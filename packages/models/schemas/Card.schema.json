@@ -1,5 +1,4 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "Card.schema.json",
   "type": "object",
   "required": ["type", "title", "body", "refs", "confidence"],

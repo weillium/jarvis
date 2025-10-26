@@ -1,12 +1,16 @@
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import pino from 'pino';
-import cardSchema from '../../../packages/models/schemas/Card.schema.json' assert { type: 'json' };
+import cardSchema from '../../../../packages/models/schemas/Card.schema.json' assert { type: 'json' };
 import { metrics } from './metrics';
 
 const log = pino({ name: 'card-validator' });
 
-const ajv = new Ajv({ allErrors: true, strict: true });
+const ajv = new Ajv({ 
+  allErrors: true, 
+  strict: false,
+  strictSchema: false
+});
 addFormats(ajv);
 const validate = ajv.compile(cardSchema);
 
