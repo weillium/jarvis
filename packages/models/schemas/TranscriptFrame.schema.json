@@ -1,0 +1,1 @@
+{ "$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["event_id","t_start_ms","t_end_ms","text"], "properties": { "event_id": {"type":"string"}, "t_start_ms": {"type":"integer","minimum":0}, "t_end_ms": {"type":"integer","minimum":0}, "speaker": {"type":"string"}, "text": {"type":"string","minLength":1} } }
