@@ -1,0 +1,141 @@
+openapi: 3.0.3
+info:
+  title: Jarvis Backend API
+  version: 1.0.0
+servers:
+  - url: https://{host}
+    variables:
+      host:
+        default: localhost:8080
+paths:
+  /health:
+    get:
+      summary: Liveness probe
+      responses:
+        '200':
+          description: OK
+  /api/events:
+    post:
+      summary: Create event and trigger compile job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventCreate'
+      responses:
+        '202': { description: Accepted }
+        '400': { description: Bad Request }
+  /api/transcript:
+    post:
+      summary: Optional HTTP transcript ingest (fallback to WS)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TranscriptFrame'
+      responses:
+        '204': { description: No Content }
+  /api/cards/history:
+    get:
+      summary: Get historical cards for late joiners
+      parameters:
+        - in: query
+          name: event_id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: cursor
+          required: false
+          schema: { type: integer, minimum: 0 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cards:
+                    type: array
+                    items: { $ref: '#/components/schemas/Card' }
+                  next_cursor: { type: integer }
+  /api/policies:
+    post:
+      summary: Update throttling/merge/pacing policies (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Policies' }
+      responses:
+        '204': { description: Updated }
+  /api/feedback:
+    post:
+      summary: Card feedback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Feedback' }
+      responses:
+        '204': { description: Recorded }
+components:
+  schemas:
+    EventCreate:
+      type: object
+      required: [title, speakers]
+      properties:
+        title: { type: string, minLength: 3 }
+        speakers: { type: array, items: { type: string } }
+        seed_urls: { type: array, items: { type: string, format: uri } }
+        questions: { type: array, items: { type: string } }
+    TranscriptFrame:
+      type: object
+      required: [event_id, t_start_ms, t_end_ms, text]
+      properties:
+        event_id: { type: string }
+        t_start_ms: { type: integer, minimum: 0 }
+        t_end_ms: { type: integer, minimum: 0 }
+        speaker: { type: string }
+        text: { type: string, minLength: 1 }
+    Card:
+      type: object
+      required: [type, title, body, refs, confidence]
+      properties:
+        type: { type: string, enum: [definition, bio, relation, diagram, timeline] }
+        title: { type: string, minLength: 1, maxLength: 120 }
+        body: { type: string, minLength: 1, maxLength: 800 }
+        media:
+          type: array
+          items:
+            type: object
+            properties:
+              kind: { type: string, enum: [image, svg] }
+              src: { type: string }
+        refs:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [label, url]
+            properties:
+              label: { type: string }
+              url: { type: string, format: uri }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+    Policies:
+      type: object
+      required: [cooldown_s, max_cards_per_min, merge_window_ms]
+      properties:
+        cooldown_s: { type: integer, minimum: 0 }
+        max_cards_per_min: { type: integer, minimum: 1 }
+        merge_window_ms: { type: integer, minimum: 0 }
+    Feedback:
+      type: object
+      required: [event_id, card_id, rating]
+      properties:
+        event_id: { type: string }
+        card_id: { type: string }
+        rating: { type: integer, enum: [1, -1] }
+        reason: { type: string }

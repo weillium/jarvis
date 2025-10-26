@@ -1,0 +1,1 @@
+{ "version":"1.0.0","schema_date":"2025-10-26","sqlite":"event_context.sqlite","vectors":"embeddings.index","rules":"event_rules.yaml" }

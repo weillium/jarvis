@@ -1,0 +1,1 @@
+{ "$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "required": ["event_id","card_id","rating"], "properties": { "event_id": {"type":"string"}, "card_id": {"type":"string"}, "rating": {"type":"integer","enum":[1,-1]}, "reason": {"type":"string"} } }

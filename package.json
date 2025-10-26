@@ -1,0 +1,14 @@
+{
+  "name": "jarvis-monorepo",
+  "private": true,
+  "packageManager": "pnpm@9.0.0",
+  "workspaces": ["apps/*","services/*","packages/*","meta-agent","dev"],
+  "scripts": {
+    "dev:backend": "pnpm --filter @jarvis/backend dev",
+    "dev:web": "pnpm --filter @jarvis/web dev",
+    "dev:mobile": "pnpm --filter @jarvis/mobile start",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test"
+  }
+}
