@@ -1,0 +1,306 @@
+---
+type: rule
+version: 1
+scope: repository
+generated_by: Repo Architect Agent
+description: >
+  Defines architectural overview, conventions, and operational rules for this repository.
+---
+
+# Project Rules
+
+## 1. Purpose & Architecture
+
+Jarvis is an AI-powered real-time event assistant that processes live meeting transcripts, generates contextual insights using vector embeddings, and emits structured cards. The system operates as a multi-runtime architecture:
+
+- **Frontend (web/)**: Next.js 16 App Router application providing event management and live viewing interfaces
+- **Worker (worker/)**: Node.js background service that orchestrates agent lifecycle (prepping → ready → running), builds vector context databases, and processes transcripts into AI-generated cards
+- **Backend (supabase/)**: PostgreSQL with pgvector for semantic search, Supabase Edge Functions (Deno runtime) for orchestration, and built-in authentication
+
+**Data Flow**: Events → Agents (prep context vectors) → Live transcripts → Vector search + LLM → Cards
+
+**System Boundaries**:
+- Web app connects to Supabase client-side and server-side
+- Worker uses service role key for privileged database access
+- Edge Functions provide atomic transactional operations
+- No direct communication between web and worker (database-mediated)
+
+## 2. Tech Stack & Frameworks
+
+**Runtime & Build**:
+- Node.js 25.1.0 (pnpm 10.20.0 workspace manager)
+- Next.js 16.0.1 (App Router, React 19.2.0, React Compiler enabled)
+- TypeScript 5.x (strict mode enabled)
+- Deno 2.x (Supabase Edge Functions)
+
+**UI & Styling**:
+- Tailwind CSS 4 (PostCSS 4)
+- React 19.2.0 with JSX transform
+
+**Data & Backend**:
+- Supabase (PostgreSQL 17, Auth, Realtime, Storage)
+- pgvector extension for 1536-dimensional embeddings (OpenAI text-embedding-3-small)
+- Supabase Edge Functions (Deno runtime) for serverless orchestration
+
+**AI & External Services**:
+- OpenAI API (embeddings: text-embedding-3-small, generation: gpt-4o-mini)
+- OpenAI SDK v6.7.0
+
+**Linting & Quality**:
+- ESLint 9 with `eslint-config-next` (core-web-vitals + TypeScript rules)
+
+## 3. Directory Map
+
+| Path | Purpose | Key Notes |
+|------|----------|-----------|
+| `web/` | Next.js frontend application | Monorepo workspace root |
+| `web/app/` | Next.js App Router routes and pages | Route groups: `(app)` for authenticated, `(marketing)` for public |
+| `web/app/(app)/events/` | Event listing and live view pages | Dynamic routes: `[eventId]/live/page.tsx` |
+| `web/features/` | Feature modules by domain | Organized: agents, auth, cards, events, transcripts |
+| `web/server/` | Server-side utilities | `actions/`, `mappers/`, `rpcs/` for data operations |
+| `web/shared/` | Shared code across app | `lib/` (supabase client), `types/`, `ui/`, `utils/`, `hooks/` |
+| `worker/` | Background agent processing service | Polls DB, processes agents, generates cards |
+| `supabase/` | Database and Edge Functions | Supabase CLI project root |
+| `supabase/migrations/` | PostgreSQL schema migrations | Timestamped SQL files, applied in order |
+| `supabase/functions/` | Deno Edge Functions | `orchestrator/` provides atomic event+agent creation |
+| `supabase/config.toml` | Local Supabase configuration | Ports, auth settings, feature flags |
+| `dev_docs/` | Generated documentation and analysis files | User-facing docs created by agents/tools, timestamped format: `YYYYMMDD_HHMMSS_<name>.md` |
+
+## 4. Data & State
+
+**Database Schema** (PostgreSQL with pgvector):
+
+- `events`: Core event records (id, owner_uid, title, topic, start_time, end_time)
+- `agents`: Per-event AI agents with status lifecycle (`prepping` → `ready` → `running` → `ended`/`error`)
+- `context_items`: Vector embeddings (1536-dim) for semantic search, linked to events
+- `transcripts`: Real-time meeting transcripts with timestamps
+- `cards`: AI-generated insights (JSON payload, kind, emitted_at)
+- `event_docs`: Document references attached to events
+- `attendees`: Event participation tracking
+
+**State Management**:
+- Client-side: React state + Supabase Realtime subscriptions (planned)
+- Server-side: Database-driven; worker maintains in-memory runtime registry (`Map<eventId, AgentRuntime>`)
+- No global state library (Redux/Zustand); prefer server components + client components as needed
+
+**RLS (Row Level Security)**:
+- Schema indicates RLS should be configured per table
+- Service role key used in worker and Edge Functions for privileged access
+- Authenticated users use anon key with RLS policies (to be confirmed)
+
+**Vector Search**:
+- `match_context()` RPC function performs cosine similarity search via pgvector
+- IVFFlat index on `context_items.embedding` with 100 lists
+- Query pattern: embed transcript → vector search → retrieve top-k context chunks
+
+## 5. Routing & API Contracts
+
+**Next.js App Router**:
+- File-based routing under `web/app/`
+- Route groups: `(app)` for authenticated sections, `(marketing)` for public
+- Dynamic routes: `[eventId]` segments
+- No API routes directory found (`web/app/(app)/api/` is empty)
+
+**Supabase Edge Functions**:
+- `orchestrator`: POST endpoint with action-based routing
+  - `GET /functions/v1/orchestrator`: Health check
+  - `POST /functions/v1/orchestrator`: `{ action: "create_event_and_agent", payload: {...} }` → calls RPC `create_event_with_agent()`
+  - CORS enabled for `localhost:3000`
+  - Returns `{ ok: boolean, error?: string, ...data }`
+
+**PostgreSQL RPC Functions**:
+- `create_event_with_agent(uuid, text, text, timestamptz)`: Atomic transaction creating event + agent, returns JSONB
+- `match_context(uuid, vector(1536), int)`: Vector similarity search, returns table of (id, chunk, similarity)
+
+**Request/Response Patterns**:
+- Edge Functions use JSON request/response with CORS headers
+- RPC functions return JSONB or table results
+- Client uses Supabase JS client with TypeScript types (to be generated)
+
+## 6. Build, Tooling & CI
+
+**Package Management**:
+- pnpm workspaces (root `package.json` + `web/package.json` + `worker/package.json`)
+- Lock files: `pnpm-lock.yaml` per workspace
+
+**Build Scripts**:
+- `web/`: `pnpm dev` (Next.js dev server), `pnpm build` (production), `pnpm start` (production server), `pnpm lint` (ESLint)
+- `worker/`: No build script defined (runs via `tsx` in dev, needs production build setup)
+- Supabase functions: Deno runtime, no explicit build step
+
+**TypeScript Configuration**:
+- `web/tsconfig.json`: Strict mode, ES2017 target, bundler module resolution, `@/*` path alias
+- `worker/tsconfig.json`: Node.js types, likely similar strictness
+- Edge Functions: Deno types via `deno.json`, JSR imports
+
+**Linting**:
+- ESLint 9 with Next.js config (core-web-vitals + TypeScript)
+- Global ignores: `.next/`, `out/`, `build/`, `next-env.d.ts`
+
+**Local Development**:
+- Supabase CLI: `supabase start` (local stack on custom ports: API 54421, DB 54422, Studio 54423)
+- Next.js: `pnpm dev` (default port 3000)
+- Worker: Run via `tsx index.ts` (needs env vars)
+
+**CI/CD**: Not configured (to be validated)
+
+## 7. Coding Conventions
+
+**Naming**:
+- Files: kebab-case for pages (`page.tsx`), PascalCase for components
+- Functions: camelCase
+- Types/Interfaces: PascalCase (e.g., `AgentRuntime`, `Props`)
+- Database: snake_case (tables, columns, functions)
+
+**Import Organization**:
+- Use `@/*` alias for absolute imports in web app (`tsconfig.json` paths)
+- Group imports: external deps → internal modules
+- No relative imports beyond one level preferred
+
+**TypeScript**:
+- Strict mode enabled
+- Prefer interfaces for object shapes, types for unions/primitives
+- Use explicit return types for functions (especially public APIs)
+- Avoid `any`; use `unknown` for untyped data
+
+**Error Handling**:
+- Edge Functions: Try-catch with JSON error responses (`{ ok: false, error: string }`)
+- Worker: Console logging with ISO timestamps, error status updates in DB
+- Client: Use Supabase error objects, display user-friendly messages
+
+**Module Boundaries**:
+- `web/shared/`: Pure utilities, no Next.js-specific imports
+- `web/server/`: Server-only code (actions, RPC wrappers)
+- `web/features/`: Feature modules with co-located logic
+- `worker/`: Self-contained service, no shared web code
+
+**Security**:
+- Never expose service role key to client
+- Use environment variables for secrets (`.env.local`, not committed)
+- Supabase RLS policies should restrict access by `owner_uid`
+- Edge Functions verify JWT when `verify_jwt = true` (orchestrator enabled)
+
+**Accessibility**:
+- Use semantic HTML elements
+- ARIA labels where needed (to be validated in implementation)
+
+**Documentation Files**:
+- Generated documentation (analysis, architecture reviews, user-facing explanations) must be placed in `dev_docs/` directory at repository root
+- All generated documentation files must include timestamp prefix: `YYYYMMDD_HHMMSS_<descriptive_name>.md` (e.g., `20251031_141610_ARCHITECTURE_ANALYSIS.md`)
+- Use format: `date +%Y%m%d_%H%M%S` for timestamps (Unix-friendly, sortable)
+- These files are for developer reference and should not be committed to source control if containing sensitive or transient analysis
+- Only files that serve descriptive/analytical purposes for users should go in `dev_docs/`; code documentation (JSDoc, README, etc.) follows standard conventions
+
+## 8. Environment & Secrets
+
+**Web Application** (`web/.env.local`):
+- `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL (public, exposed to browser)
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase anonymous key (public, exposed to browser)
+
+**Worker** (`worker/.env`):
+- `SUPABASE_URL`: Supabase project URL (same as above, server-side)
+- `SUPABASE_SERVICE_ROLE_KEY`: Service role key (server-only, full DB access)
+- `OPENAI_API_KEY`: OpenAI API key for embeddings and chat completions
+- `EMBED_MODEL`: Optional, defaults to `text-embedding-3-small`
+- `GEN_MODEL`: Optional, defaults to `gpt-4o-mini`
+
+**Supabase Local** (`supabase/.env` or system env):
+- `OPENAI_API_KEY`: Used by Supabase Studio AI features
+- Supabase CLI reads from system environment or `.env` file
+
+**Secrets Management**:
+- Never commit `.env.local`, `.env`, or files containing keys
+- Use Supabase secrets for production Edge Functions
+- Local development: `.env.local` for Next.js, `.env` for worker
+
+## 9. Testing & Validation
+
+**Current State**:
+- No test framework configured (Jest, Vitest, etc.)
+- No test files found in repository
+- Worker package.json has placeholder test script
+
+**Recommended Approach** (to be implemented):
+- Unit tests: Jest or Vitest for utilities, worker logic
+- Integration tests: Supabase test client for RPC functions, Edge Function invocations
+- E2E tests: Playwright or Cypress for critical user flows
+- Coverage target: 80% for core business logic (worker, RPC functions)
+
+**Manual Validation**:
+- Run `pnpm lint` before commits
+- Type check: `tsc --noEmit` in web and worker
+- Local Supabase: `supabase db reset` to test migrations
+- Worker: Verify agent lifecycle and card generation
+
+## 10. Performance & Observability
+
+**Performance Targets**:
+- Worker transcript processing: <5s latency goal (noted in comments)
+- Vector search: <100ms for top-5 results (IVFFlat index optimized)
+- Card generation: OpenAI API dependent, aim for <3s
+
+**Observability**:
+- Worker: Console logging with ISO timestamps (`log()` helper)
+- Edge Functions: Console logs visible in Supabase logs
+- Next.js: Built-in error boundaries and logging
+- Database: Supabase Dashboard for query performance
+
+**Profiling Tools**:
+- Next.js built-in performance monitoring
+- Supabase query analyzer
+- OpenAI token usage tracking (via response metadata)
+
+**Budgets**: Not defined (to be validated)
+
+## 11. Deployment & Operations
+
+**Deployment Targets**:
+- **Web**: Vercel (Next.js native) or similar platform
+- **Worker**: Long-running Node.js service (Railway, Fly.io, AWS ECS, or container platform)
+- **Database**: Supabase Cloud (managed PostgreSQL)
+- **Edge Functions**: Supabase Edge Functions (Deno runtime, serverless)
+
+**Deployment Flow** (to be validated):
+1. Database migrations: `supabase db push` or CI/CD pipeline
+2. Edge Functions: `supabase functions deploy orchestrator`
+3. Web: Vercel auto-deploy on push to main branch (if configured)
+4. Worker: Manual or CI/CD container deployment
+
+**Environment Setup**:
+- Production env vars must match structure above
+- Supabase project URL/keys from production project
+- Worker requires persistent connection to Supabase
+
+**Health Checks**:
+- Edge Function: `GET /functions/v1/orchestrator` returns `{ ok: true }`
+- Worker: No health endpoint (add `/health` route or process signal)
+- Database: Supabase provides connection pool health
+
+**Rollback Strategy**:
+- Database: Migration rollback scripts or point-in-time recovery
+- Edge Functions: Version pinning and redeploy previous version
+- Web: Vercel instant rollback via dashboard
+- Worker: Container image versioning and rollback
+
+## 12. Known Gaps & TODO Validations
+
+1. **Missing `is_live` column**: Worker queries `events.is_live` but schema doesn't define it. **Validation**: Add migration adding `is_live boolean default false` to `events` table, or remove query if not needed.
+
+2. **RLS Policies**: No RLS policies found in migrations. **Validation**: Add policies ensuring users can only access their own events (`owner_uid = auth.uid()`), or confirm RLS is disabled for service role.
+
+3. **API Routes**: `web/app/(app)/api/` directory exists but is empty. **Validation**: Determine if API routes are needed or remove directory; consider Server Actions instead.
+
+4. **Worker Production Build**: No build/start script for production worker. **Validation**: Add `tsc` build step and `node dist/index.js` start script, or use `tsx` in production.
+
+5. **Type Generation**: No Supabase TypeScript types generated. **Validation**: Add `supabase gen types typescript` to generate types from schema, import in `web/shared/types/`.
+
+6. **Realtime Subscriptions**: Live view page mentions "hook up realtime cards later". **Validation**: Implement Supabase Realtime subscriptions for `cards` table in live view component.
+
+7. **Document Processing**: `event_docs.path` stores paths but no extraction logic exists. **Validation**: Add file upload handler and text extraction (PDF, DOCX, etc.) to populate `context_items`.
+
+8. **Error Handling in Web**: No error boundaries or global error handling found. **Validation**: Add Next.js error boundaries and user-facing error messages.
+
+9. **Testing Strategy**: No tests configured. **Validation**: Set up testing framework and add critical path tests (agent lifecycle, vector search, card generation).
+
+10. **CI/CD Pipeline**: No GitHub Actions or similar. **Validation**: Add CI for linting, type checking, migration validation, and optional deployment.
+
