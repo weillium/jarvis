@@ -1,13 +1,108 @@
-type Props = { params: { eventId: string } };
+import { getEventById } from '@/server/actions/event-actions';
+import { getAgentByEventId } from '@/server/actions/agent-actions';
+import { EventDetail } from '@/features/events/components/event-detail';
+import { AgentPlaceholder } from '@/features/events/components/agent-placeholder';
+import { ContextCardsPlaceholder } from '@/features/events/components/context-cards-placeholder';
+import Link from 'next/link';
 
-export default function LiveEventPage({ params }: Props) {
+type Props = { 
+  params: Promise<{ eventId: string }>;
+};
+
+export default async function LiveEventPage({ params }: Props) {
+  const { eventId } = await params;
+  
+  const { data: event, error } = await getEventById(eventId);
+  const { data: agent } = await getAgentByEventId(eventId);
+
+  if (error || !event) {
+    return (
+      <div style={{
+        maxWidth: '1400px',
+        margin: '0 auto',
+        padding: '48px 24px',
+      }}>
+        <div style={{
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: '12px',
+          padding: '48px 24px',
+          textAlign: 'center',
+        }}>
+          <h2 style={{
+            fontSize: '24px',
+            fontWeight: '600',
+            color: '#0f172a',
+            margin: '0 0 12px 0',
+          }}>
+            Event Not Found
+          </h2>
+          <p style={{
+            fontSize: '16px',
+            color: '#64748b',
+            margin: '0 0 24px 0',
+          }}>
+            {error || 'The event you are looking for does not exist or you do not have access to it.'}
+          </p>
+          <Link
+            href="/events"
+            style={{
+              display: 'inline-block',
+              padding: '10px 20px',
+              background: '#1e293b',
+              color: '#ffffff',
+              borderRadius: '6px',
+              textDecoration: 'none',
+              fontSize: '15px',
+              fontWeight: '500',
+            }}
+          >
+            Back to Events
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <main>
-      <h3 style={{ margin: "8px 0" }}>Live Event</h3>
-      <p><strong>eventId:</strong> {params.eventId}</p>
-      <p style={{ marginTop: 12 }}>
-        This is a minimal live page; hook up realtime cards later.
-      </p>
-    </main>
+    <div style={{
+      maxWidth: '1400px',
+      margin: '0 auto',
+      padding: '24px',
+    }}>
+      <div style={{
+        marginBottom: '24px',
+      }}>
+        <Link
+          href="/events"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            color: '#64748b',
+            textDecoration: 'none',
+            fontSize: '14px',
+            marginBottom: '16px',
+          }}
+        >
+          <span>←</span>
+          <span>Back to Events</span>
+        </Link>
+        <h1 style={{
+          fontSize: '28px',
+          fontWeight: '700',
+          color: '#0f172a',
+          margin: 0,
+        }}>
+          Live Event View
+        </h1>
+      </div>
+
+      <EventDetail event={event} />
+      
+      <AgentPlaceholder agent={agent} />
+      
+      <ContextCardsPlaceholder />
+    </div>
   );
 }
