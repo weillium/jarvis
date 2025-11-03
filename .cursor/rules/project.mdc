@@ -1,10 +1,5 @@
 ---
-type: rule
-version: 1
-scope: repository
-generated_by: Repo Architect Agent
-description: >
-  Defines architectural overview, conventions, and operational rules for this repository.
+alwaysApply: true
 ---
 
 # Project Rules
@@ -303,4 +298,3 @@ Jarvis is an AI-powered real-time event assistant that processes live meeting tr
 9. **Testing Strategy**: No tests configured. **Validation**: Set up testing framework and add critical path tests (agent lifecycle, vector search, card generation).
 
 10. **CI/CD Pipeline**: No GitHub Actions or similar. **Validation**: Add CI for linting, type checking, migration validation, and optional deployment.
-

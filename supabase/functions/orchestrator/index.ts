@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
     const { action, payload } = await req.json().catch(() => ({}))
 
     if (action === "create_event_and_agent") {
-      const { owner_uid, title, topic, start_time } = payload ?? {}
+      const { owner_uid, title, topic, start_time, end_time } = payload ?? {}
 
       if (!owner_uid || !title) {
         return json(
@@ -71,6 +71,7 @@ Deno.serve(async (req) => {
         p_title: title,
         p_topic: topic || null,
         p_start_time: start_time || null,
+        p_end_time: end_time || null,
       })
 
       if (error) {

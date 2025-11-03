@@ -111,20 +111,30 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
         eventData.end_time = dateInTimezone.utc().toISOString();
       }
 
-      // Insert event into Supabase
-      const { data: eventResult, error: insertError } = await supabase
-        .from('events')
-        .insert([eventData])
-        .select()
-        .single();
+      // Call Orchestrator Edge Function to create event and agent
+      const { data: orchestratorResult, error: orchestratorError } = await supabase.functions.invoke('orchestrator', {
+        body: {
+          action: 'create_event_and_agent',
+          payload: {
+            owner_uid: session.user.id,
+            title: title.trim(),
+            topic: topic.trim() || null,
+            start_time: eventData.start_time || null,
+            end_time: eventData.end_time || null,
+          },
+        },
+      });
 
-      if (insertError) {
-        throw insertError;
+      if (orchestratorError) {
+        throw orchestratorError;
       }
 
-      if (!eventResult?.id) {
-        throw new Error('Failed to create event');
+      if (!orchestratorResult?.ok || !orchestratorResult?.event) {
+        throw new Error(orchestratorResult?.error || 'Failed to create event');
       }
+
+      // Extract event from orchestrator response
+      const eventResult = orchestratorResult.event;
 
       // Upload files to Supabase storage and create event_docs records
       if (files.length > 0) {
