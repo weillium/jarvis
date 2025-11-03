@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  realtime-transcribe:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: realtime-transcribe
+    ports:
+      - "3001:3001"  # HTTP health check
+      - "8080:8080"  # WebSocket server
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SUPABASE_URL=${SUPABASE_URL:-http://host.docker.internal:54421}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - HTTP_PORT=3001
+      - WEBSOCKET_PORT=8080
+    env_file:
+      - .env
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "node -e 'require(\"http\").get(\"http://localhost:3001/health\",(r)=>{process.exit(r.statusCode===200?0:1)})'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Note: This assumes you're running Supabase locally via 'supabase start'
+  # If you're not, you can uncomment the database service below
+
+networks:
+  app-network:
+    driver: bridge
+
+# Uncomment below if you want a local Supabase database in Docker
+# instead of using 'supabase start' from the main project
+#
+#  supabase-db:
+#    image: supabase/postgres:17.2.0.81
+#    container_name: supabase-db
+#    environment:
+#      - POSTGRES_PASSWORD=postgres
+#      - POSTGRES_DB=postgres
+#    ports:
+#      - "54422:5432"
+#    volumes:
+#      - supabase-db-data:/var/lib/postgresql/data
+#    networks:
+#      - app-network
+#    restart: unless-stopped
+#
+# volumes:
+#   supabase-db-data:
+

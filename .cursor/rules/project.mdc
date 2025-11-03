@@ -137,6 +137,24 @@ Jarvis is an AI-powered real-time event assistant that processes live meeting tr
 - Next.js: `pnpm dev` (default port 3000)
 - Worker: Run via `tsx index.ts` (needs env vars)
 
+**Supabase Migrations**:
+- **ALWAYS use Supabase CLI to create migration files**: `supabase migration new <migration_name>`
+  - This automatically generates files with correct timestamp format: `YYYYMMDDHHMMSS_<name>.sql`
+  - Uses current system date/time, ensuring proper ordering
+  - Example: `supabase migration new enhance_context_items_schema` → `20251103201749_enhance_context_items_schema.sql`
+- **NEVER manually create migration files with hardcoded dates**
+  - Manually creating files (e.g., `20250104_080000_*.sql`) causes:
+    - Wrong timestamps (outdated dates)
+    - Migration ordering issues
+    - Potential conflicts with Supabase migration tracking
+- **If you must create manually** (not recommended):
+  - Use actual current timestamp: `TIMESTAMP=$(date +%Y%m%d%H%M%S)`
+  - But prefer using `supabase migration new` instead
+- **Migration file naming**: Must follow format `YYYYMMDDHHMMSS_<descriptive_name>.sql`
+  - Timestamp must be in format: `YYYYMMDDHHMMSS` (year, month, day, hour, minute, second)
+  - No underscores in timestamp portion (only separator before description)
+  - Descriptive name should be kebab-case (e.g., `add_realtime_tables`, `enhance_context_items_schema`)
+
 **CI/CD**: Not configured (to be validated)
 
 ## 7. Coding Conventions

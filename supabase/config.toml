@@ -358,3 +358,9 @@ entrypoint = "./functions/orchestrator/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/orchestrator/*.html" ]
+
+[functions.transcript-ingestion]
+enabled = true
+verify_jwt = false
+import_map = "./functions/transcript-ingestion/deno.json"
+entrypoint = "./functions/transcript-ingestion/index.ts"
