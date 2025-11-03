@@ -9,6 +9,7 @@ import { RingBuffer, TranscriptChunk } from './ring-buffer';
 import { FactsStore, Fact } from './facts-store';
 import { RealtimeSession, AgentType } from './realtime-session';
 import { buildTopicContext } from './context-builder';
+import { getPolicy } from './policies';
 
 export interface OrchestratorConfig {
   supabase: ReturnType<typeof createClient>;
@@ -201,10 +202,9 @@ export class Orchestrator {
     chunk: TranscriptChunk,
     context: any
   ): Promise<void> {
-    const policy = `You output a single concise JSON "context card" strictly as:
-{"kind": string, "title": string, "body": string, "source_seq": number}. Keep it short, factually grounded, immediately useful.`;
+    const policy = getPolicy('cards', 1);
 
-    const userPrompt = `Transcript:\n${chunk.text}\n\nRecent context:\n${context.bullets.join('\n')}\n\nRelevant facts:\n${JSON.stringify(context.facts, null, 2)}\n\nAdditional context:\n${context.vectorContext}`;
+    const userPrompt = `Transcript:\n${chunk.text}\n\nRecent context:\n${context.bullets.join('\n')}\n\nRelevant facts:\n${JSON.stringify(context.facts, null, 2)}\n\nAdditional context:\n${context.vectorContext}\n\nDetermine the appropriate card_type (text, text_visual, or visual) and generate the card accordingly.`;
 
     try {
       const response = await this.config.openai.chat.completions.create({
@@ -222,6 +222,24 @@ export class Orchestrator {
 
       const card = JSON.parse(cardJson);
       card.source_seq = chunk.seq;
+      
+      // Validate and normalize card_type
+      if (!card.card_type || !['text', 'text_visual', 'visual'].includes(card.card_type)) {
+        // Auto-determine type based on content
+        card.card_type = this.determineCardType(card, chunk.text);
+      }
+      
+      // Ensure required fields based on type
+      if (card.card_type === 'visual') {
+        if (!card.label) card.label = card.title || 'Image';
+        if (!card.body) card.body = null; // Visual cards don't need body
+      } else if (card.card_type === 'text_visual') {
+        if (!card.body) card.body = card.title || 'Definition';
+      } else {
+        // text type
+        if (!card.body) card.body = card.title || 'Definition';
+        card.image_url = null; // Text cards don't have images
+      }
 
       // Store in agent_outputs
       await this.config.supabase.from('agent_outputs').insert({
@@ -240,9 +258,49 @@ export class Orchestrator {
         payload: card,
       });
 
-      console.log(`[cards] Generated card for seq ${chunk.seq} (event: ${runtime.eventId})`);
+      console.log(`[cards] Generated card for seq ${chunk.seq} (event: ${runtime.eventId}, type: ${card.card_type})`);
     } catch (error: any) {
       console.error(`[cards] Error generating card: ${error.message}`);
+    }
+  }
+
+  /**
+   * Determine card type based on content analysis
+   */
+  private determineCardType(card: any, transcriptText: string): 'text' | 'text_visual' | 'visual' {
+    // Check if card has image_url
+    if (card.image_url) {
+      // If it has body/content, it's text_visual, otherwise visual
+      return card.body ? 'text_visual' : 'visual';
+    }
+
+    // Analyze transcript for visual-worthy content
+    const lowerText = transcriptText.toLowerCase();
+    
+    // Keywords that suggest visual content
+    const visualKeywords = [
+      'photo', 'image', 'picture', 'diagram', 'chart', 'graph', 'map',
+      'illustration', 'visual', 'showing', 'depicts', 'looks like',
+      'appearance', 'shape', 'structure', 'location', 'geography'
+    ];
+    
+    const hasVisualKeyword = visualKeywords.some(keyword => lowerText.includes(keyword));
+    
+    // Check if it's a definition/explanation
+    const definitionKeywords = [
+      'is', 'are', 'means', 'refers to', 'definition', 'explain', 'describe',
+      'what is', 'who is', 'where is', 'what are'
+    ];
+    
+    const isDefinition = definitionKeywords.some(keyword => lowerText.includes(keyword));
+    
+    // Determine type
+    if (isDefinition && hasVisualKeyword) {
+      return 'text_visual';
+    } else if (hasVisualKeyword && !card.body) {
+      return 'visual';
+    } else {
+      return 'text';
     }
   }
 

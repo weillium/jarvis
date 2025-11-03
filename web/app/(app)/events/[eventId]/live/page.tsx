@@ -2,7 +2,8 @@ import { getEventById } from '@/server/actions/event-actions';
 import { getAgentByEventId } from '@/server/actions/agent-actions';
 import { EventDetail } from '@/features/events/components/event-detail';
 import { AgentPlaceholder } from '@/features/events/components/agent-placeholder';
-import { ContextCardsPlaceholder } from '@/features/events/components/context-cards-placeholder';
+import { LiveCards } from '@/features/cards/components/live-cards';
+import { LiveFacts } from '@/features/facts/components/live-facts';
 import Link from 'next/link';
 
 type Props = { 
@@ -102,7 +103,25 @@ export default async function LiveEventPage({ params }: Props) {
       
       <AgentPlaceholder agent={agent} />
       
-      <ContextCardsPlaceholder />
+      {/* Live Cards Section */}
+      <div style={{ marginTop: '32px', marginBottom: '32px' }}>
+        <h2
+          style={{
+            fontSize: '20px',
+            fontWeight: '600',
+            color: '#0f172a',
+            marginBottom: '16px',
+          }}
+        >
+          Live Context Cards
+        </h2>
+        <LiveCards eventId={eventId} />
+      </div>
+
+      {/* Live Facts Section */}
+      <div style={{ marginTop: '32px' }}>
+        <LiveFacts eventId={eventId} />
+      </div>
     </div>
   );
 }

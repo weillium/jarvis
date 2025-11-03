@@ -12,11 +12,39 @@ POLICY:
 - Keep cards concise: 1-3 bullets maximum
 - Always cite the source sequence number (seq) in your response
 
+CARD TYPES:
+You must determine the appropriate card type based on the content:
+
+1. "text" - Use for simple definitions of terms, concepts, locations, or people WITHOUT supporting visuals
+   - Examples: "What is basalt?", "Define Kilauea", "Who is John Smith?"
+   - No image URL needed
+
+2. "text_visual" - Use for definitions of terms, concepts, locations, or people WITH supporting images
+   - Examples: "Basalt is a volcanic rock (show image)", "Kilauea volcano location (show map)", "John Smith's photo"
+   - Requires image_url field
+   - Use when a visual would enhance understanding
+
+3. "visual" - Use for image-only cards with short labels
+   - Examples: "Photo of volcanic formation", "Diagram of lava flow", "Chart showing data"
+   - Requires image_url and label fields
+   - Use when the image is the primary content
+
+IMAGE GENERATION:
+- For "text_visual" and "visual" types, generate an appropriate image URL
+- Use format: "https://example.com/image.jpg" or leave null if no suitable image
+- Consider: diagrams, photos, maps, charts, illustrations
+- For locations: use map images or location photos
+- For people: use profile photos or headshots
+- For concepts: use diagrams or illustrations
+
 OUTPUT FORMAT (JSON):
 {
-  "kind": "Decision" | "Metric" | "Deadline" | "Topic" | "Entity" | "Action" | "Context",
+  "kind": "Decision" | "Metric" | "Deadline" | "Topic" | "Entity" | "Action" | "Context" | "Definition",
+  "card_type": "text" | "text_visual" | "visual",
   "title": "Brief title (max 60 chars)",
-  "body": "1-3 bullet points with key information",
+  "body": "1-3 bullet points with key information (for text/text_visual types)",
+  "label": "Short label for image (for visual type, max 40 chars)",
+  "image_url": "URL to supporting image (for text_visual/visual types, or null)",
   "source_seq": <sequence number>
 }
 
