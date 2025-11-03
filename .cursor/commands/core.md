@@ -193,6 +193,37 @@ fields:
 ```
 
 ```yaml
+- name: Add API Route
+  intent: Create a new Next.js API route for server-side endpoints (ingestion, streaming, etc.).
+  triggers:
+    - "add API route"
+    - "create endpoint"
+    - "new API handler"
+    - "add SSE endpoint"
+  prechecks:
+    - "verify web/app/api/ directory exists"
+    - "check if Server Action would be more appropriate"
+    - "review existing API routes (/api/ingest, /api/stream) for patterns"
+    - "determine if SSE streaming needed (use ReadableStream pattern from /api/stream)"
+  steps:
+    - "create web/app/api/<name>/route.ts"
+    - "export GET, POST, PUT, DELETE handlers as needed"
+    - "for SSE: use ReadableStream pattern (see /api/stream/route.ts)"
+    - "for JSON: use NextResponse.json() with proper status codes"
+    - "add CORS headers if needed (see /api/ingest for example)"
+    - "add error handling with try-catch"
+    - "use SUPABASE_SERVICE_ROLE_KEY for privileged operations (server-side only)"
+  validations:
+    - "test endpoint via curl or browser"
+    - "verify CORS headers if calling from browser"
+    - "check error handling works correctly"
+    - "if SSE: verify stream stays open and handles client disconnect"
+  rollback:
+    - "delete route.ts file"
+    - "remove any client-side calls to the endpoint"
+```
+
+```yaml
 - name: Add Vector Search Index
   intent: Create or optimize pgvector index for semantic search performance.
   triggers:
@@ -218,55 +249,94 @@ fields:
 ```
 
 ```yaml
+- name: Add Enrichment Enricher
+  intent: Add a new enricher to the context enrichment framework.
+  triggers:
+    - "add enricher"
+    - "create enrichment source"
+    - "add context enrichment"
+  prechecks:
+    - "verify worker/enrichment/ directory structure exists"
+    - "review worker/enrichment/enrichers/base-enricher.ts for interface"
+    - "check existing enrichers (web-search, document-extractor, wikipedia) for patterns"
+    - "determine if new enricher needs API keys or external services"
+  steps:
+    - "create worker/enrichment/enrichers/<name>.ts"
+    - "extend BaseEnricher class and implement enrich() method"
+    - "override getChunkingStrategy() and getQualityScore() if needed"
+    - "register enricher in worker/enrichment/index.ts (EnrichmentOrchestrator)"
+    - "add environment variables for configuration (ENRICHMENT_<NAME>_ENABLED, etc.)"
+    - "update getEnrichmentConfig() in worker/enrichment/index.ts if needed"
+  validations:
+    - "test enricher in isolation with sample input"
+    - "verify chunks are generated with proper metadata"
+    - "check quality scores are reasonable (0-1 range)"
+    - "test with context builder integration"
+  rollback:
+    - "delete enricher file"
+    - "remove from EnrichmentOrchestrator"
+    - "remove environment variables"
+```
+
+```yaml
 - name: Add Worker Task
-  intent: Add a new background processing task to the worker service.
+  intent: Add a new background processing task to the orchestrator service.
   triggers:
     - "add worker task"
     - "background job"
     - "worker processing"
+    - "add orchestrator task"
   prechecks:
-    - "review worker/index.ts structure (tickPrep, tickRun loops)"
+    - "review worker/index.ts structure (tickPrep, tickRun polling loops for fallback)"
+    - "review worker/orchestrator.ts structure (event-driven processing via Realtime)"
     - "verify worker has access to required env vars"
-    - "check if task should run on interval or trigger"
+    - "determine if task should be event-driven (Realtime subscription) or polling-based (fallback)"
   steps:
-    - "add async function for task logic in worker/index.ts"
-    - "integrate into tickPrep() or tickRun() loop, or create new tick<Name>()"
+    - "For event-driven: add handler in orchestrator.ts (e.g., handleTranscriptInsert, processCardsAgent)"
+    - "For polling: add async function in worker/index.ts and integrate into tickPrep() or tickRun()"
     - "add error handling with logging and status updates"
-    - "update AgentRuntime type if extending state"
-    - "add setInterval() call in main() if periodic task"
+    - "update EventRuntime interface if extending state (in orchestrator.ts)"
+    - "if polling: add setInterval() call in main() if periodic task"
+    - "if Realtime-driven: subscribe to appropriate Supabase Realtime channel in orchestrator.initialize()"
   validations:
     - "run worker locally with test data"
     - "verify logs show task execution"
     - "check database state changes are correct"
+    - "if Realtime-driven: verify Supabase Realtime subscription works"
   rollback:
-    - "remove function and interval call"
+    - "remove function and subscription/interval call"
     - "revert database changes if made"
 ```
 
 ```yaml
 - name: Add Realtime Subscription
-  intent: Set up Supabase Realtime subscription for live data updates in client.
+  intent: Set up real-time data updates via SSE streaming or Supabase Realtime subscriptions.
   triggers:
     - "add realtime"
     - "live updates"
     - "subscribe to changes"
+    - "add SSE stream"
   prechecks:
+    - "determine if client-side (SSE via /api/stream) or server-side (Supabase Realtime in worker)"
     - "verify supabase/config.toml has [realtime] enabled"
     - "check table has Realtime enabled in Supabase Dashboard (or via SQL)"
-    - "review web/shared/lib/supabase.ts client setup"
+    - "review web/shared/hooks/use-sse-stream.ts for client-side SSE pattern"
   steps:
-    - "create hook: web/shared/hooks/use<Name>Realtime.ts"
-    - "import supabase client from web/shared/lib/supabase.ts"
-    - "use useEffect to set up .from('<table>').on('*', callback)"
+    - "For client-side SSE: use existing useSSEStream hook or create new hook"
+    - "For client-side Supabase Realtime: create hook: web/shared/hooks/use<Name>Realtime.ts"
+    - "For server-side (worker): add subscription in orchestrator.ts initialize() method"
+    - "import supabase client from appropriate location (web/shared/lib/supabase.ts or worker)"
+    - "use useEffect to set up .from('<table>').on('*', callback) for client-side"
     - "return cleanup function to unsubscribe"
-    - "use hook in page or component (e.g., live event page)"
+    - "use hook in page or component (e.g., live event page uses LiveCards/LiveFacts)"
   validations:
-    - "test subscription in browser DevTools"
+    - "test subscription/stream in browser DevTools"
     - "verify updates appear in UI when DB changes"
     - "check memory leak (unsubscribe on unmount)"
+    - "if SSE: verify /api/stream route handles Realtime subscriptions correctly"
   rollback:
-    - "remove hook file"
-    - "remove subscription code from component"
+    - "remove hook file or subscription code"
+    - "remove subscription code from component or orchestrator"
 ```
 
 ```yaml
