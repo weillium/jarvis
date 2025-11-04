@@ -23,3 +23,5 @@ EXPOSE 3001 8080
 # Start the server
 CMD ["pnpm", "start"]
 
+
+
