@@ -248,3 +248,237 @@ async function updateBlueprintStatus(
     // Don't throw - status update is not critical
   }
 }
+
+/**
+ * Regenerate research stage only
+ * Requires: Approved blueprint
+ */
+export async function regenerateResearchStage(
+  eventId: string,
+  agentId: string,
+  blueprintId: string,
+  options: ContextGenerationOrchestratorOptions
+): Promise<ResearchResults> {
+  const { supabase, openai, genModel } = options;
+
+  console.log(`[context-gen] Regenerating research stage for event ${eventId}, agent ${agentId}, blueprint ${blueprintId}`);
+
+  // Fetch blueprint
+  const { data: blueprintRecord, error: blueprintError } = await (supabase
+    .from('context_blueprints') as any)
+    .select('*')
+    .eq('id', blueprintId)
+    .single() as { data: any | null; error: any };
+
+  if (blueprintError || !blueprintRecord) {
+    throw new Error(`Failed to fetch blueprint: ${blueprintError?.message || 'Blueprint not found'}`);
+  }
+
+  const blueprint = blueprintRecord.blueprint as Blueprint;
+
+  if (blueprintRecord.status !== 'approved' && blueprintRecord.status !== 'completed') {
+    throw new Error(`Blueprint must be approved or completed to regenerate research. Current status: ${blueprintRecord.status}`);
+  }
+
+  // Update status
+  await updateAgentStatus(supabase, agentId, 'researching');
+  await updateBlueprintStatus(supabase, blueprintId, 'executing');
+
+  // Execute research
+  const researchResults = await executeResearchPlan(
+    eventId,
+    blueprint,
+    { openai, genModel }
+  );
+
+  console.log(`[context-gen] Research regeneration completed: ${researchResults.chunks.length} chunks found`);
+
+  // Return to previous state or next state (if glossary/chunks already exist, stay at researching)
+  // For now, set to context_complete if it was before, otherwise keep researching
+  // The UI can trigger next stages if needed
+  const { data: agent } = await (supabase
+    .from('agents') as any)
+    .select('status')
+    .eq('id', agentId)
+    .single();
+
+  // If agent was at context_complete, set it back to researching (user can then trigger glossary/chunks)
+  // Otherwise leave it as researching
+  if (agent?.status === 'context_complete') {
+    // Don't change - let user decide next step
+  }
+
+  return researchResults;
+}
+
+/**
+ * Regenerate glossary stage only
+ * Requires: Approved blueprint, research results
+ */
+export async function regenerateGlossaryStage(
+  eventId: string,
+  agentId: string,
+  blueprintId: string,
+  options: ContextGenerationOrchestratorOptions,
+  researchResults?: ResearchResults
+): Promise<number> {
+  const { supabase, openai, genModel, embedModel } = options;
+
+  console.log(`[context-gen] Regenerating glossary stage for event ${eventId}, agent ${agentId}, blueprint ${blueprintId}`);
+
+  // Fetch blueprint
+  const { data: blueprintRecord, error: blueprintError } = await (supabase
+    .from('context_blueprints') as any)
+    .select('*')
+    .eq('id', blueprintId)
+    .single() as { data: any | null; error: any };
+
+  if (blueprintError || !blueprintRecord) {
+    throw new Error(`Failed to fetch blueprint: ${blueprintError?.message || 'Blueprint not found'}`);
+  }
+
+  const blueprint = blueprintRecord.blueprint as Blueprint;
+
+  if (blueprintRecord.status !== 'approved' && blueprintRecord.status !== 'completed') {
+    throw new Error(`Blueprint must be approved or completed to regenerate glossary. Current status: ${blueprintRecord.status}`);
+  }
+
+  // Fetch research results if not provided
+  let research: ResearchResults;
+  if (!researchResults) {
+    // Try to fetch existing research results from context_items with research_source
+    const { data: researchChunks } = await (supabase
+      .from('context_items') as any)
+      .select('chunk, research_source, metadata')
+      .eq('event_id', eventId)
+      .in('research_source', ['exa', 'wikipedia', 'research_stub']);
+
+    research = {
+      chunks: (researchChunks || []).map((item: any) => ({
+        text: item.chunk,
+        source: item.research_source || 'research',
+        metadata: item.metadata || {},
+      })),
+    };
+  } else {
+    research = researchResults;
+  }
+
+  // Delete existing glossary terms
+  const { error: deleteError } = await (supabase
+    .from('glossary_terms') as any)
+    .delete()
+    .eq('event_id', eventId);
+
+  if (deleteError) {
+    console.warn(`[context-gen] Warning: Failed to delete existing glossary terms: ${deleteError.message}`);
+  }
+
+  // Update status
+  await updateAgentStatus(supabase, agentId, 'building_glossary');
+
+  // Build glossary
+  const glossaryCount = await buildGlossary(
+    eventId,
+    blueprint,
+    research,
+    {
+      supabase,
+      openai,
+      genModel,
+      embedModel,
+    }
+  );
+
+  console.log(`[context-gen] Glossary regeneration completed: ${glossaryCount} terms`);
+
+  return glossaryCount;
+}
+
+/**
+ * Regenerate chunks stage only
+ * Requires: Approved blueprint, research results
+ */
+export async function regenerateChunksStage(
+  eventId: string,
+  agentId: string,
+  blueprintId: string,
+  options: ContextGenerationOrchestratorOptions,
+  researchResults?: ResearchResults
+): Promise<number> {
+  const { supabase, openai, embedModel, genModel } = options;
+
+  console.log(`[context-gen] Regenerating chunks stage for event ${eventId}, agent ${agentId}, blueprint ${blueprintId}`);
+
+  // Fetch blueprint
+  const { data: blueprintRecord, error: blueprintError } = await (supabase
+    .from('context_blueprints') as any)
+    .select('*')
+    .eq('id', blueprintId)
+    .single() as { data: any | null; error: any };
+
+  if (blueprintError || !blueprintRecord) {
+    throw new Error(`Failed to fetch blueprint: ${blueprintError?.message || 'Blueprint not found'}`);
+  }
+
+  const blueprint = blueprintRecord.blueprint as Blueprint;
+
+  if (blueprintRecord.status !== 'approved' && blueprintRecord.status !== 'completed') {
+    throw new Error(`Blueprint must be approved or completed to regenerate chunks. Current status: ${blueprintRecord.status}`);
+  }
+
+  // Fetch research results if not provided
+  let research: ResearchResults;
+  if (!researchResults) {
+    // Try to fetch existing research results from context_items with research_source
+    const { data: researchChunks } = await (supabase
+      .from('context_items') as any)
+      .select('chunk, research_source, metadata')
+      .eq('event_id', eventId)
+      .in('research_source', ['exa', 'wikipedia', 'research_stub']);
+
+    research = {
+      chunks: (researchChunks || []).map((item: any) => ({
+        text: item.chunk,
+        source: item.research_source || 'research',
+        metadata: item.metadata || {},
+      })),
+    };
+  } else {
+    research = researchResults;
+  }
+
+  // Delete existing context chunks
+  const { error: deleteError } = await (supabase
+    .from('context_items') as any)
+    .delete()
+    .eq('event_id', eventId);
+
+  if (deleteError) {
+    console.warn(`[context-gen] Warning: Failed to delete existing context chunks: ${deleteError.message}`);
+  }
+
+  // Update status
+  await updateAgentStatus(supabase, agentId, 'building_chunks');
+
+  // Build chunks
+  const chunksCount = await buildContextChunks(
+    eventId,
+    blueprint,
+    research,
+    {
+      supabase,
+      openai,
+      embedModel,
+      genModel,
+    }
+  );
+
+  console.log(`[context-gen] Chunks regeneration completed: ${chunksCount} chunks`);
+
+  // Update to context_complete
+  await updateAgentStatus(supabase, agentId, 'context_complete');
+  await updateBlueprintStatus(supabase, blueprintId, 'completed');
+
+  return chunksCount;
+}

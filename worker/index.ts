@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
 import { Orchestrator, OrchestratorConfig } from './orchestrator';
 import { generateContextBlueprint } from './blueprint-generator';
-import { executeContextGeneration } from './context-generation-orchestrator';
+import { executeContextGeneration, regenerateResearchStage, regenerateGlossaryStage, regenerateChunksStage } from './context-generation-orchestrator';
 
 /** ---------- env ---------- **/
 function need(name: string) {
@@ -152,6 +152,85 @@ async function tickContextGeneration() {
   }
 }
 
+/** ---------- regeneration loop (polling for agents needing stage regeneration) ---------- **/
+async function tickRegeneration() {
+  const regenerationStatuses = ['regenerating_research', 'regenerating_glossary', 'regenerating_chunks'];
+  
+  const { data: regeneratingAgents, error } = await supabase
+    .from('agents')
+    .select('id,event_id,status')
+    .in('status', regenerationStatuses)
+    .limit(20);
+  
+  if (error) {
+    log('[regeneration] fetch error:', error.message);
+    return;
+  }
+  
+  if (!regeneratingAgents || regeneratingAgents.length === 0) {
+    return;
+  }
+
+  for (const ag of regeneratingAgents) {
+    // Skip if already processing this agent
+    if (processingAgents.has(ag.id)) {
+      log('[regeneration] Agent', ag.id, 'already being processed, skipping');
+      continue;
+    }
+
+    // Fetch the approved or completed blueprint for this agent
+    const { data: blueprint, error: blueprintError } = await ((supabase
+      .from('context_blueprints') as any)
+      .select('id')
+      .eq('agent_id', ag.id)
+      .in('status', ['approved', 'completed'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()) as { data: { id: string } | null; error: any };
+
+    if (blueprintError || !blueprint) {
+      log('[regeneration] No approved blueprint found for agent', ag.id);
+      continue;
+    }
+
+    // Mark as processing
+    processingAgents.add(ag.id);
+
+    try {
+      const options = {
+        supabase,
+        openai,
+        embedModel: EMBED_MODEL,
+        genModel: GEN_MODEL,
+      };
+
+      if (ag.status === 'regenerating_research') {
+        log('[regeneration] regenerating research for agent', ag.id);
+        await regenerateResearchStage(ag.event_id, ag.id, blueprint.id, options);
+        // After research regeneration, set status to researching (not regenerating)
+        await supabase.from('agents').update({ status: 'researching' }).eq('id', ag.id);
+      } else if (ag.status === 'regenerating_glossary') {
+        log('[regeneration] regenerating glossary for agent', ag.id);
+        await regenerateGlossaryStage(ag.event_id, ag.id, blueprint.id, options);
+        // After glossary regeneration, set status back to context_complete
+        await supabase.from('agents').update({ status: 'context_complete' }).eq('id', ag.id);
+      } else if (ag.status === 'regenerating_chunks') {
+        log('[regeneration] regenerating chunks for agent', ag.id);
+        await regenerateChunksStage(ag.event_id, ag.id, blueprint.id, options);
+        // regenerateChunksStage already sets status to context_complete
+      }
+
+      log('[regeneration] regeneration complete for agent', ag.id);
+    } catch (e: any) {
+      log('[regeneration] error', e?.message || e);
+      await supabase.from('agents').update({ status: 'error' }).eq('id', ag.id);
+    } finally {
+      // Always remove from processing set
+      processingAgents.delete(ag.id);
+    }
+  }
+}
+
 /** ---------- run loop (polling for ready agents that need to start) ---------- **/
 async function tickRun() {
   // Find events that are live but don't have running orchestrator runtime
@@ -206,6 +285,7 @@ async function main() {
     // The main processing happens via Realtime subscriptions (event-driven)
     setInterval(tickBlueprint, 3000); // Check for agents needing blueprint generation every 3s
     setInterval(tickContextGeneration, 3000); // Check for approved blueprints needing execution every 3s
+    setInterval(tickRegeneration, 3000); // Check for agents needing stage regeneration every 3s
     setInterval(tickRun, 5000);  // Check for events needing start every 5s
     
     log('Worker/Orchestrator running...');

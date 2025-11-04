@@ -45,8 +45,14 @@ export async function buildContextChunks(
 
   // Add research result chunks
   for (const chunk of researchResults.chunks) {
+    // Validate chunk text before adding
+    if (!chunk.text || typeof chunk.text !== 'string' || chunk.text.trim().length === 0) {
+      console.warn(`[chunks] Skipping research chunk with invalid text: ${typeof chunk.text}`);
+      continue;
+    }
+    
     allChunks.push({
-      text: chunk.text,
+      text: chunk.text.trim(), // Normalize by trimming
       source: chunk.source || 'research',
       research_source: chunk.metadata?.api || 'exa',
       rank: 0, // Will be calculated
@@ -63,9 +69,16 @@ export async function buildContextChunks(
     genModel
   );
 
+  // 2. Add LLM-generated chunks (already validated in generateLLMChunks)
   for (const chunk of llmChunks) {
+    // Double-check validation (should already be validated, but be safe)
+    if (!chunk || typeof chunk !== 'string' || chunk.trim().length === 0) {
+      console.warn(`[chunks] Skipping LLM chunk with invalid text`);
+      continue;
+    }
+    
     allChunks.push({
-      text: chunk,
+      text: chunk.trim(), // Ensure trimmed
       source: 'llm_generation',
       research_source: 'llm_generation',
       rank: 0,
@@ -96,21 +109,42 @@ export async function buildContextChunks(
   for (let i = 0; i < selectedChunks.length; i += embeddingBatchSize) {
     const batch = selectedChunks.slice(i, i + embeddingBatchSize);
 
+    // Filter out chunks with invalid text
+    const validBatch = batch.filter(chunk => {
+      if (!chunk.text || typeof chunk.text !== 'string' || chunk.text.trim().length === 0) {
+        console.warn(`[chunks] Skipping chunk with invalid text (rank ${chunk.rank}): text is ${typeof chunk.text === 'string' ? 'empty' : 'not a string'}`);
+        return false;
+      }
+      return true;
+    });
+
+    if (validBatch.length === 0) {
+      console.warn(`[chunks] Batch ${i / embeddingBatchSize + 1} has no valid chunks, skipping`);
+      continue;
+    }
+
     try {
       // Generate embeddings in parallel
-      const embeddingPromises = batch.map(chunk =>
+      const embeddingPromises = validBatch.map(chunk =>
         openai.embeddings.create({
           model: embedModel,
-          input: chunk.text,
+          input: chunk.text.trim(), // Ensure trimmed string
         })
       );
 
       const embeddingResponses = await Promise.all(embeddingPromises);
 
       // Store chunks with embeddings
-      for (let j = 0; j < batch.length; j++) {
-        const chunk = batch[j];
-        const embedding = embeddingResponses[j].data[0].embedding;
+      for (let j = 0; j < validBatch.length; j++) {
+        const chunk = validBatch[j];
+        const embeddingResponse = embeddingResponses[j];
+        
+        if (!embeddingResponse || !embeddingResponse.data || !embeddingResponse.data[0]) {
+          console.error(`[chunks] Invalid embedding response for chunk at rank ${chunk.rank}`);
+          continue;
+        }
+        
+        const embedding = embeddingResponse.data[0].embedding;
 
         try {
           const { error } = await (supabase
@@ -220,7 +254,17 @@ Return as JSON array of strings.`;
       throw new Error('LLM did not return array of chunks');
     }
 
-    return chunks.slice(0, neededLLMChunks);
+    // Filter and validate chunks - ensure they are non-empty strings
+    const validChunks = chunks
+      .filter((chunk: any) => {
+        return chunk && typeof chunk === 'string' && chunk.trim().length > 0;
+      })
+      .map((chunk: string) => chunk.trim()) // Normalize by trimming
+      .slice(0, neededLLMChunks);
+
+    console.log(`[chunks] Generated ${validChunks.length} valid LLM chunks (filtered ${chunks.length - validChunks.length} invalid)`);
+
+    return validChunks;
   } catch (error: any) {
     console.error(`[chunks] Error generating LLM chunks: ${error.message}`);
     return [];
