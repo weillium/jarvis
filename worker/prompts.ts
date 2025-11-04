@@ -417,9 +417,17 @@ export function createCardGenerationUserPrompt(
   transcriptText: string,
   contextBullets: string[],
   factsContext: string,
-  vectorContext: string
+  glossaryContext?: string
 ): string {
-  return `Transcript:\n${transcriptText}\n\nRecent context:\n${contextBullets.join('\n')}\n\nRelevant facts:\n${factsContext}\n\nAdditional context:\n${vectorContext}\n\nDetermine the appropriate card_type (text, text_visual, or visual) and generate the card accordingly.`;
+  let prompt = `Transcript:\n${transcriptText}\n\nRecent context:\n${contextBullets.join('\n')}\n\nRelevant facts:\n${factsContext}`;
+  
+  if (glossaryContext) {
+    prompt += `\n\n${glossaryContext}`;
+  }
+  
+  prompt += `\n\nDetermine the appropriate card_type (text, text_visual, or visual) and generate the card accordingly.`;
+  
+  return prompt;
 }
 
 /**
@@ -435,8 +443,20 @@ export const FACTS_EXTRACTION_SYSTEM_PROMPT = `You are a facts extractor. Track 
  * @param recentText - Recent transcript text
  * @param currentFacts - Current facts (JSON string)
  */
-export function createFactsExtractionUserPrompt(recentText: string, currentFacts: string): string {
-  return `Recent transcripts:\n${recentText}\n\nCurrent facts:\n${currentFacts}\n\nExtract or update stable facts. Return JSON array with keys: key, value, confidence.`;
+export function createFactsExtractionUserPrompt(
+  recentText: string,
+  currentFacts: string,
+  glossaryContext?: string
+): string {
+  let prompt = `Recent transcripts:\n${recentText}\n\nCurrent facts:\n${currentFacts}`;
+  
+  if (glossaryContext) {
+    prompt += `\n\n${glossaryContext}`;
+  }
+  
+  prompt += `\n\nExtract or update stable facts. Return JSON array with keys: key, value, confidence.`;
+  
+  return prompt;
 }
 
 // ============================================================================
@@ -449,8 +469,25 @@ export function createFactsExtractionUserPrompt(recentText: string, currentFacts
  * @param message - The transcript message
  * @param bullets - Context bullets
  */
-export function createRealtimeCardsUserPrompt(message: string, bullets: string[]): string {
-  return `Transcript: ${message}\n\nContext:\n${bullets.join('\n') || ''}\n\nGenerate a context card if the content is novel and useful.`;
+export function createRealtimeCardsUserPrompt(
+  message: string,
+  bullets: string[],
+  glossaryContext?: string
+): string {
+  let prompt = `Transcript: ${message}\n\n`;
+
+  if (bullets.length > 0) {
+    prompt += `Recent Context:\n${bullets.join('\n')}\n\n`;
+  }
+
+  if (glossaryContext) {
+    prompt += `${glossaryContext}\n\n`;
+  }
+
+  prompt += `Generate a context card if the content is novel and useful. `;
+  prompt += `Determine the appropriate card_type (text, text_visual, or visual) based on content.`;
+  
+  return prompt;
 }
 
 /**
@@ -459,7 +496,22 @@ export function createRealtimeCardsUserPrompt(message: string, bullets: string[]
  * @param recentText - Recent transcript text
  * @param facts - Current facts (JSON string)
  */
-export function createRealtimeFactsUserPrompt(recentText: string, facts: string): string {
-  return `Recent transcripts:\n${recentText}\n\nCurrent facts:\n${facts}\n\nExtract or update stable facts.`;
+export function createRealtimeFactsUserPrompt(
+  recentText: string,
+  facts: string,
+  glossaryContext?: string
+): string {
+  let prompt = `Recent Transcripts:\n${recentText}\n\n`;
+
+  prompt += `Current Facts:\n${facts}\n\n`;
+
+  if (glossaryContext) {
+    prompt += `${glossaryContext}\n\n`;
+  }
+
+  prompt += `Extract or update stable facts. Track agenda, decisions, deadlines, metrics, attendees, topics. `;
+  prompt += `Return JSON array of facts with key, value, and confidence.`;
+  
+  return prompt;
 }
 

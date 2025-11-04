@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { connectionManager } from './connection-manager';
 
 /**
  * Server-Sent Events (SSE) Stream API Route
@@ -13,6 +14,7 @@ import { createClient } from '@supabase/supabase-js';
  * - {"type": "connected", "timestamp": "..."}
  * - {"type": "card", "payload": {...}, "timestamp": "..."}
  * - {"type": "fact_update", "payload": {...}, "timestamp": "..."}
+ * - {"type": "agent_session_status", "payload": {...}, "timestamp": "..."}
  */
 
 // Create Supabase client with service role for privileged operations
@@ -65,6 +67,9 @@ export async function GET(req: NextRequest) {
       const encoder = new TextEncoder();
       const supabase = getSupabaseClient();
 
+      // Register this connection with the connection manager
+      connectionManager.register(eventId, controller);
+
       // Send initial connection message
       controller.enqueue(
         encoder.encode(
@@ -75,6 +80,42 @@ export async function GET(req: NextRequest) {
           })
         )
       );
+
+      // Send initial session statuses (if any exist)
+      try {
+        const { data: sessions } = await supabase
+          .from('agent_sessions')
+          .select('*')
+          .eq('event_id', eventId)
+          .order('created_at', { ascending: true });
+
+        if (sessions && sessions.length > 0) {
+          for (const session of sessions) {
+            controller.enqueue(
+              encoder.encode(
+                formatSSE({
+                  type: 'agent_session_status',
+                  event_id: eventId,
+                  timestamp: new Date().toISOString(),
+                  payload: {
+                    agent_type: session.agent_type,
+                    session_id: session.provider_session_id,
+                    status: session.status,
+                    metadata: {
+                      created_at: session.created_at,
+                      updated_at: session.updated_at,
+                      closed_at: session.closed_at,
+                    },
+                  },
+                })
+              )
+            );
+          }
+        }
+      } catch (error: any) {
+        console.error(`[api/stream] Error fetching initial sessions: ${error.message}`);
+        // Don't fail the connection if initial fetch fails
+      }
 
       // Subscribe to agent_outputs table for cards
       const cardsChannel = supabase
@@ -134,11 +175,60 @@ export async function GET(req: NextRequest) {
         )
         .subscribe();
 
+      // Subscribe to agent_sessions table for status updates
+      const sessionsChannel = supabase
+        .channel(`agent_sessions_${eventId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*', // INSERT, UPDATE
+            schema: 'public',
+            table: 'agent_sessions',
+            filter: `event_id=eq.${eventId}`,
+          },
+          async (payload: any) => {
+            const session = payload.new || payload.old;
+            
+            // Stream basic status update
+            // Note: Comprehensive status (with token metrics, logs, etc.) will be
+            // pushed by worker via separate mechanism in Step 7
+            controller.enqueue(
+              encoder.encode(
+                formatSSE({
+                  type: 'agent_session_status',
+                  event_id: eventId,
+                  timestamp: new Date().toISOString(),
+                  payload: {
+                    agent_type: session.agent_type,
+                    session_id: session.provider_session_id,
+                    status: session.status,
+                    metadata: {
+                      created_at: session.created_at,
+                      updated_at: session.updated_at,
+                      closed_at: session.closed_at,
+                    },
+                    // Basic info from database
+                    // Full status with metrics/logs will come from worker push
+                  },
+                })
+              )
+            );
+          }
+        )
+        .subscribe();
+
       // Handle client disconnect
       req.signal.addEventListener('abort', () => {
         console.log(`[api/stream] Client disconnected for event ${eventId}`);
+        
+        // Unregister from connection manager
+        connectionManager.unregister(eventId, controller);
+        
+        // Clean up Supabase channels
         supabase.removeChannel(cardsChannel);
         supabase.removeChannel(factsChannel);
+        supabase.removeChannel(sessionsChannel);
+        
         controller.close();
       });
 
@@ -156,14 +246,17 @@ export async function GET(req: NextRequest) {
         } catch (error) {
           // Client disconnected
           clearInterval(heartbeatInterval);
+          connectionManager.unregister(eventId, controller);
           supabase.removeChannel(cardsChannel);
           supabase.removeChannel(factsChannel);
+          supabase.removeChannel(sessionsChannel);
         }
       }, 30000); // Every 30 seconds
 
       // Cleanup on stream end
       req.signal.addEventListener('abort', () => {
         clearInterval(heartbeatInterval);
+        connectionManager.unregister(eventId, controller);
       });
     },
   });

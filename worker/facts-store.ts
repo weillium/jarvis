@@ -1,6 +1,7 @@
 /**
  * In-memory Facts Store
  * Maintains a compact key-value store of stable facts extracted during events
+ * Enforces maximum capacity with LRU eviction (lowest confidence first, then oldest)
  */
 
 export interface Fact {
@@ -13,9 +14,52 @@ export interface Fact {
 
 export class FactsStore {
   private facts: Map<string, Fact> = new Map();
+  private maxItems: number;
+  private evictionCount: number = 0;
+
+  constructor(maxItems: number = 50) {
+    this.maxItems = maxItems;
+  }
+
+  /**
+   * Evict facts when over capacity
+   * Evicts lowest-confidence facts first, then oldest if confidence is tied
+   */
+  private evictIfNeeded(): void {
+    if (this.facts.size <= this.maxItems) {
+      return;
+    }
+
+    const overCapacity = this.facts.size - this.maxItems;
+    const factsArray = Array.from(this.facts.entries());
+
+    // Sort by confidence (lowest first), then by lastSeenSeq (oldest first)
+    factsArray.sort((a, b) => {
+      const [aKey, aFact] = a;
+      const [bKey, bFact] = b;
+      
+      // First sort by confidence (ascending - lowest first)
+      if (aFact.confidence !== bFact.confidence) {
+        return aFact.confidence - bFact.confidence;
+      }
+      
+      // If confidence is tied, sort by lastSeenSeq (ascending - oldest first)
+      return aFact.lastSeenSeq - bFact.lastSeenSeq;
+    });
+
+    // Evict the first N (lowest confidence/oldest)
+    for (let i = 0; i < overCapacity; i++) {
+      const [key] = factsArray[i];
+      this.facts.delete(key);
+      this.evictionCount++;
+    }
+
+    console.log(`[facts] Evicted ${overCapacity} facts (capacity: ${this.maxItems}, total evictions: ${this.evictionCount})`);
+  }
 
   /**
    * Upsert a fact (update if exists, insert if not)
+   * Automatically evicts facts if over capacity
    */
   upsert(key: string, value: any, confidence: number, sourceSeq: number, sourceId?: number): void {
     const existing = this.facts.get(key);
@@ -46,6 +90,9 @@ export class FactsStore {
         lastSeenSeq: sourceSeq,
         sources: sourceId ? [sourceId] : [],
       });
+
+      // Evict if over capacity
+      this.evictIfNeeded();
     }
   }
 
@@ -116,9 +163,12 @@ export class FactsStore {
     const all = Array.from(this.facts.values());
     return {
       total: all.length,
+      maxItems: this.maxItems,
+      capacityUsed: `${all.length}/${this.maxItems}`,
       highConfidence: all.filter((f) => f.confidence >= 0.5).length,
       mediumConfidence: all.filter((f) => f.confidence >= 0.3 && f.confidence < 0.5).length,
       lowConfidence: all.filter((f) => f.confidence < 0.3).length,
+      evictions: this.evictionCount,
     };
   }
 }

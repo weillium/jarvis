@@ -1,7 +1,10 @@
 /**
  * Ring Buffer for in-memory transcript storage
  * Maintains a rolling window of the last N minutes of finalized transcripts
+ * Enforces token budget limits to prevent prompt bloat
  */
+
+import { countTokens, countTokensArray } from './utils/token-counter';
 
 export interface TranscriptChunk {
   seq: number;
@@ -70,22 +73,82 @@ export class RingBuffer {
 
   /**
    * Get a condensed summary of recent transcripts for context
-   * Returns last N chunks as bullet points
+   * Returns last N chunks as bullet points, capped at 2048 tokens
+   * 
+   * @param n - Maximum number of chunks to include
+   * @param maxTokens - Maximum token budget (default 2048)
+   * @returns Array of bullet point strings that fit within token budget
    */
-  getContextBullets(n: number = 10): string[] {
+  getContextBullets(n: number = 10, maxTokens: number = 2048): string[] {
     const recent = this.getLastN(n);
-    return recent.map((chunk) => {
+    const bullets: string[] = [];
+    let totalTokens = 0;
+
+    // Add bullets one by one until we hit token budget
+    for (const chunk of recent) {
       const speaker = chunk.speaker ? `[${chunk.speaker}] ` : '';
-      return `- ${speaker}${chunk.text}`;
-    });
+      const bullet = `- ${speaker}${chunk.text}`;
+      const bulletTokens = countTokens(bullet);
+
+      // Check if adding this bullet would exceed budget
+      if (totalTokens + bulletTokens > maxTokens) {
+        break;
+      }
+
+      bullets.push(bullet);
+      totalTokens += bulletTokens;
+    }
+
+    return bullets;
+  }
+
+  /**
+   * Get token count for context bullets without creating them
+   * Useful for logging and monitoring
+   */
+  getContextBulletsTokenCount(n: number = 10, maxTokens: number = 2048): number {
+    const bullets = this.getContextBullets(n, maxTokens);
+    return countTokensArray(bullets);
   }
 
   /**
    * Get the full text of recent transcripts (for Facts Agent)
+   * Capped at 2048 tokens to prevent prompt bloat
+   * 
+   * @param n - Maximum number of chunks to include
+   * @param maxTokens - Maximum token budget (default 2048)
+   * @returns Text string that fits within token budget
    */
-  getRecentText(n: number = 20): string {
+  getRecentText(n: number = 20, maxTokens: number = 2048): string {
     const recent = this.getLastN(n);
-    return recent.map((chunk) => chunk.text).join(' ');
+    const texts: string[] = [];
+    let totalTokens = 0;
+
+    // Add chunks one by one until we hit token budget
+    for (const chunk of recent) {
+      const chunkText = chunk.text;
+      const chunkTokens = countTokens(chunkText);
+      const separatorTokens = texts.length > 0 ? 1 : 0; // Space separator
+
+      // Check if adding this chunk would exceed budget
+      if (totalTokens + chunkTokens + separatorTokens > maxTokens) {
+        break;
+      }
+
+      texts.push(chunkText);
+      totalTokens += chunkTokens + separatorTokens;
+    }
+
+    return texts.join(' ');
+  }
+
+  /**
+   * Get token count for recent text without creating it
+   * Useful for logging and monitoring
+   */
+  getRecentTextTokenCount(n: number = 20, maxTokens: number = 2048): number {
+    const text = this.getRecentText(n, maxTokens);
+    return countTokens(text);
   }
 
   /**
