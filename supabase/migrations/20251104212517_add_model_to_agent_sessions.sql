@@ -6,3 +6,4 @@ alter table agent_sessions
 
 comment on column agent_sessions.model is 'OpenAI model used for this Realtime API session (e.g., gpt-4o-realtime-preview-2024-10-01)';
 
+
