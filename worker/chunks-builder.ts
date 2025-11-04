@@ -125,18 +125,47 @@ export async function buildContextChunks(
 
     try {
       // Generate embeddings in parallel
-      const embeddingPromises = validBatch.map(chunk =>
-        openai.embeddings.create({
-          model: embedModel,
-          input: chunk.text.trim(), // Ensure trimmed string
+      // Filter again and validate text is a non-empty string
+      const embeddingBatch = validBatch
+        .map(chunk => {
+          const text = typeof chunk.text === 'string' ? chunk.text.trim() : String(chunk.text || '').trim();
+          return { ...chunk, text };
         })
-      );
+        .filter(chunk => {
+          if (!chunk.text || chunk.text.length === 0) {
+            console.warn(`[chunks] Skipping chunk with empty text after trimming (rank ${chunk.rank})`);
+            return false;
+          }
+          // OpenAI embeddings API has a maximum input length (8191 tokens for text-embedding-3-small)
+          // Rough estimate: 1 token ≈ 4 characters, so max ~32k characters
+          if (chunk.text.length > 32000) {
+            console.warn(`[chunks] Skipping chunk with text too long (${chunk.text.length} chars, rank ${chunk.rank}), truncating`);
+            chunk.text = chunk.text.substring(0, 32000);
+          }
+          return true;
+        });
+
+      if (embeddingBatch.length === 0) {
+        console.warn(`[chunks] Batch ${i / embeddingBatchSize + 1} has no valid chunks after final validation, skipping`);
+        continue;
+      }
+
+      const embeddingPromises = embeddingBatch.map(chunk => {
+        // Double-check that input is a valid non-empty string
+        if (typeof chunk.text !== 'string' || chunk.text.length === 0) {
+          throw new Error(`Invalid chunk text: ${typeof chunk.text} (length: ${chunk.text?.length || 0})`);
+        }
+        return openai.embeddings.create({
+          model: embedModel,
+          input: chunk.text,
+        });
+      });
 
       const embeddingResponses = await Promise.all(embeddingPromises);
 
       // Store chunks with embeddings
-      for (let j = 0; j < validBatch.length; j++) {
-        const chunk = validBatch[j];
+      for (let j = 0; j < embeddingBatch.length; j++) {
+        const chunk = embeddingBatch[j];
         const embeddingResponse = embeddingResponses[j];
         
         if (!embeddingResponse || !embeddingResponse.data || !embeddingResponse.data[0]) {
@@ -174,6 +203,14 @@ export async function buildContextChunks(
       }
     } catch (error: any) {
       console.error(`[chunks] Error processing batch: ${error.message}`);
+      if (error.response?.data) {
+        console.error(`[chunks] OpenAI API error details:`, JSON.stringify(error.response.data, null, 2));
+      }
+      // Log the first invalid chunk in the batch for debugging
+      if (validBatch.length > 0) {
+        const firstChunk = validBatch[0];
+        console.error(`[chunks] First chunk in failed batch - type: ${typeof firstChunk.text}, length: ${firstChunk.text?.length || 'N/A'}, text preview: ${String(firstChunk.text || '').substring(0, 100)}`);
+      }
     }
   }
 
@@ -212,7 +249,7 @@ Guidelines:
 - Cover different aspects of the topic
 - Each chunk should be self-contained
 
-Output format: Return a JSON array of strings, where each string is a context chunk.`;
+Output format: Return a JSON object with a "chunks" field containing an array of strings, where each string is a context chunk. Example: {"chunks": ["chunk 1 text...", "chunk 2 text..."]}`;
 
   const researchSummary = researchResults.chunks
     .map(c => c.text)
@@ -229,7 +266,7 @@ ${researchSummary}
 
 Generate informative context chunks that complement the research results. Each chunk should cover a different aspect or provide additional context.
 
-Return as JSON array of strings.`;
+Return as a JSON object with a "chunks" field containing an array of strings. Each string should be a complete context chunk (200-400 words).`;
 
   try {
     const response = await openai.chat.completions.create({
@@ -247,11 +284,23 @@ Return as JSON array of strings.`;
       throw new Error('Empty response from LLM');
     }
 
-    const parsed = JSON.parse(content);
-    const chunks = parsed.chunks || [];
+    let parsed: any;
+    try {
+      parsed = JSON.parse(content);
+    } catch (e) {
+      console.error(`[chunks] Failed to parse LLM response as JSON: ${content.substring(0, 200)}`);
+      throw new Error('LLM response is not valid JSON');
+    }
 
-    if (!Array.isArray(chunks)) {
-      throw new Error('LLM did not return array of chunks');
+    // Handle both formats: { chunks: [...] } and [...] (array directly)
+    let chunks: any[] = [];
+    if (Array.isArray(parsed)) {
+      chunks = parsed;
+    } else if (parsed && Array.isArray(parsed.chunks)) {
+      chunks = parsed.chunks;
+    } else {
+      console.error(`[chunks] Unexpected LLM response format. Parsed:`, JSON.stringify(parsed).substring(0, 200));
+      throw new Error('LLM did not return array of chunks in expected format');
     }
 
     // Filter and validate chunks - ensure they are non-empty strings

@@ -411,8 +411,8 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
         </div>
       )}
 
-      {/* Status Indicator */}
-      {isPrepping && (
+      {/* Status Indicator - Only show during active building */}
+      {isPrepping && contextItems.length === 0 && (
         <div style={{
           padding: '12px 16px',
           background: '#fef3c7',
@@ -427,47 +427,6 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
             Agent status: <strong>{agentStatus}</strong> - The worker should be processing this every 3 seconds.
             {!isRealTime && ' Make sure the worker is running!'}
           </div>
-        </div>
-      )}
-
-      {/* Diagnostic Info */}
-      {agentStatus && (
-        <div style={{
-          padding: '12px 16px',
-          background: agentStatus === 'prepping' ? '#fef3c7' : agentStatus === 'ready' ? '#dbeafe' : '#f3f4f6',
-          border: `1px solid ${agentStatus === 'prepping' ? '#fbbf24' : agentStatus === 'ready' ? '#3b82f6' : '#9ca3af'}`,
-          borderRadius: '8px',
-          marginBottom: '20px',
-          fontSize: '13px',
-        }}>
-          <div style={{ fontWeight: '600', marginBottom: '4px' }}>
-            Agent Status: <span style={{ textTransform: 'capitalize' }}>{agentStatus}</span>
-          </div>
-          {agentStatus === 'prepping' && (
-            <div style={{ fontSize: '12px', opacity: 0.8 }}>
-              Context building is in progress. The worker polls for 'prepping' agents every 3 seconds.
-              {contextItems.length === 0 && (
-                <div style={{ marginTop: '4px', color: '#dc2626' }}>
-                  ⚠️ No chunks yet. Check if the worker is running: <code>cd worker && npm run dev</code>
-                </div>
-              )}
-            </div>
-          )}
-          {agentStatus === 'ready' && (
-            <div style={{ fontSize: '12px', opacity: 0.8 }}>
-              Context database is complete. Agent is ready to start when event goes live.
-            </div>
-          )}
-          {agentStatus === 'running' && (
-            <div style={{ fontSize: '12px', opacity: 0.8 }}>
-              Agent is running. Context database was built during the 'prepping' phase.
-            </div>
-          )}
-          {!['prepping', 'ready', 'running'].includes(agentStatus || '') && (
-            <div style={{ fontSize: '12px', opacity: 0.8 }}>
-              Agent status: {agentStatus}. Context building only happens when status is 'prepping'.
-            </div>
-          )}
         </div>
       )}
 
@@ -555,9 +514,9 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
             <div style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
               {(filterByRank || filterByResearchSource)
                 ? 'No context items match the selected filters.'
-                : isPrepping
-                ? 'Context database is being built. Chunks will appear here as they are generated.'
-                : 'No context items found. Context will be generated when agent status is "prepping".'}
+                : contextItems.length === 0
+                ? 'No context items found. Expand to view chunks when they are available.'
+                : 'No context items match the current filters.'}
             </div>
           ) : (
             <div style={{ padding: '8px' }}>
