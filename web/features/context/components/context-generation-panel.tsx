@@ -314,14 +314,19 @@ export function ContextGenerationPanel({ eventId, agentStatus, embedded = false,
         </div>
       )}
 
-      {/* Start button */}
+      {/* Start/Regenerate button and Approve button */}
       {statusData?.agent && canStart && (
-        <div style={{ marginBottom: '20px' }}>
+        <div style={{ 
+          marginBottom: '20px',
+          display: 'flex',
+          gap: '12px',
+          flexWrap: 'wrap',
+        }}>
           <button
             onClick={handleStart}
             disabled={starting}
             style={{
-              background: starting ? '#94a3b8' : '#3b82f6',
+              background: starting ? '#94a3b8' : (statusData?.agent?.status === 'blueprint_ready' ? '#8b5cf6' : '#3b82f6'),
               color: '#ffffff',
               border: 'none',
               borderRadius: '8px',
@@ -332,8 +337,29 @@ export function ContextGenerationPanel({ eventId, agentStatus, embedded = false,
               transition: 'background 0.2s',
             }}
           >
-            {starting ? 'Starting...' : 'Start Context Generation'}
+            {starting 
+              ? 'Starting...' 
+              : (statusData?.agent?.status === 'blueprint_ready' ? 'Regenerate Blueprint' : 'Start Context Generation')}
           </button>
+          {canApprove && (
+            <button
+              onClick={handleApprove}
+              disabled={approving}
+              style={{
+                background: approving ? '#94a3b8' : '#10b981',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '12px 24px',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: approving ? 'not-allowed' : 'pointer',
+                transition: 'background 0.2s',
+              }}
+            >
+              {approving ? 'Approving...' : 'Approve Blueprint'}
+            </button>
+          )}
         </div>
       )}
 

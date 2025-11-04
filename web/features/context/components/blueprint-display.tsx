@@ -97,43 +97,49 @@ export function BlueprintDisplay({
         background: '#f8fafc',
       }),
     }}>
-      {/* Header - only show when not embedded */}
-      {!embedded && (
+      {/* Header - show when not embedded OR when embedded and can approve */}
+      {(!embedded || canApprove) && (
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           marginBottom: '16px',
         }}>
-          <h4 style={{
-            fontSize: '18px',
-            fontWeight: '600',
-            color: '#0f172a',
-            margin: 0,
-          }}>
-            Context Blueprint
-          </h4>
-        <div style={{ display: 'flex', gap: '8px' }}>
+          {!embedded && (
+            <h4 style={{
+              fontSize: '18px',
+              fontWeight: '600',
+              color: '#0f172a',
+              margin: 0,
+            }}>
+              Context Blueprint
+            </h4>
+          )}
           {canApprove && (
-            <button
-              onClick={onApprove}
-              disabled={approving}
-              style={{
-                background: approving ? '#94a3b8' : '#10b981',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '6px',
-                padding: '8px 16px',
-                fontSize: '14px',
-                fontWeight: '500',
-                cursor: approving ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {approving ? 'Approving...' : 'Approve Blueprint'}
-            </button>
+            <div style={{ 
+              display: 'flex', 
+              gap: '8px',
+              marginLeft: embedded ? 0 : 'auto',
+            }}>
+              <button
+                onClick={onApprove}
+                disabled={approving}
+                style={{
+                  background: approving ? '#94a3b8' : '#10b981',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '8px 16px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  cursor: approving ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {approving ? 'Approving...' : 'Approve Blueprint'}
+              </button>
+            </div>
           )}
         </div>
-      </div>
       )}
 
       {/* Summary */}

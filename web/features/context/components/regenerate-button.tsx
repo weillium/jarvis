@@ -137,7 +137,7 @@ export function RegenerateButton({ eventId, stage, onComplete }: RegenerateButto
   };
 
   return (
-    <div style={{ marginBottom: '16px' }}>
+    <div style={{ marginBottom: 0 }}>
       <button
         onClick={handleStartOrRegenerate}
         disabled={isDisabled()}

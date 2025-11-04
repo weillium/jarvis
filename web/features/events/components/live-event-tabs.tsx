@@ -49,11 +49,19 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
   useEffect(() => {
     async function fetchBlueprintStatus() {
       try {
-        const res = await fetch(`/api/context/${eventId}/status`);
-        const data = await res.json();
-        if (data.ok) {
-          setBlueprintStatus(data.blueprint?.status || null);
-          setCanApprove(data.blueprint?.status === 'ready' && !data.blueprint?.approved_at);
+        const [statusRes, agentRes] = await Promise.all([
+          fetch(`/api/context/${eventId}/status`),
+          fetch(`/api/agent/${eventId}`),
+        ]);
+        const statusData = await statusRes.json();
+        const agentData = await agentRes.json();
+        
+        if (statusData.ok) {
+          setBlueprintStatus(statusData.blueprint?.status || null);
+          // Can approve when agent status is blueprint_ready AND blueprint status is ready
+          const agentIsReady = agentData.ok && agentData.agent?.status === 'blueprint_ready';
+          const blueprintIsReady = statusData.blueprint?.status === 'ready' && !statusData.blueprint?.approved_at;
+          setCanApprove(agentIsReady && blueprintIsReady);
         }
       } catch (err) {
         console.error('Failed to fetch blueprint status:', err);
@@ -105,12 +113,39 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
       label: 'Context Blueprint',
       content: (
         <div>
-          <RegenerateButton eventId={eventId} stage="blueprint" />
+          <div style={{ 
+            display: 'flex', 
+            gap: '12px', 
+            marginBottom: '16px',
+            flexWrap: 'wrap',
+          }}>
+            <RegenerateButton eventId={eventId} stage="blueprint" />
+            {canApprove && (
+              <button
+                onClick={handleApproveBlueprint}
+                disabled={approving}
+                style={{
+                  padding: '10px 16px',
+                  background: approving ? '#94a3b8' : '#10b981',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  cursor: approving ? 'not-allowed' : 'pointer',
+                  transition: 'background 0.2s',
+                  opacity: approving ? 0.6 : 1,
+                }}
+              >
+                {approving ? 'Approving...' : 'Approve Blueprint'}
+              </button>
+            )}
+          </div>
           <BlueprintDisplay
             eventId={eventId}
             onApprove={handleApproveBlueprint}
             approving={approving}
-            canApprove={canApprove}
+            canApprove={false}
             onRegenerate={handleRegenerateBlueprint}
             embedded={true}
           />
