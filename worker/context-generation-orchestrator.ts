@@ -3,10 +3,12 @@
  * Orchestrates the execution of context generation blueprint
  * 
  * Flow:
- * 1. Execute research plan (Exa/Wikipedia)
- * 2. Build glossary
- * 3. Build chunks (ranked, up to 1000)
+ * 1. Execute research plan (Exa/Wikipedia) → Store in research_results
+ * 2. Build glossary → Store with generation_cycle_id
+ * 3. Build chunks (ranked, up to 1000) → Store with generation_cycle_id
  * 4. Update status to 'context_complete'
+ * 
+ * Uses generation_cycles for tracking and versioning
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -20,6 +22,67 @@ export interface ContextGenerationOrchestratorOptions {
   openai: OpenAI;
   embedModel: string;
   genModel: string;
+}
+
+/**
+ * Create a generation cycle record
+ */
+async function createGenerationCycle(
+  supabase: ReturnType<typeof createClient>,
+  eventId: string,
+  agentId: string,
+  blueprintId: string,
+  cycleType: 'blueprint' | 'research' | 'glossary' | 'chunks' | 'rankings' | 'embeddings' | 'full',
+  component?: string
+): Promise<string> {
+  const { data, error } = await (supabase
+    .from('generation_cycles') as any)
+    .insert({
+      event_id: eventId,
+      agent_id: agentId,
+      blueprint_id: blueprintId,
+      cycle_type: cycleType,
+      component: component || cycleType,
+      status: 'started',
+      progress_current: 0,
+      progress_total: 0,
+    })
+    .select('id')
+    .single();
+
+  if (error || !data) {
+    throw new Error(`Failed to create generation cycle: ${error?.message || 'Unknown error'}`);
+  }
+
+  return data.id;
+}
+
+/**
+ * Update generation cycle status and progress
+ */
+async function updateGenerationCycle(
+  supabase: ReturnType<typeof createClient>,
+  cycleId: string,
+  updates: {
+    status?: 'started' | 'processing' | 'completed' | 'failed' | 'superseded';
+    progress_current?: number;
+    progress_total?: number;
+    error_message?: string;
+  }
+): Promise<void> {
+  const updateData: any = { ...updates };
+  if (updates.status === 'completed') {
+    updateData.completed_at = new Date().toISOString();
+  }
+
+  const { error } = await (supabase
+    .from('generation_cycles') as any)
+    .update(updateData)
+    .eq('id', cycleId);
+
+  if (error) {
+    console.warn(`[context-gen] Warning: Failed to update generation cycle: ${error.message}`);
+  }
 }
 
 /**
@@ -53,24 +116,48 @@ export async function executeContextGeneration(
     await updateAgentStatus(supabase, agentId, 'researching');
     // Blueprint status stays 'approved' - execution tracked via agent status and generation_cycles
 
-    // 3. Execute research plan
+    // 3. Create research generation cycle
+    const researchCycleId = await createGenerationCycle(
+      supabase,
+      eventId,
+      agentId,
+      blueprintId,
+      'research',
+      'research'
+    );
+
+    // 4. Execute research plan and store in research_results
     console.log(`[context-gen] Executing research plan with ${blueprint.research_plan.queries.length} queries`);
     const researchResults = await executeResearchPlan(
       eventId,
+      blueprintId,
       blueprint,
-      { openai, genModel }
+      researchCycleId,
+      { supabase, openai, genModel }
     );
 
     console.log(`[context-gen] Research completed: ${researchResults.chunks.length} chunks found`);
 
-    // 4. Update status to 'building_glossary'
+    // 5. Create glossary generation cycle
+    const glossaryCycleId = await createGenerationCycle(
+      supabase,
+      eventId,
+      agentId,
+      blueprintId,
+      'glossary',
+      'glossary'
+    );
+
+    // 6. Update status to 'building_glossary'
     await updateAgentStatus(supabase, agentId, 'building_glossary');
 
-    // 5. Build glossary
+    // 7. Build glossary (fetches research from research_results table)
     const glossaryCount = await buildGlossary(
       eventId,
+      blueprintId,
+      glossaryCycleId,
       blueprint,
-      researchResults,
+      null, // Pass null to fetch from research_results table
       {
         supabase,
         openai,
@@ -81,14 +168,26 @@ export async function executeContextGeneration(
 
     console.log(`[context-gen] Glossary built: ${glossaryCount} terms`);
 
-    // 6. Update status to 'building_chunks'
+    // 8. Create chunks generation cycle
+    const chunksCycleId = await createGenerationCycle(
+      supabase,
+      eventId,
+      agentId,
+      blueprintId,
+      'chunks',
+      'llm_chunks'
+    );
+
+    // 9. Update status to 'building_chunks'
     await updateAgentStatus(supabase, agentId, 'building_chunks');
 
-    // 7. Build chunks
+    // 10. Build chunks (fetches research from research_results table)
     const chunksCount = await buildContextChunks(
       eventId,
+      blueprintId,
+      chunksCycleId,
       blueprint,
-      researchResults,
+      null, // Pass null to fetch from research_results table
       {
         supabase,
         openai,
@@ -111,28 +210,50 @@ export async function executeContextGeneration(
     await updateAgentStatus(supabase, agentId, 'error').catch(() => {});
     await updateBlueprintStatus(supabase, blueprintId, 'error', error.message).catch(() => {});
     
+    // Mark any active generation cycles as failed
+    await (supabase
+      .from('generation_cycles') as any)
+      .update({
+        status: 'failed',
+        error_message: error.message,
+      })
+      .eq('event_id', eventId)
+      .eq('agent_id', agentId)
+      .in('status', ['started', 'processing'])
+      .catch(() => {});
+    
     throw error;
   }
 }
 
 /**
- * Execute research plan from blueprint
+ * Execute research plan from blueprint and store in research_results table
  * Currently uses stub - Exa integration will be added in Step 7
  */
 async function executeResearchPlan(
   eventId: string,
+  blueprintId: string,
   blueprint: Blueprint,
-  options: { openai: OpenAI; genModel: string }
+  generationCycleId: string,
+  options: { supabase: ReturnType<typeof createClient>; openai: OpenAI; genModel: string }
 ): Promise<ResearchResults> {
-  const { openai, genModel } = options;
+  const { supabase, openai, genModel } = options;
   const queries = blueprint.research_plan.queries || [];
 
   console.log(`[research] Executing ${queries.length} research queries`);
 
   const chunks: ResearchResults['chunks'] = [];
+  let insertedCount = 0;
+
+  // Update cycle to processing
+  await updateGenerationCycle(supabase, generationCycleId, {
+    status: 'processing',
+    progress_total: queries.length,
+  });
 
   // Process queries (stub implementation - will be enhanced with Exa API in Step 7)
-  for (const queryItem of queries) {
+  for (let i = 0; i < queries.length; i++) {
+    const queryItem = queries[i];
     try {
       if (queryItem.api === 'wikipedia') {
         // TODO: Implement Wikipedia enricher
@@ -144,22 +265,60 @@ async function executeResearchPlan(
         console.log(`[research] Exa query (stub): ${queryItem.query}`);
         // For now, generate stub chunks based on query
         const stubChunks = await generateStubResearchChunks(queryItem.query, openai, genModel);
-        chunks.push(...stubChunks.map(text => ({
-          text,
-          source: 'research_stub',
-          metadata: {
+        
+        // Store each chunk in research_results table
+        for (const chunkText of stubChunks) {
+          const metadata = {
             api: 'exa',
             query: queryItem.query,
             quality_score: 0.7, // Lower quality for stub
-          },
-        })));
+          };
+
+          const { error } = await (supabase
+            .from('research_results') as any)
+            .insert({
+              event_id: eventId,
+              blueprint_id: blueprintId,
+              generation_cycle_id: generationCycleId,
+              query: queryItem.query,
+              api: 'llm_stub', // Using llm_stub since it's a stub
+              content: chunkText,
+              quality_score: metadata.quality_score,
+              metadata: metadata,
+              is_active: true,
+              version: 1,
+            });
+
+          if (error) {
+            console.error(`[research] Error storing research result: ${error.message}`);
+          } else {
+            insertedCount++;
+            chunks.push({
+              text: chunkText,
+              source: 'research_stub',
+              metadata,
+            });
+          }
+        }
       }
+
+      // Update progress
+      await updateGenerationCycle(supabase, generationCycleId, {
+        progress_current: i + 1,
+      });
     } catch (error: any) {
       console.error(`[research] Error processing query "${queryItem.query}": ${error.message}`);
       // Continue with other queries
     }
   }
 
+  // Mark cycle as completed
+  await updateGenerationCycle(supabase, generationCycleId, {
+    status: 'completed',
+    progress_current: queries.length,
+  });
+
+  console.log(`[research] Stored ${insertedCount} research results in database`);
   return { chunks };
 }
 
@@ -283,32 +442,152 @@ export async function regenerateResearchStage(
     throw new Error(`Blueprint must be approved to regenerate research. Current status: ${blueprintRecord.status}`);
   }
 
+  // Soft delete existing research results
+  const { error: softDeleteError } = await (supabase
+    .from('research_results') as any)
+    .update({
+      is_active: false,
+      deleted_at: new Date().toISOString(),
+    })
+    .eq('event_id', eventId)
+    .eq('blueprint_id', blueprintId)
+    .eq('is_active', true);
+
+  if (softDeleteError) {
+    console.warn(`[context-gen] Warning: Failed to soft delete existing research: ${softDeleteError.message}`);
+  }
+
+  // Create generation cycle
+  const researchCycleId = await createGenerationCycle(
+    supabase,
+    eventId,
+    agentId,
+    blueprintId,
+    'research',
+    'research'
+  );
+
   // Update status
   await updateAgentStatus(supabase, agentId, 'researching');
   // Blueprint status stays 'approved'
 
-  // Execute research
+  // Execute research and store in research_results
   const researchResults = await executeResearchPlan(
     eventId,
+    blueprintId,
     blueprint,
-    { openai, genModel }
+    researchCycleId,
+    { supabase, openai, genModel }
   );
 
   console.log(`[context-gen] Research regeneration completed: ${researchResults.chunks.length} chunks found`);
 
-  // Return to previous state or next state (if glossary/chunks already exist, stay at researching)
-  // For now, set to context_complete if it was before, otherwise keep researching
-  // The UI can trigger next stages if needed
-  const { data: agent } = await (supabase
-    .from('agents') as any)
-    .select('status')
-    .eq('id', agentId)
-    .single();
+  // Mark downstream components (glossary, chunks) as needing regeneration
+  // Soft delete glossary and chunks that depend on the old research
+  const { error: glossaryDeleteError } = await (supabase
+    .from('glossary_terms') as any)
+    .update({
+      is_active: false,
+      deleted_at: new Date().toISOString(),
+    })
+    .eq('event_id', eventId)
+    .eq('is_active', true);
 
-  // If agent was at context_complete, set it back to researching (user can then trigger glossary/chunks)
-  // Otherwise leave it as researching
-  if (agent?.status === 'context_complete') {
-    // Don't change - let user decide next step
+  if (glossaryDeleteError) {
+    console.warn(`[context-gen] Warning: Failed to soft delete glossary after research regeneration: ${glossaryDeleteError.message}`);
+  }
+
+  // Soft delete non-research chunks (preserve any research chunks)
+  const { error: chunksDeleteError } = await (supabase
+    .from('context_items') as any)
+    .update({
+      is_active: false,
+      deleted_at: new Date().toISOString(),
+    })
+    .eq('event_id', eventId)
+    .eq('is_active', true)
+    .neq('component_type', 'research');
+
+  if (chunksDeleteError) {
+    console.warn(`[context-gen] Warning: Failed to soft delete chunks after research regeneration: ${chunksDeleteError.message}`);
+  }
+
+  // Mark any active generation cycles for glossary/chunks as superseded
+  await (supabase
+    .from('generation_cycles') as any)
+    .update({
+      status: 'superseded',
+    })
+    .eq('event_id', eventId)
+    .in('cycle_type', ['glossary', 'chunks'])
+    .in('status', ['started', 'processing', 'completed'])
+    .catch(() => {});
+
+  console.log(`[context-gen] Downstream components (glossary, chunks) marked for regeneration`);
+
+  // Automatically regenerate downstream components since research changed
+  console.log(`[context-gen] Auto-regenerating downstream components after research regeneration`);
+  
+  try {
+    // Regenerate glossary
+    const glossaryCycleId = await createGenerationCycle(
+      supabase,
+      eventId,
+      agentId,
+      blueprintId,
+      'glossary',
+      'glossary'
+    );
+
+    await updateAgentStatus(supabase, agentId, 'building_glossary');
+    const glossaryCount = await buildGlossary(
+      eventId,
+      blueprintId,
+      glossaryCycleId,
+      blueprint,
+      null, // Fetch from research_results table
+      {
+        supabase,
+        openai,
+        genModel,
+        embedModel,
+      }
+    );
+    console.log(`[context-gen] Glossary auto-regenerated: ${glossaryCount} terms`);
+
+    // Regenerate chunks
+    const chunksCycleId = await createGenerationCycle(
+      supabase,
+      eventId,
+      agentId,
+      blueprintId,
+      'chunks',
+      'llm_chunks'
+    );
+
+    await updateAgentStatus(supabase, agentId, 'building_chunks');
+    const chunksCount = await buildContextChunks(
+      eventId,
+      blueprintId,
+      chunksCycleId,
+      blueprint,
+      null, // Fetch from research_results table
+      {
+        supabase,
+        openai,
+        embedModel,
+        genModel,
+      }
+    );
+    console.log(`[context-gen] Chunks auto-regenerated: ${chunksCount} chunks`);
+
+    // Mark as complete
+    await updateAgentStatus(supabase, agentId, 'context_complete');
+    console.log(`[context-gen] All downstream components regenerated successfully`);
+  } catch (downstreamError: any) {
+    console.error(`[context-gen] Error auto-regenerating downstream components: ${downstreamError.message}`);
+    // Don't throw - research regeneration was successful, downstream can be regenerated manually
+    await updateAgentStatus(supabase, agentId, 'researching');
   }
 
   return researchResults;
@@ -346,45 +625,26 @@ export async function regenerateGlossaryStage(
     throw new Error(`Blueprint must be approved to regenerate glossary. Current status: ${blueprintRecord.status}`);
   }
 
-  // Fetch research results if not provided
-  let research: ResearchResults;
-  if (!researchResults) {
-    // Try to fetch existing research results from context_items with research_source
-    const { data: researchChunks } = await (supabase
-      .from('context_items') as any)
-      .select('chunk, research_source, metadata')
-      .eq('event_id', eventId)
-      .in('research_source', ['exa', 'wikipedia', 'research_stub']);
-
-    research = {
-      chunks: (researchChunks || []).map((item: any) => ({
-        text: item.chunk,
-        source: item.research_source || 'research',
-        metadata: item.metadata || {},
-      })),
-    };
-  } else {
-    research = researchResults;
-  }
-
-  // Delete existing glossary terms
-  const { error: deleteError } = await (supabase
-    .from('glossary_terms') as any)
-    .delete()
-    .eq('event_id', eventId);
-
-  if (deleteError) {
-    console.warn(`[context-gen] Warning: Failed to delete existing glossary terms: ${deleteError.message}`);
-  }
+  // Create generation cycle
+  const glossaryCycleId = await createGenerationCycle(
+    supabase,
+    eventId,
+    agentId,
+    blueprintId,
+    'glossary',
+    'glossary'
+  );
 
   // Update status
   await updateAgentStatus(supabase, agentId, 'building_glossary');
 
-  // Build glossary
+  // Build glossary (fetches research from research_results table)
   const glossaryCount = await buildGlossary(
     eventId,
+    blueprintId,
+    glossaryCycleId,
     blueprint,
-    research,
+    null, // Fetch from research_results table
     {
       supabase,
       openai,
@@ -430,45 +690,26 @@ export async function regenerateChunksStage(
     throw new Error(`Blueprint must be approved to regenerate chunks. Current status: ${blueprintRecord.status}`);
   }
 
-  // Fetch research results if not provided
-  let research: ResearchResults;
-  if (!researchResults) {
-    // Try to fetch existing research results from context_items with research_source
-    const { data: researchChunks } = await (supabase
-      .from('context_items') as any)
-      .select('chunk, research_source, metadata')
-      .eq('event_id', eventId)
-      .in('research_source', ['exa', 'wikipedia', 'research_stub']);
-
-    research = {
-      chunks: (researchChunks || []).map((item: any) => ({
-        text: item.chunk,
-        source: item.research_source || 'research',
-        metadata: item.metadata || {},
-      })),
-    };
-  } else {
-    research = researchResults;
-  }
-
-  // Delete existing context chunks
-  const { error: deleteError } = await (supabase
-    .from('context_items') as any)
-    .delete()
-    .eq('event_id', eventId);
-
-  if (deleteError) {
-    console.warn(`[context-gen] Warning: Failed to delete existing context chunks: ${deleteError.message}`);
-  }
+  // Create generation cycle
+  const chunksCycleId = await createGenerationCycle(
+    supabase,
+    eventId,
+    agentId,
+    blueprintId,
+    'chunks',
+    'llm_chunks'
+  );
 
   // Update status
   await updateAgentStatus(supabase, agentId, 'building_chunks');
 
-  // Build chunks
+  // Build chunks (fetches research from research_results table, preserves research chunks)
   const chunksCount = await buildContextChunks(
     eventId,
+    blueprintId,
+    chunksCycleId,
     blueprint,
-    research,
+    null, // Fetch from research_results table
     {
       supabase,
       openai,

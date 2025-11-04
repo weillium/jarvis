@@ -46,11 +46,12 @@ export async function GET(
 
     const supabase = getSupabaseClient();
 
-    // Build query
+    // Build query - only fetch active terms with version info
     let query = (supabase
       .from('glossary_terms') as any)
-      .select('*')
+      .select('id, term, definition, acronym_for, category, usage_examples, related_terms, confidence_score, source, source_url, created_at, version, generation_cycle_id')
       .eq('event_id', eventId)
+      .eq('is_active', true)
       .order('confidence_score', { ascending: false, nullsFirst: false })
       .order('term', { ascending: true });
 

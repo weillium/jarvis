@@ -95,11 +95,12 @@ export async function GET(
       // For now, just indicate stage
     } else if (agent.status === 'building_glossary') {
       stage = 'building_glossary';
-      // Get glossary term count
+      // Get active glossary term count
       const { count: glossaryCount } = await (supabase
         .from('glossary_terms') as any)
         .select('*', { count: 'exact', head: true })
-        .eq('event_id', eventId);
+        .eq('event_id', eventId)
+        .eq('is_active', true);
       
       // Estimate total based on blueprint (if available)
       // glossary_plan is JSONB, so it's already an object
@@ -113,11 +114,12 @@ export async function GET(
       };
     } else if (agent.status === 'building_chunks') {
       stage = 'building_chunks';
-      // Get chunk count
+      // Get active chunk count
       const { count: chunkCount } = await (supabase
         .from('context_items') as any)
         .select('*', { count: 'exact', head: true })
-        .eq('event_id', eventId);
+        .eq('event_id', eventId)
+        .eq('is_active', true);
       
       const targetChunks = blueprint?.target_chunk_count || 1000;
       progress = {

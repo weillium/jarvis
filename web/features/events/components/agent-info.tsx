@@ -5,6 +5,8 @@ import { useAgentInfo, AgentInfo as AgentInfoType } from '@/shared/hooks/useAgen
 import { ContextGenerationPanel } from '@/features/context/components/context-generation-panel';
 import { ContextDatabaseVisualization } from '@/features/events/components/context-database-visualization';
 import { GlossaryVisualization } from '@/features/context/components/glossary-visualization';
+import { ResearchResultsVisualization } from '@/features/context/components/research-results-visualization';
+import { VersionHistory } from '@/features/context/components/version-history';
 
 interface AgentInfoProps {
   eventId: string;
@@ -14,6 +16,7 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
   const { agent, contextStats, blueprint, loading, error } = useAgentInfo(eventId);
   const [isDatabaseExpanded, setIsDatabaseExpanded] = useState(false);
   const [isGlossaryExpanded, setIsGlossaryExpanded] = useState(false);
+  const [isResearchExpanded, setIsResearchExpanded] = useState(false);
 
   const getStatusColor = (status: AgentInfoType['status'] | null): string => {
     if (!status) return '#6b7280';
@@ -674,6 +677,55 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
           )}
         </div>
       )}
+
+      {/* Research Results Section - Collapsible */}
+      <div style={{
+        paddingTop: '24px',
+        borderTop: '1px solid #e2e8f0',
+        marginBottom: '24px',
+      }}>
+        <button
+          onClick={() => setIsResearchExpanded(!isResearchExpanded)}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '12px 0',
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: '16px',
+            fontWeight: '600',
+            color: '#0f172a',
+          }}
+        >
+          <span>Research Results</span>
+          <span style={{
+            fontSize: '18px',
+            transform: isResearchExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+            transition: 'transform 0.2s',
+          }}>
+            ▼
+          </span>
+        </button>
+        {isResearchExpanded && (
+          <div style={{
+            marginTop: '16px',
+          }}>
+            <ResearchResultsVisualization eventId={eventId} embedded={true} />
+          </div>
+        )}
+      </div>
+
+      {/* Version History Section - Collapsible */}
+      <div style={{
+        paddingTop: '24px',
+        borderTop: '1px solid #e2e8f0',
+        marginBottom: '24px',
+      }}>
+        <VersionHistory eventId={eventId} embedded={true} />
+      </div>
     </div>
   );
 }

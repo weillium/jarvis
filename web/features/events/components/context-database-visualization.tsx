@@ -14,6 +14,9 @@ interface ContextItem {
   metadata: Record<string, any> | null;
   rank: number | null;
   research_source: string | null;
+  component_type: string | null;
+  version: number | null;
+  generation_cycle_id: string | null;
 }
 
 interface ContextStats {
@@ -34,7 +37,7 @@ interface ContextDatabaseVisualizationProps {
 export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = false }: ContextDatabaseVisualizationProps) {
   const [contextItems, setContextItems] = useState<ContextItem[]>([]);
   const [stats, setStats] = useState<ContextStats | null>(null);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(embedded); // Auto-expand when embedded
   const [loading, setLoading] = useState(true);
   const [isRealTime, setIsRealTime] = useState(false);
   const [filterByRank, setFilterByRank] = useState<string | null>(null);
@@ -217,28 +220,29 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
       padding: embedded ? '0' : '24px',
       marginBottom: embedded ? '0' : '24px',
     }}>
-      {/* Header */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '20px',
-      }}>
-        <div>
-          <h3 style={{
-            fontSize: '20px',
-            fontWeight: '600',
-            color: '#0f172a',
-            margin: '0 0 4px 0',
-          }}>
-            Context Database
-          </h3>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            fontSize: '13px',
-            color: '#64748b',
+      {/* Header - only show when not embedded */}
+      {!embedded && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '20px',
+        }}>
+          <div>
+            <h3 style={{
+              fontSize: '20px',
+              fontWeight: '600',
+              color: '#0f172a',
+              margin: '0 0 4px 0',
+            }}>
+              Context Database
+            </h3>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              fontSize: '13px',
+              color: '#64748b',
           }}>
             <span>
               {loading ? 'Loading...' : `${stats?.total || 0} / 1,000 chunks`}
@@ -261,29 +265,32 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
             )}
           </div>
         </div>
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          style={{
-            padding: '8px 16px',
-            border: '1px solid #e2e8f0',
-            borderRadius: '6px',
-            fontSize: '14px',
-            fontWeight: '500',
-            color: '#374151',
-            background: '#ffffff',
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = '#f8fafc';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = '#ffffff';
-          }}
-        >
-          {isExpanded ? 'Collapse' : 'Expand'}
-        </button>
+        {!embedded && (
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            style={{
+              padding: '8px 16px',
+              border: '1px solid #e2e8f0',
+              borderRadius: '6px',
+              fontSize: '14px',
+              fontWeight: '500',
+              color: '#374151',
+              background: '#ffffff',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#f8fafc';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = '#ffffff';
+            }}
+          >
+            {isExpanded ? 'Collapse' : 'Expand'}
+          </button>
+        )}
       </div>
+      )}
 
       {/* Stats Overview */}
       {stats && (
@@ -553,6 +560,18 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
                           fontWeight: '600',
                         }}>
                           Rank: {item.rank}
+                        </div>
+                      )}
+                      {item.version && item.version > 1 && (
+                        <div style={{
+                          fontSize: '11px',
+                          padding: '2px 8px',
+                          background: '#e0e7ff',
+                          color: '#4338ca',
+                          borderRadius: '4px',
+                          fontWeight: '500',
+                        }}>
+                          v{item.version}
                         </div>
                       )}
                       <div style={{

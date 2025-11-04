@@ -19,6 +19,8 @@ interface GlossaryTerm {
   source: string | null;
   source_url: string | null;
   created_at: string;
+  version: number | null;
+  generation_cycle_id: string | null;
 }
 
 interface GlossaryData {
@@ -118,28 +120,30 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
       borderRadius: embedded ? '0' : '12px',
       padding: embedded ? '0' : '24px',
     }}>
-      {/* Header */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '20px',
-      }}>
-        <h3 style={{
-          fontSize: '20px',
-          fontWeight: '600',
-          color: '#0f172a',
-          margin: 0,
+      {/* Header - only show when not embedded */}
+      {!embedded && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '20px',
         }}>
-          Glossary
-        </h3>
-        <span style={{
-          fontSize: '14px',
-          color: '#64748b',
-        }}>
-          {glossaryData.count} {glossaryData.count === 1 ? 'term' : 'terms'}
-        </span>
-      </div>
+          <h3 style={{
+            fontSize: '20px',
+            fontWeight: '600',
+            color: '#0f172a',
+            margin: 0,
+          }}>
+            Glossary
+          </h3>
+          <span style={{
+            fontSize: '14px',
+            color: '#64748b',
+          }}>
+            {glossaryData.count} {glossaryData.count === 1 ? 'term' : 'terms'}
+          </span>
+        </div>
+      )}
 
       {/* Search and Filter */}
       <div style={{
@@ -245,6 +249,19 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
                         fontWeight: '500',
                       }}>
                         {term.category}
+                      </span>
+                    )}
+                    {term.version && term.version > 1 && (
+                      <span style={{
+                        display: 'inline-block',
+                        padding: '2px 8px',
+                        background: '#f3f4f6',
+                        color: '#64748b',
+                        borderRadius: '4px',
+                        fontSize: '11px',
+                        fontWeight: '500',
+                      }}>
+                        v{term.version}
                       </span>
                     )}
                   </div>

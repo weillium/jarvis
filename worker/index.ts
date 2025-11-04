@@ -15,7 +15,7 @@ const SUPABASE_URL  = need('SUPABASE_URL');
 const SERVICE_ROLE  = need('SUPABASE_SERVICE_ROLE_KEY');
 const OPENAI_KEY    = need('OPENAI_API_KEY');
 const EMBED_MODEL   = process.env.EMBED_MODEL || 'text-embedding-3-small';
-const GEN_MODEL     = process.env.GEN_MODEL   || 'gpt-4o-mini';
+const GEN_MODEL     = process.env.GEN_MODEL   || 'gpt-5';
 const REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-10-01';
 
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
@@ -207,8 +207,8 @@ async function tickRegeneration() {
       if (ag.status === 'regenerating_research') {
         log('[regeneration] regenerating research for agent', ag.id);
         await regenerateResearchStage(ag.event_id, ag.id, blueprint.id, options);
-        // After research regeneration, set status to researching (not regenerating)
-        await supabase.from('agents').update({ status: 'researching' }).eq('id', ag.id);
+        // regenerateResearchStage now auto-regenerates downstream components
+        // Status will be set to context_complete or researching by the function
       } else if (ag.status === 'regenerating_glossary') {
         log('[regeneration] regenerating glossary for agent', ag.id);
         await regenerateGlossaryStage(ag.event_id, ag.id, blueprint.id, options);

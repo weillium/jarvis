@@ -1,8 +1,5 @@
 import { getEventById } from '@/server/actions/event-actions';
-import { EventDetail } from '@/features/events/components/event-detail';
-import { AgentInfo } from '@/features/events/components/agent-info';
-import { LiveCards } from '@/features/cards/components/live-cards';
-import { LiveFacts } from '@/features/facts/components/live-facts';
+import { LiveEventTabs } from '@/features/events/components/live-event-tabs';
 import Link from 'next/link';
 
 type Props = { 
@@ -97,31 +94,7 @@ export default async function LiveEventPage({ params }: Props) {
         </h1>
       </div>
 
-      <EventDetail event={event} />
-      
-      {/* Agent Information - Permanent operational component with embedded context management */}
-      {/* Includes: Agent details, Context generation, Context database, Glossary */}
-      <AgentInfo eventId={eventId} />
-      
-      {/* Live Cards Section */}
-      <div style={{ marginTop: '32px', marginBottom: '32px' }}>
-        <h2
-          style={{
-            fontSize: '20px',
-            fontWeight: '600',
-            color: '#0f172a',
-            marginBottom: '16px',
-          }}
-        >
-          Live Context Cards
-        </h2>
-        <LiveCards eventId={eventId} />
-      </div>
-
-      {/* Live Facts Section */}
-      <div style={{ marginTop: '32px' }}>
-        <LiveFacts eventId={eventId} />
-      </div>
+      <LiveEventTabs event={event} eventId={eventId} />
     </div>
   );
 }

@@ -25,16 +25,19 @@ export interface ResearchResults {
 
 /**
  * Build glossary from blueprint plan and research results
+ * Fetches research from research_results table if not provided
  */
 export async function buildGlossary(
   eventId: string,
+  blueprintId: string,
+  generationCycleId: string,
   blueprint: Blueprint,
-  researchResults: ResearchResults,
+  researchResults: ResearchResults | null,
   options: GlossaryBuilderOptions
 ): Promise<number> {
   const { supabase, openai, genModel } = options;
 
-  console.log(`[glossary] Building glossary for event ${eventId}`);
+  console.log(`[glossary] Building glossary for event ${eventId}, cycle ${generationCycleId}`);
   console.log(`[glossary] Blueprint has ${blueprint.glossary_plan.terms.length} terms planned`);
 
   const termsToBuild = blueprint.glossary_plan.terms || [];
@@ -43,13 +46,61 @@ export async function buildGlossary(
     return 0;
   }
 
+  // Fetch research from research_results table if not provided
+  let research: ResearchResults;
+  if (!researchResults) {
+    const { data: researchData, error: researchError } = await (supabase
+      .from('research_results') as any)
+      .select('content, metadata, query, api')
+      .eq('event_id', eventId)
+      .eq('blueprint_id', blueprintId)
+      .eq('is_active', true);
+
+    if (researchError) {
+      console.warn(`[glossary] Warning: Failed to fetch research results: ${researchError.message}`);
+    }
+
+    research = {
+      chunks: (researchData || []).map((item: any) => ({
+        text: item.content,
+        source: item.api || 'research',
+        metadata: item.metadata || {},
+      })),
+    };
+  } else {
+    research = researchResults;
+  }
+
+  // Soft delete existing glossary terms (mark as inactive)
+  const { error: softDeleteError } = await (supabase
+    .from('glossary_terms') as any)
+    .update({
+      is_active: false,
+      deleted_at: new Date().toISOString(),
+    })
+    .eq('event_id', eventId)
+    .eq('is_active', true);
+
+  if (softDeleteError) {
+    console.warn(`[glossary] Warning: Failed to soft delete existing terms: ${softDeleteError.message}`);
+  }
+
   // Extract context from research results
-  const researchContext = researchResults.chunks
+  const researchContext = research.chunks
     .map(c => c.text)
     .join('\n\n')
     .substring(0, 10000); // Limit context size
 
   let insertedCount = 0;
+
+  // Update generation cycle progress
+  const { error: cycleError } = await (supabase
+    .from('generation_cycles') as any)
+    .update({
+      status: 'processing',
+      progress_total: termsToBuild.length,
+    })
+    .eq('id', generationCycleId);
 
   // Process terms in batches to avoid rate limits
   const batchSize = 5;
@@ -72,6 +123,7 @@ export async function buildGlossary(
             .from('glossary_terms') as any)
             .insert({
               event_id: eventId,
+              generation_cycle_id: generationCycleId,
               term: def.term,
               definition: def.definition,
               acronym_for: def.acronym_for || null,
@@ -81,12 +133,19 @@ export async function buildGlossary(
               confidence_score: def.confidence_score || 0.8,
               source: def.source || 'llm_generation',
               source_url: def.source_url || null,
+              is_active: true,
+              version: 1,
             });
 
           if (error) {
             console.error(`[glossary] Error inserting term "${def.term}": ${error.message}`);
           } else {
             insertedCount++;
+            // Update progress
+            await (supabase
+              .from('generation_cycles') as any)
+              .update({ progress_current: insertedCount })
+              .eq('id', generationCycleId);
           }
         } catch (error: any) {
           console.error(`[glossary] Error processing term "${def.term}": ${error.message}`);
@@ -96,6 +155,16 @@ export async function buildGlossary(
       console.error(`[glossary] Error processing batch: ${error.message}`);
     }
   }
+
+  // Mark cycle as completed
+  await (supabase
+    .from('generation_cycles') as any)
+    .update({
+      status: 'completed',
+      progress_current: insertedCount,
+      completed_at: new Date().toISOString(),
+    })
+    .eq('id', generationCycleId);
 
   console.log(`[glossary] Inserted ${insertedCount} glossary terms for event ${eventId}`);
   return insertedCount;

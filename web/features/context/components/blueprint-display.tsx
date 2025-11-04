@@ -8,6 +8,7 @@ interface BlueprintDisplayProps {
   approving: boolean;
   canApprove: boolean;
   onRegenerate?: () => void;
+  embedded?: boolean; // If true, removes expand button and regenerate button
 }
 
 interface Blueprint {
@@ -32,10 +33,11 @@ export function BlueprintDisplay({
   approving,
   canApprove,
   onRegenerate,
+  embedded = false,
 }: BlueprintDisplayProps) {
   const [blueprint, setBlueprint] = useState<Blueprint | null>(null);
   const [loading, setLoading] = useState(true);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(embedded); // Auto-expand when embedded
 
   useEffect(() => {
     async function fetchBlueprint() {
@@ -88,79 +90,51 @@ export function BlueprintDisplay({
 
   return (
     <div style={{
-      border: '1px solid #e2e8f0',
-      borderRadius: '8px',
-      padding: '20px',
-      background: '#f8fafc',
+      ...(embedded ? {} : {
+        border: '1px solid #e2e8f0',
+        borderRadius: '8px',
+        padding: '20px',
+        background: '#f8fafc',
+      }),
     }}>
-      {/* Header */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '16px',
-      }}>
-        <h4 style={{
-          fontSize: '18px',
-          fontWeight: '600',
-          color: '#0f172a',
-          margin: 0,
+      {/* Header - only show when not embedded */}
+      {!embedded && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '16px',
         }}>
-          Context Blueprint
-        </h4>
+          <h4 style={{
+            fontSize: '18px',
+            fontWeight: '600',
+            color: '#0f172a',
+            margin: 0,
+          }}>
+            Context Blueprint
+          </h4>
         <div style={{ display: 'flex', gap: '8px' }}>
           {canApprove && (
-            <>
-              <button
-                onClick={onApprove}
-                disabled={approving}
-                style={{
-                  background: approving ? '#94a3b8' : '#10b981',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '6px',
-                  padding: '8px 16px',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  cursor: approving ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {approving ? 'Approving...' : 'Approve Blueprint'}
-              </button>
-              <button
-                onClick={handleRegenerate}
-                disabled={approving}
-                style={{
-                  background: '#ffffff',
-                  color: '#64748b',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '6px',
-                  padding: '8px 16px',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  cursor: approving ? 'not-allowed' : 'pointer',
-                }}
-              >
-                Regenerate Blueprint
-              </button>
-            </>
+            <button
+              onClick={onApprove}
+              disabled={approving}
+              style={{
+                background: approving ? '#94a3b8' : '#10b981',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '8px 16px',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: approving ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {approving ? 'Approving...' : 'Approve Blueprint'}
+            </button>
           )}
-          <button
-            onClick={() => setExpanded(!expanded)}
-            style={{
-              background: '#ffffff',
-              color: '#64748b',
-              border: '1px solid #e2e8f0',
-              borderRadius: '6px',
-              padding: '8px 16px',
-              fontSize: '14px',
-              cursor: 'pointer',
-            }}
-          >
-            {expanded ? 'Collapse' : 'Expand'}
-          </button>
         </div>
       </div>
+      )}
 
       {/* Summary */}
       <div style={{

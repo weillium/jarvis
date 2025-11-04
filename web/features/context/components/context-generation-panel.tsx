@@ -8,6 +8,8 @@ interface ContextGenerationPanelProps {
   eventId: string;
   agentStatus: string | null;
   embedded?: boolean; // If true, removes outer wrapper styling for embedding
+  onClearContext?: () => void;
+  isClearing?: boolean;
 }
 
 interface StatusData {
@@ -35,7 +37,7 @@ interface StatusData {
   } | null;
 }
 
-export function ContextGenerationPanel({ eventId, agentStatus, embedded = false }: ContextGenerationPanelProps) {
+export function ContextGenerationPanel({ eventId, agentStatus, embedded = false, onClearContext, isClearing = false }: ContextGenerationPanelProps) {
   const [statusData, setStatusData] = useState<StatusData | null>(null);
   const [loading, setLoading] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -251,36 +253,38 @@ export function ContextGenerationPanel({ eventId, agentStatus, embedded = false 
       padding: embedded ? '0' : '24px',
       marginBottom: embedded ? '0' : '24px',
     }}>
-      {/* Header */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '20px',
-      }}>
-        <h3 style={{
-          fontSize: '20px',
-          fontWeight: '600',
-          color: '#0f172a',
-          margin: 0,
+      {/* Header - only show when not embedded */}
+      {!embedded && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '20px',
         }}>
-          Context Generation
-        </h3>
-        {statusData?.agent && (
-          <span style={{
-            display: 'inline-block',
-            padding: '6px 12px',
-            background: getStatusColor(statusData.agent.status),
-            color: '#ffffff',
-            borderRadius: '6px',
-            fontSize: '12px',
-            fontWeight: '500',
-            textTransform: 'uppercase',
+          <h3 style={{
+            fontSize: '20px',
+            fontWeight: '600',
+            color: '#0f172a',
+            margin: 0,
           }}>
-            {getStatusLabel(statusData.agent.status)}
-          </span>
-        )}
-      </div>
+            Context Generation
+          </h3>
+          {statusData?.agent && (
+            <span style={{
+              display: 'inline-block',
+              padding: '6px 12px',
+              background: getStatusColor(statusData.agent.status),
+              color: '#ffffff',
+              borderRadius: '6px',
+              fontSize: '12px',
+              fontWeight: '500',
+              textTransform: 'uppercase',
+            }}>
+              {getStatusLabel(statusData.agent.status)}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Error message */}
       {error && (
@@ -364,38 +368,47 @@ export function ContextGenerationPanel({ eventId, agentStatus, embedded = false 
         statusData?.agent?.status === 'regenerating_chunks') && (
         <div style={{
           marginBottom: '20px',
-          padding: '16px',
-          background: '#f8fafc',
-          borderRadius: '8px',
-          border: '1px solid #e2e8f0',
+          ...(embedded ? {} : {
+            padding: '16px',
+            background: '#f8fafc',
+            borderRadius: '8px',
+            border: '1px solid #e2e8f0',
+          }),
         }}>
-          <h4 style={{
-            fontSize: '14px',
-            fontWeight: '600',
-            color: '#0f172a',
-            margin: '0 0 8px 0',
-          }}>
-            Modular Regeneration
-          </h4>
-          <p style={{
-            fontSize: '12px',
-            color: '#64748b',
-            margin: '0 0 12px 0',
-          }}>
-            Regenerate specific components independently. Each component is versioned and can be regenerated without affecting others:
-          </p>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
             gap: '8px',
-            marginBottom: '12px',
           }}>
             <button
-              onClick={() => handleRegenerateStage('research')}
-              disabled={!!regeneratingStage || statusData?.agent?.status === 'regenerating_research'}
+              onClick={() => handleRegenerate()}
+              disabled={!!isRegenerating || !!regeneratingStage}
               style={{
                 padding: '10px 16px',
-                background: (regeneratingStage === 'research' || statusData?.agent?.status === 'regenerating_research') 
+                background: (isRegenerating) 
+                  ? '#94a3b8' 
+                  : (statusData?.blueprint ? '#8b5cf6' : '#3b82f6'),
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: '500',
+                cursor: (isRegenerating || regeneratingStage) 
+                  ? 'not-allowed' 
+                  : 'pointer',
+                transition: 'background 0.2s',
+              }}
+            >
+              {isRegenerating 
+                ? (statusData?.blueprint ? 'Regenerating...' : 'Starting...')
+                : (statusData?.blueprint ? 'Regenerate Blueprint' : 'Start Context Generation')}
+            </button>
+            <button
+              onClick={() => handleRegenerateStage('research')}
+              disabled={!!regeneratingStage || statusData?.agent?.status === 'regenerating_research' || !statusData?.blueprint}
+              style={{
+                padding: '10px 16px',
+                background: (regeneratingStage === 'research' || statusData?.agent?.status === 'regenerating_research' || !statusData?.blueprint) 
                   ? '#94a3b8' 
                   : '#3b82f6',
                 color: '#ffffff',
@@ -403,32 +416,23 @@ export function ContextGenerationPanel({ eventId, agentStatus, embedded = false 
                 borderRadius: '6px',
                 fontSize: '12px',
                 fontWeight: '500',
-                cursor: (regeneratingStage || statusData?.agent?.status === 'regenerating_research') 
+                cursor: (regeneratingStage || statusData?.agent?.status === 'regenerating_research' || !statusData?.blueprint) 
                   ? 'not-allowed' 
                   : 'pointer',
                 transition: 'background 0.2s',
-                textAlign: 'left',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '4px',
+                opacity: !statusData?.blueprint ? 0.6 : 1,
               }}
-              title="Regenerate research results independently. Preserves glossary and chunks."
             >
-              <span style={{ fontWeight: '600' }}>
-                {(regeneratingStage === 'research' || statusData?.agent?.status === 'regenerating_research') 
-                  ? 'Regenerating...' 
-                  : 'Regenerate Research'}
-              </span>
-              <span style={{ fontSize: '11px', opacity: 0.9 }}>
-                Re-execute research plan
-              </span>
+              {(regeneratingStage === 'research' || statusData?.agent?.status === 'regenerating_research') 
+                ? 'Regenerating...' 
+                : 'Regenerate Research'}
             </button>
             <button
               onClick={() => handleRegenerateStage('glossary')}
-              disabled={!!regeneratingStage || statusData?.agent?.status === 'regenerating_glossary'}
+              disabled={!!regeneratingStage || statusData?.agent?.status === 'regenerating_glossary' || !statusData?.blueprint}
               style={{
                 padding: '10px 16px',
-                background: (regeneratingStage === 'glossary' || statusData?.agent?.status === 'regenerating_glossary') 
+                background: (regeneratingStage === 'glossary' || statusData?.agent?.status === 'regenerating_glossary' || !statusData?.blueprint) 
                   ? '#94a3b8' 
                   : '#3b82f6',
                 color: '#ffffff',
@@ -436,32 +440,23 @@ export function ContextGenerationPanel({ eventId, agentStatus, embedded = false 
                 borderRadius: '6px',
                 fontSize: '12px',
                 fontWeight: '500',
-                cursor: (regeneratingStage || statusData?.agent?.status === 'regenerating_glossary') 
+                cursor: (regeneratingStage || statusData?.agent?.status === 'regenerating_glossary' || !statusData?.blueprint) 
                   ? 'not-allowed' 
                   : 'pointer',
                 transition: 'background 0.2s',
-                textAlign: 'left',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '4px',
+                opacity: !statusData?.blueprint ? 0.6 : 1,
               }}
-              title="Regenerate glossary terms independently. Preserves research and chunks."
             >
-              <span style={{ fontWeight: '600' }}>
-                {(regeneratingStage === 'glossary' || statusData?.agent?.status === 'regenerating_glossary') 
-                  ? 'Regenerating...' 
-                  : 'Regenerate Glossary'}
-              </span>
-              <span style={{ fontSize: '11px', opacity: 0.9 }}>
-                Re-build glossary terms
-              </span>
+              {(regeneratingStage === 'glossary' || statusData?.agent?.status === 'regenerating_glossary') 
+                ? 'Regenerating...' 
+                : 'Regenerate Glossary'}
             </button>
             <button
               onClick={() => handleRegenerateStage('chunks')}
-              disabled={!!regeneratingStage || statusData?.agent?.status === 'regenerating_chunks'}
+              disabled={!!regeneratingStage || statusData?.agent?.status === 'regenerating_chunks' || !statusData?.blueprint}
               style={{
                 padding: '10px 16px',
-                background: (regeneratingStage === 'chunks' || statusData?.agent?.status === 'regenerating_chunks') 
+                background: (regeneratingStage === 'chunks' || statusData?.agent?.status === 'regenerating_chunks' || !statusData?.blueprint) 
                   ? '#94a3b8' 
                   : '#3b82f6',
                 color: '#ffffff',
@@ -469,36 +464,40 @@ export function ContextGenerationPanel({ eventId, agentStatus, embedded = false 
                 borderRadius: '6px',
                 fontSize: '12px',
                 fontWeight: '500',
-                cursor: (regeneratingStage || statusData?.agent?.status === 'regenerating_chunks') 
+                cursor: (regeneratingStage || statusData?.agent?.status === 'regenerating_chunks' || !statusData?.blueprint) 
                   ? 'not-allowed' 
                   : 'pointer',
                 transition: 'background 0.2s',
-                textAlign: 'left',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '4px',
+                opacity: !statusData?.blueprint ? 0.6 : 1,
               }}
-              title="Regenerate chunks (preserves research chunks). Re-ranks and re-embeds."
             >
-              <span style={{ fontWeight: '600' }}>
-                {(regeneratingStage === 'chunks' || statusData?.agent?.status === 'regenerating_chunks') 
-                  ? 'Regenerating...' 
-                  : 'Regenerate Chunks'}
-              </span>
-              <span style={{ fontSize: '11px', opacity: 0.9 }}>
-                Re-build ranked chunks
-              </span>
+              {(regeneratingStage === 'chunks' || statusData?.agent?.status === 'regenerating_chunks') 
+                ? 'Regenerating...' 
+                : 'Regenerate Chunks'}
             </button>
-          </div>
-          <div style={{
-            padding: '8px 12px',
-            background: '#e0f2fe',
-            border: '1px solid #bae6fd',
-            borderRadius: '6px',
-            fontSize: '11px',
-            color: '#0369a1',
-          }}>
-            <strong>Benefits:</strong> Each component is independently versioned. Regenerating one component preserves others and maintains a full audit trail.
+            {onClearContext && (
+              <button
+                onClick={onClearContext}
+                disabled={isClearing || !!isRegenerating || !!regeneratingStage}
+                style={{
+                  padding: '10px 16px',
+                  background: (isClearing || isRegenerating || regeneratingStage) 
+                    ? '#94a3b8' 
+                    : '#ef4444',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontWeight: '500',
+                  cursor: (isClearing || isRegenerating || regeneratingStage) 
+                    ? 'not-allowed' 
+                    : 'pointer',
+                  transition: 'background 0.2s',
+                }}
+              >
+                {isClearing ? 'Clearing...' : 'Clear Context'}
+              </button>
+            )}
           </div>
           {regenerationError && (
             <div style={{
@@ -516,8 +515,8 @@ export function ContextGenerationPanel({ eventId, agentStatus, embedded = false 
         </div>
       )}
 
-      {/* Blueprint display */}
-      {showBlueprint && statusData?.blueprint && (
+      {/* Blueprint display - only show when not embedded */}
+      {!embedded && showBlueprint && statusData?.blueprint && (
         <div style={{ marginBottom: '20px' }}>
           <BlueprintDisplay
             eventId={eventId}

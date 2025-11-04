@@ -70,17 +70,19 @@ export async function GET(
     const agent = agents[0];
     const agentId = agent.id;
 
-    // Fetch context statistics in parallel
+    // Fetch context statistics in parallel (only active items)
     const [chunksResult, glossaryResult, blueprintResult] = await Promise.all([
-      // Get chunk count
+      // Get active chunk count
       (supabase.from('context_items') as any)
         .select('*', { count: 'exact', head: true })
-        .eq('event_id', eventId),
+        .eq('event_id', eventId)
+        .eq('is_active', true),
       
-      // Get glossary term count
+      // Get active glossary term count
       (supabase.from('glossary_terms') as any)
         .select('*', { count: 'exact', head: true })
-        .eq('event_id', eventId),
+        .eq('event_id', eventId)
+        .eq('is_active', true),
       
       // Get latest blueprint
       (supabase.from('context_blueprints') as any)

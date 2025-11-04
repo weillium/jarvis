@@ -22,11 +22,12 @@ export async function GET(
     const { eventId } = await params;
     const supabase = getSupabaseClient();
 
-    // Fetch context items directly using service role (bypasses RLS)
+    // Fetch active context items directly using service role (bypasses RLS)
     const { data, error } = await supabase
       .from('context_items')
-      .select('id, source, chunk, enrichment_source, quality_score, enrichment_timestamp, chunk_size, metadata, rank, research_source')
+      .select('id, source, chunk, enrichment_source, quality_score, enrichment_timestamp, chunk_size, metadata, rank, research_source, component_type, version, generation_cycle_id')
       .eq('event_id', eventId)
+      .eq('is_active', true)
       .order('rank', { ascending: true, nullsFirst: true })
       .order('enrichment_timestamp', { ascending: false, nullsFirst: true });
 

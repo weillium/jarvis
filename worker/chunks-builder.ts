@@ -28,23 +28,76 @@ export interface ChunkWithRank {
 /**
  * Build context chunks from blueprint plan, research results, and documents
  * Ranks chunks and stores top N in context_items table
+ * Fetches research from research_results table if not provided
  */
 export async function buildContextChunks(
   eventId: string,
+  blueprintId: string,
+  generationCycleId: string,
   blueprint: Blueprint,
-  researchResults: ResearchResults,
+  researchResults: ResearchResults | null,
   options: ChunksBuilderOptions
 ): Promise<number> {
   const { supabase, openai, embedModel, genModel } = options;
 
-  console.log(`[chunks] Building context chunks for event ${eventId}`);
+  console.log(`[chunks] Building context chunks for event ${eventId}, cycle ${generationCycleId}`);
   console.log(`[chunks] Target: ${blueprint.chunks_plan.target_count} chunks (${blueprint.chunks_plan.quality_tier} tier)`);
+
+  // Fetch research from research_results table if not provided
+  let research: ResearchResults;
+  if (!researchResults) {
+    const { data: researchData, error: researchError } = await (supabase
+      .from('research_results') as any)
+      .select('content, metadata, query, api')
+      .eq('event_id', eventId)
+      .eq('blueprint_id', blueprintId)
+      .eq('is_active', true);
+
+    if (researchError) {
+      console.warn(`[chunks] Warning: Failed to fetch research results: ${researchError.message}`);
+    }
+
+    research = {
+      chunks: (researchData || []).map((item: any) => ({
+        text: item.content,
+        source: item.api || 'research',
+        metadata: item.metadata || {},
+      })),
+    };
+  } else {
+    research = researchResults;
+  }
+
+  // Soft delete existing non-research chunks (preserve research chunks)
+  // Delete chunks that are not research type
+  const { error: softDeleteError } = await (supabase
+    .from('context_items') as any)
+    .update({
+      is_active: false,
+      deleted_at: new Date().toISOString(),
+    })
+    .eq('event_id', eventId)
+    .eq('is_active', true)
+    .neq('component_type', 'research');
+
+  if (softDeleteError) {
+    console.warn(`[chunks] Warning: Failed to soft delete existing chunks: ${softDeleteError.message}`);
+  }
+
+  // Update generation cycle to processing
+  await (supabase
+    .from('generation_cycles') as any)
+    .update({
+      status: 'processing',
+      progress_total: blueprint.chunks_plan.target_count || 500,
+    })
+    .eq('id', generationCycleId);
 
   // 1. Collect chunks from all sources
   const allChunks: ChunkWithRank[] = [];
 
   // Add research result chunks
-  for (const chunk of researchResults.chunks) {
+  for (const chunk of research.chunks) {
     // Validate chunk text before adding
     if (!chunk.text || typeof chunk.text !== 'string' || chunk.text.trim().length === 0) {
       console.warn(`[chunks] Skipping research chunk with invalid text: ${typeof chunk.text}`);
@@ -64,7 +117,7 @@ export async function buildContextChunks(
   // 2. Generate additional LLM chunks if needed (based on chunks plan)
   const llmChunks = await generateLLMChunks(
     blueprint,
-    researchResults,
+    research,
     openai,
     genModel
   );
@@ -176,10 +229,16 @@ export async function buildContextChunks(
         const embedding = embeddingResponse.data[0].embedding;
 
         try {
+          // Determine component type
+          const componentType = chunk.research_source === 'llm_generation' 
+            ? 'llm_generated' 
+            : chunk.rank ? 'ranked' : 'research';
+
           const { error } = await (supabase
             .from('context_items') as any)
             .insert({
               event_id: eventId,
+              generation_cycle_id: generationCycleId,
               source: chunk.source,
               chunk: chunk.text,
               embedding: embedding,
@@ -190,12 +249,20 @@ export async function buildContextChunks(
               research_source: chunk.research_source,
               quality_score: chunk.quality_score || 0.8,
               metadata: chunk.metadata || {},
+              component_type: componentType,
+              is_active: true,
+              version: 1,
             });
 
           if (error) {
             console.error(`[chunks] Error inserting chunk at rank ${chunk.rank}: ${error.message}`);
           } else {
             insertedCount++;
+            // Update progress
+            await (supabase
+              .from('generation_cycles') as any)
+              .update({ progress_current: insertedCount })
+              .eq('id', generationCycleId);
           }
         } catch (error: any) {
           console.error(`[chunks] Error processing chunk: ${error.message}`);
@@ -213,6 +280,16 @@ export async function buildContextChunks(
       }
     }
   }
+
+  // Mark cycle as completed
+  await (supabase
+    .from('generation_cycles') as any)
+    .update({
+      status: 'completed',
+      progress_current: insertedCount,
+      completed_at: new Date().toISOString(),
+    })
+    .eq('id', generationCycleId);
 
   console.log(`[chunks] Inserted ${insertedCount} context chunks for event ${eventId}`);
   return insertedCount;
