@@ -1,14 +1,6 @@
 {
-  "name": "jarvis-monorepo",
-  "private": true,
-  "packageManager": "pnpm@9.0.0",
-  "workspaces": ["apps/*","services/*","packages/*","meta-agent","dev"],
-  "scripts": {
-    "dev:backend": "pnpm --filter @jarvis/backend dev",
-    "dev:web": "pnpm --filter @jarvis/web dev",
-    "dev:mobile": "pnpm --filter @jarvis/mobile start",
-    "typecheck": "pnpm -r typecheck",
-    "lint": "pnpm -r lint",
-    "test": "pnpm -r test"
-  }
+  "dependencies": {
+    "node": "^25.1.0"
+  },
+  "packageManager": "pnpm@10.20.0+sha512.cf9998222162dd85864d0a8102e7892e7ba4ceadebbf5a31f9c2fce48dfce317a9c53b9f6464d1ef9042cba2e02ae02a9f7c143a2b438cd93c91840f0192b9dd"
 }

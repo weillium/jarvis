@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM"],
+    "strict": false,
+    "module": "esnext",
+    "target": "esnext",
+    "moduleResolution": "bundler",
+    "allowJs": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": []
+  },
+  "include": ["**/*.ts", "types.d.ts"],
+  "exclude": ["node_modules"]
+}
+
+
+
+

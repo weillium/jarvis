@@ -1,0 +1,350 @@
+---
+alwaysApply: true
+---
+
+# Project Rules
+
+## 1. Purpose & Architecture
+
+Jarvis is an AI-powered real-time event assistant that processes live meeting transcripts, generates contextual insights using vector embeddings, and emits structured cards. The system operates as a multi-runtime architecture with event-driven processing:
+
+- **Frontend (web/)**: Next.js 16 App Router application providing event management and live viewing interfaces with real-time SSE streaming
+- **Worker (worker/)**: Node.js background service that orchestrates dual-agent architecture (Cards + Facts), manages OpenAI Realtime API sessions, builds vector context databases with enrichment framework, and processes transcripts in real-time via Supabase Realtime subscriptions
+- **Backend (supabase/)**: PostgreSQL with pgvector for semantic search, Supabase Edge Functions (Deno runtime) for orchestration, and built-in authentication
+
+**Data Flow**: Events → Agents (prep context vectors + enrichment) → Live transcripts (via `/api/ingest`) → Supabase Realtime → Orchestrator (dual-agent processing) → Cards/Facts → SSE stream (via `/api/stream`) → Frontend
+
+**Processing Model**: Event-driven (not polling-based)
+- Worker subscribes to Supabase Realtime for transcript inserts
+- Dual-agent architecture: Cards Agent (immediate processing) + Facts Agent (debounced updates)
+- In-memory state: Ring buffers (rolling window) and facts store
+- Checkpoints enable resume capability after restart
+
+**System Boundaries**:
+- Web app connects to Supabase client-side and server-side
+- Worker uses service role key for privileged database access and subscribes to Realtime
+- Edge Functions provide atomic transactional operations
+- API routes (`/api/ingest`, `/api/stream`) bridge web app and worker via database
+- No direct communication between web and worker (database-mediated via Supabase Realtime)
+
+## 2. Tech Stack & Frameworks
+
+**Runtime & Build**:
+- Node.js 25.1.0 (pnpm 10.20.0 workspace manager)
+- Next.js 16.0.1 (App Router, React 19.2.0, React Compiler enabled)
+- TypeScript 5.x (strict mode enabled)
+- Deno 2.x (Supabase Edge Functions)
+
+**UI & Styling**:
+- Tailwind CSS 4 (PostCSS 4)
+- React 19.2.0 with JSX transform
+
+**Data & Backend**:
+- Supabase (PostgreSQL 17, Auth, Realtime, Storage)
+- pgvector extension for 1536-dimensional embeddings (OpenAI text-embedding-3-small)
+- Supabase Edge Functions (Deno runtime) for serverless orchestration
+
+**AI & External Services**:
+- OpenAI API (embeddings: text-embedding-3-small, generation: gpt-4o-mini, realtime: gpt-4o-realtime-preview-2024-10-01)
+- OpenAI SDK v6.7.0
+- OpenAI Realtime API for dual-agent architecture (Cards + Facts agents)
+
+**Linting & Quality**:
+- ESLint 9 with `eslint-config-next` (core-web-vitals + TypeScript rules)
+
+## 3. Directory Map
+
+| Path | Purpose | Key Notes |
+|------|----------|-----------|
+| `web/` | Next.js frontend application | Monorepo workspace root |
+| `web/app/` | Next.js App Router routes and pages | Route groups: `(app)` for authenticated, `(marketing)` for public |
+| `web/app/(app)/events/` | Event listing and live view pages | Dynamic routes: `[eventId]/live/page.tsx` |
+| `web/features/` | Feature modules by domain | Organized: agents, auth, cards, events, transcripts |
+| `web/server/` | Server-side utilities | `actions/`, `mappers/`, `rpcs/` for data operations |
+| `web/shared/` | Shared code across app | `lib/` (supabase client), `types/`, `ui/`, `utils/`, `hooks/` |
+| `worker/` | Background orchestrator service | Event-driven processing via Supabase Realtime, dual-agent architecture (Cards + Facts), ring buffers, facts store, checkpoint management |
+| `worker/enrichment/` | Context enrichment framework | Enrichers for web search, documents, Wikipedia (extensible architecture) |
+| `worker/orchestrator.ts` | Main orchestrator class | Manages event runtimes, Realtime sessions, transcript processing |
+| `worker/ring-buffer.ts` | In-memory transcript buffer | Rolling window of recent transcripts (5 minutes default) |
+| `worker/facts-store.ts` | In-memory facts store | Key-value store for stable facts with confidence tracking |
+| `worker/realtime-session.ts` | OpenAI Realtime API wrapper | Manages WebSocket connections to OpenAI Realtime API |
+| `worker/policies.ts` | Versioned agent policies | Behavior definitions for Cards and Facts agents |
+| `supabase/` | Database and Edge Functions | Supabase CLI project root |
+| `supabase/migrations/` | PostgreSQL schema migrations | Timestamped SQL files, applied in order |
+| `supabase/functions/` | Deno Edge Functions | `orchestrator/` provides atomic event+agent creation |
+| `supabase/config.toml` | Local Supabase configuration | Ports, auth settings, feature flags |
+| `dev_docs/` | Generated documentation and analysis files | User-facing docs created by agents/tools, timestamped format: `YYYYMMDD_HHMMSS_<name>.md` |
+
+## 4. Data & State
+
+**Database Schema** (PostgreSQL with pgvector):
+
+- `events`: Core event records (id, owner_uid, title, topic, start_time, end_time, is_live)
+- `agents`: Per-event AI agents with status lifecycle (`prepping` → `ready` → `running` → `ended`/`error`)
+- `context_items`: Vector embeddings (1536-dim) for semantic search, linked to events (with enrichment metadata: metadata, quality_score, enrichment_timestamp, chunk_size, enrichment_source)
+- `transcripts`: Real-time meeting transcripts (id, event_id, seq, at_ms, speaker, text, final, ts)
+- `cards`: AI-generated insights (JSON payload, kind, emitted_at) - legacy table, prefer `agent_outputs`
+- `agent_sessions`: OpenAI Realtime API session tracking (event_id, agent_id, provider_session_id, agent_type: 'cards'|'facts', status)
+- `checkpoints`: Processing progress per agent (event_id, agent_id, agent_type, last_seq_processed) for resume capability
+- `agent_outputs`: Structured outputs from agents (event_id, agent_id, agent_type, for_seq, type: 'card'|'fact_update', payload)
+- `facts`: Key-value store for stable facts (event_id, fact_key, fact_value, confidence, last_seen_seq, sources)
+- `event_docs`: Document references attached to events
+- `attendees`: Event participation tracking
+
+**State Management**:
+- Client-side: React state + SSE streaming via `useSSEStream` hook (connects to `/api/stream`)
+- Server-side: Database-driven; worker maintains in-memory runtime registry (`Map<eventId, EventRuntime>`)
+- In-memory worker state: Ring buffers (last 5 minutes of transcripts), facts store (key-value with confidence), checkpoint tracking
+- No global state library (Redux/Zustand); prefer server components + client components as needed
+
+**RLS (Row Level Security)**:
+- Schema indicates RLS should be configured per table
+- Service role key used in worker and Edge Functions for privileged access
+- Authenticated users use anon key with RLS policies (to be confirmed)
+
+**Vector Search**:
+- `match_context()` RPC function performs cosine similarity search via pgvector
+- IVFFlat index on `context_items.embedding` with 100 lists
+- Query pattern: embed transcript → vector search → retrieve top-k context chunks
+
+## 5. Routing & API Contracts
+
+**Next.js App Router**:
+- File-based routing under `web/app/`
+- Route groups: `(app)` for authenticated sections, `(marketing)` for public
+- Dynamic routes: `[eventId]` segments
+- API routes: `web/app/api/ingest/route.ts` (transcript ingestion), `web/app/api/stream/route.ts` (SSE streaming)
+
+**Supabase Edge Functions**:
+- `orchestrator`: POST endpoint with action-based routing
+  - `GET /functions/v1/orchestrator`: Health check
+  - `POST /functions/v1/orchestrator`: `{ action: "create_event_and_agent", payload: {...} }` → calls RPC `create_event_with_agent()`
+  - CORS enabled for `localhost:3000`
+  - Returns `{ ok: boolean, error?: string, ...data }`
+
+**PostgreSQL RPC Functions**:
+- `create_event_with_agent(uuid, text, text, timestamptz)`: Atomic transaction creating event + agent, returns JSONB
+- `match_context(uuid, vector(1536), int)`: Vector similarity search, returns table of (id, chunk, similarity)
+
+**Request/Response Patterns**:
+- Edge Functions use JSON request/response with CORS headers
+- API routes: `/api/ingest` (POST) accepts transcript chunks, `/api/stream` (GET) streams SSE events
+- RPC functions return JSONB or table results
+- Client uses Supabase JS client with TypeScript types (to be generated)
+- SSE stream format: `{"type": "card"|"fact_update"|"connected"|"heartbeat", "payload": {...}, "timestamp": "..."}`
+
+## 6. Build, Tooling & CI
+
+**Package Management**:
+- pnpm workspaces (root `package.json` + `web/package.json` + `worker/package.json`)
+- Lock files: `pnpm-lock.yaml` per workspace
+
+**Build Scripts**:
+- `web/`: `pnpm dev` (Next.js dev server), `pnpm build` (production), `pnpm start` (production server), `pnpm lint` (ESLint)
+- `worker/`: No build script defined (runs via `tsx` in dev, needs production build setup)
+- Supabase functions: Deno runtime, no explicit build step
+
+**TypeScript Configuration**:
+- `web/tsconfig.json`: Strict mode, ES2017 target, bundler module resolution, `@/*` path alias
+- `worker/tsconfig.json`: Node.js types, likely similar strictness
+- Edge Functions: Deno types via `deno.json`, JSR imports
+
+**Linting**:
+- ESLint 9 with Next.js config (core-web-vitals + TypeScript)
+- Global ignores: `.next/`, `out/`, `build/`, `next-env.d.ts`
+
+**Local Development**:
+- Supabase CLI: `supabase start` (local stack on custom ports: API 54421, DB 54422, Studio 54423)
+- Next.js: `pnpm dev` (default port 3000)
+- Worker: Run via `tsx index.ts` (needs env vars)
+
+**Supabase Migrations**:
+- **ALWAYS use Supabase CLI to create migration files**: `supabase migration new <migration_name>`
+  - This automatically generates files with correct timestamp format: `YYYYMMDDHHMMSS_<name>.sql`
+  - Uses current system date/time, ensuring proper ordering
+  - Example: `supabase migration new enhance_context_items_schema` → `20251103201749_enhance_context_items_schema.sql`
+- **NEVER manually create migration files with hardcoded dates**
+  - Manually creating files (e.g., `20250104_080000_*.sql`) causes:
+    - Wrong timestamps (outdated dates)
+    - Migration ordering issues
+    - Potential conflicts with Supabase migration tracking
+- **If you must create manually** (not recommended):
+  - Use actual current timestamp: `TIMESTAMP=$(date +%Y%m%d%H%M%S)`
+  - But prefer using `supabase migration new` instead
+- **Migration file naming**: Must follow format `YYYYMMDDHHMMSS_<descriptive_name>.sql`
+  - Timestamp must be in format: `YYYYMMDDHHMMSS` (year, month, day, hour, minute, second)
+  - No underscores in timestamp portion (only separator before description)
+  - Descriptive name should be kebab-case (e.g., `add_realtime_tables`, `enhance_context_items_schema`)
+
+**CI/CD**: Not configured (to be validated)
+
+## 7. Coding Conventions
+
+**Naming**:
+- Files: kebab-case for pages (`page.tsx`), PascalCase for components
+- Functions: camelCase
+- Types/Interfaces: PascalCase (e.g., `AgentRuntime`, `Props`)
+- Database: snake_case (tables, columns, functions)
+
+**Import Organization**:
+- Use `@/*` alias for absolute imports in web app (`tsconfig.json` paths)
+- Group imports: external deps → internal modules
+- No relative imports beyond one level preferred
+
+**TypeScript**:
+- Strict mode enabled
+- Prefer interfaces for object shapes, types for unions/primitives
+- Use explicit return types for functions (especially public APIs)
+- Avoid `any`; use `unknown` for untyped data
+
+**Error Handling**:
+- Edge Functions: Try-catch with JSON error responses (`{ ok: false, error: string }`)
+- Worker: Console logging with ISO timestamps, error status updates in DB
+- Client: Use Supabase error objects, display user-friendly messages
+
+**Module Boundaries**:
+- `web/shared/`: Pure utilities, no Next.js-specific imports
+- `web/server/`: Server-only code (actions, RPC wrappers)
+- `web/features/`: Feature modules with co-located logic
+- `worker/`: Self-contained service, no shared web code
+
+**Security**:
+- Never expose service role key to client
+- Use environment variables for secrets (`.env.local`, not committed)
+- Supabase RLS policies should restrict access by `owner_uid`
+- Edge Functions verify JWT when `verify_jwt = true` (orchestrator enabled)
+
+**Accessibility**:
+- Use semantic HTML elements
+- ARIA labels where needed (to be validated in implementation)
+
+**Documentation Files**:
+- Generated documentation (analysis, architecture reviews, user-facing explanations) must be placed in `dev_docs/` directory at repository root
+- All generated documentation files must include timestamp prefix: `YYYYMMDD_HHMMSS_<descriptive_name>.md` (e.g., `20251031_141610_ARCHITECTURE_ANALYSIS.md`)
+- Use format: `date +%Y%m%d_%H%M%S` for timestamps (Unix-friendly, sortable)
+- These files are for developer reference and should not be committed to source control if containing sensitive or transient analysis
+- Only files that serve descriptive/analytical purposes for users should go in `dev_docs/`; code documentation (JSDoc, README, etc.) follows standard conventions
+
+## 8. Environment & Secrets
+
+**Web Application** (`web/.env.local`):
+- `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL (public, exposed to browser)
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase anonymous key (public, exposed to browser)
+- `SUPABASE_SERVICE_ROLE_KEY`: Service role key (server-only, for API routes like `/api/ingest` and `/api/stream`)
+
+**Worker** (`worker/.env`):
+- `SUPABASE_URL`: Supabase project URL (same as above, server-side)
+- `SUPABASE_SERVICE_ROLE_KEY`: Service role key (server-only, full DB access)
+- `OPENAI_API_KEY`: OpenAI API key for embeddings, chat completions, and Realtime API
+- `EMBED_MODEL`: Optional, defaults to `text-embedding-3-small`
+- `GEN_MODEL`: Optional, defaults to `gpt-4o-mini`
+- `OPENAI_REALTIME_MODEL`: Optional, defaults to `gpt-4o-realtime-preview-2024-10-01`
+- Enrichment variables (optional): `ENRICHMENT_WEB_SEARCH_ENABLED`, `ENRICHMENT_DOCUMENT_EXTRACTION_ENABLED`, `ENRICHMENT_WIKIPEDIA_ENABLED`, etc.
+
+**Supabase Local** (`supabase/.env` or system env):
+- `OPENAI_API_KEY`: Used by Supabase Studio AI features
+- Supabase CLI reads from system environment or `.env` file
+
+**Secrets Management**:
+- Never commit `.env.local`, `.env`, or files containing keys
+- Use Supabase secrets for production Edge Functions
+- Local development: `.env.local` for Next.js, `.env` for worker
+
+## 9. Testing & Validation
+
+**Current State**:
+- No test framework configured (Jest, Vitest, etc.)
+- No test files found in repository
+- Worker package.json has placeholder test script
+
+**Recommended Approach** (to be implemented):
+- Unit tests: Jest or Vitest for utilities, worker logic
+- Integration tests: Supabase test client for RPC functions, Edge Function invocations
+- E2E tests: Playwright or Cypress for critical user flows
+- Coverage target: 80% for core business logic (worker, RPC functions)
+
+**Manual Validation**:
+- Run `pnpm lint` before commits
+- Type check: `tsc --noEmit` in web and worker
+- Local Supabase: `supabase db reset` to test migrations
+- Worker: Verify agent lifecycle and card generation
+
+## 10. Performance & Observability
+
+**Performance Targets**:
+- Worker transcript processing: Event-driven via Realtime (<100ms from DB insert to processing start)
+- Vector search: <100ms for top-5 results (IVFFlat index optimized)
+- Card generation: OpenAI API dependent, aim for <3s (fallback to standard API until Realtime API fully integrated)
+- Facts updates: Debounced every 25 seconds or on triggers
+- SSE streaming: Real-time delivery to frontend (<100ms latency)
+
+**Observability**:
+- Worker: Console logging with ISO timestamps (`log()` helper)
+- Edge Functions: Console logs visible in Supabase logs
+- Next.js: Built-in error boundaries and logging
+- Database: Supabase Dashboard for query performance
+
+**Profiling Tools**:
+- Next.js built-in performance monitoring
+- Supabase query analyzer
+- OpenAI token usage tracking (via response metadata)
+
+**Budgets**: Not defined (to be validated)
+
+## 11. Deployment & Operations
+
+**Deployment Targets**:
+- **Web**: Vercel (Next.js native) or similar platform
+- **Worker**: Long-running Node.js service (Railway, Fly.io, AWS ECS, or container platform)
+- **Database**: Supabase Cloud (managed PostgreSQL)
+- **Edge Functions**: Supabase Edge Functions (Deno runtime, serverless)
+
+**Deployment Flow** (to be validated):
+1. Database migrations: `supabase db push` or CI/CD pipeline
+2. Edge Functions: `supabase functions deploy orchestrator`
+3. Web: Vercel auto-deploy on push to main branch (if configured)
+4. Worker: Manual or CI/CD container deployment
+
+**Environment Setup**:
+- Production env vars must match structure above
+- Supabase project URL/keys from production project
+- Worker requires persistent connection to Supabase
+
+**Health Checks**:
+- Edge Function: `GET /functions/v1/orchestrator` returns `{ ok: true }`
+- Worker: No health endpoint (add `/health` route or process signal)
+- Database: Supabase provides connection pool health
+
+**Rollback Strategy**:
+- Database: Migration rollback scripts or point-in-time recovery
+- Edge Functions: Version pinning and redeploy previous version
+- Web: Vercel instant rollback via dashboard
+- Worker: Container image versioning and rollback
+
+## 12. Known Gaps & TODO Validations
+
+1. ✅ **`is_live` column**: Added in migration `20251103060001_add_is_live_to_events.sql`
+
+2. **RLS Policies**: No RLS policies found in migrations. **Validation**: Add policies ensuring users can only access their own events (`owner_uid = auth.uid()`), or confirm RLS is disabled for service role.
+
+3. ✅ **API Routes**: Implemented `/api/ingest` and `/api/stream` in `web/app/api/`
+
+4. **Worker Production Build**: No build/start script for production worker. **Validation**: Add `tsc` build step and `node dist/index.js` start script, or use `tsx` in production.
+
+5. **Type Generation**: No Supabase TypeScript types generated. **Validation**: Add `supabase gen types typescript` to generate types from schema, import in `web/shared/types/`.
+
+6. ✅ **Realtime Subscriptions**: Implemented via SSE streaming (`useSSEStream` hook, `/api/stream` route, `LiveCards` and `LiveFacts` components)
+
+7. **Document Processing**: `event_docs.path` stores paths but extraction logic is placeholder. **Validation**: Implement actual PDF/DOCX extraction in `worker/enrichment/enrichers/document-extractor.ts` (framework exists, needs implementation)
+
+8. **Error Handling in Web**: No error boundaries or global error handling found. **Validation**: Add Next.js error boundaries and user-facing error messages.
+
+9. **Testing Strategy**: No tests configured. **Validation**: Set up testing framework and add critical path tests (agent lifecycle, vector search, card generation, Realtime API integration).
+
+10. **CI/CD Pipeline**: No GitHub Actions or similar. **Validation**: Add CI for linting, type checking, migration validation, and optional deployment.
+
+11. **OpenAI Realtime API Integration**: Currently uses fallback to standard API. **Validation**: Complete Realtime API WebSocket integration in `worker/realtime-session.ts` (currently placeholder)
+
+12. **Enrichment Framework**: Base architecture exists but enrichers are placeholders. **Validation**: Implement actual enrichers (web search, document extraction, Wikipedia) in `worker/enrichment/enrichers/`
+
+13. **Card Types**: Three types implemented (text, text_visual, visual) with proper rendering. ✅ **Status**: Complete
