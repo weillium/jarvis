@@ -18,7 +18,9 @@ const EMBED_MODEL   = process.env.EMBED_MODEL || 'text-embedding-3-small';
 const GEN_MODEL     = process.env.GEN_MODEL   || 'gpt-5';
 const REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-10-01';
 const EXA_API_KEY   = process.env.EXA_API_KEY; // Optional - fallback to stub if not provided
-const SSE_ENDPOINT  = process.env.SSE_ENDPOINT || 'http://localhost:3000'; // Base URL for SSE push endpoint
+// Clean SSE_ENDPOINT - remove backticks and other invalid characters
+const SSE_ENDPOINT_RAW = process.env.SSE_ENDPOINT || 'http://localhost:3000';
+const SSE_ENDPOINT = SSE_ENDPOINT_RAW.trim().replace(/[`'"]/g, ''); // Base URL for SSE push endpoint
 
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
 const openai   = new OpenAI({ apiKey: OPENAI_KEY });
@@ -236,6 +238,102 @@ async function tickRegeneration() {
   }
 }
 
+/** ---------- pause/resume loop (handle paused sessions) ---------- **/
+async function tickPauseResume() {
+  // Find sessions that are marked as paused in DB but may still be active in runtime
+  const { data: pausedSessions, error: pausedError } = await supabase
+    .from('agent_sessions')
+    .select('event_id, agent_id')
+    .eq('status', 'paused')
+    .limit(50);
+  
+  if (pausedError) {
+    log('[pause-resume] fetch error:', pausedError.message);
+    return;
+  }
+  
+  if (!pausedSessions || pausedSessions.length === 0) {
+    return;
+  }
+
+  // Group by event_id
+  const eventsToPause = new Map<string, string>(); // eventId -> agentId
+  for (const session of pausedSessions) {
+    if (!eventsToPause.has(session.event_id)) {
+      eventsToPause.set(session.event_id, session.agent_id);
+    }
+  }
+
+  // Pause events that have paused sessions in DB but are still active in runtime
+  for (const [eventId, agentId] of eventsToPause) {
+    try {
+      // Check if runtime exists and sessions are still active (needs to be paused)
+      const runtime = orchestrator.getRuntime(eventId);
+      if (runtime && runtime.status === 'running') {
+        const cardsActive = runtime.cardsSession?.getStatus().isActive;
+        const factsActive = runtime.factsSession?.getStatus().isActive;
+        
+        if (cardsActive || factsActive) {
+          log('[pause-resume] Pausing event', eventId, '- sessions are still active');
+          await orchestrator.pauseEvent(eventId);
+        }
+      }
+    } catch (e: any) {
+      log('[pause-resume] error pausing event', eventId, e?.message || e);
+    }
+  }
+
+  // Find sessions that are paused but event is live and agent is running (should resume)
+  // Use separate queries to avoid complex joins
+  const { data: pausedForResume, error: pausedError2 } = await supabase
+    .from('agent_sessions')
+    .select('event_id, agent_id')
+    .eq('status', 'paused')
+    .limit(50);
+  
+  if (pausedError2 || !pausedForResume || pausedForResume.length === 0) {
+    return;
+  }
+
+  // Check each event to see if it should be resumed
+  const eventsToResume = new Map<string, string>(); // eventId -> agentId
+  for (const session of pausedForResume) {
+    // Check if event is live
+    const { data: event } = await supabase
+      .from('events')
+      .select('is_live')
+      .eq('id', session.event_id)
+      .single();
+    
+    if (!event || !event.is_live) {
+      continue;
+    }
+
+    // Check if agent is running
+    const { data: agent } = await supabase
+      .from('agents')
+      .select('status')
+      .eq('id', session.agent_id)
+      .single();
+    
+    if (agent && agent.status === 'running') {
+      if (!eventsToResume.has(session.event_id)) {
+        eventsToResume.set(session.event_id, session.agent_id);
+      }
+    }
+  }
+
+  // Resume events
+  for (const [eventId, agentId] of eventsToResume) {
+    try {
+      log('[pause-resume] Resuming event', eventId);
+      await orchestrator.resumeEvent(eventId, agentId);
+    } catch (e: any) {
+      log('[pause-resume] error resuming event', eventId, e?.message || e);
+    }
+  }
+}
+
 /** ---------- run loop (polling for ready agents that need to start) ---------- **/
 async function tickRun() {
   // Find events that are live but don't have running orchestrator runtime
@@ -285,12 +383,13 @@ async function main() {
     // Initialize orchestrator (subscribes to Realtime, resumes events)
     await orchestrator.initialize();
     
-    // Start polling loops for blueprint generation, context generation, and run
+    // Start polling loops for blueprint generation, context generation, pause/resume, and run
     // Note: These are fallbacks for agents that need blueprint/execution or events that need to start
     // The main processing happens via Realtime subscriptions (event-driven)
     setInterval(tickBlueprint, 3000); // Check for agents needing blueprint generation every 3s
     setInterval(tickContextGeneration, 3000); // Check for approved blueprints needing execution every 3s
     setInterval(tickRegeneration, 3000); // Check for agents needing stage regeneration every 3s
+    setInterval(tickPauseResume, 5000); // Check for sessions needing pause/resume every 5s
     setInterval(tickRun, 5000);  // Check for events needing start every 5s
     
     log('Worker/Orchestrator running...');

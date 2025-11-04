@@ -48,7 +48,7 @@ export interface LogEntry {
 export interface AgentSessionStatus {
   agent_type: 'cards' | 'facts';
   session_id: string;
-  status: 'starting' | 'active' | 'closed' | 'error';
+  status: 'starting' | 'active' | 'paused' | 'closed' | 'error';
   runtime: {
     event_id: string;
     agent_id: string;
@@ -396,7 +396,15 @@ export class Orchestrator {
     }
 
     try {
-      const baseUrl = this.config.sseEndpoint.replace(/\/$/, ''); // Remove trailing slash
+      // Clean and validate base URL
+      let baseUrl = (this.config.sseEndpoint || '').trim().replace(/\/$/, ''); // Remove trailing slash
+      // Remove any backticks or other invalid characters
+      baseUrl = baseUrl.replace(/[`'"]/g, '');
+      
+      if (!baseUrl || !baseUrl.startsWith('http')) {
+        console.warn(`[orchestrator] Invalid SSE endpoint configured: ${this.config.sseEndpoint}`);
+        return;
+      }
 
       // Push cards status
       const cardsResponse = await fetch(`${baseUrl}/api/agent-sessions/${runtime.eventId}/status`, {
@@ -423,8 +431,20 @@ export class Orchestrator {
       }
     } catch (error: any) {
       // Don't throw - status push failure shouldn't break processing
+      // Log the full URL that failed to help debug
+      const baseUrl = this.config.sseEndpoint?.replace(/\/$/, '') || 'N/A';
+      const attemptedUrl = `${baseUrl}/api/agent-sessions/${runtime.eventId}/status`;
       console.error(`[orchestrator] Error pushing session status: ${error.message}`);
+      console.error(`[orchestrator] Attempted URL: ${attemptedUrl}`);
+      console.error(`[orchestrator] SSE_ENDPOINT config: ${this.config.sseEndpoint}`);
     }
+  }
+
+  /**
+   * Get runtime for an event (for external access)
+   */
+  getRuntime(eventId: string): EventRuntime | undefined {
+    return this.runtimes.get(eventId);
   }
 
   /**
@@ -946,10 +966,75 @@ export class Orchestrator {
       .select('id, agent_type, status')
       .eq('event_id', eventId)
       .eq('agent_id', agentId)
-      .in('status', ['starting', 'active']);
+      .in('status', ['starting', 'active', 'paused']);
 
-    if (existingSessions && existingSessions.length > 0) {
-      console.log(`[orchestrator] Event ${eventId} already has ${existingSessions.length} active session(s), skipping creation`);
+    // Handle paused sessions - resume them
+    const pausedSessions = existingSessions?.filter(s => s.status === 'paused') || [];
+    if (pausedSessions.length > 0) {
+      console.log(`[orchestrator] Event ${eventId} has ${pausedSessions.length} paused session(s), resuming...`);
+      // If runtime exists but sessions are null, recreate them
+      if (!runtime.cardsSession || !runtime.factsSession) {
+        // Recreate session objects (they were cleared on pause)
+        runtime.cardsSession = new RealtimeSession(this.config.openai, {
+          eventId,
+          agentType: 'cards',
+          model: this.config.realtimeModel,
+          onStatusChange: async (status, sessionId) => {
+            await this.handleSessionStatusChange(eventId, agentId, 'cards', status, sessionId);
+          },
+          onLog: (level, message, context) => {
+            this.captureLog(runtime, 'cards', level, message, context);
+          },
+          supabase: this.config.supabase,
+          onRetrieve: async (query: string, topK: number) => {
+            return await this.handleRetrieveQuery(runtime, query, topK);
+          },
+          embedText: async (text: string) => {
+            return await this.embedText(text);
+          },
+        });
+
+        runtime.factsSession = new RealtimeSession(this.config.openai, {
+          eventId,
+          agentType: 'facts',
+          model: this.config.realtimeModel,
+          onStatusChange: async (status, sessionId) => {
+            await this.handleSessionStatusChange(eventId, agentId, 'facts', status, sessionId);
+          },
+          onLog: (level, message, context) => {
+            this.captureLog(runtime, 'facts', level, message, context);
+          },
+          supabase: this.config.supabase,
+          onRetrieve: async (query: string, topK: number) => {
+            return await this.handleRetrieveQuery(runtime, query, topK);
+          },
+        });
+      }
+
+      // Resume both sessions
+      try {
+        runtime.cardsSessionId = await runtime.cardsSession.resume();
+        runtime.factsSessionId = await runtime.factsSession.resume();
+        
+        // Update runtime status
+        runtime.status = 'running';
+        await this.config.supabase
+          .from('agents')
+          .update({ status: 'running' })
+          .eq('id', agentId);
+        
+        console.log(`[orchestrator] Event ${eventId} resumed successfully`);
+        return;
+      } catch (error: any) {
+        console.error(`[orchestrator] Failed to resume sessions: ${error.message}`);
+        // Fall through to create new sessions
+      }
+    }
+
+    // Check for active sessions (not paused)
+    const activeSessions = existingSessions?.filter(s => s.status === 'active' || s.status === 'starting') || [];
+    if (activeSessions.length > 0) {
+      console.log(`[orchestrator] Event ${eventId} already has ${activeSessions.length} active session(s), skipping creation`);
       // Update runtime status to running if sessions exist
       runtime.status = 'running';
       await this.config.supabase
@@ -1054,6 +1139,131 @@ export class Orchestrator {
       .eq('id', agentId);
 
     console.log(`[orchestrator] Event ${eventId} started`);
+  }
+
+  /**
+   * Pause event sessions (close WebSocket but preserve state)
+   */
+  async pauseEvent(eventId: string): Promise<void> {
+    console.log(`[orchestrator] Pausing event ${eventId}`);
+    const runtime = this.runtimes.get(eventId);
+
+    if (!runtime) {
+      throw new Error(`Event ${eventId} not found in runtime`);
+    }
+
+    if (runtime.status !== 'running') {
+      throw new Error(`Event ${eventId} is not running (status: ${runtime.status})`);
+    }
+
+    try {
+      // Pause both sessions
+      if (runtime.cardsSession) {
+        await runtime.cardsSession.pause();
+      }
+      if (runtime.factsSession) {
+        await runtime.factsSession.pause();
+      }
+
+      // Note: Runtime state (ring buffer, facts store) is preserved
+      // Runtime status stays 'running' but sessions are paused
+      // The agent status in DB is updated by the session's pause() method
+      
+      console.log(`[orchestrator] Event ${eventId} paused`);
+    } catch (error: any) {
+      console.error(`[orchestrator] Error pausing event ${eventId}: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Resume paused event sessions
+   */
+  async resumeEvent(eventId: string, agentId: string): Promise<void> {
+    console.log(`[orchestrator] Resuming event ${eventId}`);
+    const runtime = this.runtimes.get(eventId);
+
+    if (!runtime) {
+      // Try to resume from database state
+      runtime = await this.createRuntime(eventId, agentId);
+    }
+
+    // Check if sessions are paused in database
+    const { data: pausedSessions } = await this.config.supabase
+      .from('agent_sessions')
+      .select('id, agent_type, status')
+      .eq('event_id', eventId)
+      .eq('agent_id', agentId)
+      .eq('status', 'paused');
+
+    if (!pausedSessions || pausedSessions.length === 0) {
+      throw new Error(`No paused sessions found for event ${eventId}`);
+    }
+
+    // Recreate session objects if they don't exist
+    if (!runtime.cardsSession || !runtime.factsSession) {
+      runtime.cardsSession = new RealtimeSession(this.config.openai, {
+        eventId,
+        agentType: 'cards',
+        model: this.config.realtimeModel,
+        onStatusChange: async (status, sessionId) => {
+          await this.handleSessionStatusChange(eventId, agentId, 'cards', status, sessionId);
+        },
+        onLog: (level, message, context) => {
+          this.captureLog(runtime, 'cards', level, message, context);
+        },
+        supabase: this.config.supabase,
+        onRetrieve: async (query: string, topK: number) => {
+          return await this.handleRetrieveQuery(runtime, query, topK);
+        },
+        embedText: async (text: string) => {
+          return await this.embedText(text);
+        },
+      });
+
+      runtime.factsSession = new RealtimeSession(this.config.openai, {
+        eventId,
+        agentType: 'facts',
+        model: this.config.realtimeModel,
+        onStatusChange: async (status, sessionId) => {
+          await this.handleSessionStatusChange(eventId, agentId, 'facts', status, sessionId);
+        },
+        onLog: (level, message, context) => {
+          this.captureLog(runtime, 'facts', level, message, context);
+        },
+        supabase: this.config.supabase,
+        onRetrieve: async (query: string, topK: number) => {
+          return await this.handleRetrieveQuery(runtime, query, topK);
+        },
+      });
+    }
+
+    // Resume both sessions
+    try {
+      runtime.cardsSessionId = await runtime.cardsSession.resume();
+      runtime.factsSessionId = await runtime.factsSession.resume();
+
+      // Register event handlers
+      runtime.cardsSession.on('card', async (card: any) => {
+        await this.handleCardResponse(runtime, card);
+      });
+
+      runtime.factsSession.on('facts', async (facts: any[]) => {
+        await this.handleFactsResponse(runtime, facts);
+      });
+
+      // Update runtime status
+      runtime.status = 'running';
+      await this.config.supabase
+        .from('agents')
+        .update({ status: 'running' })
+        .eq('id', agentId);
+
+      console.log(`[orchestrator] Event ${eventId} resumed successfully`);
+    } catch (error: any) {
+      console.error(`[orchestrator] Error resuming event ${eventId}: ${error.message}`);
+      throw error;
+    }
   }
 
   /**
@@ -1347,7 +1557,7 @@ export class Orchestrator {
     eventId: string,
     agentId: string,
     agentType: 'cards' | 'facts',
-    status: 'starting' | 'active' | 'closed' | 'error',
+    status: 'starting' | 'active' | 'paused' | 'closed' | 'error',
     sessionId?: string
   ): Promise<void> {
     console.log(

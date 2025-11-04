@@ -24,7 +24,7 @@ export interface RealtimeSessionConfig {
   agentType: AgentType;
   model?: string;
   onStatusChange?: (
-    status: 'starting' | 'active' | 'closed' | 'error',
+    status: 'starting' | 'active' | 'paused' | 'closed' | 'error',
     sessionId?: string
   ) => void;
   onLog?: (
@@ -46,7 +46,7 @@ export class RealtimeSession {
   private messageQueue: any[] = [];
   private eventHandlers: Map<string, ((data: any) => void)[]> = new Map();
   private onStatusChange?: (
-    status: 'starting' | 'active' | 'closed' | 'error',
+    status: 'starting' | 'active' | 'paused' | 'closed' | 'error',
     sessionId?: string
   ) => void;
   private onLog?: (
@@ -228,7 +228,7 @@ export class RealtimeSession {
    * Update agent_sessions table status
    */
   private async updateDatabaseStatus(
-    status: 'starting' | 'active' | 'closed' | 'error',
+    status: 'starting' | 'active' | 'paused' | 'closed' | 'error',
     sessionId?: string
   ): Promise<void> {
     if (!this.supabase || !this.config.eventId) {
@@ -649,9 +649,9 @@ export class RealtimeSession {
   }
 
   /**
-   * Close the session
+   * Pause the session (close WebSocket but preserve state for resume)
    */
-  async close(): Promise<void> {
+  async pause(): Promise<void> {
     if (!this.isActive) {
       return;
     }
@@ -661,8 +661,58 @@ export class RealtimeSession {
       if (this.session) {
         this.session.close({
           code: 1000,
+          reason: 'Paused - state preserved for resume',
+        });
+        this.session = undefined;
+      }
+
+      this.isActive = false;
+      // Note: Don't clear messageQueue - preserve for resume
+
+      // Notify paused status
+      this.onStatusChange?.('paused');
+
+      // Update database
+      if (this.supabase) {
+        await this.updateDatabaseStatus('paused');
+      }
+
+      console.log(`[realtime] Session paused (${this.config.agentType})`);
+    } catch (error: any) {
+      console.error(`[realtime] Error pausing session: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Resume a paused session (reconnect and restore state)
+   */
+  async resume(): Promise<string> {
+    if (this.isActive) {
+      throw new Error('Session already active');
+    }
+
+    // Reconnect using the same connect() logic
+    return await this.connect();
+  }
+
+  /**
+   * Close the session permanently
+   */
+  async close(): Promise<void> {
+    if (!this.isActive && !this.session) {
+      // Already closed or paused
+      return;
+    }
+
+    try {
+      // Close WebSocket if it exists
+      if (this.session) {
+        this.session.close({
+          code: 1000,
           reason: 'Normal closure',
         });
+        this.session = undefined;
       }
 
       this.isActive = false;

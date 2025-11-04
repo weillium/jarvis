@@ -5,7 +5,7 @@ import { useEffect, useState, useRef } from 'react';
 export interface AgentSessionStatus {
   agent_type: 'cards' | 'facts';
   session_id: string;
-  status: 'starting' | 'active' | 'closed' | 'error';
+  status: 'starting' | 'active' | 'paused' | 'closed' | 'error';
   runtime?: {
     event_id: string;
     agent_id: string;

@@ -19,6 +19,9 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
   const [expandedLogs, setExpandedLogs] = useState<{ cards: boolean; facts: boolean }>({ cards: false, facts: false });
   const [isStartingSessions, setIsStartingSessions] = useState(false);
   const [startSessionsError, setStartSessionsError] = useState<string | null>(null);
+  const [isPausing, setIsPausing] = useState(false);
+  const [isResuming, setIsResuming] = useState(false);
+  const [pauseResumeError, setPauseResumeError] = useState<string | null>(null);
 
   // Fetch total cost from all generation cycles
   useEffect(() => {
@@ -177,12 +180,68 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
     }
   };
 
+  const handlePauseSessions = async () => {
+    setIsPausing(true);
+    setPauseResumeError(null);
+
+    try {
+      const res = await fetch(`/api/agent-sessions/${eventId}/pause`, {
+        method: 'POST',
+      });
+
+      const data = await res.json();
+
+      if (!data.ok) {
+        throw new Error(data.error || 'Failed to pause sessions');
+      }
+
+      // Refresh agent info to reflect status change
+      await refetch();
+      
+      console.log('[AgentOverview] Sessions paused');
+    } catch (err: any) {
+      console.error('Failed to pause sessions:', err);
+      setPauseResumeError(err.message || 'Failed to pause sessions');
+    } finally {
+      setIsPausing(false);
+    }
+  };
+
+  const handleResumeSessions = async () => {
+    setIsResuming(true);
+    setPauseResumeError(null);
+
+    try {
+      const res = await fetch(`/api/agent-sessions/${eventId}/resume`, {
+        method: 'POST',
+      });
+
+      const data = await res.json();
+
+      if (!data.ok) {
+        throw new Error(data.error || 'Failed to resume sessions');
+      }
+
+      // Refresh agent info to reflect status change
+      await refetch();
+      
+      console.log('[AgentOverview] Sessions will be resumed by worker');
+    } catch (err: any) {
+      console.error('Failed to resume sessions:', err);
+      setPauseResumeError(err.message || 'Failed to resume sessions');
+    } finally {
+      setIsResuming(false);
+    }
+  };
+
   const getSessionStatusColor = (status: string): string => {
     switch (status) {
       case 'starting':
         return '#f59e0b';
       case 'active':
         return '#10b981';
+      case 'paused':
+        return '#8b5cf6'; // Purple for paused
       case 'closed':
         return '#6b7280';
       case 'error':
@@ -198,6 +257,8 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
         return 'Starting';
       case 'active':
         return 'Active';
+      case 'paused':
+        return 'Paused';
       case 'closed':
         return 'Closed';
       case 'error':
@@ -723,14 +784,102 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
           paddingBottom: '24px',
           borderBottom: '1px solid #e2e8f0',
         }}>
-          <h4 style={{
-            fontSize: '16px',
-            fontWeight: '600',
-            color: '#0f172a',
-            margin: '0 0 16px 0',
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '16px',
           }}>
-            Realtime Agent Sessions
-          </h4>
+            <h4 style={{
+              fontSize: '16px',
+              fontWeight: '600',
+              color: '#0f172a',
+              margin: 0,
+            }}>
+              Realtime Agent Sessions
+            </h4>
+            
+            {/* Pause/Resume Controls */}
+            {(cardsStatus || factsStatus) && (
+              <div style={{
+                display: 'flex',
+                gap: '8px',
+              }}>
+                {(cardsStatus?.status === 'active' || factsStatus?.status === 'active') && (
+                  <button
+                    onClick={handlePauseSessions}
+                    disabled={isPausing}
+                    style={{
+                      padding: '6px 12px',
+                      background: isPausing ? '#cbd5e1' : '#8b5cf6',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: '500',
+                      cursor: isPausing ? 'not-allowed' : 'pointer',
+                      transition: 'background 0.2s',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isPausing) {
+                        e.currentTarget.style.background = '#7c3aed';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isPausing) {
+                        e.currentTarget.style.background = '#8b5cf6';
+                      }
+                    }}
+                  >
+                    {isPausing ? 'Pausing...' : '⏸️ Pause'}
+                  </button>
+                )}
+                {(cardsStatus?.status === 'paused' || factsStatus?.status === 'paused') && (
+                  <button
+                    onClick={handleResumeSessions}
+                    disabled={isResuming}
+                    style={{
+                      padding: '6px 12px',
+                      background: isResuming ? '#cbd5e1' : '#10b981',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: '500',
+                      cursor: isResuming ? 'not-allowed' : 'pointer',
+                      transition: 'background 0.2s',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isResuming) {
+                        e.currentTarget.style.background = '#059669';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isResuming) {
+                        e.currentTarget.style.background = '#10b981';
+                      }
+                    }}
+                  >
+                    {isResuming ? 'Resuming...' : '▶️ Resume'}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+          
+          {pauseResumeError && (
+            <div style={{
+              padding: '8px 12px',
+              marginBottom: '16px',
+              background: '#fef2f2',
+              borderRadius: '6px',
+              border: '1px solid #fecaca',
+              fontSize: '12px',
+              color: '#dc2626',
+            }}>
+              {pauseResumeError}
+            </div>
+          )}
           
           {sessionsError && (
             <div style={{
