@@ -83,12 +83,12 @@ export async function POST(
 
     const agentId = agents[0].id;
 
-    // Find approved or completed blueprint (blueprints can be 'approved' or 'completed' after execution)
+    // Find approved blueprint (execution tracked via agent status and generation_cycles)
     const { data: blueprints, error: blueprintError } = await (supabase
       .from('context_blueprints') as any)
       .select('id, status')
       .eq('agent_id', agentId)
-      .in('status', ['approved', 'completed'])
+      .eq('status', 'approved')
       .order('created_at', { ascending: false }) // Get the most recent one
       .limit(1);
 
@@ -104,7 +104,7 @@ export async function POST(
       return NextResponse.json(
         { 
           ok: false, 
-          error: 'No approved or completed blueprint found. Please approve a blueprint first.' 
+          error: 'No approved blueprint found. Please approve a blueprint first.' 
         },
         { status: 400 }
       );

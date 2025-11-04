@@ -178,12 +178,12 @@ async function tickRegeneration() {
       continue;
     }
 
-    // Fetch the approved or completed blueprint for this agent
+    // Fetch the approved blueprint for this agent
     const { data: blueprint, error: blueprintError } = await ((supabase
       .from('context_blueprints') as any)
       .select('id')
       .eq('agent_id', ag.id)
-      .in('status', ['approved', 'completed'])
+      .eq('status', 'approved')
       .order('created_at', { ascending: false })
       .limit(1)
       .single()) as { data: { id: string } | null; error: any };

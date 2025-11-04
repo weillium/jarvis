@@ -51,7 +51,7 @@ export async function executeContextGeneration(
 
     // 2. Update status to 'researching'
     await updateAgentStatus(supabase, agentId, 'researching');
-    await updateBlueprintStatus(supabase, blueprintId, 'executing');
+    // Blueprint status stays 'approved' - execution tracked via agent status and generation_cycles
 
     // 3. Execute research plan
     console.log(`[context-gen] Executing research plan with ${blueprint.research_plan.queries.length} queries`);
@@ -101,7 +101,7 @@ export async function executeContextGeneration(
 
     // 8. Update status to 'context_complete'
     await updateAgentStatus(supabase, agentId, 'context_complete');
-    await updateBlueprintStatus(supabase, blueprintId, 'completed');
+    // Blueprint status stays 'approved' - completion tracked via agent status
 
     console.log(`[context-gen] Context generation complete for event ${eventId}`);
   } catch (error: any) {
@@ -228,14 +228,17 @@ async function updateBlueprintStatus(
   status: string,
   errorMessage?: string
 ): Promise<void> {
+  // Only allow: 'generating', 'ready', 'approved', 'error'
+  // 'executing' and 'completed' removed - tracked via agent status and generation_cycles
+  const allowedStatuses = ['generating', 'ready', 'approved', 'error'];
+  if (!allowedStatuses.includes(status)) {
+    console.warn(`[context-gen] Warning: Blueprint status '${status}' not allowed, skipping update`);
+    return;
+  }
+
   const update: any = { status };
   if (errorMessage) {
     update.error_message = errorMessage;
-  }
-  if (status === 'completed') {
-    update.completed_at = new Date().toISOString();
-  } else if (status === 'executing') {
-    update.execution_started_at = new Date().toISOString();
   }
 
   const { error } = await (supabase
@@ -276,13 +279,13 @@ export async function regenerateResearchStage(
 
   const blueprint = blueprintRecord.blueprint as Blueprint;
 
-  if (blueprintRecord.status !== 'approved' && blueprintRecord.status !== 'completed') {
-    throw new Error(`Blueprint must be approved or completed to regenerate research. Current status: ${blueprintRecord.status}`);
+  if (blueprintRecord.status !== 'approved') {
+    throw new Error(`Blueprint must be approved to regenerate research. Current status: ${blueprintRecord.status}`);
   }
 
   // Update status
   await updateAgentStatus(supabase, agentId, 'researching');
-  await updateBlueprintStatus(supabase, blueprintId, 'executing');
+  // Blueprint status stays 'approved'
 
   // Execute research
   const researchResults = await executeResearchPlan(
@@ -339,8 +342,8 @@ export async function regenerateGlossaryStage(
 
   const blueprint = blueprintRecord.blueprint as Blueprint;
 
-  if (blueprintRecord.status !== 'approved' && blueprintRecord.status !== 'completed') {
-    throw new Error(`Blueprint must be approved or completed to regenerate glossary. Current status: ${blueprintRecord.status}`);
+  if (blueprintRecord.status !== 'approved') {
+    throw new Error(`Blueprint must be approved to regenerate glossary. Current status: ${blueprintRecord.status}`);
   }
 
   // Fetch research results if not provided
@@ -423,8 +426,8 @@ export async function regenerateChunksStage(
 
   const blueprint = blueprintRecord.blueprint as Blueprint;
 
-  if (blueprintRecord.status !== 'approved' && blueprintRecord.status !== 'completed') {
-    throw new Error(`Blueprint must be approved or completed to regenerate chunks. Current status: ${blueprintRecord.status}`);
+  if (blueprintRecord.status !== 'approved') {
+    throw new Error(`Blueprint must be approved to regenerate chunks. Current status: ${blueprintRecord.status}`);
   }
 
   // Fetch research results if not provided
@@ -478,7 +481,7 @@ export async function regenerateChunksStage(
 
   // Update to context_complete
   await updateAgentStatus(supabase, agentId, 'context_complete');
-  await updateBlueprintStatus(supabase, blueprintId, 'completed');
+  // Blueprint status stays 'approved'
 
   return chunksCount;
 }

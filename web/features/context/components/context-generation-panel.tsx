@@ -352,8 +352,16 @@ export function ContextGenerationPanel({ eventId, agentStatus, embedded = false 
         </div>
       )}
 
-      {/* Stage Regeneration Controls */}
-      {(statusData?.agent?.status === 'context_complete' || statusData?.agent?.status === 'error') && (
+      {/* Stage Regeneration Controls - Modular Regeneration */}
+      {(statusData?.agent?.status === 'context_complete' || 
+        statusData?.agent?.status === 'error' ||
+        statusData?.agent?.status === 'blueprint_approved' ||
+        statusData?.agent?.status === 'researching' ||
+        statusData?.agent?.status === 'building_glossary' ||
+        statusData?.agent?.status === 'building_chunks' ||
+        statusData?.agent?.status === 'regenerating_research' ||
+        statusData?.agent?.status === 'regenerating_glossary' ||
+        statusData?.agent?.status === 'regenerating_chunks') && (
         <div style={{
           marginBottom: '20px',
           padding: '16px',
@@ -365,73 +373,132 @@ export function ContextGenerationPanel({ eventId, agentStatus, embedded = false 
             fontSize: '14px',
             fontWeight: '600',
             color: '#0f172a',
-            margin: '0 0 12px 0',
+            margin: '0 0 8px 0',
           }}>
-            Regenerate Stages
+            Modular Regeneration
           </h4>
           <p style={{
             fontSize: '12px',
             color: '#64748b',
             margin: '0 0 12px 0',
           }}>
-            Regenerate specific stages without regenerating the entire blueprint:
+            Regenerate specific components independently. Each component is versioned and can be regenerated without affecting others:
           </p>
           <div style={{
-            display: 'flex',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
             gap: '8px',
-            flexWrap: 'wrap',
+            marginBottom: '12px',
           }}>
             <button
               onClick={() => handleRegenerateStage('research')}
-              disabled={!!regeneratingStage}
+              disabled={!!regeneratingStage || statusData?.agent?.status === 'regenerating_research'}
               style={{
-                padding: '8px 16px',
-                background: regeneratingStage === 'research' ? '#94a3b8' : '#3b82f6',
+                padding: '10px 16px',
+                background: (regeneratingStage === 'research' || statusData?.agent?.status === 'regenerating_research') 
+                  ? '#94a3b8' 
+                  : '#3b82f6',
                 color: '#ffffff',
                 border: 'none',
                 borderRadius: '6px',
                 fontSize: '12px',
                 fontWeight: '500',
-                cursor: regeneratingStage ? 'not-allowed' : 'pointer',
+                cursor: (regeneratingStage || statusData?.agent?.status === 'regenerating_research') 
+                  ? 'not-allowed' 
+                  : 'pointer',
                 transition: 'background 0.2s',
+                textAlign: 'left',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '4px',
               }}
+              title="Regenerate research results independently. Preserves glossary and chunks."
             >
-              {regeneratingStage === 'research' ? 'Regenerating...' : 'Regenerate Research'}
+              <span style={{ fontWeight: '600' }}>
+                {(regeneratingStage === 'research' || statusData?.agent?.status === 'regenerating_research') 
+                  ? 'Regenerating...' 
+                  : 'Regenerate Research'}
+              </span>
+              <span style={{ fontSize: '11px', opacity: 0.9 }}>
+                Re-execute research plan
+              </span>
             </button>
             <button
               onClick={() => handleRegenerateStage('glossary')}
-              disabled={!!regeneratingStage}
+              disabled={!!regeneratingStage || statusData?.agent?.status === 'regenerating_glossary'}
               style={{
-                padding: '8px 16px',
-                background: regeneratingStage === 'glossary' ? '#94a3b8' : '#3b82f6',
+                padding: '10px 16px',
+                background: (regeneratingStage === 'glossary' || statusData?.agent?.status === 'regenerating_glossary') 
+                  ? '#94a3b8' 
+                  : '#3b82f6',
                 color: '#ffffff',
                 border: 'none',
                 borderRadius: '6px',
                 fontSize: '12px',
                 fontWeight: '500',
-                cursor: regeneratingStage ? 'not-allowed' : 'pointer',
+                cursor: (regeneratingStage || statusData?.agent?.status === 'regenerating_glossary') 
+                  ? 'not-allowed' 
+                  : 'pointer',
                 transition: 'background 0.2s',
+                textAlign: 'left',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '4px',
               }}
+              title="Regenerate glossary terms independently. Preserves research and chunks."
             >
-              {regeneratingStage === 'glossary' ? 'Regenerating...' : 'Regenerate Glossary'}
+              <span style={{ fontWeight: '600' }}>
+                {(regeneratingStage === 'glossary' || statusData?.agent?.status === 'regenerating_glossary') 
+                  ? 'Regenerating...' 
+                  : 'Regenerate Glossary'}
+              </span>
+              <span style={{ fontSize: '11px', opacity: 0.9 }}>
+                Re-build glossary terms
+              </span>
             </button>
             <button
               onClick={() => handleRegenerateStage('chunks')}
-              disabled={!!regeneratingStage}
+              disabled={!!regeneratingStage || statusData?.agent?.status === 'regenerating_chunks'}
               style={{
-                padding: '8px 16px',
-                background: regeneratingStage === 'chunks' ? '#94a3b8' : '#3b82f6',
+                padding: '10px 16px',
+                background: (regeneratingStage === 'chunks' || statusData?.agent?.status === 'regenerating_chunks') 
+                  ? '#94a3b8' 
+                  : '#3b82f6',
                 color: '#ffffff',
                 border: 'none',
                 borderRadius: '6px',
                 fontSize: '12px',
                 fontWeight: '500',
-                cursor: regeneratingStage ? 'not-allowed' : 'pointer',
+                cursor: (regeneratingStage || statusData?.agent?.status === 'regenerating_chunks') 
+                  ? 'not-allowed' 
+                  : 'pointer',
                 transition: 'background 0.2s',
+                textAlign: 'left',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '4px',
               }}
+              title="Regenerate chunks (preserves research chunks). Re-ranks and re-embeds."
             >
-              {regeneratingStage === 'chunks' ? 'Regenerating...' : 'Regenerate Chunks'}
+              <span style={{ fontWeight: '600' }}>
+                {(regeneratingStage === 'chunks' || statusData?.agent?.status === 'regenerating_chunks') 
+                  ? 'Regenerating...' 
+                  : 'Regenerate Chunks'}
+              </span>
+              <span style={{ fontSize: '11px', opacity: 0.9 }}>
+                Re-build ranked chunks
+              </span>
             </button>
+          </div>
+          <div style={{
+            padding: '8px 12px',
+            background: '#e0f2fe',
+            border: '1px solid #bae6fd',
+            borderRadius: '6px',
+            fontSize: '11px',
+            color: '#0369a1',
+          }}>
+            <strong>Benefits:</strong> Each component is independently versioned. Regenerating one component preserves others and maintains a full audit trail.
           </div>
           {regenerationError && (
             <div style={{
