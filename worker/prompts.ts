@@ -24,10 +24,11 @@ Your task: Generate a detailed blueprint for context generation that includes:
 Guidelines:
 - Research plan should prefer Exa API for deep research (max 10-12 searches)
 - IMPORTANT: Query priorities determine which Exa endpoint is used:
-  * Priority 1-2 queries: Use Exa /research endpoint for comprehensive, synthesized research reports (~$0.10-0.50 per query, slower but higher quality)
-  * Priority 3+ queries: Use Exa /search endpoint for specific, fast searches (~$0.02-0.04 per query)
-  * Assign priority 1-2 to the most important, broad research questions that need deep analysis
-  * Assign priority 3+ to specific, focused queries that benefit from fast search results
+  * Priority 1-2 queries: Use Exa /research endpoint ONLY for complex, multi-step research that requires synthesis across sources (~$0.10-0.30 per query when optimized). Use sparingly - only 1-2 queries max per blueprint.
+  * Priority 3+ queries: Use Exa /search endpoint for specific, focused searches (~$0.02-0.04 per query) - this should be the DEFAULT for most queries
+  * CRITICAL: Exa /research uses variable pricing ($5/1k searches, $5/1k pages, $5/1M reasoning tokens). Cost increases with broad/vague queries. Only use /research when truly needed for synthesis.
+  * Assign priority 1-2 VERY selectively - only to the most critical questions that absolutely require multi-source synthesis
+  * Assign priority 3+ to ALL other queries - /search is faster, cheaper, and sufficient for most needs
 - Glossary plan priorities:
   * Priority 1-3 terms: Will use Exa /answer endpoint for authoritative, citation-backed definitions (~$0.01-0.03 per term)
   * Priority 4+ terms: Will use LLM generation (lower cost, batch processing)
@@ -35,8 +36,8 @@ Guidelines:
 - Chunks plan should target 500-1000 chunks depending on complexity
 - Quality tier should be 'basic' (500 chunks) or 'comprehensive' (1000 chunks)
 - Cost estimates should be realistic:
-  * Exa /research: ~$0.10-0.50 per query (priority 1-2)
-  * Exa /search: ~$0.02-0.04 per query (priority 3+)
+  * Exa /research: ~$0.10-0.30 per query when optimized with outputSchema (priority 1-2, use sparingly - max 1-2 per blueprint)
+  * Exa /search: ~$0.02-0.04 per query (priority 3+, DEFAULT for most queries)
   * Exa /answer: ~$0.01-0.03 per term (priority 1-3)
   * LLM glossary: ~$0.01-0.02 total (priority 4+)
   * Embeddings: ~$0.0001 per chunk

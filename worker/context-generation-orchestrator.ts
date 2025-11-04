@@ -243,7 +243,11 @@ async function executeResearchPlan(
   const { supabase, openai, genModel, exaApiKey } = options;
   const queries = blueprint.research_plan.queries || [];
 
-  console.log(`[research] Executing ${queries.length} research queries`);
+  console.log(`[research] ========================================`);
+  console.log(`[research] Starting research plan execution`);
+  console.log(`[research] Total queries: ${queries.length}`);
+  console.log(`[research] Event ID: ${eventId}, Blueprint ID: ${blueprintId}, Cycle ID: ${generationCycleId}`);
+  console.log(`[research] ========================================`);
 
   const chunks: ResearchResults['chunks'] = [];
   const insertedCount = { value: 0 }; // Use object to allow mutation in helper function
@@ -251,8 +255,12 @@ async function executeResearchPlan(
   // Initialize Exa client if API key is provided
   const exa = exaApiKey ? new Exa(exaApiKey) : null;
   if (!exa && queries.some(q => q.api === 'exa')) {
-    console.warn(`[research] Exa API key not provided, but Exa queries found. Falling back to stub.`);
+    console.warn(`[research] ⚠️  Exa API key not provided, but ${queries.filter(q => q.api === 'exa').length} Exa queries found. Falling back to LLM stub.`);
   }
+  
+  const exaQueries = queries.filter(q => q.api === 'exa').length;
+  const wikipediaQueries = queries.filter(q => q.api === 'wikipedia').length;
+  console.log(`[research] Query breakdown: ${exaQueries} Exa queries, ${wikipediaQueries} Wikipedia queries`);
 
   // Update cycle to processing
   await updateGenerationCycle(supabase, generationCycleId, {
@@ -263,10 +271,16 @@ async function executeResearchPlan(
   // Process queries
   for (let i = 0; i < queries.length; i++) {
     const queryItem = queries[i];
+    const queryNumber = i + 1;
+    const queryProgress = `[${queryNumber}/${queries.length}]`;
+    
+    console.log(`[research] ${queryProgress} Starting query: "${queryItem.query}" (API: ${queryItem.api}, Priority: ${queryItem.priority})`);
+    
     try {
       if (queryItem.api === 'wikipedia') {
         // Wikipedia API implementation
-        console.log(`[research] Executing Wikipedia query: ${queryItem.query}`);
+        console.log(`[research] ${queryProgress} Executing Wikipedia API request for: ${queryItem.query}`);
+        const startTime = Date.now();
         
         try {
           const wikipediaChunks = await executeWikipediaSearch(
@@ -277,22 +291,41 @@ async function executeResearchPlan(
             generationCycleId
           );
           
+          const duration = Date.now() - startTime;
+          
           for (const chunk of wikipediaChunks) {
             insertedCount.value++;
             chunks.push(chunk);
           }
           
-          console.log(`[research] Processed ${wikipediaChunks.length} Wikipedia chunks for query: ${queryItem.query}`);
+          console.log(`[research] ${queryProgress} ✓ Wikipedia API success: ${wikipediaChunks.length} chunks created in ${duration}ms for query: "${queryItem.query}"`);
         } catch (wikipediaError: any) {
-          console.error(`[research] Wikipedia API error for query "${queryItem.query}": ${wikipediaError.message}`);
+          const duration = Date.now() - startTime;
+          console.error(`[research] ${queryProgress} ✗ Wikipedia API FAILURE for query "${queryItem.query}":`, {
+            error: wikipediaError.message,
+            stack: wikipediaError.stack,
+            duration: `${duration}ms`,
+            statusCode: wikipediaError.status || wikipediaError.statusCode || 'N/A',
+            response: wikipediaError.response ? JSON.stringify(wikipediaError.response).substring(0, 200) : 'N/A',
+          });
           // Continue with other queries even if one fails
         }
+        
+        // Update progress after Wikipedia query
+        await updateGenerationCycle(supabase, generationCycleId, {
+          progress_current: queryNumber,
+        });
         continue;
       } else if (queryItem.api === 'exa') {
         if (!exa) {
           // Fallback to stub if Exa API key not available
-          console.log(`[research] Exa query (stub fallback): ${queryItem.query}`);
-          const stubChunks = await generateStubResearchChunks(queryItem.query, openai, genModel);
+          console.warn(`[research] ${queryProgress} Exa API key not available - using LLM stub fallback for query: "${queryItem.query}"`);
+          const startTime = Date.now();
+          
+          try {
+            const stubChunks = await generateStubResearchChunks(queryItem.query, openai, genModel);
+            const duration = Date.now() - startTime;
+            console.log(`[research] ${queryProgress} LLM stub generated ${stubChunks.length} chunks in ${duration}ms for query: "${queryItem.query}"`);
           
           for (const chunkText of stubChunks) {
             const metadata = {
@@ -317,7 +350,7 @@ async function executeResearchPlan(
               });
 
             if (error) {
-              console.error(`[research] Error storing research result: ${error.message}`);
+              console.error(`[research] ${queryProgress} Database error storing stub result: ${error.message}`);
             } else {
               insertedCount.value++;
               chunks.push({
@@ -327,44 +360,117 @@ async function executeResearchPlan(
               });
             }
           }
+          } catch (stubError: any) {
+            console.error(`[research] ${queryProgress} ✗ LLM stub generation FAILURE for query "${queryItem.query}":`, {
+              error: stubError.message,
+              stack: stubError.stack,
+            });
+          }
         } else {
           // Use /research endpoint for high-priority queries (priority 1-2)
           if (queryItem.priority <= 2) {
-            console.log(`[research] Using /research endpoint for high-priority query (priority ${queryItem.priority}): ${queryItem.query}`);
+            console.log(`[research] ${queryProgress} Using Exa /research endpoint for high-priority query (priority ${queryItem.priority}): "${queryItem.query}"`);
+            const startTime = Date.now();
             
             try {
               // Create comprehensive research task
+              // OPTIMIZATION: Use outputSchema to constrain scope and reduce searches/pages
+              // OPTIMIZATION: Make instructions explicit and scoped per Exa best practices
+              console.log(`[research] ${queryProgress} Creating Exa research task...`);
+              
+              // Constrain output with schema to reduce cost (Exa best practice: 1-5 root fields)
+              // This helps the agent understand scope and reduces unnecessary searches/page reads
+              const outputSchema = {
+                type: 'object',
+                required: ['summary', 'keyPoints'],
+                properties: {
+                  summary: {
+                    type: 'string',
+                    description: 'A comprehensive summary (500-1000 words) covering the main topic'
+                  },
+                  keyPoints: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    maxItems: 10,
+                    description: 'Key insights, developments, or findings (1-2 sentences each)'
+                  }
+                },
+                additionalProperties: false
+              };
+              
+              // Make instructions explicit and scoped (Exa best practice)
+              // Specify: (1) what information (2) how to find it (3) how to compose report
+              const instructions = `Research the topic: "${queryItem.query}"
+
+OBJECTIVE: Provide a structured summary with key points suitable for AI context building.
+
+WHAT TO FIND:
+- Latest developments and current state (2023-2025 focus)
+- Industry standards and best practices
+- Key insights and practical applications
+- Relevant technical details and methodologies
+
+HOW TO RESEARCH:
+- Use 3-5 targeted searches to find authoritative sources
+- Focus on recent, high-quality publications and official documentation
+- Prioritize comprehensive overview sources over narrow niche articles
+
+HOW TO COMPOSE:
+- Write a concise summary (500-1000 words) synthesizing findings
+- Extract 8-10 key points as separate insights
+- Include citations for important claims
+- Focus on actionable information relevant to the topic`;
+
               const research = await exa.research.create({
-                instructions: `Conduct comprehensive research on: ${queryItem.query}. 
-                              Focus on: latest developments, industry standards, best practices, 
-                              key insights, and practical applications. 
-                              Provide a structured, detailed report suitable for professional context.`,
-                model: 'exa-research', // Use standard model (can upgrade to 'exa-research-pro' for deeper analysis)
+                model: 'exa-research', // Use standard model (exa-research-pro is 2x more expensive)
+                instructions: instructions,
+                outputSchema: outputSchema, // Constrains agent scope, reduces searches/pages
               });
 
-              console.log(`[research] Research task created: ${research.researchId}, polling for completion...`);
+              console.log(`[research] ${queryProgress} Exa research task created: ${research.researchId}, polling for completion (timeout: 2min, polling every 5s)...`);
+              console.log(`[research] ${queryProgress} Note: Research uses variable pricing ($5/1k searches, $5/1k pages, $5/1M reasoning tokens). OutputSchema helps constrain scope.`);
 
               // Poll until research is completed
+              // OPTIMIZATION: Reduced timeout to 2 minutes (typical p50=45s, p90=90s for exa-research)
+              // OPTIMIZATION: Poll every 5 seconds to reduce overhead (status checks are not billable per docs)
+              // Note: You are ONLY charged for tasks that complete successfully (per Exa docs)
+              const pollStartTime = Date.now();
               const completedResearch = await exa.research.pollUntilFinished(research.researchId, {
-                timeoutMs: 300000, // 5 minutes timeout
-                pollInterval: 2000, // Poll every 2 seconds
+                timeoutMs: 120000, // 2 minutes timeout (p90 for exa-research is 90s, so 2min should catch most)
+                pollInterval: 5000, // Poll every 5 seconds (status checks are not billable, but reduce overhead)
                 events: false, // Don't include events for now
               });
+              const pollDuration = Date.now() - pollStartTime;
 
               if (completedResearch.status === 'completed' && completedResearch.output) {
-                console.log(`[research] Research completed for query: ${queryItem.query}`);
+                console.log(`[research] ${queryProgress} ✓ Exa /research completed successfully in ${pollDuration}ms for query: "${queryItem.query}"`);
                 
-                // Extract text from research output (can be string or object with content property)
-                const researchText = typeof completedResearch.output === 'string' 
-                  ? completedResearch.output 
-                  : (completedResearch.output as any).content || (completedResearch.output as any).text || '';
+                // Extract structured output from research (with outputSchema, it's JSON)
+                let researchData: any;
+                if (typeof completedResearch.output === 'string') {
+                  try {
+                    researchData = JSON.parse(completedResearch.output);
+                  } catch {
+                    // If not JSON, treat as plain text
+                    researchData = { summary: completedResearch.output, keyPoints: [] };
+                  }
+                } else {
+                  researchData = completedResearch.output;
+                }
                 
-                if (!researchText || researchText.length < 50) {
-                  console.warn(`[research] Research output is empty or too short for query: ${queryItem.query}`);
+                // Extract summary and key points from structured output
+                const summary = researchData.summary || researchData.content || researchData.text || '';
+                const keyPoints = researchData.keyPoints || [];
+                
+                if (!summary || summary.length < 50) {
+                  console.warn(`[research] ${queryProgress} Exa /research output is empty or too short (${summary?.length || 0} chars) for query: "${queryItem.query}" - falling back to /search`);
                   // Fallback to /search
                   await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount);
                   continue;
                 }
+                
+                // Combine summary and key points into research text
+                const researchText = summary + (keyPoints.length > 0 ? '\n\nKey Points:\n' + keyPoints.map((kp: string, i: number) => `${i + 1}. ${kp}`).join('\n') : '');
                 
                 // Split comprehensive research output into chunks
                 const textChunks = chunkTextContent(researchText, 200, 400);
@@ -405,42 +511,88 @@ async function executeResearchPlan(
                   }
                 }
 
-                console.log(`[research] Stored ${textChunks.length} chunks from comprehensive research for query: ${queryItem.query}`);
+                const totalDuration = Date.now() - startTime;
+                console.log(`[research] ${queryProgress} ✓ Stored ${textChunks.length} chunks from Exa /research in ${totalDuration}ms for query: "${queryItem.query}"`);
               } else if (completedResearch.status === 'failed') {
-                console.error(`[research] Research task failed for query: ${queryItem.query}`);
+                const totalDuration = Date.now() - startTime;
+                console.error(`[research] ${queryProgress} ✗ Exa /research task FAILED for query "${queryItem.query}":`, {
+                  status: completedResearch.status,
+                  researchId: research.researchId,
+                  duration: `${totalDuration}ms`,
+                  error: (completedResearch as any).error || 'Unknown error',
+                });
                 // Fallback to /search
-                console.log(`[research] Falling back to /search for query: ${queryItem.query}`);
+                console.log(`[research] ${queryProgress} Falling back to Exa /search for query: "${queryItem.query}"`);
                 await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount);
               } else {
-                console.warn(`[research] Research task ended with status: ${completedResearch.status}`);
+                const totalDuration = Date.now() - startTime;
+                console.warn(`[research] ${queryProgress} Exa /research task ended with unexpected status: ${completedResearch.status} (duration: ${totalDuration}ms) for query: "${queryItem.query}"`);
                 // Fallback to /search
+                console.log(`[research] ${queryProgress} Falling back to Exa /search for query: "${queryItem.query}"`);
                 await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount);
               }
             } catch (researchError: any) {
-              console.error(`[research] /research endpoint error for query "${queryItem.query}": ${researchError.message}`);
-              console.log(`[research] Falling back to /search for query: ${queryItem.query}`);
+              const duration = Date.now() - startTime;
+              console.error(`[research] ${queryProgress} ✗ Exa /research endpoint FAILURE for query "${queryItem.query}":`, {
+                error: researchError.message,
+                stack: researchError.stack,
+                duration: `${duration}ms`,
+                statusCode: researchError.status || researchError.statusCode || 'N/A',
+                response: researchError.response ? JSON.stringify(researchError.response).substring(0, 200) : 'N/A',
+                code: researchError.code || 'N/A',
+              });
+              console.log(`[research] ${queryProgress} Attempting fallback to Exa /search for query: "${queryItem.query}"`);
               // Fallback to /search
               try {
                 await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount);
               } catch (searchError: any) {
-                console.error(`[research] Fallback /search also failed: ${searchError.message}`);
+                console.error(`[research] ${queryProgress} ✗ Fallback Exa /search also FAILED for query "${queryItem.query}":`, {
+                  error: searchError.message,
+                  stack: searchError.stack,
+                  statusCode: searchError.status || searchError.statusCode || 'N/A',
+                  code: searchError.code || 'N/A',
+                });
               }
             }
           } else {
             // Use /search endpoint for priority 3+ queries (current implementation)
-            console.log(`[research] Using /search endpoint for query (priority ${queryItem.priority}): ${queryItem.query}`);
-            await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount);
+            console.log(`[research] ${queryProgress} Using Exa /search endpoint for query (priority ${queryItem.priority}): "${queryItem.query}"`);
+            const startTime = Date.now();
+            
+            try {
+              await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount);
+              const duration = Date.now() - startTime;
+              console.log(`[research] ${queryProgress} ✓ Exa /search completed in ${duration}ms for query: "${queryItem.query}"`);
+            } catch (searchError: any) {
+              const duration = Date.now() - startTime;
+              console.error(`[research] ${queryProgress} ✗ Exa /search FAILURE for query "${queryItem.query}":`, {
+                error: searchError.message,
+                stack: searchError.stack,
+                duration: `${duration}ms`,
+                statusCode: searchError.status || searchError.statusCode || 'N/A',
+                code: searchError.code || 'N/A',
+              });
+            }
           }
         }
       }
 
-      // Update progress
+      // Update progress after successful query processing
       await updateGenerationCycle(supabase, generationCycleId, {
-        progress_current: i + 1,
+        progress_current: queryNumber,
       });
+      
+      console.log(`[research] ${queryProgress} Query processing complete. Total chunks so far: ${insertedCount.value}`);
     } catch (error: any) {
-      console.error(`[research] Error processing query "${queryItem.query}": ${error.message}`);
+      console.error(`[research] ${queryProgress} ✗ UNEXPECTED ERROR processing query "${queryItem.query}":`, {
+        error: error.message,
+        stack: error.stack,
+        type: error.constructor?.name || 'Unknown',
+      });
       // Continue with other queries
+      await updateGenerationCycle(supabase, generationCycleId, {
+        progress_current: queryNumber,
+      });
     }
   }
 
@@ -450,7 +602,13 @@ async function executeResearchPlan(
     progress_current: queries.length,
   });
 
-  console.log(`[research] Stored ${insertedCount.value} research results in database`);
+  console.log(`[research] ========================================`);
+  console.log(`[research] Research plan execution COMPLETE`);
+  console.log(`[research] Total queries processed: ${queries.length}`);
+  console.log(`[research] Total chunks created: ${insertedCount.value}`);
+  console.log(`[research] Results stored in database: ${insertedCount.value}`);
+  console.log(`[research] ========================================`);
+  
   return { chunks };
 }
 
@@ -540,7 +698,11 @@ async function executeExaSearch(
   chunks: ResearchResults['chunks'],
   insertedCount: { value: number }
 ): Promise<void> {
+  const startTime = Date.now();
+  
   try {
+    console.log(`[research] Exa /search: Initiating search for "${queryItem.query}"...`);
+    
     // Search and get contents from Exa
     // Using search() with contents option (searchAndContents is deprecated)
     const searchResults = await exa.search(queryItem.query, {
@@ -548,17 +710,27 @@ async function executeExaSearch(
       numResults: 5, // Get top 5 results per query
     });
 
+    const searchDuration = Date.now() - startTime;
+    
     if (!searchResults.results || searchResults.results.length === 0) {
-      console.log(`[research] No results found for query: ${queryItem.query}`);
+      console.warn(`[research] Exa /search: No results found for query "${queryItem.query}" (duration: ${searchDuration}ms)`);
       return;
     }
+    
+    console.log(`[research] Exa /search: Received ${searchResults.results.length} results in ${searchDuration}ms for query: "${queryItem.query}"`);
 
     // Process each result and create chunks
+    let processedResults = 0;
+    let skippedResults = 0;
+    
     for (const result of searchResults.results) {
       if (!result.text) {
-        console.warn(`[research] Result missing text content for URL: ${result.url}`);
+        console.warn(`[research] Exa /search: Result missing text content for URL: ${result.url}`);
+        skippedResults++;
         continue;
       }
+      
+      processedResults++;
 
       // Split long text into chunks (200-400 words each)
       const textChunks = chunkTextContent(result.text, 200, 400);
@@ -591,7 +763,7 @@ async function executeExaSearch(
           });
 
         if (error) {
-          console.error(`[research] Error storing research result: ${error.message}`);
+          console.error(`[research] Exa /search: Database error storing result for "${queryItem.query}": ${error.message}`);
         } else {
           insertedCount.value++;
           chunks.push({
@@ -602,10 +774,20 @@ async function executeExaSearch(
         }
       }
     }
-
-    console.log(`[research] Processed ${searchResults.results.length} Exa results for query: ${queryItem.query}`);
+    
+    const totalDuration = Date.now() - startTime;
+    console.log(`[research] Exa /search: Processed ${processedResults}/${searchResults.results.length} results (${skippedResults} skipped), created ${insertedCount.value} chunks in ${totalDuration}ms for query: "${queryItem.query}"`);
   } catch (exaError: any) {
-    console.error(`[research] Exa API error for query "${queryItem.query}": ${exaError.message}`);
+    const duration = Date.now() - startTime;
+    console.error(`[research] ✗ Exa /search API FAILURE for query "${queryItem.query}":`, {
+      error: exaError.message,
+      stack: exaError.stack,
+      duration: `${duration}ms`,
+      statusCode: exaError.status || exaError.statusCode || 'N/A',
+      code: exaError.code || 'N/A',
+      response: exaError.response ? JSON.stringify(exaError.response).substring(0, 300) : 'N/A',
+      type: exaError.constructor?.name || 'Unknown',
+    });
     throw exaError; // Re-throw to allow caller to handle
   }
 }
@@ -622,14 +804,17 @@ async function executeWikipediaSearch(
   generationCycleId: string
 ): Promise<ResearchResults['chunks']> {
   const chunks: ResearchResults['chunks'] = [];
+  const startTime = Date.now();
   
   try {
     // Step 1: Search Wikipedia for relevant articles
+    console.log(`[research] Wikipedia: Searching for articles matching "${query}"...`);
     const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=5&format=json&origin=*`;
     
     const searchResponse = await fetch(searchUrl);
     if (!searchResponse.ok) {
-      throw new Error(`Wikipedia search API returned ${searchResponse.status}`);
+      const errorText = await searchResponse.text().catch(() => 'Unable to read response');
+      throw new Error(`Wikipedia search API returned ${searchResponse.status}: ${errorText.substring(0, 200)}`);
     }
     
     const searchData = await searchResponse.json() as {
@@ -642,24 +827,32 @@ async function executeWikipediaSearch(
       };
     };
     const searchResults = searchData.query?.search || [];
+    const searchDuration = Date.now() - startTime;
     
     if (searchResults.length === 0) {
-      console.log(`[research] No Wikipedia articles found for query: ${query}`);
+      console.warn(`[research] Wikipedia: No articles found for query "${query}" (duration: ${searchDuration}ms)`);
       return chunks;
     }
     
-    console.log(`[research] Found ${searchResults.length} Wikipedia articles for query: ${query}`);
+    console.log(`[research] Wikipedia: Found ${searchResults.length} articles in ${searchDuration}ms for query: "${query}"`);
     
     // Step 2: Fetch content for top results
+    let processedArticles = 0;
+    let skippedArticles = 0;
+    
     for (const result of searchResults) {
       try {
         // Use Wikipedia REST API for page summaries (simpler and faster)
         const pageTitle = encodeURIComponent(result.title.replace(/ /g, '_'));
         const summaryUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${pageTitle}`;
         
+        const articleStartTime = Date.now();
         const summaryResponse = await fetch(summaryUrl);
+        
         if (!summaryResponse.ok) {
-          console.warn(`[research] Failed to fetch Wikipedia summary for "${result.title}": ${summaryResponse.status}`);
+          const errorText = await summaryResponse.text().catch(() => 'Unable to read response');
+          console.warn(`[research] Wikipedia: Failed to fetch summary for "${result.title}" (status: ${summaryResponse.status}): ${errorText.substring(0, 100)}`);
+          skippedArticles++;
           continue;
         }
         
@@ -689,9 +882,13 @@ async function executeWikipediaSearch(
         }
         
         if (!content || content.length < 50) {
-          console.warn(`[research] Wikipedia article "${result.title}" has insufficient content`);
+          console.warn(`[research] Wikipedia: Article "${result.title}" has insufficient content (${content?.length || 0} chars)`);
+          skippedArticles++;
           continue;
         }
+        
+        const articleDuration = Date.now() - articleStartTime;
+        processedArticles++;
         
         // Split content into chunks (200-400 words each)
         const textChunks = chunkTextContent(content, 200, 400);
@@ -723,7 +920,7 @@ async function executeWikipediaSearch(
             });
           
           if (error) {
-            console.error(`[research] Error storing Wikipedia result: ${error.message}`);
+            console.error(`[research] Wikipedia: Database error storing result for article "${result.title}": ${error.message}`);
           } else {
             chunks.push({
               text: chunkText,
@@ -732,19 +929,34 @@ async function executeWikipediaSearch(
             });
           }
         }
+        
+        console.log(`[research] Wikipedia: Processed article "${result.title}" - ${textChunks.length} chunks created in ${articleDuration}ms`);
       } catch (articleError: any) {
-        console.warn(`[research] Error processing Wikipedia article "${result.title}": ${articleError.message}`);
-        // Continue with next article
+        const articleDuration = Date.now() - articleStartTime;
+        console.warn(`[research] Wikipedia: Error processing article "${result.title}" (duration: ${articleDuration}ms):`, {
+          error: articleError.message,
+          stack: articleError.stack,
+          statusCode: articleError.status || articleError.statusCode || 'N/A',
+        });
+        skippedArticles++;
       }
     }
     
-    console.log(`[research] Processed ${chunks.length} Wikipedia chunks from ${searchResults.length} articles`);
+    const totalDuration = Date.now() - startTime;
+    console.log(`[research] Wikipedia: Completed query "${query}" - ${processedArticles}/${searchResults.length} articles processed (${skippedArticles} skipped), ${chunks.length} chunks created in ${totalDuration}ms`);
+
+    return chunks;
   } catch (error: any) {
-    console.error(`[research] Wikipedia API error for query "${query}": ${error.message}`);
+    const duration = Date.now() - startTime;
+    console.error(`[research] ✗ Wikipedia API FAILURE for query "${query}":`, {
+      error: error.message,
+      stack: error.stack,
+      duration: `${duration}ms`,
+      statusCode: error.status || error.statusCode || 'N/A',
+      type: error.constructor?.name || 'Unknown',
+    });
     throw error;
   }
-  
-  return chunks;
 }
 
 /**
