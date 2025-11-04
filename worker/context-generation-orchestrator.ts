@@ -13,6 +13,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
+import { Exa } from 'exa-js';
 import { Blueprint } from './blueprint-generator';
 import { buildGlossary, GlossaryBuilderOptions, ResearchResults } from './glossary-builder';
 import { buildContextChunks, ChunksBuilderOptions } from './chunks-builder';
@@ -22,6 +23,7 @@ export interface ContextGenerationOrchestratorOptions {
   openai: OpenAI;
   embedModel: string;
   genModel: string;
+  exaApiKey?: string; // Optional Exa API key for research
 }
 
 /**
@@ -133,7 +135,7 @@ export async function executeContextGeneration(
       blueprintId,
       blueprint,
       researchCycleId,
-      { supabase, openai, genModel }
+      { supabase, openai, genModel, exaApiKey: options.exaApiKey }
     );
 
     console.log(`[context-gen] Research completed: ${researchResults.chunks.length} chunks found`);
@@ -163,6 +165,7 @@ export async function executeContextGeneration(
         openai,
         genModel,
         embedModel,
+        exaApiKey: options.exaApiKey,
       }
     );
 
@@ -228,22 +231,28 @@ export async function executeContextGeneration(
 
 /**
  * Execute research plan from blueprint and store in research_results table
- * Currently uses stub - Exa integration will be added in Step 7
+ * Uses Exa API for deep research queries
  */
 async function executeResearchPlan(
   eventId: string,
   blueprintId: string,
   blueprint: Blueprint,
   generationCycleId: string,
-  options: { supabase: ReturnType<typeof createClient>; openai: OpenAI; genModel: string }
+  options: { supabase: ReturnType<typeof createClient>; openai: OpenAI; genModel: string; exaApiKey?: string }
 ): Promise<ResearchResults> {
-  const { supabase, openai, genModel } = options;
+  const { supabase, openai, genModel, exaApiKey } = options;
   const queries = blueprint.research_plan.queries || [];
 
   console.log(`[research] Executing ${queries.length} research queries`);
 
   const chunks: ResearchResults['chunks'] = [];
-  let insertedCount = 0;
+  const insertedCount = { value: 0 }; // Use object to allow mutation in helper function
+
+  // Initialize Exa client if API key is provided
+  const exa = exaApiKey ? new Exa(exaApiKey) : null;
+  if (!exa && queries.some(q => q.api === 'exa')) {
+    console.warn(`[research] Exa API key not provided, but Exa queries found. Falling back to stub.`);
+  }
 
   // Update cycle to processing
   await updateGenerationCycle(supabase, generationCycleId, {
@@ -251,53 +260,176 @@ async function executeResearchPlan(
     progress_total: queries.length,
   });
 
-  // Process queries (stub implementation - will be enhanced with Exa API in Step 7)
+  // Process queries
   for (let i = 0; i < queries.length; i++) {
     const queryItem = queries[i];
     try {
       if (queryItem.api === 'wikipedia') {
-        // TODO: Implement Wikipedia enricher
-        console.log(`[research] Wikipedia query (stub): ${queryItem.query}`);
-        // For now, skip Wikipedia queries
+        // Wikipedia API implementation
+        console.log(`[research] Executing Wikipedia query: ${queryItem.query}`);
+        
+        try {
+          const wikipediaChunks = await executeWikipediaSearch(
+            queryItem.query,
+            supabase,
+            eventId,
+            blueprintId,
+            generationCycleId
+          );
+          
+          for (const chunk of wikipediaChunks) {
+            insertedCount.value++;
+            chunks.push(chunk);
+          }
+          
+          console.log(`[research] Processed ${wikipediaChunks.length} Wikipedia chunks for query: ${queryItem.query}`);
+        } catch (wikipediaError: any) {
+          console.error(`[research] Wikipedia API error for query "${queryItem.query}": ${wikipediaError.message}`);
+          // Continue with other queries even if one fails
+        }
         continue;
       } else if (queryItem.api === 'exa') {
-        // TODO: Implement Exa API integration (Step 7)
-        console.log(`[research] Exa query (stub): ${queryItem.query}`);
-        // For now, generate stub chunks based on query
-        const stubChunks = await generateStubResearchChunks(queryItem.query, openai, genModel);
-        
-        // Store each chunk in research_results table
-        for (const chunkText of stubChunks) {
-          const metadata = {
-            api: 'exa',
-            query: queryItem.query,
-            quality_score: 0.7, // Lower quality for stub
-          };
-
-          const { error } = await (supabase
-            .from('research_results') as any)
-            .insert({
-              event_id: eventId,
-              blueprint_id: blueprintId,
-              generation_cycle_id: generationCycleId,
+        if (!exa) {
+          // Fallback to stub if Exa API key not available
+          console.log(`[research] Exa query (stub fallback): ${queryItem.query}`);
+          const stubChunks = await generateStubResearchChunks(queryItem.query, openai, genModel);
+          
+          for (const chunkText of stubChunks) {
+            const metadata = {
+              api: 'exa',
               query: queryItem.query,
-              api: 'llm_stub', // Using llm_stub since it's a stub
-              content: chunkText,
-              quality_score: metadata.quality_score,
-              metadata: metadata,
-              is_active: true,
-              version: 1,
-            });
+              quality_score: 0.7,
+            };
 
-          if (error) {
-            console.error(`[research] Error storing research result: ${error.message}`);
+            const { error } = await (supabase
+              .from('research_results') as any)
+              .insert({
+                event_id: eventId,
+                blueprint_id: blueprintId,
+                generation_cycle_id: generationCycleId,
+                query: queryItem.query,
+                api: 'llm_stub',
+                content: chunkText,
+                quality_score: metadata.quality_score,
+                metadata: metadata,
+                is_active: true,
+                version: 1,
+              });
+
+            if (error) {
+              console.error(`[research] Error storing research result: ${error.message}`);
+            } else {
+              insertedCount.value++;
+              chunks.push({
+                text: chunkText,
+                source: 'research_stub',
+                metadata,
+              });
+            }
+          }
+        } else {
+          // Use /research endpoint for high-priority queries (priority 1-2)
+          if (queryItem.priority <= 2) {
+            console.log(`[research] Using /research endpoint for high-priority query (priority ${queryItem.priority}): ${queryItem.query}`);
+            
+            try {
+              // Create comprehensive research task
+              const research = await exa.research.create({
+                instructions: `Conduct comprehensive research on: ${queryItem.query}. 
+                              Focus on: latest developments, industry standards, best practices, 
+                              key insights, and practical applications. 
+                              Provide a structured, detailed report suitable for professional context.`,
+                model: 'exa-research', // Use standard model (can upgrade to 'exa-research-pro' for deeper analysis)
+              });
+
+              console.log(`[research] Research task created: ${research.researchId}, polling for completion...`);
+
+              // Poll until research is completed
+              const completedResearch = await exa.research.pollUntilFinished(research.researchId, {
+                timeoutMs: 300000, // 5 minutes timeout
+                pollInterval: 2000, // Poll every 2 seconds
+                events: false, // Don't include events for now
+              });
+
+              if (completedResearch.status === 'completed' && completedResearch.output) {
+                console.log(`[research] Research completed for query: ${queryItem.query}`);
+                
+                // Extract text from research output (can be string or object with content property)
+                const researchText = typeof completedResearch.output === 'string' 
+                  ? completedResearch.output 
+                  : (completedResearch.output as any).content || (completedResearch.output as any).text || '';
+                
+                if (!researchText || researchText.length < 50) {
+                  console.warn(`[research] Research output is empty or too short for query: ${queryItem.query}`);
+                  // Fallback to /search
+                  await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount);
+                  continue;
+                }
+                
+                // Split comprehensive research output into chunks
+                const textChunks = chunkTextContent(researchText, 200, 400);
+                
+                for (const chunkText of textChunks) {
+                  const metadata = {
+                    api: 'exa',
+                    query: queryItem.query,
+                    research_id: completedResearch.researchId,
+                    method: 'research',
+                    quality_score: 0.95, // High quality for comprehensive research
+                  };
+
+                  const { error } = await (supabase
+                    .from('research_results') as any)
+                    .insert({
+                      event_id: eventId,
+                      blueprint_id: blueprintId,
+                      generation_cycle_id: generationCycleId,
+                      query: queryItem.query,
+                      api: 'exa',
+                      content: chunkText,
+                      quality_score: metadata.quality_score,
+                      metadata: metadata,
+                      is_active: true,
+                      version: 1,
+                    });
+
+                  if (error) {
+                    console.error(`[research] Error storing research result: ${error.message}`);
+                  } else {
+                    insertedCount.value++;
+                    chunks.push({
+                      text: chunkText,
+                      source: 'exa_research',
+                      metadata,
+                    });
+                  }
+                }
+
+                console.log(`[research] Stored ${textChunks.length} chunks from comprehensive research for query: ${queryItem.query}`);
+              } else if (completedResearch.status === 'failed') {
+                console.error(`[research] Research task failed for query: ${queryItem.query}`);
+                // Fallback to /search
+                console.log(`[research] Falling back to /search for query: ${queryItem.query}`);
+                await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount);
+              } else {
+                console.warn(`[research] Research task ended with status: ${completedResearch.status}`);
+                // Fallback to /search
+                await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount);
+              }
+            } catch (researchError: any) {
+              console.error(`[research] /research endpoint error for query "${queryItem.query}": ${researchError.message}`);
+              console.log(`[research] Falling back to /search for query: ${queryItem.query}`);
+              // Fallback to /search
+              try {
+                await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount);
+              } catch (searchError: any) {
+                console.error(`[research] Fallback /search also failed: ${searchError.message}`);
+              }
+            }
           } else {
-            insertedCount++;
-            chunks.push({
-              text: chunkText,
-              source: 'research_stub',
-              metadata,
-            });
+            // Use /search endpoint for priority 3+ queries (current implementation)
+            console.log(`[research] Using /search endpoint for query (priority ${queryItem.priority}): ${queryItem.query}`);
+            await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount);
           }
         }
       }
@@ -318,12 +450,12 @@ async function executeResearchPlan(
     progress_current: queries.length,
   });
 
-  console.log(`[research] Stored ${insertedCount} research results in database`);
+  console.log(`[research] Stored ${insertedCount.value} research results in database`);
   return { chunks };
 }
 
 /**
- * Generate stub research chunks (temporary until Exa integration)
+ * Generate stub research chunks (fallback when Exa API not available)
  */
 async function generateStubResearchChunks(
   query: string,
@@ -358,6 +490,335 @@ async function generateStubResearchChunks(
     console.error(`[research] Error generating stub chunks: ${error.message}`);
     return [];
   }
+}
+
+/**
+ * Chunk text content into smaller pieces (200-400 words each)
+ * Attempts to split on sentence boundaries
+ */
+function chunkTextContent(text: string, minWords: number, maxWords: number): string[] {
+  const words = text.split(/\s+/);
+  const chunks: string[] = [];
+  
+  let currentChunk: string[] = [];
+  let currentWordCount = 0;
+
+  for (const word of words) {
+    currentChunk.push(word);
+    currentWordCount++;
+
+    // Check if we should finalize this chunk
+    if (currentWordCount >= minWords) {
+      // Try to end on sentence boundary if we're past min words
+      if (currentWordCount >= maxWords || word.match(/[.!?]$/)) {
+        chunks.push(currentChunk.join(' '));
+        currentChunk = [];
+        currentWordCount = 0;
+      }
+    }
+  }
+
+  // Add remaining chunk if any
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk.join(' '));
+  }
+
+  return chunks.length > 0 ? chunks : [text]; // Fallback to original text if chunking fails
+}
+
+/**
+ * Execute Exa search and store results
+ * Extracted as helper function for reuse
+ */
+async function executeExaSearch(
+  queryItem: { query: string },
+  exa: Exa,
+  supabase: ReturnType<typeof createClient>,
+  eventId: string,
+  blueprintId: string,
+  generationCycleId: string,
+  chunks: ResearchResults['chunks'],
+  insertedCount: { value: number }
+): Promise<void> {
+  try {
+    // Search and get contents from Exa
+    // Using search() with contents option (searchAndContents is deprecated)
+    const searchResults = await exa.search(queryItem.query, {
+      contents: { text: true },
+      numResults: 5, // Get top 5 results per query
+    });
+
+    if (!searchResults.results || searchResults.results.length === 0) {
+      console.log(`[research] No results found for query: ${queryItem.query}`);
+      return;
+    }
+
+    // Process each result and create chunks
+    for (const result of searchResults.results) {
+      if (!result.text) {
+        console.warn(`[research] Result missing text content for URL: ${result.url}`);
+        continue;
+      }
+
+      // Split long text into chunks (200-400 words each)
+      const textChunks = chunkTextContent(result.text, 200, 400);
+      
+      for (const chunkText of textChunks) {
+        const metadata = {
+          api: 'exa',
+          query: queryItem.query,
+          url: result.url,
+          title: result.title || null,
+          author: result.author || null,
+          published_date: result.publishedDate || null,
+          quality_score: calculateQualityScore(result, chunkText),
+        };
+
+        const { error } = await (supabase
+          .from('research_results') as any)
+          .insert({
+            event_id: eventId,
+            blueprint_id: blueprintId,
+            generation_cycle_id: generationCycleId,
+            query: queryItem.query,
+            api: 'exa',
+            content: chunkText,
+            source_url: result.url,
+            quality_score: metadata.quality_score,
+            metadata: metadata,
+            is_active: true,
+            version: 1,
+          });
+
+        if (error) {
+          console.error(`[research] Error storing research result: ${error.message}`);
+        } else {
+          insertedCount.value++;
+          chunks.push({
+            text: chunkText,
+            source: 'exa',
+            metadata,
+          });
+        }
+      }
+    }
+
+    console.log(`[research] Processed ${searchResults.results.length} Exa results for query: ${queryItem.query}`);
+  } catch (exaError: any) {
+    console.error(`[research] Exa API error for query "${queryItem.query}": ${exaError.message}`);
+    throw exaError; // Re-throw to allow caller to handle
+  }
+}
+
+/**
+ * Execute Wikipedia search and store results
+ * Uses Wikipedia MediaWiki API (free, no API key required)
+ */
+async function executeWikipediaSearch(
+  query: string,
+  supabase: ReturnType<typeof createClient>,
+  eventId: string,
+  blueprintId: string,
+  generationCycleId: string
+): Promise<ResearchResults['chunks']> {
+  const chunks: ResearchResults['chunks'] = [];
+  
+  try {
+    // Step 1: Search Wikipedia for relevant articles
+    const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=5&format=json&origin=*`;
+    
+    const searchResponse = await fetch(searchUrl);
+    if (!searchResponse.ok) {
+      throw new Error(`Wikipedia search API returned ${searchResponse.status}`);
+    }
+    
+    const searchData = await searchResponse.json() as {
+      query?: {
+        search?: Array<{
+          title: string;
+          pageid: number;
+          snippet: string;
+        }>;
+      };
+    };
+    const searchResults = searchData.query?.search || [];
+    
+    if (searchResults.length === 0) {
+      console.log(`[research] No Wikipedia articles found for query: ${query}`);
+      return chunks;
+    }
+    
+    console.log(`[research] Found ${searchResults.length} Wikipedia articles for query: ${query}`);
+    
+    // Step 2: Fetch content for top results
+    for (const result of searchResults) {
+      try {
+        // Use Wikipedia REST API for page summaries (simpler and faster)
+        const pageTitle = encodeURIComponent(result.title.replace(/ /g, '_'));
+        const summaryUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${pageTitle}`;
+        
+        const summaryResponse = await fetch(summaryUrl);
+        if (!summaryResponse.ok) {
+          console.warn(`[research] Failed to fetch Wikipedia summary for "${result.title}": ${summaryResponse.status}`);
+          continue;
+        }
+        
+        const summaryData = await summaryResponse.json() as {
+          extract?: string;
+          extract_html?: string;
+          title?: string;
+          content_urls?: {
+            desktop?: {
+              page?: string;
+            };
+          };
+          thumbnail?: {
+            source?: string;
+          };
+          coordinates?: {
+            lat?: number;
+            lon?: number;
+          };
+        };
+        
+        // Combine extract and extract_html for better content
+        let content = summaryData.extract || '';
+        if (summaryData.extract_html) {
+          // Strip HTML tags for plain text
+          content = summaryData.extract_html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        }
+        
+        if (!content || content.length < 50) {
+          console.warn(`[research] Wikipedia article "${result.title}" has insufficient content`);
+          continue;
+        }
+        
+        // Split content into chunks (200-400 words each)
+        const textChunks = chunkTextContent(content, 200, 400);
+        
+        for (const chunkText of textChunks) {
+          const metadata = {
+            api: 'wikipedia',
+            query: query,
+            title: result.title,
+            url: summaryData.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${pageTitle}`,
+            page_id: result.pageid,
+            quality_score: calculateWikipediaQualityScore(summaryData, chunkText),
+          };
+          
+          const { error } = await (supabase
+            .from('research_results') as any)
+            .insert({
+              event_id: eventId,
+              blueprint_id: blueprintId,
+              generation_cycle_id: generationCycleId,
+              query: query,
+              api: 'wikipedia',
+              content: chunkText,
+              source_url: metadata.url,
+              quality_score: metadata.quality_score,
+              metadata: metadata,
+              is_active: true,
+              version: 1,
+            });
+          
+          if (error) {
+            console.error(`[research] Error storing Wikipedia result: ${error.message}`);
+          } else {
+            chunks.push({
+              text: chunkText,
+              source: 'wikipedia',
+              metadata,
+            });
+          }
+        }
+      } catch (articleError: any) {
+        console.warn(`[research] Error processing Wikipedia article "${result.title}": ${articleError.message}`);
+        // Continue with next article
+      }
+    }
+    
+    console.log(`[research] Processed ${chunks.length} Wikipedia chunks from ${searchResults.length} articles`);
+  } catch (error: any) {
+    console.error(`[research] Wikipedia API error for query "${query}": ${error.message}`);
+    throw error;
+  }
+  
+  return chunks;
+}
+
+/**
+ * Calculate quality score for Wikipedia content
+ */
+function calculateWikipediaQualityScore(articleData: any, chunkText: string): number {
+  let score = 0.6; // Base score (Wikipedia is generally reliable)
+  
+  // Boost for substantial content
+  const wordCount = chunkText.split(/\s+/).length;
+  if (wordCount > 100) {
+    score += 0.1;
+  }
+  
+  // Boost if article has thumbnail (often indicates well-maintained article)
+  if (articleData.thumbnail) {
+    score += 0.1;
+  }
+  
+  // Boost if article has coordinates (often indicates factual accuracy)
+  if (articleData.coordinates) {
+    score += 0.1;
+  }
+  
+  // Boost for longer extract (more comprehensive)
+  if (articleData.extract && articleData.extract.length > 500) {
+    score += 0.1;
+  }
+  
+  // Cap at 1.0
+  return Math.min(score, 1.0);
+}
+
+/**
+ * Calculate quality score for a research result chunk
+ * Based on source metadata and content characteristics
+ */
+function calculateQualityScore(result: any, chunkText: string): number {
+  let score = 0.5; // Base score
+
+  // Boost for having a title
+  if (result.title && result.title.length > 10) {
+    score += 0.1;
+  }
+
+  // Boost for having author
+  if (result.author) {
+    score += 0.1;
+  }
+
+  // Boost for recent publication date
+  if (result.publishedDate) {
+    try {
+      const published = new Date(result.publishedDate);
+      const now = new Date();
+      const daysSincePublished = (now.getTime() - published.getTime()) / (1000 * 60 * 60 * 24);
+      
+      // Recent content (within 2 years) gets higher score
+      if (daysSincePublished < 730) {
+        score += 0.1;
+      }
+    } catch (e) {
+      // Ignore date parsing errors
+    }
+  }
+
+  // Boost for substantial content (more than 100 words)
+  const wordCount = chunkText.split(/\s+/).length;
+  if (wordCount > 100) {
+    score += 0.1;
+  }
+
+  // Cap at 1.0
+  return Math.min(score, 1.0);
 }
 
 /**
@@ -477,7 +938,7 @@ export async function regenerateResearchStage(
     blueprintId,
     blueprint,
     researchCycleId,
-    { supabase, openai, genModel }
+    { supabase, openai, genModel, exaApiKey: options.exaApiKey }
   );
 
   console.log(`[context-gen] Research regeneration completed: ${researchResults.chunks.length} chunks found`);
@@ -550,7 +1011,8 @@ export async function regenerateResearchStage(
         supabase,
         openai,
         genModel,
-        embedModel,
+        embedModel: options.embedModel,
+        exaApiKey: options.exaApiKey,
       }
     );
     console.log(`[context-gen] Glossary auto-regenerated: ${glossaryCount} terms`);
@@ -575,7 +1037,7 @@ export async function regenerateResearchStage(
       {
         supabase,
         openai,
-        embedModel,
+        embedModel: options.embedModel,
         genModel,
       }
     );
@@ -650,6 +1112,7 @@ export async function regenerateGlossaryStage(
       openai,
       genModel,
       embedModel,
+      exaApiKey: options.exaApiKey,
     }
   );
 

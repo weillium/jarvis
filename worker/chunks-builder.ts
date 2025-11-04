@@ -320,11 +320,17 @@ async function generateLLMChunks(
 
 Your task: Generate context chunks that provide valuable background information about the event topic and key themes.
 
+Context: The research results provided may include:
+- Comprehensive research reports (from Exa /research endpoint) for high-priority queries - these are synthesized, in-depth analyses
+- Specific search results (from Exa /search endpoint) for focused queries - these are direct results from web searches
+- Both types complement each other: comprehensive reports provide broad context, specific searches provide detailed information
+
 Guidelines:
 - Each chunk should be 200-400 words
 - Be factual and informative
 - Cover different aspects of the topic
 - Each chunk should be self-contained
+- Build on the research results provided, whether they are comprehensive reports or specific search results
 
 Output format: Return a JSON object with a "chunks" field containing an array of strings, where each string is a context chunk. Example: {"chunks": ["chunk 1 text...", "chunk 2 text..."]}`;
 

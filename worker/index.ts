@@ -17,6 +17,7 @@ const OPENAI_KEY    = need('OPENAI_API_KEY');
 const EMBED_MODEL   = process.env.EMBED_MODEL || 'text-embedding-3-small';
 const GEN_MODEL     = process.env.GEN_MODEL   || 'gpt-5';
 const REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-10-01';
+const EXA_API_KEY   = process.env.EXA_API_KEY; // Optional - fallback to stub if not provided
 
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
 const openai   = new OpenAI({ apiKey: OPENAI_KEY });
@@ -139,6 +140,7 @@ async function tickContextGeneration() {
           openai,
           embedModel: EMBED_MODEL,
           genModel: GEN_MODEL,
+          exaApiKey: EXA_API_KEY,
         }
       );
       log('[context-gen] context generation complete for agent', ag.id);
@@ -202,6 +204,7 @@ async function tickRegeneration() {
         openai,
         embedModel: EMBED_MODEL,
         genModel: GEN_MODEL,
+        exaApiKey: EXA_API_KEY,
       };
 
       if (ag.status === 'regenerating_research') {
