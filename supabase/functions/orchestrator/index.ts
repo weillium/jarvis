@@ -64,6 +64,10 @@ Deno.serve(async (req) => {
         )
       }
 
+      // Get model from environment (GEN_MODEL from worker, or default)
+      // This ensures agents are created with the correct model matching worker configuration
+      const model = Deno.env.get("GEN_MODEL") || Deno.env.get("OPENAI_GEN_MODEL") || "gpt-4o-mini"
+
       // Use a Postgres function for atomic transaction
       // This ensures both event and agent are created together or not at all
       const { data, error } = await supabase.rpc("create_event_with_agent", {
@@ -72,6 +76,7 @@ Deno.serve(async (req) => {
         p_topic: topic || null,
         p_start_time: start_time || null,
         p_end_time: end_time || null,
+        p_model: model,
       })
 
       if (error) {

@@ -369,15 +369,25 @@ export class Orchestrator {
     const userPrompt = `Recent transcripts:\n${recentText}\n\nCurrent facts:\n${JSON.stringify(currentFacts, null, 2)}\n\nExtract or update stable facts. Return JSON array with keys: key, value, confidence.`;
 
     try {
-      const response = await this.config.openai.chat.completions.create({
+      // Some models (like o1, o1-preview, o1-mini) don't support temperature parameter
+      const supportsTemperature = !this.config.genModel.startsWith('o1');
+      
+      // Build request options - conditionally include temperature
+      const requestOptions: any = {
         model: this.config.genModel,
         messages: [
           { role: 'system', content: policy },
           { role: 'user', content: userPrompt },
         ],
         response_format: { type: 'json_object' },
-        temperature: 0.5,
-      });
+      };
+      
+      // Only add temperature if model supports it
+      if (supportsTemperature) {
+        requestOptions.temperature = 0.5;
+      }
+      
+      const response = await this.config.openai.chat.completions.create(requestOptions);
 
       const factsJson = response.choices[0]?.message?.content;
       if (!factsJson) return;

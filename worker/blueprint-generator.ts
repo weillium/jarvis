@@ -11,6 +11,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
+import { BLUEPRINT_GENERATION_SYSTEM_PROMPT } from './prompts';
 
 // ============================================================================
 // Type Definitions
@@ -306,40 +307,8 @@ async function generateBlueprintWithLLM(
 ): Promise<Blueprint> {
   const topic = eventTopic || eventTitle;
 
-  const systemPrompt = `You are a context planning assistant that creates comprehensive blueprints for building AI context databases for live events.
-
-Your task: Generate a detailed blueprint for context generation that includes:
-1. Important details extracted from the event information
-2. Inferred key topics and themes
-3. Terms and concepts that need definitions (glossary)
-4. A research plan using external APIs (Exa or Wikipedia)
-5. A glossary construction plan
-6. A vector database chunks construction plan
-7. Cost estimates for each phase
-
-Guidelines:
-- Research plan should prefer Exa API for deep research (max 10-12 searches)
-- IMPORTANT: Query priorities determine which Exa endpoint is used:
-  * Priority 1-2 queries: Use Exa /research endpoint for comprehensive, synthesized research reports (~$0.10-0.50 per query, slower but higher quality)
-  * Priority 3+ queries: Use Exa /search endpoint for specific, fast searches (~$0.02-0.04 per query)
-  * Assign priority 1-2 to the most important, broad research questions that need deep analysis
-  * Assign priority 3+ to specific, focused queries that benefit from fast search results
-- Glossary plan priorities:
-  * Priority 1-3 terms: Will use Exa /answer endpoint for authoritative, citation-backed definitions (~$0.01-0.03 per term)
-  * Priority 4+ terms: Will use LLM generation (lower cost, batch processing)
-  * Assign priority 1-3 to the most critical terms that need authoritative definitions
-- Chunks plan should target 500-1000 chunks depending on complexity
-- Quality tier should be 'basic' (500 chunks) or 'comprehensive' (1000 chunks)
-- Cost estimates should be realistic:
-  * Exa /research: ~$0.10-0.50 per query (priority 1-2)
-  * Exa /search: ~$0.02-0.04 per query (priority 3+)
-  * Exa /answer: ~$0.01-0.03 per term (priority 1-3)
-  * LLM glossary: ~$0.01-0.02 total (priority 4+)
-  * Embeddings: ~$0.0001 per chunk
-- Prioritize high-value research queries and terms strategically
-- Consider both basic and comprehensive tiers in cost breakdown
-
-Output format: Return a JSON object matching the Blueprint structure with these exact field names.`;
+  // Use shared system prompt
+  const systemPrompt = BLUEPRINT_GENERATION_SYSTEM_PROMPT;
 
   const documentsSection = hasDocuments
     ? `\n\nDocuments Available:\n${documentsText}\n\nConsider that documents are uploaded for this event. The blueprint should plan to extract and use content from these documents in the chunks construction phase.`
@@ -444,7 +413,18 @@ Return the blueprint as a JSON object with all fields properly structured and po
   while (attempt <= maxRetries) {
     try {
       const isRetry = attempt > 0;
-      const currentTemperature = isRetry ? 0.5 : 0.7; // Lower temperature on retries
+      
+      // Some models have temperature restrictions:
+      // - o1 models: Don't support temperature parameter at all
+      // - Some models (like gpt-5): Only support temperature = 1 (default), not custom values
+      // We'll only set temperature if the model supports custom values
+      const isO1Model = genModel.startsWith('o1');
+      // Models that only support default temperature (1) or don't support it at all
+      const onlySupportsDefaultTemp = isO1Model || genModel.includes('gpt-5');
+      
+      // Only set custom temperature if model supports it
+      const supportsCustomTemperature = !onlySupportsDefaultTemp;
+      const currentTemperature = supportsCustomTemperature ? (isRetry ? 0.5 : 0.7) : undefined;
       
       // Enhance prompt on retries with more explicit requirements
       const currentUserPrompt = isRetry
@@ -453,17 +433,25 @@ Return the blueprint as a JSON object with all fields properly structured and po
 IMPORTANT: This is a retry attempt. The previous response had empty or insufficient arrays. You MUST fill ALL arrays with actual, relevant content. Do not return empty arrays. Every array field must have the minimum required items as specified above.`
         : userPrompt;
 
-      console.log(`[blueprint] LLM attempt ${attempt + 1}/${maxRetries + 1} for topic "${topic}"${isRetry ? ' (retry with lower temperature)' : ''}`);
+      console.log(`[blueprint] LLM attempt ${attempt + 1}/${maxRetries + 1} for topic "${topic}"${isRetry && supportsCustomTemperature ? ' (retry with lower temperature)' : ''}`);
 
-      const response = await openai.chat.completions.create({
+      // Build request options - conditionally include temperature
+      const requestOptions: any = {
         model: genModel,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: currentUserPrompt },
         ],
         response_format: { type: 'json_object' },
-        temperature: currentTemperature,
-      });
+      };
+      
+      // Only add temperature if model supports custom temperature values
+      // Models that only support default (1) or don't support it at all will omit the parameter
+      if (supportsCustomTemperature && currentTemperature !== undefined) {
+        requestOptions.temperature = currentTemperature;
+      }
+
+      const response = await openai.chat.completions.create(requestOptions);
 
       const content = response.choices[0]?.message?.content;
       if (!content) {

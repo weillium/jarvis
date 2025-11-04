@@ -23,9 +23,10 @@ export async function GET(
     const supabase = getSupabaseClient();
 
     // Fetch active context items directly using service role (bypasses RLS)
+    // Only return items that are active (not superseded or invalidated)
     const { data, error } = await supabase
       .from('context_items')
-      .select('id, source, chunk, enrichment_source, quality_score, enrichment_timestamp, chunk_size, metadata, rank, research_source, component_type, version, generation_cycle_id')
+      .select('id, source, chunk, enrichment_source, quality_score, enrichment_timestamp, chunk_size, metadata, rank, research_source, component_type, version, generation_cycle_id, is_active')
       .eq('event_id', eventId)
       .eq('is_active', true)
       .order('rank', { ascending: true, nullsFirst: true })

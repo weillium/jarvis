@@ -586,28 +586,7 @@ export function ContextGenerationPanel({ eventId, agentStatus, embedded = false,
               )}
             </div>
 
-            {/* System Prompt */}
-            <div style={{ marginBottom: '16px' }}>
-              <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '600', color: '#1e293b' }}>
-                System Prompt
-              </h3>
-              <pre style={{
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                borderRadius: '6px',
-                padding: '12px',
-                fontSize: '12px',
-                color: '#334155',
-                overflow: 'auto',
-                maxHeight: '150px',
-                whiteSpace: 'pre-wrap',
-                fontFamily: 'monospace',
-              }}>
-                {promptPreview.system}
-              </pre>
-            </div>
-
-            {/* User Prompt */}
+            {/* User Prompt - System prompt is embedded and doesn't need to be shown separately */}
             <div style={{ marginBottom: '20px', flex: 1, overflow: 'auto' }}>
               <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '600', color: '#1e293b' }}>
                 User Prompt

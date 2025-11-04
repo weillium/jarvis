@@ -284,15 +284,25 @@ For each term, provide:
 Return as JSON object with a "definitions" key containing an array of term definitions.`;
 
     try {
-      const response = await openai.chat.completions.create({
+      // Some models (like o1, o1-preview, o1-mini) don't support temperature parameter
+      const supportsTemperature = !genModel.startsWith('o1');
+      
+      // Build request options - conditionally include temperature
+      const requestOptions: any = {
         model: genModel,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
         response_format: { type: 'json_object' },
-        temperature: 0.5, // Lower temperature for more consistent definitions
-      });
+      };
+      
+      // Only add temperature if model supports it
+      if (supportsTemperature) {
+        requestOptions.temperature = 0.5; // Lower temperature for more consistent definitions
+      }
+      
+      const response = await openai.chat.completions.create(requestOptions);
 
       const content = response.choices[0]?.message?.content;
       if (!content) {

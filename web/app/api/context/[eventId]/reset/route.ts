@@ -4,9 +4,12 @@ import { createClient } from '@supabase/supabase-js';
 /**
  * Reset Context API Route
  * 
- * Invalidates all existing context components by setting agent status back to 'idle',
- * requiring the user to restart context building. Does not delete actual records
- * from the database to maintain proper versioning and audit trail.
+ * Invalidates all existing context components by:
+ * 1. Setting is_active = false for all glossary terms, context items, and research results
+ * 2. Setting agent status back to 'idle' to require restart of context building
+ * 
+ * Does not delete actual records from the database to maintain proper versioning and audit trail.
+ * All invalidated items are marked with deleted_at timestamp.
  * 
  * POST /api/context/[eventId]/reset
  */
@@ -66,17 +69,56 @@ export async function POST(
 
     const agentId = agents[0].id;
 
-    // Reset agent status to 'idle' to invalidate all context components
-    // This forces a restart of context building without deleting any records
-    const { error: updateError } = await (supabase
-      .from('agents') as any)
-      .update({ status: 'idle' })
-      .eq('id', agentId);
+    // Invalidate all context components by setting is_active = false
+    // This marks them as superseded/invalidated without deleting records
+    const [glossaryResult, contextItemsResult, researchResult, agentUpdateResult] = await Promise.all([
+      // Invalidate all glossary terms for this event
+      (supabase.from('glossary_terms') as any)
+        .update({
+          is_active: false,
+          deleted_at: new Date().toISOString(),
+        })
+        .eq('event_id', eventId)
+        .eq('is_active', true),
+      
+      // Invalidate all context items for this event
+      (supabase.from('context_items') as any)
+        .update({
+          is_active: false,
+          deleted_at: new Date().toISOString(),
+        })
+        .eq('event_id', eventId)
+        .eq('is_active', true),
+      
+      // Invalidate all research results for this event
+      (supabase.from('research_results') as any)
+        .update({
+          is_active: false,
+          deleted_at: new Date().toISOString(),
+        })
+        .eq('event_id', eventId)
+        .eq('is_active', true),
+      
+      // Reset agent status to 'idle' to require restart of context building
+      (supabase.from('agents') as any)
+        .update({ status: 'idle' })
+        .eq('id', agentId),
+    ]);
 
-    if (updateError) {
-      console.error('[api/context/reset] Error updating agent:', updateError);
+    // Log errors but don't fail if some tables don't have records
+    if (glossaryResult.error) {
+      console.warn('[api/context/reset] Warning: Failed to invalidate glossary terms:', glossaryResult.error.message);
+    }
+    if (contextItemsResult.error) {
+      console.warn('[api/context/reset] Warning: Failed to invalidate context items:', contextItemsResult.error.message);
+    }
+    if (researchResult.error) {
+      console.warn('[api/context/reset] Warning: Failed to invalidate research results:', researchResult.error.message);
+    }
+    if (agentUpdateResult.error) {
+      console.error('[api/context/reset] Error updating agent:', agentUpdateResult.error);
       return NextResponse.json(
-        { ok: false, error: `Failed to reset context: ${updateError.message}` },
+        { ok: false, error: `Failed to reset context: ${agentUpdateResult.error.message}` },
         { status: 500 }
       );
     }
@@ -86,7 +128,7 @@ export async function POST(
       agent_id: agentId,
       event_id: eventId,
       status: 'idle',
-      message: 'Context components have been invalidated. Please restart context building.',
+      message: 'All context components have been invalidated. Please restart context building.',
     });
   } catch (error: any) {
     console.error('[api/context/reset] Unexpected error:', error);
