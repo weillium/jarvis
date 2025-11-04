@@ -17,9 +17,27 @@ export default function AuthPage() {
     if (!loading && user) {
       // Double-check user is actually valid by verifying with Supabase
       const checkUser = async () => {
-        const { data: { user: verifiedUser }, error } = await supabase.auth.getUser();
-        if (verifiedUser && !error) {
-          router.push('/');
+        try {
+          const { data: { user: verifiedUser }, error } = await supabase.auth.getUser();
+          if (error) {
+            console.error('[Auth Page] Error verifying user before redirect:', {
+              message: error.message,
+              status: error.status,
+              name: error.name,
+            });
+            return;
+          }
+          if (verifiedUser && !error) {
+            router.push('/');
+          } else {
+            console.warn('[Auth Page] User from useAuth but verification returned no user');
+          }
+        } catch (err) {
+          console.error('[Auth Page] Exception verifying user before redirect:', {
+            error: err,
+            message: err instanceof Error ? err.message : String(err),
+            stack: err instanceof Error ? err.stack : undefined,
+          });
         }
       };
       checkUser();

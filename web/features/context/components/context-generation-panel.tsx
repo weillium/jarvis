@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ContextGenerationProgress } from './context-generation-progress';
 import { BlueprintDisplay } from './blueprint-display';
 
 interface ContextGenerationPanelProps {
   eventId: string;
-  agentStatus: string | null;
   embedded?: boolean; // If true, removes outer wrapper styling for embedding
   onClearContext?: () => void;
   isClearing?: boolean;
@@ -37,13 +36,11 @@ interface StatusData {
   } | null;
 }
 
-export function ContextGenerationPanel({ eventId, agentStatus, embedded = false, onClearContext, isClearing = false }: ContextGenerationPanelProps) {
+export function ContextGenerationPanel({ eventId, embedded = false, onClearContext, isClearing = false }: ContextGenerationPanelProps) {
   const [statusData, setStatusData] = useState<StatusData | null>(null);
-  const [loading, setLoading] = useState(false);
   const [starting, setStarting] = useState(false);
   const [approving, setApproving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
   const [showPromptPreview, setShowPromptPreview] = useState(false);
   const [promptPreview, setPromptPreview] = useState<{
     system: string;
@@ -61,7 +58,7 @@ export function ContextGenerationPanel({ eventId, agentStatus, embedded = false,
   const [regenerationError, setRegenerationError] = useState<string | null>(null);
 
   // Fetch status
-  const fetchStatus = async () => {
+  const fetchStatus = useCallback(async () => {
     try {
       const res = await fetch(`/api/context/${eventId}/status`);
       const data = await res.json();
@@ -71,17 +68,18 @@ export function ContextGenerationPanel({ eventId, agentStatus, embedded = false,
       } else {
         setError(data.error || 'Failed to fetch status');
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to fetch status:', err);
-      setError(err.message || 'Failed to fetch status');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch status';
+      setError(errorMessage);
     }
-  };
+  }, [eventId]);
 
   // Initial fetch
   useEffect(() => {
     if (!eventId) return;
     fetchStatus();
-  }, [eventId]);
+  }, [eventId, fetchStatus]);
 
   // Poll for status updates (every 3 seconds)
   useEffect(() => {
@@ -91,12 +89,10 @@ export function ContextGenerationPanel({ eventId, agentStatus, embedded = false,
       fetchStatus();
     }, 3000);
 
-    setPollingInterval(interval);
-
     return () => {
-      if (interval) clearInterval(interval);
+      clearInterval(interval);
     };
-  }, [eventId]);
+  }, [eventId, fetchStatus]);
 
   // Fetch prompt preview and show modal
   const fetchPromptPreview = async () => {
@@ -114,9 +110,10 @@ export function ContextGenerationPanel({ eventId, agentStatus, embedded = false,
       } else {
         setError(data.error || 'Failed to fetch prompt preview');
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to fetch prompt preview:', err);
-      setError(err.message || 'Failed to fetch prompt preview');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch prompt preview';
+      setError(errorMessage);
     }
   };
 
@@ -138,9 +135,10 @@ export function ContextGenerationPanel({ eventId, agentStatus, embedded = false,
       } else {
         setError(data.error || 'Failed to start context generation');
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to start context generation:', err);
-      setError(err.message || 'Failed to start context generation');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to start context generation';
+      setError(errorMessage);
     } finally {
       setStarting(false);
     }
@@ -175,9 +173,10 @@ export function ContextGenerationPanel({ eventId, agentStatus, embedded = false,
       } else {
         setRegenerationError(data.error || `Failed to regenerate ${stage}`);
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error(`Failed to regenerate ${stage}:`, err);
-      setRegenerationError(err.message || `Failed to regenerate ${stage}`);
+      const errorMessage = err instanceof Error ? err.message : `Failed to regenerate ${stage}`;
+      setRegenerationError(errorMessage);
     } finally {
       setRegeneratingStage(null);
     }
@@ -202,9 +201,10 @@ export function ContextGenerationPanel({ eventId, agentStatus, embedded = false,
       } else {
         setError(data.error || 'Failed to regenerate blueprint');
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to regenerate blueprint:', err);
-      setError(err.message || 'Failed to regenerate blueprint');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to regenerate blueprint';
+      setError(errorMessage);
     } finally {
       setIsRegenerating(false);
     }
@@ -227,9 +227,10 @@ export function ContextGenerationPanel({ eventId, agentStatus, embedded = false,
       } else {
         setError(data.error || 'Failed to approve blueprint');
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to approve blueprint:', err);
-      setError(err.message || 'Failed to approve blueprint');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to approve blueprint';
+      setError(errorMessage);
     } finally {
       setApproving(false);
     }

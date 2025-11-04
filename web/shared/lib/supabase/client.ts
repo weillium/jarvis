@@ -2,9 +2,35 @@
 
 import { createClient } from '@supabase/supabase-js';
 
+// Check environment variables are available
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('[Supabase Client] Missing environment variables:', {
+    hasUrl: !!supabaseUrl,
+    hasAnonKey: !!supabaseAnonKey,
+    urlPreview: supabaseUrl ? `${supabaseUrl.substring(0, 20)}...` : 'MISSING',
+  });
+  throw new Error('Missing Supabase environment variables. Please check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.');
+}
+
+// Validate URL format
+try {
+  if (supabaseUrl) {
+    new URL(supabaseUrl);
+  }
+} catch (urlError) {
+  console.error('[Supabase Client] Invalid Supabase URL format:', {
+    url: supabaseUrl,
+    error: urlError instanceof Error ? urlError.message : String(urlError),
+  });
+  throw new Error('Invalid Supabase URL format. NEXT_PUBLIC_SUPABASE_URL must be a valid URL.');
+}
+
 export const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  supabaseUrl!,
+  supabaseAnonKey!,
   {
     auth: {
       persistSession: true,
@@ -14,6 +40,16 @@ export const supabase = createClient(
     },
   }
 );
+
+// Log client initialization
+if (typeof window !== 'undefined') {
+  console.log('[Supabase Client] Client initialized:', {
+    hasUrl: !!supabaseUrl,
+    hasAnonKey: !!supabaseAnonKey,
+    url: supabaseUrl ? new URL(supabaseUrl).origin : 'MISSING',
+    hasLocalStorage: typeof window.localStorage !== 'undefined',
+  });
+}
 
 // Sync session to cookies for server-side access (deferred to avoid module init issues)
 if (typeof window !== 'undefined') {
@@ -28,41 +64,65 @@ if (typeof window !== 'undefined') {
         document.cookie = 'sb-refresh-token=; path=/; max-age=0';
       }
     } catch (error) {
-      console.warn('Failed to sync session to cookies:', error);
+      console.error('[Supabase Client] Failed to sync session to cookies:', {
+        error,
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        hasSession: !!session,
+        sessionExpiresAt: session?.expires_at,
+      });
     }
   };
 
   // Use setTimeout to defer initialization after module load
   setTimeout(() => {
+    let isInitialAuthState = true;
+    
     // Listen for auth state changes
-    supabase.auth.onAuthStateChange((_event, session) => {
-      syncSessionToCookies(session);
-    });
-
-    // Initialize cookies on mount (deferred)
-    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
-      // If session exists but user doesn't, clear it
-      if (session && !error) {
+    // NOTE: onAuthStateChange fires with the INITIAL session automatically when subscribed
+    // This eliminates the need for a separate getSession() call that was causing race conditions
+    supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[Supabase Client] Auth state change in cookie sync:', { 
+        event, 
+        hasSession: !!session,
+        isInitial: isInitialAuthState,
+      });
+      
+      // Handle initial session verification
+      if (isInitialAuthState && session) {
+        isInitialAuthState = false;
+        // Verify the initial session is valid
         try {
-          const { data: { user }, error: userError } = await supabase.auth.getUser();
-          if (userError || !user) {
-            // Invalid session - clear it
+          const { data: { user }, error } = await supabase.auth.getUser();
+          if (error || !user) {
+            console.warn('[Supabase Client] Initial session invalid, clearing:', {
+              error: error?.message,
+              hasUser: !!user,
+            });
             await supabase.auth.signOut();
             syncSessionToCookies(null);
-          } else {
-            syncSessionToCookies(session);
+            return;
           }
         } catch (err) {
-          // Error checking user - clear session
-          await supabase.auth.signOut();
+          console.error('[Supabase Client] Error verifying initial session:', err);
           syncSessionToCookies(null);
+          return;
         }
-      } else {
-        syncSessionToCookies(session);
+      } else if (isInitialAuthState) {
+        // No initial session
+        isInitialAuthState = false;
       }
-    }).catch((error) => {
-      console.warn('Failed to get initial session:', error);
-      syncSessionToCookies(null);
+      
+      // Sync session to cookies (for server-side access)
+      try {
+        syncSessionToCookies(session);
+      } catch (error) {
+        console.error('[Supabase Client] Error syncing session to cookies:', {
+          error,
+          message: error instanceof Error ? error.message : String(error),
+          event,
+        });
+      }
     });
   }, 0);
 }

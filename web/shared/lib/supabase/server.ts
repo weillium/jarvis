@@ -43,27 +43,59 @@ export async function createServerClient() {
           // Don't log - this is expected after DB reset
         } else {
           // Log other auth errors for debugging
-          console.warn('Server: Failed to set session from cookies:', error.message);
+          console.error('[Supabase Server] Failed to set session from cookies:', {
+            message: error.message,
+            status: error.status,
+            name: error.name,
+          });
         }
       }
     }
   } catch (error) {
     // Gracefully handle any errors (e.g., invalid tokens, network issues)
-    // Don't log - this is expected when cookies are malformed or missing
+    // Log unexpected errors for debugging
+    if (error instanceof Error) {
+      // Only log if it's not a common expected error (e.g., cookie parsing)
+      const isExpectedError = error.message.includes('Unexpected token') || 
+                             error.message.includes('Invalid JSON') ||
+                             error.message.includes('cookie');
+      if (!isExpectedError) {
+        console.error('[Supabase Server] Unexpected error setting session from cookies:', {
+          message: error.message,
+          stack: error.stack,
+          name: error.name,
+        });
+      }
+    } else {
+      console.error('[Supabase Server] Unexpected non-Error exception setting session:', error);
+    }
   }
 
   return supabase;
 }
 
 export async function getServerSession() {
-  const supabase = await createServerClient();
-  const { data: { session }, error } = await supabase.auth.getSession();
-  
-  if (error) {
-    console.warn('Server: Error getting session:', error.message);
+  try {
+    const supabase = await createServerClient();
+    const { data: { session }, error } = await supabase.auth.getSession();
+    
+    if (error) {
+      console.error('[Supabase Server] Error getting session:', {
+        message: error.message,
+        status: error.status,
+        name: error.name,
+      });
+      return null;
+    }
+    
+    return session;
+  } catch (err) {
+    console.error('[Supabase Server] Exception getting session:', {
+      error: err,
+      message: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return null;
   }
-  
-  return session;
 }
 

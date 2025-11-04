@@ -59,9 +59,13 @@ export interface UseAgentSessionsReturn {
 /**
  * Hook for managing agent session status via SSE stream
  * Connects to /api/stream and parses agent_session_status events
+ * 
+ * @param eventId - Event ID to connect to
+ * @param shouldConnect - Optional function that returns whether to connect. If not provided, connects unconditionally.
  */
 export function useAgentSessions(
-  eventId: string | null
+  eventId: string | null,
+  shouldConnect?: () => boolean
 ): UseAgentSessionsReturn {
   const [cards, setCards] = useState<AgentSessionStatus | null>(null);
   const [facts, setFacts] = useState<AgentSessionStatus | null>(null);
@@ -72,6 +76,12 @@ export function useAgentSessions(
 
   const connect = useCallback(() => {
     if (!eventId) {
+      setIsLoading(false);
+      return;
+    }
+
+    // Check if we should connect based on optional condition
+    if (shouldConnect && !shouldConnect()) {
       setIsLoading(false);
       return;
     }
@@ -192,7 +202,7 @@ export function useAgentSessions(
       setError(error);
       setIsLoading(false);
     }
-  }, [eventId]);
+  }, [eventId, shouldConnect]);
 
   const reconnect = useCallback(() => {
     console.log('[useAgentSessions] Manual reconnect triggered');
@@ -224,7 +234,18 @@ export function useAgentSessions(
   }, [connect]);
 
   useEffect(() => {
-    connect();
+    // Only connect if shouldConnect allows it (or if shouldConnect is not provided)
+    if (!shouldConnect || shouldConnect()) {
+      connect();
+    } else {
+      // If we shouldn't connect, close any existing connection and set loading to false
+      if (eventSourceRef.current) {
+        console.log('[useAgentSessions] Closing connection - shouldConnect returned false');
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      setIsLoading(false);
+    }
 
     return () => {
       if (eventSourceRef.current) {
@@ -236,7 +257,7 @@ export function useAgentSessions(
         reconnectTimeoutRef.current = null;
       }
     };
-  }, [connect]);
+  }, [connect, shouldConnect]);
 
   // Reset state when eventId changes
   useEffect(() => {

@@ -9,7 +9,18 @@ interface AppShellWrapperProps {
 }
 
 function AppShell({ children }: AppShellWrapperProps) {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+
+  // This should be protected by AuthGuard, but log if we somehow get here without a user
+  if (!loading && !user) {
+    console.warn('[AppShell] AppShell rendered without user (should be protected by AuthGuard)');
+    return null;
+  }
+
+  if (loading) {
+    // Still loading, AuthGuard will handle the loading state
+    return null;
+  }
 
   if (!user) {
     return null;

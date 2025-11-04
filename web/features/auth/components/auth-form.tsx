@@ -47,13 +47,52 @@ export function AuthForm({ mode, onToggleMode }: AuthFormProps) {
         document.cookie = `sb-refresh-token=${refresh_token}; path=/; max-age=604800; SameSite=Lax`;
       }
 
-      // Small delay to ensure cookies are set before navigation
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // Wait for auth state to propagate - ensure session is available before navigation
+      // This helps the useAuth hook on the next page receive the session immediately
+      let authStateReceived = false;
+      await new Promise<void>((resolve) => {
+        // Check if session is already available immediately
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session && !authStateReceived) {
+            authStateReceived = true;
+            resolve();
+            return;
+          }
+        }).catch(() => {});
+        
+        const timeout = setTimeout(() => {
+          // If auth state change doesn't fire within 500ms, proceed anyway
+          // (session is already set, onAuthStateChange might just be delayed)
+          if (!authStateReceived) {
+            authStateReceived = true;
+            resolve();
+          }
+        }, 500);
+        
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+          if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session && !authStateReceived) {
+            clearTimeout(timeout);
+            subscription.unsubscribe();
+            authStateReceived = true;
+            resolve();
+          }
+        });
+      });
 
       // Redirect to app dashboard (route group doesn't appear in URL)
       router.push('/');
     } catch (err: any) {
-      setError(err.message || 'An error occurred');
+      const errorMessage = err.message || 'An error occurred';
+      console.error('[AuthForm] Auth error:', {
+        mode,
+        email,
+        error: err,
+        message: errorMessage,
+        status: err.status,
+        name: err.name,
+        stack: err instanceof Error ? err.stack : undefined,
+      });
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

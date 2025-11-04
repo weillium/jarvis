@@ -255,8 +255,264 @@ export async function executeContextGeneration(
 }
 
 /**
+ * Pending research task tracking
+ */
+interface PendingResearchTask {
+  researchId: string;
+  queryItem: { query: string; api: string; priority: number };
+  queryNumber: number;
+  queryProgress: string;
+  createdAt: number; // Timestamp when task was created
+  startTime: number; // For timing
+}
+
+/**
+ * Poll for research task completion
+ * Per Exa docs: https://docs.exa.ai/reference/research/get-a-task
+ * Polls up to 5 minutes per task, checking every 5-10 seconds
+ */
+async function pollResearchTasks(
+  exa: Exa,
+  pendingTasks: PendingResearchTask[],
+  supabase: ReturnType<typeof createClient>,
+  eventId: string,
+  blueprintId: string,
+  generationCycleId: string,
+  chunks: ResearchResults['chunks'],
+  insertedCount: { value: number },
+  costBreakdown: { exa: { total: number; research: { cost: number; queries: number; usage: { searches: number; pages: number; tokens: number } } } }
+): Promise<void> {
+  const MAX_POLL_TIME_MS = 5 * 60 * 1000; // 5 minutes per task
+  const POLL_INTERVAL_MS = 10000; // Poll every 10 seconds (per Exa docs, status checks are not billable)
+  
+  const activeTasks = [...pendingTasks]; // Clone array
+  const startTime = Date.now();
+  
+  console.log(`[research-poll] Polling ${activeTasks.length} research task(s) (max ${MAX_POLL_TIME_MS / 1000}s per task, interval ${POLL_INTERVAL_MS / 1000}s)`);
+  
+  while (activeTasks.length > 0) {
+    // Check each active task
+    for (let i = activeTasks.length - 1; i >= 0; i--) {
+      const task = activeTasks[i];
+      const taskAge = Date.now() - task.createdAt;
+      
+      // Check if task has exceeded max poll time
+      if (taskAge > MAX_POLL_TIME_MS) {
+        console.warn(`[research-poll] ${task.queryProgress} Task ${task.researchId} exceeded max poll time (${MAX_POLL_TIME_MS / 1000}s), falling back to /search`);
+        activeTasks.splice(i, 1); // Remove from active list
+        
+        // Fallback to /search
+        try {
+          await executeExaSearch(
+            task.queryItem,
+            exa,
+            supabase,
+            eventId,
+            blueprintId,
+            generationCycleId,
+            chunks,
+            insertedCount,
+            costBreakdown
+          );
+        } catch (searchError: any) {
+          console.error(`[research-poll] ${task.queryProgress} ✗ Fallback /search FAILED:`, searchError.message);
+        }
+        continue;
+      }
+      
+      try {
+        // Get task status (per Exa docs: https://docs.exa.ai/reference/research/get-a-task)
+        const taskStatus = await exa.research.get(task.researchId);
+        
+        if (taskStatus.status === 'completed' && taskStatus.output) {
+          const duration = Date.now() - task.startTime;
+          console.log(`[research-poll] ${task.queryProgress} ✓ Exa /research completed in ${duration}ms for query: "${task.queryItem.query}"`);
+          
+          // Process completed research result
+          await processCompletedResearchTask(
+            task,
+            taskStatus,
+            exa,
+            supabase,
+            eventId,
+            blueprintId,
+            generationCycleId,
+            chunks,
+            insertedCount,
+            costBreakdown
+          );
+          
+          activeTasks.splice(i, 1); // Remove from active list
+        } else if (taskStatus.status === 'failed') {
+          const duration = Date.now() - task.startTime;
+          console.error(`[research-poll] ${task.queryProgress} ✗ Exa /research task FAILED for query "${task.queryItem.query}":`, {
+            status: taskStatus.status,
+            researchId: task.researchId,
+            duration: `${duration}ms`,
+            error: (taskStatus as any).error || 'Unknown error',
+          });
+          
+          // Fallback to /search
+          console.log(`[research-poll] ${task.queryProgress} Falling back to Exa /search for query: "${task.queryItem.query}"`);
+          try {
+            await executeExaSearch(
+              task.queryItem,
+              exa,
+              supabase,
+              eventId,
+              blueprintId,
+              generationCycleId,
+              chunks,
+              insertedCount,
+              costBreakdown
+            );
+          } catch (searchError: any) {
+            console.error(`[research-poll] ${task.queryProgress} ✗ Fallback /search FAILED:`, searchError.message);
+          }
+          
+          activeTasks.splice(i, 1); // Remove from active list
+        } else if (taskStatus.status === 'canceled') {
+          console.warn(`[research-poll] ${task.queryProgress} Task ${task.researchId} was canceled`);
+          activeTasks.splice(i, 1); // Remove from active list
+        } else {
+          // Still running (pending or running status)
+          const taskAgeSeconds = Math.floor(taskAge / 1000);
+          console.log(`[research-poll] ${task.queryProgress} Task ${task.researchId} still ${taskStatus.status} (${taskAgeSeconds}s elapsed)`);
+        }
+      } catch (pollError: any) {
+        console.error(`[research-poll] ${task.queryProgress} ✗ Error polling task ${task.researchId}:`, {
+          error: pollError.message,
+          statusCode: pollError.status || pollError.statusCode || 'N/A',
+        });
+        // Continue polling this task (don't remove from active list)
+      }
+    }
+    
+    // If there are still active tasks, wait before next poll
+    if (activeTasks.length > 0) {
+      await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+    }
+  }
+  
+  const totalDuration = Date.now() - startTime;
+  console.log(`[research-poll] ========================================`);
+  console.log(`[research-poll] Polling complete in ${totalDuration}ms`);
+  console.log(`[research-poll] ========================================`);
+}
+
+/**
+ * Process a completed research task result
+ */
+async function processCompletedResearchTask(
+  task: PendingResearchTask,
+  taskStatus: any,
+  exa: Exa,
+  supabase: ReturnType<typeof createClient>,
+  eventId: string,
+  blueprintId: string,
+  generationCycleId: string,
+  chunks: ResearchResults['chunks'],
+  insertedCount: { value: number },
+  costBreakdown: { exa: { total: number; research: { cost: number; queries: number; usage: { searches: number; pages: number; tokens: number } } } }
+): Promise<void> {
+  const { queryItem, queryProgress } = task;
+  
+  // Extract structured output from research (with outputSchema, it's JSON)
+  let researchData: any;
+  if (typeof taskStatus.output === 'string') {
+    try {
+      researchData = JSON.parse(taskStatus.output);
+    } catch {
+      // If not JSON, treat as plain text
+      researchData = { summary: taskStatus.output, keyPoints: [] };
+    }
+  } else {
+    researchData = taskStatus.output;
+  }
+  
+  // Extract summary and key points from structured output
+  const summary = researchData.summary || researchData.content || researchData.text || '';
+  const keyPoints = researchData.keyPoints || [];
+  
+  if (!summary || summary.length < 50) {
+    console.warn(`[research-poll] ${queryProgress} Exa /research output is empty or too short (${summary?.length || 0} chars) for query: "${queryItem.query}" - falling back to /search`);
+    // Fallback to /search
+    await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount, costBreakdown);
+    return;
+  }
+  
+  // Combine summary and key points into research text
+  const researchText = summary + (keyPoints.length > 0 ? '\n\nKey Points:\n' + keyPoints.map((kp: string, i: number) => `${i + 1}. ${kp}`).join('\n') : '');
+  
+  // Split comprehensive research output into chunks
+  const textChunks = chunkTextContent(researchText, 200, 400);
+  
+  for (const chunkText of textChunks) {
+    const metadata = {
+      api: 'exa',
+      query: queryItem.query,
+      research_id: task.researchId,
+      method: 'research',
+      quality_score: 0.95, // High quality for comprehensive research
+    };
+
+    const { error } = await (supabase
+      .from('research_results') as any)
+      .insert({
+        event_id: eventId,
+        blueprint_id: blueprintId,
+        generation_cycle_id: generationCycleId,
+        query: queryItem.query,
+        api: 'exa',
+        content: chunkText,
+        quality_score: metadata.quality_score,
+        metadata: metadata,
+        is_active: true,
+        version: 1,
+      });
+
+    if (error) {
+      console.error(`[research-poll] ${queryProgress} Error storing research result: ${error.message}`);
+    } else {
+      insertedCount.value++;
+      chunks.push({
+        text: chunkText,
+        source: 'exa_research',
+        metadata,
+      });
+    }
+  }
+
+  const totalDuration = Date.now() - task.startTime;
+  console.log(`[research-poll] ${queryProgress} ✓ Stored ${textChunks.length} chunks from Exa /research in ${totalDuration}ms for query: "${queryItem.query}"`);
+  
+  // Track Exa research cost (estimate based on typical usage)
+  // Note: Exa research cost is variable, we estimate based on typical usage
+  // If Exa provides usage data in response, we can use that
+  // Estimate: typical research uses ~5 searches, ~3 pages, ~50k tokens
+  const estimatedUsage = {
+    searches: 5,
+    pages: 3,
+    tokens: 50000,
+  };
+  const researchCost = calculateExaResearchCost(estimatedUsage);
+  costBreakdown.exa.total += researchCost;
+  costBreakdown.exa.research.cost += researchCost;
+  costBreakdown.exa.research.queries += 1;
+  costBreakdown.exa.research.usage.searches += estimatedUsage.searches;
+  costBreakdown.exa.research.usage.pages += estimatedUsage.pages;
+  costBreakdown.exa.research.usage.tokens += estimatedUsage.tokens;
+}
+
+/**
  * Execute research plan from blueprint and store in research_results table
  * Uses Exa API for deep research queries
+ * 
+ * NEW APPROACH:
+ * 1. Start all Exa /research tasks (fire-and-forget)
+ * 2. Process Wikipedia and Exa /search queries immediately
+ * 3. Poll for /research task completion in background (up to 5 minutes)
+ * 4. Process results as they complete
  */
 async function executeResearchPlan(
   eventId: string,
@@ -276,6 +532,7 @@ async function executeResearchPlan(
 
   const chunks: ResearchResults['chunks'] = [];
   const insertedCount = { value: 0 }; // Use object to allow mutation in helper function
+  const pendingResearchTasks: PendingResearchTask[] = []; // Track async research tasks
 
   // Initialize cost tracking
   const costBreakdown = {
@@ -415,7 +672,7 @@ async function executeResearchPlan(
               // Create comprehensive research task
               // OPTIMIZATION: Use outputSchema to constrain scope and reduce searches/pages
               // OPTIMIZATION: Make instructions explicit and scoped per Exa best practices
-              console.log(`[research] ${queryProgress} Creating Exa research task...`);
+              console.log(`[research] ${queryProgress} Creating Exa research task (will poll in background)...`);
               
               // Constrain output with schema to reduce cost (Exa best practice: 1-5 root fields)
               // This helps the agent understand scope and reduces unnecessary searches/page reads
@@ -460,138 +717,37 @@ HOW TO COMPOSE:
 - Include citations for important claims
 - Focus on actionable information relevant to the topic`;
 
+              // Create research task (returns immediately, doesn't wait for completion)
+              // Per Exa docs: https://docs.exa.ai/reference/research/create-a-task
               const research = await exa.research.create({
                 model: 'exa-research', // Use standard model (exa-research-pro is 2x more expensive)
                 instructions: instructions,
                 outputSchema: outputSchema, // Constrains agent scope, reduces searches/pages
               });
 
-              console.log(`[research] ${queryProgress} Exa research task created: ${research.researchId}, polling for completion (timeout: 2min, polling every 5s)...`);
+              console.log(`[research] ${queryProgress} ✓ Exa research task created: ${research.researchId}, status: ${research.status}. Will poll in background.`);
               console.log(`[research] ${queryProgress} Note: Research uses variable pricing ($5/1k searches, $5/1k pages, $5/1M reasoning tokens). OutputSchema helps constrain scope.`);
 
-              // Poll until research is completed
-              // OPTIMIZATION: Reduced timeout to 2 minutes (typical p50=45s, p90=90s for exa-research)
-              // OPTIMIZATION: Poll every 5 seconds to reduce overhead (status checks are not billable per docs)
-              // Note: You are ONLY charged for tasks that complete successfully (per Exa docs)
-              const pollStartTime = Date.now();
-              const completedResearch = await exa.research.pollUntilFinished(research.researchId, {
-                timeoutMs: 120000, // 2 minutes timeout (p90 for exa-research is 90s, so 2min should catch most)
-                pollInterval: 5000, // Poll every 5 seconds (status checks are not billable, but reduce overhead)
-                events: false, // Don't include events for now
+              // Store task for background polling (don't block here)
+              pendingResearchTasks.push({
+                researchId: research.researchId,
+                queryItem,
+                queryNumber,
+                queryProgress,
+                createdAt: Date.now(),
+                startTime,
               });
-              const pollDuration = Date.now() - pollStartTime;
-
-              if (completedResearch.status === 'completed' && completedResearch.output) {
-                console.log(`[research] ${queryProgress} ✓ Exa /research completed successfully in ${pollDuration}ms for query: "${queryItem.query}"`);
-                
-                // Extract structured output from research (with outputSchema, it's JSON)
-                let researchData: any;
-                if (typeof completedResearch.output === 'string') {
-                  try {
-                    researchData = JSON.parse(completedResearch.output);
-                  } catch {
-                    // If not JSON, treat as plain text
-                    researchData = { summary: completedResearch.output, keyPoints: [] };
-                  }
-                } else {
-                  researchData = completedResearch.output;
-                }
-                
-                // Extract summary and key points from structured output
-                const summary = researchData.summary || researchData.content || researchData.text || '';
-                const keyPoints = researchData.keyPoints || [];
-                
-                if (!summary || summary.length < 50) {
-                  console.warn(`[research] ${queryProgress} Exa /research output is empty or too short (${summary?.length || 0} chars) for query: "${queryItem.query}" - falling back to /search`);
-                  // Fallback to /search
-                  await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount, costBreakdown);
-                  continue;
-                }
-                
-                // Combine summary and key points into research text
-                const researchText = summary + (keyPoints.length > 0 ? '\n\nKey Points:\n' + keyPoints.map((kp: string, i: number) => `${i + 1}. ${kp}`).join('\n') : '');
-                
-                // Split comprehensive research output into chunks
-                const textChunks = chunkTextContent(researchText, 200, 400);
-                
-                for (const chunkText of textChunks) {
-                  const metadata = {
-                    api: 'exa',
-                    query: queryItem.query,
-                    research_id: completedResearch.researchId,
-                    method: 'research',
-                    quality_score: 0.95, // High quality for comprehensive research
-                  };
-
-                  const { error } = await (supabase
-                    .from('research_results') as any)
-                    .insert({
-                      event_id: eventId,
-                      blueprint_id: blueprintId,
-                      generation_cycle_id: generationCycleId,
-                      query: queryItem.query,
-                      api: 'exa',
-                      content: chunkText,
-                      quality_score: metadata.quality_score,
-                      metadata: metadata,
-                      is_active: true,
-                      version: 1,
-                    });
-
-                  if (error) {
-                    console.error(`[research] Error storing research result: ${error.message}`);
-                  } else {
-                    insertedCount.value++;
-                    chunks.push({
-                      text: chunkText,
-                      source: 'exa_research',
-                      metadata,
-                    });
-                  }
-                }
-
-                const totalDuration = Date.now() - startTime;
-                console.log(`[research] ${queryProgress} ✓ Stored ${textChunks.length} chunks from Exa /research in ${totalDuration}ms for query: "${queryItem.query}"`);
-                
-                // Track Exa research cost (estimate based on typical usage)
-                // Note: Exa research cost is variable, we estimate based on typical usage
-                // If Exa provides usage data in response, we can use that
-                if (costBreakdown) {
-                  // Estimate: typical research uses ~5 searches, ~3 pages, ~50k tokens
-                  const estimatedUsage = {
-                    searches: 5,
-                    pages: 3,
-                    tokens: 50000,
-                  };
-                  const researchCost = calculateExaResearchCost(estimatedUsage);
-                  costBreakdown.exa.total += researchCost;
-                  costBreakdown.exa.research.cost += researchCost;
-                  costBreakdown.exa.research.queries += 1;
-                  costBreakdown.exa.research.usage.searches += estimatedUsage.searches;
-                  costBreakdown.exa.research.usage.pages += estimatedUsage.pages;
-                  costBreakdown.exa.research.usage.tokens += estimatedUsage.tokens;
-                }
-              } else if (completedResearch.status === 'failed') {
-                const totalDuration = Date.now() - startTime;
-                console.error(`[research] ${queryProgress} ✗ Exa /research task FAILED for query "${queryItem.query}":`, {
-                  status: completedResearch.status,
-                  researchId: research.researchId,
-                  duration: `${totalDuration}ms`,
-                  error: (completedResearch as any).error || 'Unknown error',
-                });
-                // Fallback to /search
-                console.log(`[research] ${queryProgress} Falling back to Exa /search for query: "${queryItem.query}"`);
-                await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount, costBreakdown);
-              } else {
-                const totalDuration = Date.now() - startTime;
-                console.warn(`[research] ${queryProgress} Exa /research task ended with unexpected status: ${completedResearch.status} (duration: ${totalDuration}ms) for query: "${queryItem.query}"`);
-                // Fallback to /search
-                console.log(`[research] ${queryProgress} Falling back to Exa /search for query: "${queryItem.query}"`);
-                await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount, costBreakdown);
-              }
+              
+              // Update progress immediately (task started, not completed)
+              await updateGenerationCycle(supabase, generationCycleId, {
+                progress_current: queryNumber,
+              });
+              
+              console.log(`[research] ${queryProgress} Moving on to next query while research task runs in background...`);
+              continue; // Continue to next query immediately
             } catch (researchError: any) {
               const duration = Date.now() - startTime;
-              console.error(`[research] ${queryProgress} ✗ Exa /research endpoint FAILURE for query "${queryItem.query}":`, {
+              console.error(`[research] ${queryProgress} ✗ Exa /research task creation FAILURE for query "${queryItem.query}":`, {
                 error: researchError.message,
                 stack: researchError.stack,
                 duration: `${duration}ms`,
@@ -652,6 +808,25 @@ HOW TO COMPOSE:
         progress_current: queryNumber,
       });
     }
+  }
+
+  // Poll for pending research tasks if any were started
+  if (pendingResearchTasks.length > 0 && exa) {
+    console.log(`[research] ========================================`);
+    console.log(`[research] Starting background polling for ${pendingResearchTasks.length} research task(s)...`);
+    console.log(`[research] ========================================`);
+    
+    await pollResearchTasks(
+      exa,
+      pendingResearchTasks,
+      supabase,
+      eventId,
+      blueprintId,
+      generationCycleId,
+      chunks,
+      insertedCount,
+      costBreakdown
+    );
   }
 
   // Calculate total cost

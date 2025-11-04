@@ -180,7 +180,6 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
             )}
             <ContextGenerationPanel 
               eventId={eventId} 
-              agentStatus={agentStatus} 
               embedded={true}
               onClearContext={agentInfo && agentInfo.status !== 'idle' ? handleReset : undefined}
               isClearing={isResetting}
@@ -199,6 +198,7 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
             gap: '12px', 
             marginBottom: '16px',
             flexWrap: 'wrap',
+            alignItems: 'center',
           }}>
             {canApprove && (
               <button

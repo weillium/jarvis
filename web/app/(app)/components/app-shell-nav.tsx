@@ -13,9 +13,26 @@ export function AppShellNav({ user }: AppShellNavProps) {
   const router = useRouter();
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    // Redirect to root (will show landing page for unauthenticated users)
-    window.location.href = '/';
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('[AppShellNav] Error signing out:', {
+          message: error.message,
+          status: error.status,
+          name: error.name,
+        });
+      }
+      // Redirect to root (will show landing page for unauthenticated users)
+      window.location.href = '/';
+    } catch (err) {
+      console.error('[AppShellNav] Exception during sign out:', {
+        error: err,
+        message: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      });
+      // Still redirect even on error
+      window.location.href = '/';
+    }
   };
 
   return (

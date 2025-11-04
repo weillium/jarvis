@@ -14,9 +14,20 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
   useEffect(() => {
     if (!loading && !user) {
+      console.log('[AuthGuard] No user found, redirecting to auth page');
       router.push('/auth');
     }
   }, [user, loading, router]);
+
+  useEffect(() => {
+    if (loading) {
+      console.log('[AuthGuard] Loading auth state...');
+    } else if (user) {
+      console.log('[AuthGuard] User authenticated:', { userId: user.id, email: user.email });
+    } else {
+      console.warn('[AuthGuard] Auth guard rendered without user (should redirect)');
+    }
+  }, [user, loading]);
 
   if (loading) {
     return (

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAgentInfo } from '@/shared/hooks/useAgentInfo';
 import { useAgentSessions, AgentSessionStatus } from '@/shared/hooks/use-agent-sessions';
 import { ContextGenerationPanel } from '@/features/context/components/context-generation-panel';
@@ -12,7 +12,53 @@ interface AgentOverviewProps {
 
 export function AgentOverview({ eventId }: AgentOverviewProps) {
   const { agent, contextStats, blueprint, loading, error, refetch } = useAgentInfo(eventId);
-  const { cards: cardsStatus, facts: factsStatus, isLoading: sessionsLoading, error: sessionsError, reconnect } = useAgentSessions(eventId);
+  const [hasActiveSessions, setHasActiveSessions] = useState(false);
+  const [checkingSessions, setCheckingSessions] = useState(true);
+  
+  // Check if sessions exist and are in starting/active states before connecting
+  const checkForActiveSessions = useCallback(async () => {
+    if (!eventId) {
+      setCheckingSessions(false);
+      return;
+    }
+    
+    try {
+      const res = await fetch(`/api/agent-sessions/${eventId}/check`);
+      const data = await res.json();
+      
+      if (data.ok && data.hasActiveSessions) {
+        setHasActiveSessions(true);
+      } else {
+        setHasActiveSessions(false);
+      }
+    } catch (err) {
+      console.error('[AgentOverview] Failed to check for active sessions:', err);
+      setHasActiveSessions(false);
+    } finally {
+      setCheckingSessions(false);
+    }
+  }, [eventId]);
+  
+  useEffect(() => {
+    checkForActiveSessions();
+    
+    // Poll periodically to check for new sessions
+    // - Every 5 seconds if not connected (to detect when sessions become active)
+    // - Every 30 seconds if connected (to detect if connection dropped and sessions are still active)
+    const pollInterval = hasActiveSessions ? 30000 : 5000;
+    const interval = setInterval(() => {
+      checkForActiveSessions();
+    }, pollInterval);
+    
+    return () => clearInterval(interval);
+  }, [checkForActiveSessions, hasActiveSessions]);
+  
+  // Only connect to SSE when sessions actually exist and are starting/active
+  const shouldConnectToSessions = useCallback(() => {
+    return hasActiveSessions;
+  }, [hasActiveSessions]);
+  
+  const { cards: cardsStatus, facts: factsStatus, isLoading: sessionsLoading, error: sessionsError, reconnect } = useAgentSessions(eventId, shouldConnectToSessions);
   const [isResetting, setIsResetting] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
   const [totalCost, setTotalCost] = useState<number | null>(null);
@@ -171,12 +217,11 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
       // Refresh agent info to reflect status change (context_complete -> testing)
       await refetch();
       
-      // Force reconnect to SSE to get the new session statuses
-      if (reconnect) {
-        setTimeout(() => {
-          reconnect();
-        }, 500);
-      }
+      // Check for active sessions (they will be in 'generated' state initially, so we wait)
+      // The status will change to 'starting' when user clicks "Start Sessions"
+      setTimeout(() => {
+        checkForActiveSessions();
+      }, 1000);
       
       console.log('[AgentOverview] Sessions created successfully. Agent status set to testing.');
     } catch (err: any) {
@@ -204,6 +249,11 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
 
       // Refresh agent info
       await refetch();
+      
+      // Check for active sessions (they should now be in 'starting' state)
+      setTimeout(() => {
+        checkForActiveSessions();
+      }, 1000);
       
       // Sessions will be activated by worker
       console.log('[AgentOverview] Sessions will be started by worker...');
