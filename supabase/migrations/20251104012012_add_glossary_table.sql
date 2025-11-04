@@ -1,6 +1,6 @@
 -- Migration: Add glossary_terms table
 -- Stores glossary terms, acronyms, and definitions for fast lookup during live events
--- Generated: 2025-01-04
+-- Generated: 2024-11-03
 
 create table if not exists glossary_terms (
   id uuid primary key default gen_random_uuid(),

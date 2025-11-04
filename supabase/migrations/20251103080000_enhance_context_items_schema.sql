@@ -1,6 +1,6 @@
 -- Migration: Enhance context_items table for external enrichment
 -- Adds metadata tracking, quality scoring, and enrichment source information
--- Generated: 2025-01-04
+-- Generated: 2024-11-03
 
 -- Add new columns for enrichment tracking
 alter table context_items

@@ -107,7 +107,7 @@ Once the worker is running:
 
 ## 🔗 Related Documentation
 
-- Full guide: `../dev_docs/20250104_WORKER_LAUNCH_GUIDE.md`
-- Architecture: `../dev_docs/20250104_ORCHESTRATOR_EVENT_CREATION_FLOW.md`
-- Context building: `../dev_docs/20250104_STEP2_CONTEXT_DATABASE_CONSTRUCTION.md`
+- Full guide: `../dev_docs/20251103_181500_WORKER_LAUNCH_GUIDE.md`
+- Architecture: `../dev_docs/20251103_175400_ORCHESTRATOR_EVENT_CREATION_FLOW.md`
+- Context building: `../dev_docs/20251103_175800_STEP2_CONTEXT_DATABASE_CONSTRUCTION.md`
 

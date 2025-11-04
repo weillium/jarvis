@@ -1,6 +1,6 @@
 -- Migration: Add context generation statuses to agents table
 -- Extends agent status enum to support new manual context generation workflow
--- Generated: 2025-01-04
+-- Generated: 2024-11-03
 
 -- Drop existing constraint
 alter table agents

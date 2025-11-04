@@ -1,6 +1,6 @@
 -- Migration: Add ranking and research source to context_items
 -- Enhances context_items table with ranking and research source tracking
--- Generated: 2025-01-04
+-- Generated: 2024-11-03
 
 -- Add ranking column (1 = highest rank, 1000 = lowest rank)
 alter table context_items

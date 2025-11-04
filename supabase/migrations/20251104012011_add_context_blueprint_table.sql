@@ -1,6 +1,6 @@
 -- Migration: Add context_blueprints table
 -- Stores context generation blueprints for user review and approval
--- Generated: 2025-01-04
+-- Generated: 2024-11-03
 
 create table if not exists context_blueprints (
   id uuid primary key default gen_random_uuid(),

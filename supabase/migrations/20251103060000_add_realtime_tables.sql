@@ -1,5 +1,5 @@
 -- Migration: Add tables and columns for real-time event processing with OpenAI Realtime API
--- Generated: 2025-01-04
+-- Generated: 2024-11-03
 -- Purpose: Support dual-agent architecture (Cards + Facts) with session management, checkpoints, and facts tracking
 
 -- ============================================================================
