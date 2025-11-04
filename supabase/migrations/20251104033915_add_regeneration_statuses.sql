@@ -18,14 +18,12 @@ alter table agents
     'researching',             -- Executing deep research plan
     'building_glossary',       -- Constructing glossary knowledge base
     'building_chunks',         -- Constructing vector database chunks
-    'context_complete',        -- Context generation complete (equivalent to 'ready')
-    -- Regeneration statuses (allow regenerating specific stages)
+    'context_complete',        -- Context generation complete
     'regenerating_research',   -- Regenerating research stage only
     'regenerating_glossary',   -- Regenerating glossary stage only
     'regenerating_chunks',     -- Regenerating chunks stage only
-    -- Legacy statuses (backward compatibility)
-    'prepping',                -- Legacy: automatic context building
-    'ready',                   -- Legacy: ready to start
+    'prepping',                -- automatic context building
+    'ready',                   -- ready to start
     'running',                 -- Agent is running and processing transcripts
     'ended',                   -- Agent has ended
     'error'                    -- Agent encountered an error

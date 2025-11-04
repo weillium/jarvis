@@ -85,6 +85,18 @@ export async function POST(
       .in('status', ['starting', 'active']);
 
     if (updateError) {
+      // Check if it's a constraint violation (migration not applied)
+      if (updateError.message?.includes('check constraint') || updateError.message?.includes('agent_sessions_status_check')) {
+        return NextResponse.json(
+          { 
+            ok: false, 
+            error: `Database migration not applied. Please run migration 20251104184719_add_paused_status_to_agent_sessions.sql to add 'paused' status support.`,
+            details: updateError.message 
+          },
+          { status: 500 }
+        );
+      }
+      
       return NextResponse.json(
         { ok: false, error: `Failed to pause sessions: ${updateError.message}` },
         { status: 500 }

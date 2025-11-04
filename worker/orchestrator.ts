@@ -48,7 +48,7 @@ export interface LogEntry {
 export interface AgentSessionStatus {
   agent_type: 'cards' | 'facts';
   session_id: string;
-  status: 'starting' | 'active' | 'paused' | 'closed' | 'error';
+  status: 'generated' | 'starting' | 'active' | 'paused' | 'closed' | 'error';
   runtime: {
     event_id: string;
     agent_id: string;
@@ -406,37 +406,66 @@ export class Orchestrator {
         return;
       }
 
-      // Push cards status
-      const cardsResponse = await fetch(`${baseUrl}/api/agent-sessions/${runtime.eventId}/status`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cardsStatus),
-      });
+      // Push cards status with timeout
+      try {
+        const cardsResponse = await fetch(`${baseUrl}/api/agent-sessions/${runtime.eventId}/status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(cardsStatus),
+          signal: AbortSignal.timeout(5000), // 5 second timeout
+        });
 
-      if (!cardsResponse.ok) {
-        const error = await cardsResponse.json().catch(() => ({ error: 'Unknown error' }));
-        console.warn(`[orchestrator] Failed to push cards status: ${error.error || cardsResponse.statusText}`);
+        if (!cardsResponse.ok) {
+          const error = await cardsResponse.json().catch(() => ({ error: 'Unknown error' }));
+          console.warn(`[orchestrator] Failed to push cards status: ${error.error || cardsResponse.statusText} (status: ${cardsResponse.status})`);
+        }
+      } catch (fetchError: any) {
+        // Handle timeout or network errors separately
+        if (fetchError.name === 'AbortError' || fetchError.name === 'TimeoutError') {
+          console.warn(`[orchestrator] Timeout pushing cards status to ${baseUrl} (endpoint may be unreachable)`);
+        } else {
+          throw fetchError; // Re-throw to be caught by outer catch
+        }
       }
 
-      // Push facts status
-      const factsResponse = await fetch(`${baseUrl}/api/agent-sessions/${runtime.eventId}/status`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(factsStatus),
-      });
+      // Push facts status with timeout
+      try {
+        const factsResponse = await fetch(`${baseUrl}/api/agent-sessions/${runtime.eventId}/status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(factsStatus),
+          signal: AbortSignal.timeout(5000), // 5 second timeout
+        });
 
-      if (!factsResponse.ok) {
-        const error = await factsResponse.json().catch(() => ({ error: 'Unknown error' }));
-        console.warn(`[orchestrator] Failed to push facts status: ${error.error || factsResponse.statusText}`);
+        if (!factsResponse.ok) {
+          const error = await factsResponse.json().catch(() => ({ error: 'Unknown error' }));
+          console.warn(`[orchestrator] Failed to push facts status: ${error.error || factsResponse.statusText} (status: ${factsResponse.status})`);
+        }
+      } catch (fetchError: any) {
+        // Handle timeout or network errors separately
+        if (fetchError.name === 'AbortError' || fetchError.name === 'TimeoutError') {
+          console.warn(`[orchestrator] Timeout pushing facts status to ${baseUrl} (endpoint may be unreachable)`);
+        } else {
+          throw fetchError; // Re-throw to be caught by outer catch
+        }
       }
     } catch (error: any) {
       // Don't throw - status push failure shouldn't break processing
       // Log the full URL that failed to help debug
       const baseUrl = this.config.sseEndpoint?.replace(/\/$/, '') || 'N/A';
       const attemptedUrl = `${baseUrl}/api/agent-sessions/${runtime.eventId}/status`;
-      console.error(`[orchestrator] Error pushing session status: ${error.message}`);
+      
+      // Provide more detailed error information
+      const errorDetails = error.cause 
+        ? ` (cause: ${error.cause.message || error.cause})`
+        : error.code 
+        ? ` (code: ${error.code})`
+        : '';
+      
+      console.error(`[orchestrator] Error pushing session status: ${error.message}${errorDetails}`);
       console.error(`[orchestrator] Attempted URL: ${attemptedUrl}`);
       console.error(`[orchestrator] SSE_ENDPOINT config: ${this.config.sseEndpoint}`);
+      console.error(`[orchestrator] Note: Ensure Next.js is running on the configured port and the endpoint is accessible`);
     }
   }
 
@@ -955,18 +984,26 @@ export class Orchestrator {
       runtime.status = 'context_complete';
     }
 
-    if (runtime.status !== 'context_complete') {
-      console.warn(`[orchestrator] Event ${eventId} not ready (status: ${runtime.status})`);
-      return;
-    }
-
     // Check if sessions already exist in database
+    // Look for sessions with 'starting' status (activated but not yet connected)
+    // Also check for 'generated' status sessions that need to be activated
     const { data: existingSessions } = await this.config.supabase
       .from('agent_sessions')
       .select('id, agent_type, status')
       .eq('event_id', eventId)
       .eq('agent_id', agentId)
-      .in('status', ['starting', 'active', 'paused']);
+      .in('status', ['generated', 'starting', 'active', 'paused']);
+
+    // Allow starting if status is context_complete OR if we have generated/starting sessions
+    // (testing workflow: sessions generated, now activating them)
+    const hasGeneratedOrStartingSessions = existingSessions?.some(
+      s => s.status === 'generated' || s.status === 'starting'
+    ) || false;
+
+    if (runtime.status !== 'context_complete' && !hasGeneratedOrStartingSessions) {
+      console.warn(`[orchestrator] Event ${eventId} not ready (status: ${runtime.status}) and no generated/starting sessions`);
+      return;
+    }
 
     // Handle paused sessions - resume them
     const pausedSessions = existingSessions?.filter(s => s.status === 'paused') || [];
@@ -1031,16 +1068,25 @@ export class Orchestrator {
       }
     }
 
-    // Check for active sessions (not paused)
+    // Check for active sessions (not paused or generated)
     const activeSessions = existingSessions?.filter(s => s.status === 'active' || s.status === 'starting') || [];
     if (activeSessions.length > 0) {
       console.log(`[orchestrator] Event ${eventId} already has ${activeSessions.length} active session(s), skipping creation`);
       // Update runtime status to running if sessions exist
       runtime.status = 'running';
-      await this.config.supabase
+      // Only update agent status if it's not in 'testing' status (testing workflow)
+      const { data: currentAgentCheck } = await this.config.supabase
         .from('agents')
-        .update({ status: 'running' })
-        .eq('id', agentId);
+        .select('status')
+        .eq('id', agentId)
+        .single();
+      
+      if (currentAgentCheck && currentAgentCheck.status !== 'testing') {
+        await this.config.supabase
+          .from('agents')
+          .update({ status: 'running' })
+          .eq('id', agentId);
+      }
       return;
     }
 
@@ -1083,30 +1129,50 @@ export class Orchestrator {
       },
     });
 
-    // Insert sessions with 'starting' status (not 'active')
-    // Use upsert to handle case where sessions might already exist
-    const { error: sessionsError } = await this.config.supabase.from('agent_sessions').upsert([
-      {
-        event_id: eventId,
-        agent_id: agentId,
-        provider_session_id: 'pending',
-        agent_type: 'cards',
-        status: 'starting',
-      },
-      {
-        event_id: eventId,
-        agent_id: agentId,
-        provider_session_id: 'pending',
-        agent_type: 'facts',
-        status: 'starting',
-      },
-    ], {
-      onConflict: 'event_id,agent_type',
-    });
+    // Update existing sessions from 'generated' or 'starting' to 'starting' if needed
+    // If sessions don't exist, create them (shouldn't happen in testing workflow, but handle it)
+    const { data: existingSessionRecords } = await this.config.supabase
+      .from('agent_sessions')
+      .select('id, agent_type, status')
+      .eq('event_id', eventId)
+      .eq('agent_id', agentId);
 
-    if (sessionsError) {
-      console.error(`[orchestrator] Failed to create session records: ${sessionsError.message}`);
-      // Continue anyway - sessions might already exist
+    if (existingSessionRecords && existingSessionRecords.length > 0) {
+      // Update existing sessions to 'starting' if they're 'generated'
+      const { error: updateError } = await this.config.supabase
+        .from('agent_sessions')
+        .update({ status: 'starting' })
+        .eq('event_id', eventId)
+        .eq('agent_id', agentId)
+        .in('status', ['generated']);
+
+      if (updateError) {
+        console.warn(`[orchestrator] Failed to update session status: ${updateError.message}`);
+      }
+    } else {
+      // Create sessions if they don't exist (fallback - shouldn't happen in testing workflow)
+      const { error: sessionsError } = await this.config.supabase.from('agent_sessions').upsert([
+        {
+          event_id: eventId,
+          agent_id: agentId,
+          provider_session_id: 'pending',
+          agent_type: 'cards',
+          status: 'starting',
+        },
+        {
+          event_id: eventId,
+          agent_id: agentId,
+          provider_session_id: 'pending',
+          agent_type: 'facts',
+          status: 'starting',
+        },
+      ], {
+        onConflict: 'event_id,agent_type',
+      });
+
+      if (sessionsError) {
+        console.error(`[orchestrator] Failed to create session records: ${sessionsError.message}`);
+      }
     }
 
     // Connect sessions (will update status to 'active' via callback)
@@ -1131,12 +1197,22 @@ export class Orchestrator {
     // Start periodic context summary logging (every 5 minutes)
     this.startPeriodicSummary(runtime);
 
-    // Update status
+    // Update status to running
     runtime.status = 'running';
-    await this.config.supabase
+    // Only update agent status to 'running' if it's not already in 'testing' status
+    // This allows testing workflow where agent stays in 'testing' while sessions are active
+    const { data: currentAgent } = await this.config.supabase
       .from('agents')
-      .update({ status: 'running' })
-      .eq('id', agentId);
+      .select('status')
+      .eq('id', agentId)
+      .single();
+    
+    if (currentAgent && currentAgent.status !== 'testing') {
+      await this.config.supabase
+        .from('agents')
+        .update({ status: 'running' })
+        .eq('id', agentId);
+    }
 
     console.log(`[orchestrator] Event ${eventId} started`);
   }
@@ -1557,7 +1633,7 @@ export class Orchestrator {
     eventId: string,
     agentId: string,
     agentType: 'cards' | 'facts',
-    status: 'starting' | 'active' | 'paused' | 'closed' | 'error',
+    status: 'generated' | 'starting' | 'active' | 'paused' | 'closed' | 'error',
     sessionId?: string
   ): Promise<void> {
     console.log(

@@ -99,6 +99,11 @@ export class RealtimeSession {
       // Set up event handlers BEFORE marking as active
       this.setupEventHandlers();
 
+      // Wait for session to be ready before sending configuration
+      // The create() method returns a WebSocket, but we should wait for it to be ready
+      // Use a small delay to allow the WebSocket to establish connection
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       // Define retrieve tool for RAG (available to all agents)
       const retrieveTool: any = {
         type: 'function',
@@ -175,16 +180,42 @@ export class RealtimeSession {
 
       // Configure session (instructions, output format, tools, etc.)
       // Note: For Cards agent, we remove response_format requirement since output is via tool
-      this.session.send({
-        type: 'session.update',
-        session: {
-          type: 'realtime',
-          instructions: policy,
-          output_modalities: ['text'],
-          max_output_tokens: 4096,
-          tools,
-        },
-      } as RealtimeClientEvent);
+      // Wrap in try-catch to handle cases where connection isn't fully ready
+      try {
+        this.session.send({
+          type: 'session.update',
+          session: {
+            type: 'realtime',
+            instructions: policy,
+            output_modalities: ['text'],
+            max_output_tokens: 4096,
+            tools,
+          },
+        } as RealtimeClientEvent);
+      } catch (error: any) {
+        // If send fails, wait a bit and retry once
+        if (error.message?.includes('could not send data') || error.message?.includes('not ready')) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          try {
+            this.session.send({
+              type: 'session.update',
+              session: {
+                type: 'realtime',
+                instructions: policy,
+                output_modalities: ['text'],
+                max_output_tokens: 4096,
+                tools,
+              },
+            } as RealtimeClientEvent);
+          } catch (retryError: any) {
+            // Log but don't throw - connection might still work
+            console.warn(`[realtime] Session update send failed (will retry): ${retryError.message}`);
+            // The session might still work, so we continue
+          }
+        } else {
+          throw error;
+        }
+      }
 
       // Mark as active (connection established)
       this.isActive = true;

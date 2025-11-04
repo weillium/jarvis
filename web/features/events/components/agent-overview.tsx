@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAgentInfo } from '@/shared/hooks/useAgentInfo';
 import { useAgentSessions, AgentSessionStatus } from '@/shared/hooks/use-agent-sessions';
 import { ContextGenerationPanel } from '@/features/context/components/context-generation-panel';
+import { TestTranscriptModal } from './test-transcript-modal';
 
 interface AgentOverviewProps {
   eventId: string;
@@ -11,7 +12,7 @@ interface AgentOverviewProps {
 
 export function AgentOverview({ eventId }: AgentOverviewProps) {
   const { agent, contextStats, blueprint, loading, error, refetch } = useAgentInfo(eventId);
-  const { cards: cardsStatus, facts: factsStatus, isLoading: sessionsLoading, error: sessionsError } = useAgentSessions(eventId);
+  const { cards: cardsStatus, facts: factsStatus, isLoading: sessionsLoading, error: sessionsError, reconnect } = useAgentSessions(eventId);
   const [isResetting, setIsResetting] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
   const [totalCost, setTotalCost] = useState<number | null>(null);
@@ -22,6 +23,7 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
   const [isPausing, setIsPausing] = useState(false);
   const [isResuming, setIsResuming] = useState(false);
   const [pauseResumeError, setPauseResumeError] = useState<string | null>(null);
+  const [isTestTranscriptModalOpen, setIsTestTranscriptModalOpen] = useState(false);
 
   // Fetch total cost from all generation cycles
   useEffect(() => {
@@ -151,6 +153,40 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
     return new Date(dateString).toLocaleString();
   };
 
+  const handleCreateSessions = async () => {
+    setIsStartingSessions(true);
+    setStartSessionsError(null);
+
+    try {
+      const res = await fetch(`/api/agent-sessions/${eventId}/create`, {
+        method: 'POST',
+      });
+
+      const data = await res.json();
+
+      if (!data.ok) {
+        throw new Error(data.error || 'Failed to create sessions');
+      }
+
+      // Refresh agent info to reflect status change (context_complete -> testing)
+      await refetch();
+      
+      // Force reconnect to SSE to get the new session statuses
+      if (reconnect) {
+        setTimeout(() => {
+          reconnect();
+        }, 500);
+      }
+      
+      console.log('[AgentOverview] Sessions created successfully. Agent status set to testing.');
+    } catch (err: any) {
+      console.error('Failed to create sessions:', err);
+      setStartSessionsError(err.message || 'Failed to create sessions');
+    } finally {
+      setIsStartingSessions(false);
+    }
+  };
+
   const handleStartSessions = async () => {
     setIsStartingSessions(true);
     setStartSessionsError(null);
@@ -166,18 +202,60 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
         throw new Error(data.error || 'Failed to start sessions');
       }
 
-      // Refresh agent info to reflect status change
+      // Refresh agent info
       await refetch();
       
-      // Sessions will appear once the worker picks up the event (usually within 5-10 seconds)
-      // The SSE stream will update automatically via useAgentSessions hook
-      console.log('[AgentOverview] Event marked as live, waiting for worker to start sessions...');
+      // Sessions will be activated by worker
+      console.log('[AgentOverview] Sessions will be started by worker...');
     } catch (err: any) {
       console.error('Failed to start sessions:', err);
       setStartSessionsError(err.message || 'Failed to start sessions');
     } finally {
       setIsStartingSessions(false);
     }
+  };
+
+  const handleConfirmReady = async () => {
+    setIsResuming(true); // Reuse loading state
+    setPauseResumeError(null);
+
+    try {
+      const res = await fetch(`/api/agent-sessions/${eventId}/confirm-ready`, {
+        method: 'POST',
+      });
+
+      const data = await res.json();
+
+      if (!data.ok) {
+        throw new Error(data.error || 'Failed to confirm ready');
+      }
+
+      // Refresh agent info (testing -> ready)
+      await refetch();
+      
+      console.log('[AgentOverview] Agent confirmed ready. Sessions regenerated.');
+    } catch (err: any) {
+      console.error('Failed to confirm ready:', err);
+      setPauseResumeError(err.message || 'Failed to confirm ready');
+    } finally {
+      setIsResuming(false);
+    }
+  };
+
+  const handleSendTestTranscript = async (text: string, speaker: string) => {
+    const res = await fetch(`/api/agent-sessions/${eventId}/test-transcript`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, speaker }),
+    });
+
+    const data = await res.json();
+
+    if (!data.ok) {
+      throw new Error(data.error || 'Failed to send test transcript');
+    }
+
+    console.log('[AgentOverview] Test transcript sent successfully');
   };
 
   const handlePauseSessions = async () => {
@@ -236,6 +314,8 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
 
   const getSessionStatusColor = (status: string): string => {
     switch (status) {
+      case 'generated':
+        return '#64748b'; // Gray for generated (not started)
       case 'starting':
         return '#f59e0b';
       case 'active':
@@ -253,6 +333,8 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
 
   const getSessionStatusLabel = (status: string): string => {
     switch (status) {
+      case 'generated':
+        return 'Generated';
       case 'starting':
         return 'Starting';
       case 'active':
@@ -799,75 +881,204 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
               Realtime Agent Sessions
             </h4>
             
-            {/* Pause/Resume Controls */}
-            {(cardsStatus || factsStatus) && (
-              <div style={{
-                display: 'flex',
-                gap: '8px',
-              }}>
-                {(cardsStatus?.status === 'active' || factsStatus?.status === 'active') && (
+            {/* Controls - Top Right Corner */}
+            <div style={{
+              display: 'flex',
+              gap: '8px',
+              alignItems: 'center',
+            }}>
+              {/* Refresh button - always visible */}
+              <button
+                onClick={() => reconnect()}
+                style={{
+                  padding: '8px 16px',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  color: '#374151',
+                  background: '#ffffff',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#f8fafc';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = '#ffffff';
+                }}
+                title="Refresh session status"
+              >
+                Refresh
+              </button>
+              
+              {/* Create Sessions button - visible when agent is context_complete AND no sessions exist */}
+              {agent?.status === 'context_complete' && 
+               !cardsStatus && 
+               !factsStatus && 
+               !sessionsLoading && (
+                <button
+                  onClick={handleCreateSessions}
+                  disabled={isStartingSessions}
+                  style={{
+                    padding: '8px 16px',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    color: '#ffffff',
+                    background: isStartingSessions ? '#93c5fd' : '#3b82f6',
+                    cursor: isStartingSessions ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isStartingSessions) {
+                      e.currentTarget.style.background = '#2563eb';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isStartingSessions) {
+                      e.currentTarget.style.background = '#3b82f6';
+                    }
+                  }}
+                  title="Create sessions (generates but does not start them)"
+                >
+                  {isStartingSessions ? 'Creating...' : 'Create Sessions'}
+                </button>
+              )}
+              
+              {/* Testing state buttons - visible when agent is testing */}
+              {agent?.status === 'testing' && (
+                <>
+                  {/* Start Sessions button - visible when sessions are generated but not active */}
+                  {/* Show button when: both sessions exist and are 'generated', OR at least one exists and is 'generated' (allow for async updates) */}
+                  {((cardsStatus?.status === 'generated' && factsStatus?.status === 'generated') ||
+                    (cardsStatus?.status === 'generated' && !factsStatus) ||
+                    (!cardsStatus && factsStatus?.status === 'generated') ||
+                    // Also show if we're in testing state but haven't received status yet (sessions might be loading)
+                    (!cardsStatus && !factsStatus && sessionsLoading)) && (
+                    <button
+                      onClick={handleStartSessions}
+                      disabled={isStartingSessions}
+                      style={{
+                        padding: '8px 16px',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        color: '#ffffff',
+                        background: isStartingSessions ? '#93c5fd' : '#3b82f6',
+                        cursor: isStartingSessions ? 'not-allowed' : 'pointer',
+                        transition: 'all 0.2s',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isStartingSessions) {
+                          e.currentTarget.style.background = '#2563eb';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isStartingSessions) {
+                          e.currentTarget.style.background = '#3b82f6';
+                        }
+                      }}
+                      title="Start generated sessions"
+                    >
+                      {isStartingSessions ? 'Starting...' : 'Start Sessions'}
+                    </button>
+                  )}
+                  
+                  {/* Pause Sessions button - visible when sessions are active */}
+                  {(cardsStatus?.status === 'active' || factsStatus?.status === 'active') && (
+                    <button
+                      onClick={handlePauseSessions}
+                      disabled={isPausing}
+                      style={{
+                        padding: '8px 16px',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '6px',
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        color: isPausing ? '#9ca3af' : '#374151',
+                        background: isPausing ? '#f3f4f6' : '#ffffff',
+                        cursor: isPausing ? 'not-allowed' : 'pointer',
+                        transition: 'all 0.2s',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isPausing) {
+                          e.currentTarget.style.background = '#f8fafc';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isPausing) {
+                          e.currentTarget.style.background = '#ffffff';
+                        }
+                      }}
+                      title="Pause active sessions (preserves state for resume)"
+                    >
+                      {isPausing ? 'Pausing...' : 'Pause Sessions'}
+                    </button>
+                  )}
+                  
+                  {/* Test Transcript button - always visible in testing state */}
                   <button
-                    onClick={handlePauseSessions}
-                    disabled={isPausing}
+                    onClick={() => setIsTestTranscriptModalOpen(true)}
                     style={{
-                      padding: '6px 12px',
-                      background: isPausing ? '#cbd5e1' : '#8b5cf6',
-                      color: '#ffffff',
-                      border: 'none',
+                      padding: '8px 16px',
+                      border: '1px solid #e2e8f0',
                       borderRadius: '6px',
-                      fontSize: '12px',
+                      fontSize: '14px',
                       fontWeight: '500',
-                      cursor: isPausing ? 'not-allowed' : 'pointer',
-                      transition: 'background 0.2s',
+                      color: '#374151',
+                      background: '#ffffff',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
                     }}
                     onMouseEnter={(e) => {
-                      if (!isPausing) {
-                        e.currentTarget.style.background = '#7c3aed';
-                      }
+                      e.currentTarget.style.background = '#f8fafc';
                     }}
                     onMouseLeave={(e) => {
-                      if (!isPausing) {
-                        e.currentTarget.style.background = '#8b5cf6';
-                      }
+                      e.currentTarget.style.background = '#ffffff';
                     }}
+                    title="Send test transcript to sessions"
                   >
-                    {isPausing ? 'Pausing...' : '⏸️ Pause'}
+                    Test Transcript
                   </button>
-                )}
-                {(cardsStatus?.status === 'paused' || factsStatus?.status === 'paused') && (
+                  
+                  {/* Confirm Ready button - always visible in testing state */}
                   <button
-                    onClick={handleResumeSessions}
+                    onClick={handleConfirmReady}
                     disabled={isResuming}
                     style={{
-                      padding: '6px 12px',
-                      background: isResuming ? '#cbd5e1' : '#10b981',
-                      color: '#ffffff',
-                      border: 'none',
+                      padding: '8px 16px',
+                      border: '1px solid #e2e8f0',
                       borderRadius: '6px',
-                      fontSize: '12px',
+                      fontSize: '14px',
                       fontWeight: '500',
+                      color: isResuming ? '#9ca3af' : '#374151',
+                      background: isResuming ? '#f3f4f6' : '#ffffff',
                       cursor: isResuming ? 'not-allowed' : 'pointer',
-                      transition: 'background 0.2s',
+                      transition: 'all 0.2s',
                     }}
                     onMouseEnter={(e) => {
                       if (!isResuming) {
-                        e.currentTarget.style.background = '#059669';
+                        e.currentTarget.style.background = '#f8fafc';
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (!isResuming) {
-                        e.currentTarget.style.background = '#10b981';
+                        e.currentTarget.style.background = '#ffffff';
                       }
                     }}
+                    title="Stop sessions, regenerate, and set agent to ready"
                   >
-                    {isResuming ? 'Resuming...' : '▶️ Resume'}
+                    {isResuming ? 'Processing...' : 'Confirm Ready'}
                   </button>
-                )}
-              </div>
-            )}
+                </>
+              )}
+            </div>
           </div>
           
-          {pauseResumeError && (
+          {(pauseResumeError || startSessionsError) && (
             <div style={{
               padding: '8px 12px',
               marginBottom: '16px',
@@ -877,7 +1088,7 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
               fontSize: '12px',
               color: '#dc2626',
             }}>
-              {pauseResumeError}
+              {pauseResumeError || startSessionsError}
             </div>
           )}
           
@@ -930,65 +1141,11 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
                 marginBottom: '16px',
               }}>
                 {agent?.status === 'ready' || agent?.status === 'context_complete'
-                  ? 'Sessions will be created when the event is marked as live.'
+                  ? 'Use the "Create Sessions" button above to begin.'
                   : agent?.status === 'running'
                   ? 'Waiting for sessions to be created...'
                   : 'Agent sessions are only available when the event is running.'}
               </div>
-              
-              {/* Manual Start Button for Testing */}
-              {(agent?.status === 'ready' || agent?.status === 'context_complete') && (
-                <div>
-                  {startSessionsError && (
-                    <div style={{
-                      padding: '8px 12px',
-                      marginBottom: '12px',
-                      background: '#fef2f2',
-                      borderRadius: '6px',
-                      border: '1px solid #fecaca',
-                      fontSize: '12px',
-                      color: '#dc2626',
-                    }}>
-                      {startSessionsError}
-                    </div>
-                  )}
-                  <button
-                    onClick={handleStartSessions}
-                    disabled={isStartingSessions}
-                    style={{
-                      padding: '10px 20px',
-                      background: isStartingSessions ? '#cbd5e1' : '#3b82f6',
-                      color: '#ffffff',
-                      border: 'none',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                      fontWeight: '500',
-                      cursor: isStartingSessions ? 'not-allowed' : 'pointer',
-                      transition: 'background 0.2s',
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isStartingSessions) {
-                        e.currentTarget.style.background = '#2563eb';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isStartingSessions) {
-                        e.currentTarget.style.background = '#3b82f6';
-                      }
-                    }}
-                  >
-                    {isStartingSessions ? 'Starting Sessions...' : '🚀 Start Sessions (Testing)'}
-                  </button>
-                  <div style={{
-                    fontSize: '11px',
-                    color: '#94a3b8',
-                    marginTop: '8px',
-                    fontStyle: 'italic',
-                  }}>
-                    Manual trigger for testing - marks event as live
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
@@ -999,20 +1156,34 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
               gap: '16px',
             }}>
               {/* Cards Agent Session */}
-              <SessionStatusCard
-                title="Cards Agent"
-                status={cardsStatus}
-              />
+              {cardsStatus && (
+                <SessionStatusCard
+                  key={`cards-${cardsStatus.session_id}-${cardsStatus.status}-${cardsStatus.metadata?.updated_at || Date.now()}`}
+                  title="Cards Agent"
+                  status={cardsStatus}
+                />
+              )}
               
               {/* Facts Agent Session */}
-              <SessionStatusCard
-                title="Facts Agent"
-                status={factsStatus}
-              />
+              {factsStatus && (
+                <SessionStatusCard
+                  key={`facts-${factsStatus.session_id}-${factsStatus.status}-${factsStatus.metadata?.updated_at || Date.now()}`}
+                  title="Facts Agent"
+                  status={factsStatus}
+                />
+              )}
             </div>
           )}
         </div>
       )}
+      
+      {/* Test Transcript Modal */}
+      <TestTranscriptModal
+        eventId={eventId}
+        isOpen={isTestTranscriptModalOpen}
+        onClose={() => setIsTestTranscriptModalOpen(false)}
+        onSend={handleSendTestTranscript}
+      />
     </div>
   );
 }

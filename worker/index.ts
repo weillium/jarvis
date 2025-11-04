@@ -334,43 +334,62 @@ async function tickPauseResume() {
   }
 }
 
-/** ---------- run loop (polling for ready agents that need to start) ---------- **/
-async function tickRun() {
-  // Find events that are live but don't have running orchestrator runtime
-  const { data: live, error } = await supabase
-    .from('events')
-    .select('id')
-    .eq('is_live', true)
+/** ---------- start generated sessions loop (polling for generated sessions that need activation) ---------- **/
+// This handles the new testing workflow: when sessions are created with 'generated' status,
+// and then the start API is called, sessions are updated to 'starting' and this loop activates them
+async function tickStartGeneratedSessions() {
+  // Find sessions with 'starting' status that need to be activated
+  // These are sessions that were generated and then the start API was called
+  const { data: startingSessions, error: sessionsError } = await supabase
+    .from('agent_sessions')
+    .select('event_id, agent_id')
+    .eq('status', 'starting')
     .limit(50);
   
-  if (error) {
-    log('[run] live fetch error:', error.message);
+  if (sessionsError) {
+    log('[start-generated] fetch error:', sessionsError.message);
     return;
   }
   
-  if (!live) return;
+  if (!startingSessions || startingSessions.length === 0) {
+    return;
+  }
 
-  for (const ev of live) {
-    // Check if we have a ready agent for this event (must have 'context_complete' status)
-    const { data: readyAgents, error: agentError } = await supabase
-      .from('agents')
-      .select('id,event_id,status')
-      .eq('event_id', ev.id)
-      .eq('status', 'context_complete')
-      .limit(1);
-    
-    if (agentError) {
-      log('[run] agent fetch error for event', ev.id, agentError.message);
-      continue;
+  // Group by event_id and agent_id
+  const eventsToStart = new Map<string, string>(); // eventId -> agentId
+  for (const session of startingSessions) {
+    if (!eventsToStart.has(session.event_id)) {
+      eventsToStart.set(session.event_id, session.agent_id);
     }
-    
-    if (readyAgents && readyAgents[0]) {
-      // Start the event in orchestrator
-      try {
-        await orchestrator.startEvent(ev.id, readyAgents[0].id);
-      } catch (e: any) {
-        log('[run] error starting event', ev.id, e?.message || e);
+  }
+
+  // Start events that have starting sessions
+  for (const [eventId, agentId] of eventsToStart) {
+    try {
+      // Check if runtime already exists and is running
+      const runtime = orchestrator.getRuntime(eventId);
+      if (runtime && runtime.status === 'running' && 
+          runtime.cardsSession && runtime.factsSession) {
+        // Already running, skip
+        continue;
       }
+
+      // Check if event is live (required for worker to process)
+      const { data: event } = await supabase
+        .from('events')
+        .select('is_live')
+        .eq('id', eventId)
+        .single();
+
+      if (!event || !event.is_live) {
+        // Event not live, skip
+        continue;
+      }
+
+      log('[start-generated] Starting event', eventId, 'with generated sessions');
+      await orchestrator.startEvent(eventId, agentId);
+    } catch (e: any) {
+      log('[start-generated] error starting event', eventId, e?.message || e);
     }
   }
 }
@@ -390,7 +409,8 @@ async function main() {
     setInterval(tickContextGeneration, 3000); // Check for approved blueprints needing execution every 3s
     setInterval(tickRegeneration, 3000); // Check for agents needing stage regeneration every 3s
     setInterval(tickPauseResume, 5000); // Check for sessions needing pause/resume every 5s
-    setInterval(tickRun, 5000);  // Check for events needing start every 5s
+    setInterval(tickStartGeneratedSessions, 5000); // Check for generated sessions that need to be started every 5s
+    // tickRun is disabled - manual session management via API
     
     log('Worker/Orchestrator running...');
   } catch (e: any) {

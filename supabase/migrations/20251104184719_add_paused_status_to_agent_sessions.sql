@@ -12,4 +12,3 @@ alter table agent_sessions
 
 -- Add comment explaining the paused status
 comment on column agent_sessions.status is 'Session status: starting (connecting), active (operational), paused (closed but state preserved for resume), closed (permanently ended), error (failed)';
-

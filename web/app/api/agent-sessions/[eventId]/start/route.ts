@@ -14,12 +14,12 @@ export async function POST(
       auth: { persistSession: false },
     });
 
-    // Get the agent for this event
+    // Get the agent for this event (must be in testing status with generated sessions)
     const { data: agents, error: agentError } = await supabase
       .from('agents')
       .select('id, status')
       .eq('event_id', eventId)
-      .eq('status', 'context_complete')
+      .eq('status', 'testing')
       .limit(1);
 
     if (agentError) {
@@ -33,7 +33,7 @@ export async function POST(
       return NextResponse.json(
         {
           ok: false,
-          error: 'No agent found with context_complete status for this event',
+          error: 'No agent found with testing status for this event. Create sessions first.',
         },
         { status: 404 }
       );
@@ -41,26 +41,68 @@ export async function POST(
 
     const agentId = agents[0].id;
 
-    // Mark event as live (this will trigger the worker to start sessions)
-    // Note: We keep agent status as 'context_complete' - the worker's tickRun() looks for
-    // agents with 'context_complete' status and will start the sessions, then update status to 'running'
-    const { error: updateError } = await supabase
-      .from('events')
-      .update({ is_live: true })
-      .eq('id', eventId);
+    // Check for generated sessions
+    const { data: generatedSessions, error: sessionsError } = await supabase
+      .from('agent_sessions')
+      .select('id, agent_type, status')
+      .eq('event_id', eventId)
+      .eq('agent_id', agentId)
+      .eq('status', 'generated');
 
-    if (updateError) {
+    if (sessionsError) {
       return NextResponse.json(
-        { ok: false, error: `Failed to mark event as live: ${updateError.message}` },
+        { ok: false, error: `Failed to fetch sessions: ${sessionsError.message}` },
         { status: 500 }
       );
     }
 
+    if (!generatedSessions || generatedSessions.length === 0) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'No generated sessions found. Create sessions first.',
+        },
+        { status: 404 }
+      );
+    }
+
+    // Update sessions from 'generated' to 'starting' so worker can activate them
+    const { error: updateError } = await supabase
+      .from('agent_sessions')
+      .update({ status: 'starting' })
+      .eq('event_id', eventId)
+      .eq('agent_id', agentId)
+      .eq('status', 'generated');
+
+    if (updateError) {
+      return NextResponse.json(
+        { ok: false, error: `Failed to update sessions: ${updateError.message}` },
+        { status: 500 }
+      );
+    }
+
+    // Mark event as live so worker can pick up and start the sessions
+    const { error: eventUpdateError } = await supabase
+      .from('events')
+      .update({ is_live: true })
+      .eq('id', eventId);
+
+    if (eventUpdateError) {
+      return NextResponse.json(
+        { ok: false, error: `Failed to mark event as live: ${eventUpdateError.message}` },
+        { status: 500 }
+      );
+    }
+
+    // Note: Worker will pick up sessions with 'starting' status and activate them
+    // The worker's startEvent will handle the actual session creation and connection
+
     return NextResponse.json({
       ok: true,
-      message: 'Event marked as live. Sessions will start automatically.',
+      message: 'Sessions will be started by worker. Status updated to starting.',
       eventId,
       agentId,
+      sessionsUpdated: generatedSessions.length,
     });
   } catch (error: any) {
     console.error('Error starting agent sessions:', error);

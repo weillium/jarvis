@@ -48,12 +48,12 @@ export async function POST(
 
     const agentId = agents[0].id;
 
-    // Check if sessions are paused
-    const { data: pausedSessions, error: sessionsError } = await supabase
+    // Check if sessions are paused or closed (can resume both)
+    const { data: sessionsToResume, error: sessionsError } = await supabase
       .from('agent_sessions')
       .select('id, agent_type, status')
       .eq('event_id', eventId)
-      .eq('status', 'paused');
+      .in('status', ['paused', 'closed']);
 
     if (sessionsError) {
       return NextResponse.json(
@@ -62,11 +62,11 @@ export async function POST(
       );
     }
 
-    if (!pausedSessions || pausedSessions.length === 0) {
+    if (!sessionsToResume || sessionsToResume.length === 0) {
       return NextResponse.json(
         {
           ok: false,
-          error: 'No paused sessions found to resume',
+          error: 'No paused or closed sessions found to resume',
         },
         { status: 404 }
       );
@@ -99,18 +99,25 @@ export async function POST(
       );
     }
 
-    // Don't update session status here - keep as 'paused'
-    // The worker's tickPauseResume will detect paused sessions where:
-    // - event is live (we just ensured this)
-    // - agent status is running (we just set this)
-    // and will call resumeEvent() which will update status to 'active'
+    // Update session status from 'paused' or 'closed' to 'starting' so worker can resume
+    const { error: sessionsUpdateError } = await supabase
+      .from('agent_sessions')
+      .update({ status: 'starting' })
+      .eq('event_id', eventId)
+      .in('status', ['paused', 'closed']);
+
+    if (sessionsUpdateError) {
+      console.warn(`Failed to update session status: ${sessionsUpdateError.message}`);
+    }
+
+    // The worker's tickPauseResume or tickRun will detect these sessions and resume them
 
     return NextResponse.json({
       ok: true,
       message: 'Sessions will be resumed by worker on next tick.',
       eventId,
       agentId,
-      resumedSessions: pausedSessions.length,
+      resumedSessions: sessionsToResume.length,
     });
   } catch (error: any) {
     console.error('Error resuming agent sessions:', error);
