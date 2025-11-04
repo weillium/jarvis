@@ -40,10 +40,29 @@ if (typeof window !== 'undefined') {
     });
 
     // Initialize cookies on mount (deferred)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      syncSessionToCookies(session);
+    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
+      // If session exists but user doesn't, clear it
+      if (session && !error) {
+        try {
+          const { data: { user }, error: userError } = await supabase.auth.getUser();
+          if (userError || !user) {
+            // Invalid session - clear it
+            await supabase.auth.signOut();
+            syncSessionToCookies(null);
+          } else {
+            syncSessionToCookies(session);
+          }
+        } catch (err) {
+          // Error checking user - clear session
+          await supabase.auth.signOut();
+          syncSessionToCookies(null);
+        }
+      } else {
+        syncSessionToCookies(session);
+      }
     }).catch((error) => {
       console.warn('Failed to get initial session:', error);
+      syncSessionToCookies(null);
     });
   }, 0);
 }

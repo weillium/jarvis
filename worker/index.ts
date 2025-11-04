@@ -30,7 +30,7 @@ function log(...a: any[]) { console.log(new Date().toISOString(), ...a); }
 
 /** ---------- orchestrator ---------- **/
 const orchestratorConfig: OrchestratorConfig = {
-  supabase,
+  supabase: supabase as any as ReturnType<typeof createClient>,
   openai,
   embedModel: EMBED_MODEL,
   genModel: GEN_MODEL,
@@ -76,7 +76,7 @@ async function tickBlueprint() {
         ag.event_id,
         ag.id,
         {
-          supabase,
+          supabase: supabase as any as ReturnType<typeof createClient>,
           openai,
           genModel: GEN_MODEL,
         }
@@ -140,7 +140,7 @@ async function tickContextGeneration() {
         ag.id,
         blueprint.id,
         {
-          supabase,
+          supabase: supabase as any as ReturnType<typeof createClient>,
           openai,
           embedModel: EMBED_MODEL,
           genModel: GEN_MODEL,
@@ -204,7 +204,7 @@ async function tickRegeneration() {
 
     try {
       const options = {
-        supabase,
+        supabase: supabase as any as ReturnType<typeof createClient>,
         openai,
         embedModel: EMBED_MODEL,
         genModel: GEN_MODEL,
@@ -298,18 +298,7 @@ async function tickPauseResume() {
   // Check each event to see if it should be resumed
   const eventsToResume = new Map<string, string>(); // eventId -> agentId
   for (const session of pausedForResume) {
-    // Check if event is live
-    const { data: event } = await supabase
-      .from('events')
-      .select('is_live')
-      .eq('id', session.event_id)
-      .single();
-    
-    if (!event || !event.is_live) {
-      continue;
-    }
-
-    // Check if agent is running
+    // Check if agent is running (agent status is the indicator for processing)
     const { data: agent } = await supabase
       .from('agents')
       .select('status')
@@ -374,20 +363,26 @@ async function tickStartGeneratedSessions() {
         continue;
       }
 
-      // Check if event is live (required for worker to process)
-      const { data: event } = await supabase
-        .from('events')
-        .select('is_live')
-        .eq('id', eventId)
+      // Check if agent is in testing or running status (required for worker to process)
+      const { data: agent } = await supabase
+        .from('agents')
+        .select('status')
+        .eq('id', agentId)
         .single();
 
-      if (!event || !event.is_live) {
-        // Event not live, skip
+      if (!agent || (agent.status !== 'testing' && agent.status !== 'running')) {
+        // Agent not in a state that allows processing, skip
         continue;
       }
 
-      log('[start-generated] Starting event', eventId, 'with generated sessions');
-      await orchestrator.startEvent(eventId, agentId);
+      // Use lightweight testing method for 'testing' status, full startEvent for 'running'
+      if (agent.status === 'testing') {
+        log('[start-generated] Starting sessions for testing (event:', eventId, ')');
+        await orchestrator.startSessionsForTesting(eventId, agentId);
+      } else {
+        log('[start-generated] Starting event', eventId, 'with generated sessions');
+        await orchestrator.startEvent(eventId, agentId);
+      }
     } catch (e: any) {
       log('[start-generated] error starting event', eventId, e?.message || e);
     }

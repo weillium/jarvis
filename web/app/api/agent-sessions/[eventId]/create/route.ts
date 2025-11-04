@@ -78,6 +78,16 @@ export async function POST(
       }
     }
 
+    // Get the model from agent (fallback to default)
+    const { data: agentWithModel } = await supabase
+      .from('agents')
+      .select('model')
+      .eq('id', agentId)
+      .single();
+    
+    // Use agent's model or default to Realtime API model
+    const model = agentWithModel?.model || 'gpt-4o-realtime-preview-2024-10-01';
+
     // Create new sessions with 'generated' status (not 'starting')
     const { data: newSessions, error: createError } = await supabase
       .from('agent_sessions')
@@ -88,6 +98,7 @@ export async function POST(
           provider_session_id: 'pending', // Will be set when actually started
           agent_type: 'cards',
           status: 'generated',
+          model: model,
         },
         {
           event_id: eventId,
@@ -95,6 +106,7 @@ export async function POST(
           provider_session_id: 'pending',
           agent_type: 'facts',
           status: 'generated',
+          model: model,
         },
       ])
       .select();

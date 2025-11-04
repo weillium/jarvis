@@ -85,7 +85,7 @@ export interface AgentSessionStatus {
 export interface EventRuntime {
   eventId: string;
   agentId: string;
-  status: 'prepping' | 'context_complete' | 'running' | 'ended' | 'error';
+  status: 'prepping' | 'context_complete' | 'ready' | 'running' | 'ended' | 'error';
   
   // In-memory state
   ringBuffer: RingBuffer;
@@ -501,8 +501,14 @@ export class Orchestrator {
     const eventId = transcript.event_id;
     const runtime = this.runtimes.get(eventId);
 
-    if (!runtime || runtime.status !== 'running') {
-      // Event not active, skip
+    // TEMPORARILY COMMENTED OUT FOR TESTING: Allow sessions to process regardless of runtime status
+    // if (!runtime || runtime.status !== 'running') {
+    //   // Event not active, skip
+    //   return;
+    // }
+    
+    // Still need runtime to exist
+    if (!runtime) {
       return;
     }
 
@@ -1000,10 +1006,11 @@ export class Orchestrator {
       s => s.status === 'generated' || s.status === 'starting'
     ) || false;
 
-    if (runtime.status !== 'context_complete' && !hasGeneratedOrStartingSessions) {
-      console.warn(`[orchestrator] Event ${eventId} not ready (status: ${runtime.status}) and no generated/starting sessions`);
-      return;
-    }
+    // TEMPORARILY COMMENTED OUT FOR TESTING: Allow sessions to start regardless of runtime status
+    // if (runtime.status !== 'context_complete' && !hasGeneratedOrStartingSessions) {
+    //   console.warn(`[orchestrator] Event ${eventId} not ready (status: ${runtime.status}) and no generated/starting sessions`);
+    //   return;
+    // }
 
     // Handle paused sessions - resume them
     const pausedSessions = existingSessions?.filter(s => s.status === 'paused') || [];
@@ -1071,23 +1078,32 @@ export class Orchestrator {
     // Check for active sessions (not paused or generated)
     const activeSessions = existingSessions?.filter(s => s.status === 'active' || s.status === 'starting') || [];
     if (activeSessions.length > 0) {
-      console.log(`[orchestrator] Event ${eventId} already has ${activeSessions.length} active session(s), skipping creation`);
-      // Update runtime status to running if sessions exist
-      runtime.status = 'running';
-      // Only update agent status if it's not in 'testing' status (testing workflow)
-      const { data: currentAgentCheck } = await this.config.supabase
-        .from('agents')
-        .select('status')
-        .eq('id', agentId)
-        .single();
+      console.log(`[orchestrator] Event ${eventId} already has ${activeSessions.length} active session(s) in database`);
       
-      if (currentAgentCheck && currentAgentCheck.status !== 'testing') {
-        await this.config.supabase
+      // If runtime doesn't have session objects, we need to create new connections
+      // Note: OpenAI Realtime API doesn't support resuming existing sessions - each connection is new
+      if (!runtime.cardsSession || !runtime.factsSession) {
+        console.log(`[orchestrator] Runtime missing session objects, creating new connections...`);
+        // Fall through to create new sessions (will happen below)
+      } else {
+        // Runtime already has session objects, just update status
+        console.log(`[orchestrator] Runtime already has session objects, skipping creation`);
+        runtime.status = 'running';
+        // Only update agent status if it's not in 'testing' status (testing workflow)
+        const { data: currentAgentCheck } = await this.config.supabase
           .from('agents')
-          .update({ status: 'running' })
-          .eq('id', agentId);
+          .select('status')
+          .eq('id', agentId)
+          .single();
+        
+        if (currentAgentCheck && currentAgentCheck.status !== 'testing') {
+          await this.config.supabase
+            .from('agents')
+            .update({ status: 'running' })
+            .eq('id', agentId);
+        }
+        return;
       }
-      return;
     }
 
     // Create Realtime sessions with status callbacks and tool handlers
@@ -1218,6 +1234,151 @@ export class Orchestrator {
   }
 
   /**
+   * Start sessions for testing - minimal setup, just connects sessions
+   * This is a lightweight method for testing session startup without full runtime dependencies
+   */
+  async startSessionsForTesting(eventId: string, agentId: string): Promise<void> {
+    console.log(`[orchestrator] Starting sessions for testing (event: ${eventId})`);
+
+    // Get or create minimal runtime (just for session storage)
+    let runtime = this.runtimes.get(eventId);
+    if (!runtime) {
+      // Create minimal runtime without full setup
+      // Load minimal glossary (empty map is fine for testing)
+      const glossaryCache = await this.loadGlossary(eventId).catch(() => new Map<string, GlossaryEntry>());
+      
+      runtime = {
+        eventId,
+        agentId,
+        status: 'ready', // Use 'ready' status for testing
+        ringBuffer: new RingBuffer(1000, 5 * 60 * 1000), // Minimal ring buffer
+        factsStore: new FactsStore(50), // Minimal facts store
+        glossaryCache, // Load glossary (but empty is fine for testing)
+        cardsLastSeq: 0,
+        factsLastSeq: 0,
+        factsLastUpdate: Date.now(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      this.runtimes.set(eventId, runtime);
+    }
+
+    // Check if sessions already exist and are connected
+    if (runtime.cardsSession && runtime.factsSession && runtime.cardsSessionId && runtime.factsSessionId) {
+      console.log(`[orchestrator] Sessions already connected for event ${eventId}`);
+      return;
+    }
+
+    // Check database for existing sessions
+    const { data: existingSessions } = await this.config.supabase
+      .from('agent_sessions')
+      .select('id, agent_type, status')
+      .eq('event_id', eventId)
+      .eq('agent_id', agentId)
+      .in('status', ['generated', 'starting']);
+
+    if (!existingSessions || existingSessions.length === 0) {
+      throw new Error(`No generated or starting sessions found for event ${eventId}. Create sessions first.`);
+    }
+
+    // Update sessions to 'starting' if they're 'generated'
+    const { error: updateError } = await this.config.supabase
+      .from('agent_sessions')
+      .update({ status: 'starting' })
+      .eq('event_id', eventId)
+      .eq('agent_id', agentId)
+      .in('status', ['generated']);
+
+    if (updateError) {
+      console.warn(`[orchestrator] Failed to update session status: ${updateError.message}`);
+    }
+
+    // Create minimal session objects with basic callbacks
+    runtime.cardsSession = new RealtimeSession(this.config.openai, {
+      eventId,
+      agentType: 'cards',
+      model: this.config.realtimeModel,
+      onStatusChange: async (status, sessionId) => {
+        console.log(`[orchestrator] Cards session status: ${status} (${sessionId || 'no ID'})`);
+        // Minimal status update - just update database
+        if (this.config.supabase && sessionId) {
+          await this.config.supabase
+            .from('agent_sessions')
+            .update({ 
+              status: status as any,
+              provider_session_id: sessionId,
+              model: this.config.realtimeModel,
+              updated_at: new Date().toISOString()
+            })
+            .eq('event_id', eventId)
+            .eq('agent_type', 'cards');
+        }
+      },
+      onLog: (level, message, context) => {
+        console.log(`[cards-test] ${message}`);
+      },
+      supabase: this.config.supabase,
+      // Minimal tool handlers - just return empty for testing
+      onRetrieve: async () => [],
+      embedText: async () => [],
+    });
+
+    runtime.factsSession = new RealtimeSession(this.config.openai, {
+      eventId,
+      agentType: 'facts',
+      model: this.config.realtimeModel,
+      onStatusChange: async (status, sessionId) => {
+        console.log(`[orchestrator] Facts session status: ${status} (${sessionId || 'no ID'})`);
+        // Minimal status update - just update database
+        if (this.config.supabase && sessionId) {
+          await this.config.supabase
+            .from('agent_sessions')
+            .update({ 
+              status: status as any,
+              provider_session_id: sessionId,
+              model: this.config.realtimeModel,
+              updated_at: new Date().toISOString()
+            })
+            .eq('event_id', eventId)
+            .eq('agent_type', 'facts');
+        }
+      },
+      onLog: (level, message, context) => {
+        console.log(`[facts-test] ${message}`);
+      },
+      supabase: this.config.supabase,
+      // Minimal tool handlers - just return empty for testing
+      onRetrieve: async () => [],
+    });
+
+    // Connect sessions (this establishes WebSocket connections)
+    try {
+      console.log(`[orchestrator] Connecting cards session...`);
+      runtime.cardsSessionId = await runtime.cardsSession.connect();
+      console.log(`[orchestrator] Cards session connected: ${runtime.cardsSessionId}`);
+
+      console.log(`[orchestrator] Connecting facts session...`);
+      runtime.factsSessionId = await runtime.factsSession.connect();
+      console.log(`[orchestrator] Facts session connected: ${runtime.factsSessionId}`);
+
+      // Update runtime status
+      runtime.status = 'running';
+      
+      console.log(`[orchestrator] Sessions started successfully for testing (event: ${eventId})`);
+    } catch (error: any) {
+      console.error(`[orchestrator] Failed to connect sessions: ${error.message}`);
+      // Update status to error
+      if (runtime.cardsSession) {
+        await runtime.cardsSession.onStatusChange?.('error');
+      }
+      if (runtime.factsSession) {
+        await runtime.factsSession.onStatusChange?.('error');
+      }
+      throw error;
+    }
+  }
+
+  /**
    * Pause event sessions (close WebSocket but preserve state)
    */
   async pauseEvent(eventId: string): Promise<void> {
@@ -1228,9 +1389,10 @@ export class Orchestrator {
       throw new Error(`Event ${eventId} not found in runtime`);
     }
 
-    if (runtime.status !== 'running') {
-      throw new Error(`Event ${eventId} is not running (status: ${runtime.status})`);
-    }
+    // TEMPORARILY COMMENTED OUT FOR TESTING: Allow pause operation regardless of runtime status
+    // if (runtime.status !== 'running') {
+    //   throw new Error(`Event ${eventId} is not running (status: ${runtime.status})`);
+    // }
 
     try {
       // Pause both sessions

@@ -80,7 +80,16 @@ export async function POST(
       }
     }
 
-    // Step 2: Create new sessions with 'generated' status
+    // Step 2: Get model from agent for new sessions
+    const { data: agentWithModel } = await supabase
+      .from('agents')
+      .select('model')
+      .eq('id', agentId)
+      .single();
+    
+    const model = agentWithModel?.model || 'gpt-4o-realtime-preview-2024-10-01';
+
+    // Step 3: Create new sessions with 'generated' status
     const { data: newSessions, error: createError } = await supabase
       .from('agent_sessions')
       .insert([
@@ -90,6 +99,7 @@ export async function POST(
           provider_session_id: 'pending',
           agent_type: 'cards',
           status: 'generated',
+          model: model,
         },
         {
           event_id: eventId,
@@ -97,6 +107,7 @@ export async function POST(
           provider_session_id: 'pending',
           agent_type: 'facts',
           status: 'generated',
+          model: model,
         },
       ])
       .select();
@@ -108,7 +119,7 @@ export async function POST(
       );
     }
 
-    // Step 3: Update agent status to 'ready' (not 'running')
+    // Step 4: Update agent status to 'ready' (not 'running')
     const { error: updateError } = await supabase
       .from('agents')
       .update({ status: 'ready' })
@@ -119,17 +130,6 @@ export async function POST(
         { ok: false, error: `Failed to update agent status: ${updateError.message}` },
         { status: 500 }
       );
-    }
-
-    // Step 4: Mark event as not live (testing complete)
-    const { error: eventUpdateError } = await supabase
-      .from('events')
-      .update({ is_live: false })
-      .eq('id', eventId);
-
-    if (eventUpdateError) {
-      console.warn(`Failed to update event is_live status: ${eventUpdateError.message}`);
-      // Don't fail the request - main operation succeeded
     }
 
     return NextResponse.json({

@@ -249,21 +249,6 @@ export async function GET(req: NextRequest) {
           }
         });
 
-      // Handle client disconnect
-      req.signal.addEventListener('abort', () => {
-        console.log(`[api/stream] Client disconnected for event ${eventId}`);
-        
-        // Unregister from connection manager
-        connectionManager.unregister(eventId, controller);
-        
-        // Clean up Supabase channels
-        supabase.removeChannel(cardsChannel);
-        supabase.removeChannel(factsChannel);
-        supabase.removeChannel(sessionsChannel);
-        
-        controller.close();
-      });
-
       // Send periodic heartbeat to keep connection alive
       const heartbeatInterval = setInterval(() => {
         try {
@@ -276,19 +261,28 @@ export async function GET(req: NextRequest) {
             )
           );
         } catch (error) {
-          // Client disconnected
+          // Client disconnected - cleanup will be handled by abort handler
           clearInterval(heartbeatInterval);
-          connectionManager.unregister(eventId, controller);
-          supabase.removeChannel(cardsChannel);
-          supabase.removeChannel(factsChannel);
-          supabase.removeChannel(sessionsChannel);
         }
       }, 30000); // Every 30 seconds
 
-      // Cleanup on stream end
+      // Handle client disconnect - single consolidated cleanup handler
       req.signal.addEventListener('abort', () => {
+        console.log(`[api/stream] Client disconnected for event ${eventId}`);
+        
+        // Clear heartbeat interval first
         clearInterval(heartbeatInterval);
+        
+        // Unregister from connection manager
         connectionManager.unregister(eventId, controller);
+        
+        // Clean up Supabase channels
+        supabase.removeChannel(cardsChannel);
+        supabase.removeChannel(factsChannel);
+        supabase.removeChannel(sessionsChannel);
+        
+        // Close controller
+        controller.close();
       });
     },
   });

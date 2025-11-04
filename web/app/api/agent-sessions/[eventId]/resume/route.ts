@@ -72,19 +72,6 @@ export async function POST(
       );
     }
 
-    // Mark event as live if not already (required for worker to resume)
-    const { error: eventUpdateError } = await supabase
-      .from('events')
-      .update({ is_live: true })
-      .eq('id', eventId);
-
-    if (eventUpdateError) {
-      return NextResponse.json(
-        { ok: false, error: `Failed to mark event as live: ${eventUpdateError.message}` },
-        { status: 500 }
-      );
-    }
-
     // Update agent status to running (worker will resume sessions)
     // Keep sessions as 'paused' - worker's tickPauseResume will detect them and call resumeEvent()
     const { error: agentUpdateError } = await supabase

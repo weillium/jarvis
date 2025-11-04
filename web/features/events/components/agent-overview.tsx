@@ -414,7 +414,13 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
             fontFamily: 'monospace',
             marginBottom: '4px',
           }}>
-            Session: {status.session_id.substring(0, 20)}...
+            {status.session_id === 'pending' || status.status === 'generated' ? (
+              <span style={{ fontStyle: 'italic', color: '#94a3b8' }}>
+                Pending activation
+              </span>
+            ) : (
+              <>Session: {status.session_id.substring(0, 20)}...</>
+            )}
           </div>
           <div style={{
             fontSize: '12px',

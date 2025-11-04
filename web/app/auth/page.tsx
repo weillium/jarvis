@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { AuthForm } from '@/features/auth/components/auth-form';
 import { useAuth } from '@/shared/hooks/use-auth';
+import { supabase } from '@/shared/lib/supabase/client';
 
 export default function AuthPage() {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
@@ -11,12 +12,22 @@ export default function AuthPage() {
   const router = useRouter();
 
   useEffect(() => {
+    // Only redirect if we have a confirmed, valid user
+    // Give a small delay to ensure auth state is fully loaded
     if (!loading && user) {
-      router.push('/');
+      // Double-check user is actually valid by verifying with Supabase
+      const checkUser = async () => {
+        const { data: { user: verifiedUser }, error } = await supabase.auth.getUser();
+        if (verifiedUser && !error) {
+          router.push('/');
+        }
+      };
+      checkUser();
     }
   }, [user, loading, router]);
 
-  if (loading || user) {
+  // Show loading state while checking auth, but don't redirect until we confirm user exists
+  if (loading) {
     return (
       <div style={{
         minHeight: '100vh',

@@ -10,7 +10,7 @@ description: >
 # Project Commands
 
 > Use commands verbatim (e.g., "Command: Add Feature Module").  
-> Cursor will expand each into stepwise edits following `.cursor/rules/project.md`.
+> Cursor will expand each into stepwise edits following `.cursor/rules/project.mdc`.
 
 ## Command Schema
 
@@ -379,7 +379,7 @@ fields:
   steps:
     - "add variable to worker/.env.example (if worker-related)"
     - "add variable to web/.env.local.example (if web-related)"
-    - "update .cursor/rules/project.md section 8 with new variable"
+    - "update .cursor/rules/project.mdc section 8 with new variable"
     - "add usage in code with need() helper or process.env"
     - "document purpose and default value in code comments"
   validations:

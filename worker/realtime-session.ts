@@ -276,6 +276,11 @@ export class RealtimeSession {
         updateData.provider_session_id = sessionId;
       }
 
+      // Set model when connecting (uses config.model which is set from orchestrator)
+      if (status === 'active' && this.config.model) {
+        updateData.model = this.config.model;
+      }
+
       if (status === 'closed') {
         updateData.closed_at = new Date().toISOString();
       }

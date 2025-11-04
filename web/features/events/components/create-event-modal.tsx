@@ -112,7 +112,14 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
       }
 
       // Call Orchestrator Edge Function to create event and agent
-      const { data: orchestratorResult, error: orchestratorError } = await supabase.functions.invoke('orchestrator', {
+      console.log('Calling orchestrator to create event...');
+      
+      // Add timeout wrapper to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Request timed out after 30 seconds')), 30000);
+      });
+      
+      const invokePromise = supabase.functions.invoke('orchestrator', {
         body: {
           action: 'create_event_and_agent',
           payload: {
@@ -125,16 +132,26 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
         },
       });
 
+      const { data: orchestratorResult, error: orchestratorError } = await Promise.race([
+        invokePromise,
+        timeoutPromise,
+      ]) as { data: any; error: any };
+
+      console.log('Orchestrator response:', { orchestratorResult, orchestratorError });
+
       if (orchestratorError) {
+        console.error('Orchestrator error:', orchestratorError);
         throw orchestratorError;
       }
 
       if (!orchestratorResult?.ok || !orchestratorResult?.event) {
+        console.error('Orchestrator returned invalid response:', orchestratorResult);
         throw new Error(orchestratorResult?.error || 'Failed to create event');
       }
 
       // Extract event from orchestrator response
       const eventResult = orchestratorResult.event;
+      console.log('Event created successfully:', eventResult.id);
 
       // Upload files to Supabase storage and create event_docs records
       if (files.length > 0) {
@@ -204,6 +221,7 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
         onSuccess();
       }
     } catch (err) {
+      console.error('Error creating event:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to create event';
       setError(errorMessage);
     } finally {

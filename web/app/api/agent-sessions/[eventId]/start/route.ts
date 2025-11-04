@@ -81,19 +81,6 @@ export async function POST(
       );
     }
 
-    // Mark event as live so worker can pick up and start the sessions
-    const { error: eventUpdateError } = await supabase
-      .from('events')
-      .update({ is_live: true })
-      .eq('id', eventId);
-
-    if (eventUpdateError) {
-      return NextResponse.json(
-        { ok: false, error: `Failed to mark event as live: ${eventUpdateError.message}` },
-        { status: 500 }
-      );
-    }
-
     // Note: Worker will pick up sessions with 'starting' status and activate them
     // The worker's startEvent will handle the actual session creation and connection
 
