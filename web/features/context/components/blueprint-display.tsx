@@ -7,6 +7,7 @@ interface BlueprintDisplayProps {
   onApprove: () => void;
   approving: boolean;
   canApprove: boolean;
+  onRegenerate?: () => void;
 }
 
 interface Blueprint {
@@ -30,6 +31,7 @@ export function BlueprintDisplay({
   onApprove,
   approving,
   canApprove,
+  onRegenerate,
 }: BlueprintDisplayProps) {
   const [blueprint, setBlueprint] = useState<Blueprint | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,6 +54,13 @@ export function BlueprintDisplay({
 
     fetchBlueprint();
   }, [eventId]);
+
+  // Handle regenerate blueprint - just trigger the parent's callback to show prompt preview modal
+  const handleRegenerate = () => {
+    if (onRegenerate) {
+      onRegenerate();
+    }
+  };
 
   if (loading) {
     return (
@@ -101,22 +110,40 @@ export function BlueprintDisplay({
         </h4>
         <div style={{ display: 'flex', gap: '8px' }}>
           {canApprove && (
-            <button
-              onClick={onApprove}
-              disabled={approving}
-              style={{
-                background: approving ? '#94a3b8' : '#10b981',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '6px',
-                padding: '8px 16px',
-                fontSize: '14px',
-                fontWeight: '500',
-                cursor: approving ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {approving ? 'Approving...' : 'Approve Blueprint'}
-            </button>
+            <>
+              <button
+                onClick={onApprove}
+                disabled={approving}
+                style={{
+                  background: approving ? '#94a3b8' : '#10b981',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '8px 16px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  cursor: approving ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {approving ? 'Approving...' : 'Approve Blueprint'}
+              </button>
+              <button
+                onClick={handleRegenerate}
+                disabled={approving}
+                style={{
+                  background: '#ffffff',
+                  color: '#64748b',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '6px',
+                  padding: '8px 16px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  cursor: approving ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Regenerate Blueprint
+              </button>
+            </>
           )}
           <button
             onClick={() => setExpanded(!expanded)}

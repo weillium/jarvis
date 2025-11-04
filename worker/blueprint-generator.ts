@@ -336,80 +336,262 @@ Output format: Return a JSON object matching the Blueprint structure with these 
 Event Title: ${eventTitle}
 Event Topic: ${topic}${documentsSection}
 
-Please create a comprehensive blueprint that includes:
+CRITICAL: You MUST populate ALL arrays with actual, relevant content. Empty arrays are NOT acceptable and will cause the request to fail.
 
-1. Important Details: Extract and clean important details from the event information (5-10 key points)
-2. Inferred Topics: List 5-10 key topics that will likely be discussed
-3. Key Terms: Identify 10-20 terms/concepts/acronyms that attendees might need help understanding
-4. Research Plan: Create a research plan with 5-12 queries (prefer Exa API, use Wikipedia as fallback):
-   - Each query should be specific and actionable
-   - Assign priorities (1 = highest, 10 = lowest)
-   - Estimate cost per query (Exa: ~$0.02-0.04, Wikipedia: ~$0.001)
-   - Include total_searches and estimated_total_cost
-5. Glossary Plan: List terms that need definitions with:
-   - term: string
-   - is_acronym: boolean
-   - category: string (technical, business, domain-specific, etc.)
-   - priority: number (1 = highest, 10 = lowest)
-   - estimated_count: total number of terms
-6. Chunks Plan: Plan how to construct vector database chunks:
-   - sources: array with source name, priority, estimated_chunks
+Your response must include:
+
+1. Important Details (array of 5-10 strings):
+   - Extract key points, insights, or highlights from the event information
+   - Think about what makes this event important or what attendees should know
+   - Example for topic "${topic}": ["Focuses on practical ${topic} implementation strategies", "Covers latest industry developments in ${topic}", "Provides hands-on experience with ${topic} tools"]
+   - REQUIRED: Minimum 5 items
+
+2. Inferred Topics (array of 5-10 strings):
+   - List specific topics that will likely be discussed during the event
+   - Think about subtopics, related areas, and themes
+   - Example for topic "${topic}": ["${topic} Fundamentals", "${topic} Best Practices", "${topic} Case Studies", "${topic} Tools and Frameworks"]
+   - REQUIRED: Minimum 5 items
+
+3. Key Terms (array of 10-20 strings):
+   - Identify terms, concepts, acronyms, or jargon that attendees might encounter
+   - These should be domain-specific terms related to "${topic}"
+   - Think about technical terms, industry jargon, acronyms, and key concepts
+   - Example: Extract terms from the topic itself, related technologies, methodologies
+   - REQUIRED: Minimum 10 items
+
+4. Research Plan (object with queries array):
+   - queries: Array of 5-12 search query objects, each with:
+     * query: string (specific search query related to "${topic}")
+     * api: "exa" or "wikipedia"
+     * priority: number (1-10, lower is higher priority)
+     * estimated_cost: number (0.02-0.04 for exa, 0.001 for wikipedia)
+   - Example queries for "${topic}":
+     * {"query": "latest developments and trends in ${topic} 2024", "api": "exa", "priority": 1, "estimated_cost": 0.03}
+     * {"query": "best practices for ${topic} implementation", "api": "exa", "priority": 2, "estimated_cost": 0.03}
+     * {"query": "${topic} industry standards and guidelines", "api": "exa", "priority": 3, "estimated_cost": 0.03}
+   - total_searches: number (must match queries array length)
+   - estimated_total_cost: number (sum of all query costs)
+   - REQUIRED: Minimum 5 queries
+
+5. Glossary Plan (object with terms array):
+   - terms: Array of 10-20 term objects, each with:
+     * term: string (the actual term)
+     * is_acronym: boolean
+     * category: string (e.g., "technical", "business", "domain-specific")
+     * priority: number (1-10, lower is higher priority)
+   - estimated_count: number (must match terms array length)
+   - REQUIRED: Minimum 10 terms related to "${topic}"
+
+6. Chunks Plan (object):
+   - sources: Array of at least 3 source objects, each with:
+     * source: string (e.g., "research_results", "event_documents", "llm_generated")
+     * priority: number (1-10)
+     * estimated_chunks: number
    - target_count: number (500 for basic, 1000 for comprehensive)
-   - quality_tier: 'basic' or 'comprehensive'
-   - ranking_strategy: string describing how chunks will be ranked
-7. Cost Breakdown: Provide realistic cost estimates for:
-   - research: total research cost
-   - glossary: glossary generation cost (minimal, ~$0.01-0.02)
-   - chunks: embedding and generation cost (~$0.0001 per chunk + generation)
-   - total: sum of all costs
+   - quality_tier: "basic" or "comprehensive"
+   - ranking_strategy: string describing ranking approach
+   - REQUIRED: Minimum 3 sources
 
-Return the blueprint as a JSON object with all fields properly structured.`;
+7. Cost Breakdown (object):
+   - research: number (total cost from research plan)
+   - glossary: number (typically 0.01-0.02)
+   - chunks: number (approximately target_count * 0.0001 + 0.05)
+   - total: number (sum of all costs)
 
-  try {
-    const response = await openai.chat.completions.create({
-      model: genModel,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.7,
-    });
+VERIFY BEFORE RETURNING:
+- important_details array has at least 5 items
+- inferred_topics array has at least 5 items  
+- key_terms array has at least 10 items
+- research_plan.queries array has at least 5 items
+- glossary_plan.terms array has at least 10 items
+- chunks_plan.sources array has at least 3 items
+- All arrays are non-empty
 
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error('Empty response from LLM');
+Return the blueprint as a JSON object with all fields properly structured and populated.`;
+
+  // Retry logic with validation
+  const maxRetries = 2; // 3 attempts total (initial + 2 retries)
+  let attempt = 0;
+  let parsed: LLMBlueprintResponse | null = null;
+  let lastError: Error | null = null;
+
+  while (attempt <= maxRetries) {
+    try {
+      const isRetry = attempt > 0;
+      const currentTemperature = isRetry ? 0.5 : 0.7; // Lower temperature on retries
+      
+      // Enhance prompt on retries with more explicit requirements
+      const currentUserPrompt = isRetry
+        ? `${userPrompt}
+
+IMPORTANT: This is a retry attempt. The previous response had empty or insufficient arrays. You MUST fill ALL arrays with actual, relevant content. Do not return empty arrays. Every array field must have the minimum required items as specified above.`
+        : userPrompt;
+
+      console.log(`[blueprint] LLM attempt ${attempt + 1}/${maxRetries + 1} for topic "${topic}"${isRetry ? ' (retry with lower temperature)' : ''}`);
+
+      const response = await openai.chat.completions.create({
+        model: genModel,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: currentUserPrompt },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: currentTemperature,
+      });
+
+      const content = response.choices[0]?.message?.content;
+      if (!content) {
+        throw new Error('Empty response from LLM');
+      }
+
+      parsed = JSON.parse(content) as LLMBlueprintResponse;
+
+      // Validate array lengths
+      const importantDetailsCount = Array.isArray(parsed.important_details) ? parsed.important_details.length : 0;
+      const inferredTopicsCount = Array.isArray(parsed.inferred_topics) ? parsed.inferred_topics.length : 0;
+      const keyTermsCount = Array.isArray(parsed.key_terms) ? parsed.key_terms.length : 0;
+      const researchQueriesCount = Array.isArray(parsed.research_plan?.queries) ? parsed.research_plan.queries.length : 0;
+      const glossaryTermsCount = Array.isArray(parsed.glossary_plan?.terms) ? parsed.glossary_plan.terms.length : 0;
+      const chunksSourcesCount = Array.isArray(parsed.chunks_plan?.sources) ? parsed.chunks_plan.sources.length : 0;
+
+      console.log(`[blueprint] LLM response validation - attempt ${attempt + 1}:`, {
+        important_details: importantDetailsCount,
+        inferred_topics: inferredTopicsCount,
+        key_terms: keyTermsCount,
+        research_queries: researchQueriesCount,
+        glossary_terms: glossaryTermsCount,
+        chunks_sources: chunksSourcesCount,
+      });
+
+      // Check if validation passes
+      const validationPassed = 
+        importantDetailsCount >= 5 &&
+        inferredTopicsCount >= 5 &&
+        keyTermsCount >= 10 &&
+        researchQueriesCount >= 5 &&
+        glossaryTermsCount >= 10 &&
+        chunksSourcesCount >= 3;
+
+      if (validationPassed) {
+        console.log(`[blueprint] Validation passed on attempt ${attempt + 1}`);
+        break; // Success, exit retry loop
+      } else {
+        // Validation failed, log what's missing
+        const missing: string[] = [];
+        if (importantDetailsCount < 5) missing.push(`important_details (${importantDetailsCount}/5)`);
+        if (inferredTopicsCount < 5) missing.push(`inferred_topics (${inferredTopicsCount}/5)`);
+        if (keyTermsCount < 10) missing.push(`key_terms (${keyTermsCount}/10)`);
+        if (researchQueriesCount < 5) missing.push(`research_queries (${researchQueriesCount}/5)`);
+        if (glossaryTermsCount < 10) missing.push(`glossary_terms (${glossaryTermsCount}/10)`);
+        if (chunksSourcesCount < 3) missing.push(`chunks_sources (${chunksSourcesCount}/3)`);
+        
+        console.warn(`[blueprint] Validation failed on attempt ${attempt + 1}. Missing: ${missing.join(', ')}`);
+        
+        if (attempt < maxRetries) {
+          attempt++;
+          continue; // Retry
+        } else {
+          // All retries exhausted, use parsed but log critical error
+          console.error(`[blueprint] All retries exhausted. Using response with insufficient data: ${missing.join(', ')}`);
+          break;
+        }
+      }
+    } catch (error: any) {
+      lastError = error;
+      console.error(`[blueprint] Error on attempt ${attempt + 1}: ${error.message}`);
+      
+      if (attempt < maxRetries) {
+        attempt++;
+        continue; // Retry
+      } else {
+        // All retries exhausted, rethrow
+        throw new Error(`Failed to generate blueprint after ${maxRetries + 1} attempts: ${error.message}`);
+      }
     }
+  }
 
-    const parsed = JSON.parse(content) as LLMBlueprintResponse;
+  if (!parsed) {
+    throw new Error(`Failed to parse LLM response: ${lastError?.message || 'Unknown error'}`);
+  }
 
-    // Validate and normalize the blueprint
-    const blueprint: Blueprint = {
-      important_details: parsed.important_details || [],
-      inferred_topics: parsed.inferred_topics || [],
-      key_terms: parsed.key_terms || [],
-      research_plan: parsed.research_plan || {
-        queries: [],
-        total_searches: 0,
-        estimated_total_cost: 0,
-      },
-      glossary_plan: parsed.glossary_plan || {
-        terms: [],
-        estimated_count: 0,
-      },
-      chunks_plan: parsed.chunks_plan || {
-        sources: [],
-        target_count: 500,
-        quality_tier: 'basic',
-        ranking_strategy: 'relevance',
-      },
-      cost_breakdown: parsed.cost_breakdown || {
-        research: 0,
-        glossary: 0,
-        chunks: 0,
-        total: 0,
-      },
-    };
+  // Validate and normalize the blueprint
+  const blueprint: Blueprint = {
+    important_details: (Array.isArray(parsed.important_details) && parsed.important_details.length >= 5)
+      ? parsed.important_details.filter((item: any) => item && typeof item === 'string' && item.trim().length > 0)
+      : (parsed.important_details || []).length > 0
+        ? parsed.important_details
+        : [`Event focuses on ${topic} - content generation failed, please regenerate blueprint`],
+    
+    inferred_topics: (Array.isArray(parsed.inferred_topics) && parsed.inferred_topics.length >= 5)
+      ? parsed.inferred_topics.filter((item: any) => item && typeof item === 'string' && item.trim().length > 0)
+      : (parsed.inferred_topics || []).length > 0
+        ? parsed.inferred_topics
+        : [`${topic} Fundamentals`, `${topic} Best Practices`],
+    
+    key_terms: (Array.isArray(parsed.key_terms) && parsed.key_terms.length >= 10)
+      ? parsed.key_terms.filter((item: any) => item && typeof item === 'string' && item.trim().length > 0)
+      : (parsed.key_terms || []).length > 0
+        ? parsed.key_terms
+        : [topic],
+    
+    research_plan: parsed.research_plan || {
+      queries: [],
+      total_searches: 0,
+      estimated_total_cost: 0,
+    },
+    
+    glossary_plan: parsed.glossary_plan || {
+      terms: [],
+      estimated_count: 0,
+    },
+    
+    chunks_plan: parsed.chunks_plan || {
+      sources: [],
+      target_count: 500,
+      quality_tier: 'basic',
+      ranking_strategy: 'relevance',
+    },
+    
+    cost_breakdown: parsed.cost_breakdown || {
+      research: 0,
+      glossary: 0,
+      chunks: 0,
+      total: 0,
+    },
+  };
+
+  // Apply minimal fallbacks only if arrays are still empty after all retries
+  if (blueprint.research_plan.queries.length === 0) {
+    blueprint.research_plan.queries = [{
+      query: `latest developments and trends in ${topic} 2024`,
+      api: 'exa' as const,
+      priority: 1,
+      estimated_cost: 0.03,
+    }];
+    blueprint.research_plan.total_searches = 1;
+    blueprint.research_plan.estimated_total_cost = 0.03;
+    console.error(`[blueprint] CRITICAL: Research plan queries empty after all retries, using minimal fallback`);
+  }
+
+  if (blueprint.glossary_plan.terms.length === 0) {
+    blueprint.glossary_plan.terms = [{
+      term: topic,
+      is_acronym: false,
+      category: 'domain-specific',
+      priority: 1,
+    }];
+    blueprint.glossary_plan.estimated_count = 1;
+    console.error(`[blueprint] CRITICAL: Glossary plan terms empty after all retries, using minimal fallback`);
+  }
+
+  if (blueprint.chunks_plan.sources.length === 0) {
+    blueprint.chunks_plan.sources = [{
+      source: 'llm_generated',
+      priority: 1,
+      estimated_chunks: blueprint.chunks_plan.target_count || 500,
+    }];
+    console.error(`[blueprint] CRITICAL: Chunks plan sources empty after all retries, using minimal fallback`);
+  }
 
     // Ensure quality_tier is valid
     if (blueprint.chunks_plan.quality_tier !== 'basic' && blueprint.chunks_plan.quality_tier !== 'comprehensive') {
@@ -457,11 +639,7 @@ Return the blueprint as a JSON object with all fields properly structured.`;
         blueprint.cost_breakdown.chunks;
     }
 
-    console.log(`[blueprint] LLM generated blueprint with ${blueprint.research_plan.queries.length} research queries, ${blueprint.glossary_plan.terms.length} glossary terms, target ${blueprint.chunks_plan.target_count} chunks`);
+    console.log(`[blueprint] LLM generated blueprint with ${blueprint.important_details.length} important details, ${blueprint.inferred_topics.length} inferred topics, ${blueprint.key_terms.length} key terms, ${blueprint.research_plan.queries.length} research queries, ${blueprint.glossary_plan.terms.length} glossary terms, target ${blueprint.chunks_plan.target_count} chunks`);
     
     return blueprint;
-  } catch (error: any) {
-    console.error(`[blueprint] Error generating blueprint with LLM: ${error.message}`);
-    throw new Error(`Failed to generate blueprint: ${error.message}`);
-  }
 }
