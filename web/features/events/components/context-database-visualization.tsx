@@ -28,9 +28,10 @@ interface ContextStats {
 interface ContextDatabaseVisualizationProps {
   eventId: string;
   agentStatus: string | null;
+  embedded?: boolean; // If true, removes outer wrapper styling for embedding
 }
 
-export function ContextDatabaseVisualization({ eventId, agentStatus }: ContextDatabaseVisualizationProps) {
+export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = false }: ContextDatabaseVisualizationProps) {
   const [contextItems, setContextItems] = useState<ContextItem[]>([]);
   const [stats, setStats] = useState<ContextStats | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -210,11 +211,11 @@ export function ContextDatabaseVisualization({ eventId, agentStatus }: ContextDa
 
   return (
     <div style={{
-      background: '#ffffff',
-      border: '1px solid #e2e8f0',
-      borderRadius: '12px',
-      padding: '24px',
-      marginBottom: '24px',
+      background: embedded ? 'transparent' : '#ffffff',
+      border: embedded ? 'none' : '1px solid #e2e8f0',
+      borderRadius: embedded ? '0' : '12px',
+      padding: embedded ? '0' : '24px',
+      marginBottom: embedded ? '0' : '24px',
     }}>
       {/* Header */}
       <div style={{

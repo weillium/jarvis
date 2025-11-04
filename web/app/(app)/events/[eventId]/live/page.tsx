@@ -1,10 +1,6 @@
 import { getEventById } from '@/server/actions/event-actions';
-import { getAgentByEventId } from '@/server/actions/agent-actions';
 import { EventDetail } from '@/features/events/components/event-detail';
-import { AgentPlaceholder } from '@/features/events/components/agent-placeholder';
-import { ContextGenerationPanel } from '@/features/context/components/context-generation-panel';
-import { ContextDatabaseVisualization } from '@/features/events/components/context-database-visualization';
-import { GlossaryVisualization } from '@/features/context/components/glossary-visualization';
+import { AgentInfo } from '@/features/events/components/agent-info';
 import { LiveCards } from '@/features/cards/components/live-cards';
 import { LiveFacts } from '@/features/facts/components/live-facts';
 import Link from 'next/link';
@@ -17,7 +13,6 @@ export default async function LiveEventPage({ params }: Props) {
   const { eventId } = await params;
   
   const { data: event, error } = await getEventById(eventId);
-  const { data: agent } = await getAgentByEventId(eventId);
 
   if (error || !event) {
     return (
@@ -104,20 +99,9 @@ export default async function LiveEventPage({ params }: Props) {
 
       <EventDetail event={event} />
       
-      <AgentPlaceholder agent={agent} eventId={eventId} />
-      
-      {/* Context Generation Panel */}
-      <ContextGenerationPanel eventId={eventId} agentStatus={agent?.status || null} />
-      
-      {/* Context Database Visualization */}
-      <ContextDatabaseVisualization eventId={eventId} agentStatus={agent?.status || null} />
-      
-      {/* Glossary Visualization - Show when context is complete */}
-      {agent?.status === 'context_complete' && (
-        <div style={{ marginTop: '24px', marginBottom: '24px' }}>
-          <GlossaryVisualization eventId={eventId} />
-        </div>
-      )}
+      {/* Agent Information - Permanent operational component with embedded context management */}
+      {/* Includes: Agent details, Context generation, Context database, Glossary */}
+      <AgentInfo eventId={eventId} />
       
       {/* Live Cards Section */}
       <div style={{ marginTop: '32px', marginBottom: '32px' }}>

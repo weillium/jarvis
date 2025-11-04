@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 
 interface GlossaryVisualizationProps {
   eventId: string;
+  embedded?: boolean; // If true, removes outer wrapper styling for embedding
 }
 
 interface GlossaryTerm {
@@ -27,7 +28,7 @@ interface GlossaryData {
   grouped_by_category: Record<string, GlossaryTerm[]>;
 }
 
-export function GlossaryVisualization({ eventId }: GlossaryVisualizationProps) {
+export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVisualizationProps) {
   const [glossaryData, setGlossaryData] = useState<GlossaryData | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -112,10 +113,10 @@ export function GlossaryVisualization({ eventId }: GlossaryVisualizationProps) {
 
   return (
     <div style={{
-      background: '#ffffff',
-      border: '1px solid #e2e8f0',
-      borderRadius: '12px',
-      padding: '24px',
+      background: embedded ? 'transparent' : '#ffffff',
+      border: embedded ? 'none' : '1px solid #e2e8f0',
+      borderRadius: embedded ? '0' : '12px',
+      padding: embedded ? '0' : '24px',
     }}>
       {/* Header */}
       <div style={{
