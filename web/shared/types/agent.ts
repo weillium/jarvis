@@ -9,7 +9,7 @@ export type ContextGenerationStatus =
   | 'building_chunks'         // Constructing vector database chunks
   | 'context_complete';       // Context generation complete
 
-// Legacy statuses (backward compatibility)
+// Legacy statuses (backward compatibility - 'ready' is deprecated, use 'context_complete' instead)
 export type LegacyAgentStatus = 'prepping' | 'ready' | 'running' | 'ended' | 'error';
 
 // Combined agent status type

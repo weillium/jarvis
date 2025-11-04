@@ -241,7 +241,7 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
   };
 
   const isPrepping = agentStatus === 'prepping';
-  const isReady = agentStatus === 'ready';
+  const isReady = agentStatus === 'context_complete'; // Legacy 'ready' status replaced with 'context_complete'
   const isRunning = agentStatus === 'running';
 
   // Filter context items

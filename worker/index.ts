@@ -253,12 +253,12 @@ async function tickRun() {
   if (!live) return;
 
   for (const ev of live) {
-    // Check if we have a ready agent for this event (supports both legacy 'ready' and new 'context_complete' statuses)
+    // Check if we have a ready agent for this event (must have 'context_complete' status)
     const { data: readyAgents, error: agentError } = await supabase
       .from('agents')
       .select('id,event_id,status')
       .eq('event_id', ev.id)
-      .in('status', ['ready', 'context_complete'])
+      .eq('status', 'context_complete')
       .limit(1);
     
     if (agentError) {

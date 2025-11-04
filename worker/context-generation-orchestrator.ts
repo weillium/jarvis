@@ -210,7 +210,7 @@ export async function executeContextGeneration(
     await updateAgentStatus(supabase, agentId, 'building_chunks');
 
     // 10. Build chunks (fetches research from research_results table)
-    const chunksCount = await buildContextChunks(
+    const chunksResult = await buildContextChunks(
       eventId,
       blueprintId,
       chunksCycleId,
@@ -966,12 +966,12 @@ async function executeWikipediaSearch(
     let skippedArticles = 0;
     
     for (const result of searchResults) {
+      const articleStartTime = Date.now();
       try {
         // Use Wikipedia REST API for page summaries (simpler and faster)
         const pageTitle = encodeURIComponent(result.title.replace(/ /g, '_'));
         const summaryUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${pageTitle}`;
         
-        const articleStartTime = Date.now();
         const summaryResponse = await fetch(summaryUrl);
         
         if (!summaryResponse.ok) {
@@ -1185,9 +1185,9 @@ async function updateBlueprintStatus(
   status: string,
   errorMessage?: string
 ): Promise<void> {
-  // Only allow: 'generating', 'ready', 'approved', 'error'
+  // Only allow: 'generating', 'approved', 'error'
   // 'executing' and 'completed' removed - tracked via agent status and generation_cycles
-  const allowedStatuses = ['generating', 'ready', 'approved', 'error'];
+  const allowedStatuses = ['generating', 'approved', 'error'];
   if (!allowedStatuses.includes(status)) {
     console.warn(`[context-gen] Warning: Blueprint status '${status}' not allowed, skipping update`);
     return;
@@ -1453,9 +1453,9 @@ export async function regenerateGlossaryStage(
     }
   );
 
-  console.log(`[context-gen] Glossary regeneration completed: ${glossaryCount} terms`);
+  console.log(`[context-gen] Glossary regeneration completed: ${glossaryCount.termCount} terms`);
 
-  return glossaryCount;
+  return glossaryCount.termCount;
 }
 
 /**

@@ -8,7 +8,6 @@ import OpenAI from 'openai';
 import { RingBuffer, TranscriptChunk } from './ring-buffer';
 import { FactsStore, Fact } from './facts-store';
 import { RealtimeSession, AgentType } from './realtime-session';
-import { buildTopicContext } from './context-builder';
 import { getPolicy } from './policies';
 import {
   createCardGenerationUserPrompt,
@@ -86,7 +85,7 @@ export interface AgentSessionStatus {
 export interface EventRuntime {
   eventId: string;
   agentId: string;
-  status: 'prepping' | 'ready' | 'running' | 'ended' | 'error';
+  status: 'prepping' | 'context_complete' | 'running' | 'ended' | 'error';
   
   // In-memory state
   ringBuffer: RingBuffer;
@@ -925,8 +924,38 @@ export class Orchestrator {
       runtime = await this.createRuntime(eventId, agentId);
     }
 
-    if (runtime.status !== 'ready') {
+    // If already running, check if sessions exist and are active
+    if (runtime.status === 'running') {
+      if (runtime.cardsSession && runtime.factsSession) {
+        console.log(`[orchestrator] Event ${eventId} already running with active sessions`);
+        return;
+      }
+      // If status is running but sessions don't exist, reset status and continue
+      console.log(`[orchestrator] Event ${eventId} marked as running but sessions missing, recreating...`);
+      runtime.status = 'context_complete';
+    }
+
+    if (runtime.status !== 'context_complete') {
       console.warn(`[orchestrator] Event ${eventId} not ready (status: ${runtime.status})`);
+      return;
+    }
+
+    // Check if sessions already exist in database
+    const { data: existingSessions } = await this.config.supabase
+      .from('agent_sessions')
+      .select('id, agent_type, status')
+      .eq('event_id', eventId)
+      .eq('agent_id', agentId)
+      .in('status', ['starting', 'active']);
+
+    if (existingSessions && existingSessions.length > 0) {
+      console.log(`[orchestrator] Event ${eventId} already has ${existingSessions.length} active session(s), skipping creation`);
+      // Update runtime status to running if sessions exist
+      runtime.status = 'running';
+      await this.config.supabase
+        .from('agents')
+        .update({ status: 'running' })
+        .eq('id', agentId);
       return;
     }
 
@@ -970,7 +999,8 @@ export class Orchestrator {
     });
 
     // Insert sessions with 'starting' status (not 'active')
-    await this.config.supabase.from('agent_sessions').insert([
+    // Use upsert to handle case where sessions might already exist
+    const { error: sessionsError } = await this.config.supabase.from('agent_sessions').upsert([
       {
         event_id: eventId,
         agent_id: agentId,
@@ -985,7 +1015,14 @@ export class Orchestrator {
         agent_type: 'facts',
         status: 'starting',
       },
-    ]);
+    ], {
+      onConflict: 'event_id,agent_type',
+    });
+
+    if (sessionsError) {
+      console.error(`[orchestrator] Failed to create session records: ${sessionsError.message}`);
+      // Continue anyway - sessions might already exist
+    }
 
     // Connect sessions (will update status to 'active' via callback)
     try {
@@ -1147,7 +1184,7 @@ export class Orchestrator {
     const runtime: EventRuntime = {
       eventId,
       agentId,
-      status: 'ready',
+      status: 'context_complete',
       ringBuffer: new RingBuffer(1000, 5 * 60 * 1000), // 5 minutes
       factsStore: new FactsStore(50), // Capped at 50 items with LRU eviction
       glossaryCache,
@@ -1269,79 +1306,6 @@ export class Orchestrator {
     );
   }
 
-  /**
-   * Prepare event (build context)
-   */
-  async prepareEvent(eventId: string, agentId: string): Promise<void> {
-    console.log(`[orchestrator] Preparing event ${eventId}`);
-
-    // Check if context already exists - prevent duplicate creation
-    const { data: existingContext, error: contextError } = await this.config.supabase
-      .from('context_items')
-      .select('id')
-      .eq('event_id', eventId)
-      .limit(1);
-
-    if (contextError) {
-      console.error(`[orchestrator] Error checking existing context: ${contextError.message}`);
-      throw new Error(`Failed to check existing context: ${contextError.message}`);
-    }
-
-    if (existingContext && existingContext.length > 0) {
-      console.log(`[orchestrator] Context already exists for event ${eventId}, skipping build`);
-      // Mark agent as ready and create runtime
-      await this.config.supabase
-        .from('agents')
-        .update({ status: 'ready' })
-        .eq('id', agentId);
-      await this.createRuntime(eventId, agentId);
-      console.log(`[orchestrator] Event ${eventId} already prepared, marked as ready`);
-      return;
-    }
-
-    // Get event details
-    const { data: event } = await this.config.supabase
-      .from('events')
-      .select('id, title, topic')
-      .eq('id', eventId)
-      .single();
-
-    if (!event) {
-      throw new Error(`Event ${eventId} not found`);
-    }
-
-    // Mark agent as 'preparing' immediately to prevent duplicate picks (if status column supports it)
-    // Note: This is a safety measure - the main protection is in tickPrep()
-    
-    // Build topic-specific context using standard LLM
-    await buildTopicContext(
-      eventId,
-      event.title,
-      event.topic,
-      {
-        supabase: this.config.supabase,
-        openai: this.config.openai,
-        embedModel: this.config.embedModel,
-        genModel: this.config.genModel,
-      }
-    );
-
-    // Mark agent as ready
-    const { error: updateError } = await this.config.supabase
-      .from('agents')
-      .update({ status: 'ready' })
-      .eq('id', agentId);
-
-    if (updateError) {
-      console.error(`[orchestrator] Error updating agent status: ${updateError.message}`);
-      throw new Error(`Failed to update agent status: ${updateError.message}`);
-    }
-
-    // Create runtime
-    await this.createRuntime(eventId, agentId);
-
-    console.log(`[orchestrator] Event ${eventId} prepared`);
-  }
 
   /**
    * Helper: Embed text

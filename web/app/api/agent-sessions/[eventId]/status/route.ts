@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { connectionManager } from '../../stream/connection-manager';
+import { connectionManager } from '../../../stream/connection-manager';
 
 /**
  * Worker-to-SSE Push Endpoint

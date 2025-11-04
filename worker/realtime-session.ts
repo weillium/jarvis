@@ -4,7 +4,7 @@
  */
 
 import OpenAI from 'openai';
-import { OpenAIRealtimeWebSocket } from 'openai/realtime';
+import { OpenAIRealtimeWebSocket } from 'openai/realtime/websocket';
 import type {
   RealtimeClientEvent,
   RealtimeServerEvent,
@@ -435,12 +435,13 @@ export class RealtimeSession {
     // Handle response completion (fallback if text.done doesn't fire)
     this.session.on('response.done', async (event: ResponseDoneEvent) => {
       try {
-        // Extract text from response items
-        const textItem = event.response.output_items?.find(
+        // Extract text from response output items
+        const textItem = event.response.output?.find(
           (item: any) => item.type === 'message' && item.role === 'assistant'
-        );
+        ) as any;
 
-        if (textItem?.content) {
+        // Check if it's a message item with content
+        if (textItem && textItem.type === 'message' && textItem.content) {
           const textContent = textItem.content.find(
             (c: any) => c.type === 'text'
           );
@@ -476,22 +477,17 @@ export class RealtimeSession {
       this.emit('error', error);
     });
 
-    // Handle session end
-    this.session.on('session.ended', () => {
-      const message = `Session ended (${this.config.agentType})`;
-      console.log(`[realtime] ${message}`);
-      this.onLog?.('log', message);
-      this.isActive = false;
-      this.onStatusChange?.('closed');
-      this.updateDatabaseStatus('closed');
-      this.emit('close');
-    });
-
     // Generic event handler for debugging
     this.session.on('event', (event: RealtimeServerEvent) => {
       // Log all events for debugging (can be removed in production)
       if (process.env.DEBUG_REALTIME) {
         console.log(`[realtime] Event: ${event.type}`, event);
+      }
+      
+      // Handle session updates (session end is handled via close() method)
+      if (event.type === 'session.updated') {
+        const message = `Session updated (${this.config.agentType})`;
+        console.log(`[realtime] ${message}`);
       }
     });
   }

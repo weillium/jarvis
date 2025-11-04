@@ -17,6 +17,8 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
   const [totalCost, setTotalCost] = useState<number | null>(null);
   const [costLoading, setCostLoading] = useState(false);
   const [expandedLogs, setExpandedLogs] = useState<{ cards: boolean; facts: boolean }>({ cards: false, facts: false });
+  const [isStartingSessions, setIsStartingSessions] = useState(false);
+  const [startSessionsError, setStartSessionsError] = useState<string | null>(null);
 
   // Fetch total cost from all generation cycles
   useEffect(() => {
@@ -144,6 +146,35 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleString();
+  };
+
+  const handleStartSessions = async () => {
+    setIsStartingSessions(true);
+    setStartSessionsError(null);
+
+    try {
+      const res = await fetch(`/api/agent-sessions/${eventId}/start`, {
+        method: 'POST',
+      });
+
+      const data = await res.json();
+
+      if (!data.ok) {
+        throw new Error(data.error || 'Failed to start sessions');
+      }
+
+      // Refresh agent info to reflect status change
+      await refetch();
+      
+      // Sessions will appear once the worker picks up the event (usually within 5-10 seconds)
+      // The SSE stream will update automatically via useAgentSessions hook
+      console.log('[AgentOverview] Event marked as live, waiting for worker to start sessions...');
+    } catch (err: any) {
+      console.error('Failed to start sessions:', err);
+      setStartSessionsError(err.message || 'Failed to start sessions');
+    } finally {
+      setIsStartingSessions(false);
+    }
   };
 
   const getSessionStatusColor = (status: string): string => {
@@ -685,8 +716,8 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
       )}
 
       {/* Agent Session Status */}
-      {/* Show section if agent is running, ready, or if we have session data */}
-      {(agent?.status === 'running' || agent?.status === 'ready' || cardsStatus || factsStatus || sessionsLoading) && (
+      {/* Always show section when agent exists - will display appropriate message based on status */}
+      {agent && (
         <div style={{
           marginBottom: '24px',
           paddingBottom: '24px',
@@ -747,13 +778,68 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
               <div style={{
                 fontSize: '12px',
                 color: '#94a3b8',
+                marginBottom: '16px',
               }}>
-                {agent?.status === 'ready' 
+                {agent?.status === 'ready' || agent?.status === 'context_complete'
                   ? 'Sessions will be created when the event is marked as live.'
                   : agent?.status === 'running'
                   ? 'Waiting for sessions to be created...'
                   : 'Agent sessions are only available when the event is running.'}
               </div>
+              
+              {/* Manual Start Button for Testing */}
+              {(agent?.status === 'ready' || agent?.status === 'context_complete') && (
+                <div>
+                  {startSessionsError && (
+                    <div style={{
+                      padding: '8px 12px',
+                      marginBottom: '12px',
+                      background: '#fef2f2',
+                      borderRadius: '6px',
+                      border: '1px solid #fecaca',
+                      fontSize: '12px',
+                      color: '#dc2626',
+                    }}>
+                      {startSessionsError}
+                    </div>
+                  )}
+                  <button
+                    onClick={handleStartSessions}
+                    disabled={isStartingSessions}
+                    style={{
+                      padding: '10px 20px',
+                      background: isStartingSessions ? '#cbd5e1' : '#3b82f6',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      cursor: isStartingSessions ? 'not-allowed' : 'pointer',
+                      transition: 'background 0.2s',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isStartingSessions) {
+                        e.currentTarget.style.background = '#2563eb';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isStartingSessions) {
+                        e.currentTarget.style.background = '#3b82f6';
+                      }
+                    }}
+                  >
+                    {isStartingSessions ? 'Starting Sessions...' : '🚀 Start Sessions (Testing)'}
+                  </button>
+                  <div style={{
+                    fontSize: '11px',
+                    color: '#94a3b8',
+                    marginTop: '8px',
+                    fontStyle: 'italic',
+                  }}>
+                    Manual trigger for testing - marks event as live
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
