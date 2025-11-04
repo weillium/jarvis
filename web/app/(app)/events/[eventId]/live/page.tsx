@@ -2,6 +2,7 @@ import { getEventById } from '@/server/actions/event-actions';
 import { getAgentByEventId } from '@/server/actions/agent-actions';
 import { EventDetail } from '@/features/events/components/event-detail';
 import { AgentPlaceholder } from '@/features/events/components/agent-placeholder';
+import { ContextDatabaseVisualization } from '@/features/events/components/context-database-visualization';
 import { LiveCards } from '@/features/cards/components/live-cards';
 import { LiveFacts } from '@/features/facts/components/live-facts';
 import Link from 'next/link';
@@ -101,7 +102,10 @@ export default async function LiveEventPage({ params }: Props) {
 
       <EventDetail event={event} />
       
-      <AgentPlaceholder agent={agent} />
+      <AgentPlaceholder agent={agent} eventId={eventId} />
+      
+      {/* Context Database Visualization */}
+      <ContextDatabaseVisualization eventId={eventId} agentStatus={agent?.status || null} />
       
       {/* Live Cards Section */}
       <div style={{ marginTop: '32px', marginBottom: '32px' }}>

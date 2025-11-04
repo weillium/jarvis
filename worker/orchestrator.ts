@@ -630,6 +630,30 @@ export class Orchestrator {
   async prepareEvent(eventId: string, agentId: string): Promise<void> {
     console.log(`[orchestrator] Preparing event ${eventId}`);
 
+    // Check if context already exists - prevent duplicate creation
+    const { data: existingContext, error: contextError } = await this.config.supabase
+      .from('context_items')
+      .select('id')
+      .eq('event_id', eventId)
+      .limit(1);
+
+    if (contextError) {
+      console.error(`[orchestrator] Error checking existing context: ${contextError.message}`);
+      throw new Error(`Failed to check existing context: ${contextError.message}`);
+    }
+
+    if (existingContext && existingContext.length > 0) {
+      console.log(`[orchestrator] Context already exists for event ${eventId}, skipping build`);
+      // Mark agent as ready and create runtime
+      await this.config.supabase
+        .from('agents')
+        .update({ status: 'ready' })
+        .eq('id', agentId);
+      await this.createRuntime(eventId, agentId);
+      console.log(`[orchestrator] Event ${eventId} already prepared, marked as ready`);
+      return;
+    }
+
     // Get event details
     const { data: event } = await this.config.supabase
       .from('events')
@@ -641,6 +665,9 @@ export class Orchestrator {
       throw new Error(`Event ${eventId} not found`);
     }
 
+    // Mark agent as 'preparing' immediately to prevent duplicate picks (if status column supports it)
+    // Note: This is a safety measure - the main protection is in tickPrep()
+    
     // Build topic-specific context using standard LLM
     await buildTopicContext(
       eventId,
@@ -655,10 +682,15 @@ export class Orchestrator {
     );
 
     // Mark agent as ready
-    await this.config.supabase
+    const { error: updateError } = await this.config.supabase
       .from('agents')
       .update({ status: 'ready' })
       .eq('id', agentId);
+
+    if (updateError) {
+      console.error(`[orchestrator] Error updating agent status: ${updateError.message}`);
+      throw new Error(`Failed to update agent status: ${updateError.message}`);
+    }
 
     // Create runtime
     await this.createRuntime(eventId, agentId);

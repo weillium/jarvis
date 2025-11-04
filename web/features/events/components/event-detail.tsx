@@ -1,13 +1,23 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { EventWithStatus } from '@/shared/types/event';
 import { format, parseISO } from 'date-fns';
+import { EditEventModal } from './edit-event-modal';
 
 interface EventDetailProps {
   event: EventWithStatus;
+  onEventUpdate?: (updatedEvent: EventWithStatus) => void;
 }
 
-export function EventDetail({ event }: EventDetailProps) {
+export function EventDetail({ event, onEventUpdate }: EventDetailProps) {
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [currentEvent, setCurrentEvent] = useState(event);
+
+  // Update local state when event prop changes
+  useEffect(() => {
+    setCurrentEvent(event);
+  }, [event]);
   const formatDateTime = (dateString: string | null): string => {
     if (!dateString) return 'Not scheduled';
     try {
@@ -80,7 +90,7 @@ export function EventDetail({ event }: EventDetailProps) {
               color: '#0f172a',
               margin: 0,
             }}>
-              {event.title}
+              {currentEvent.title}
             </h1>
             <span
               style={{
@@ -88,17 +98,41 @@ export function EventDetail({ event }: EventDetailProps) {
                 borderRadius: '16px',
                 fontSize: '13px',
                 fontWeight: '600',
-                backgroundColor: `${getStatusColor(event.status)}20`,
-                color: getStatusColor(event.status),
+                backgroundColor: `${getStatusColor(currentEvent.status)}20`,
+                color: getStatusColor(currentEvent.status),
               }}
             >
-              {getStatusLabel(event.status)}
+              {getStatusLabel(currentEvent.status)}
             </span>
           </div>
         </div>
+        <button
+          onClick={() => setIsEditModalOpen(true)}
+          style={{
+            padding: '8px 16px',
+            border: '1px solid #e2e8f0',
+            borderRadius: '6px',
+            fontSize: '14px',
+            fontWeight: '500',
+            color: '#374151',
+            background: '#ffffff',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#f8fafc';
+            e.currentTarget.style.borderColor = '#cbd5e1';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = '#ffffff';
+            e.currentTarget.style.borderColor = '#e2e8f0';
+          }}
+        >
+          Edit
+        </button>
       </div>
 
-      {event.topic && (
+      {currentEvent.topic && (
         <div style={{
           marginBottom: '24px',
           padding: '16px',
@@ -124,7 +158,7 @@ export function EventDetail({ event }: EventDetailProps) {
               whiteSpace: 'pre-wrap',
             }}
           >
-            {event.topic}
+            {currentEvent.topic}
           </div>
         </div>
       )}
@@ -150,15 +184,15 @@ export function EventDetail({ event }: EventDetailProps) {
             fontWeight: '500',
             color: '#0f172a',
           }}>
-            {formatDateTime(event.start_time)}
+            {formatDateTime(currentEvent.start_time)}
           </div>
-          {event.start_time && (
+          {currentEvent.start_time && (
             <div style={{
               fontSize: '13px',
               color: '#64748b',
               marginTop: '4px',
             }}>
-              {formatDate(event.start_time)}
+              {formatDate(currentEvent.start_time)}
             </div>
           )}
         </div>
@@ -179,15 +213,15 @@ export function EventDetail({ event }: EventDetailProps) {
             fontWeight: '500',
             color: '#0f172a',
           }}>
-            {formatDateTime(event.end_time)}
+            {formatDateTime(currentEvent.end_time)}
           </div>
-          {event.end_time && (
+          {currentEvent.end_time && (
             <div style={{
               fontSize: '13px',
               color: '#64748b',
               marginTop: '4px',
             }}>
-              {formatDate(event.end_time)}
+              {formatDate(currentEvent.end_time)}
             </div>
           )}
         </div>
@@ -208,17 +242,29 @@ export function EventDetail({ event }: EventDetailProps) {
             fontWeight: '500',
             color: '#0f172a',
           }}>
-            {formatDate(event.created_at)}
+            {formatDate(currentEvent.created_at)}
           </div>
           <div style={{
             fontSize: '13px',
             color: '#64748b',
             marginTop: '4px',
           }}>
-            {formatDateTime(event.created_at)}
+            {formatDateTime(currentEvent.created_at)}
           </div>
         </div>
       </div>
+
+      <EditEventModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        event={currentEvent}
+        onSuccess={(updatedEvent) => {
+          setCurrentEvent(updatedEvent);
+          if (onEventUpdate) {
+            onEventUpdate(updatedEvent);
+          }
+        }}
+      />
     </div>
   );
 }

@@ -33,6 +33,9 @@ const orchestratorConfig: OrchestratorConfig = {
 
 const orchestrator = new Orchestrator(orchestratorConfig);
 
+// Track agents currently being processed to prevent duplicate processing
+const processingAgents = new Set<string>();
+
 /** ---------- prep loop (polling for agents that need prep) ---------- **/
 async function tickPrep() {
   const { data: prep, error } = await supabase
@@ -51,6 +54,34 @@ async function tickPrep() {
   }
 
   for (const ag of prep) {
+    // Skip if already processing this agent
+    if (processingAgents.has(ag.id)) {
+      log('[prep] Agent', ag.id, 'already being processed, skipping');
+      continue;
+    }
+
+    // Check if context already exists for this event (prevent duplicates)
+    const { data: existingContext, error: contextError } = await supabase
+      .from('context_items')
+      .select('id')
+      .eq('event_id', ag.event_id)
+      .limit(1);
+
+    if (contextError) {
+      log('[prep] Error checking existing context:', contextError.message);
+      continue;
+    }
+
+    // If context already exists, mark agent as ready and skip
+    if (existingContext && existingContext.length > 0) {
+      log('[prep] Context already exists for event', ag.event_id, '- marking agent as ready');
+      await supabase.from('agents').update({ status: 'ready' }).eq('id', ag.id);
+      continue;
+    }
+
+    // Mark as processing
+    processingAgents.add(ag.id);
+
     try {
       log('[prep] preparing agent', ag.id, 'event', ag.event_id);
       await orchestrator.prepareEvent(ag.event_id, ag.id);
@@ -58,6 +89,9 @@ async function tickPrep() {
     } catch (e: any) {
       log('[prep] error', e?.message || e);
       await supabase.from('agents').update({ status: 'error' }).eq('id', ag.id);
+    } finally {
+      // Always remove from processing set
+      processingAgents.delete(ag.id);
     }
   }
 }

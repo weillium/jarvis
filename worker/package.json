@@ -4,6 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "dev": "tsx index.ts",
+    "start": "tsx index.ts",
+    "check-setup": "tsx check-setup.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

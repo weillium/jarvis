@@ -93,3 +93,75 @@ export async function getEventById(eventId: string): Promise<{ data: EventWithSt
   }
 }
 
+export async function updateEvent(
+  eventId: string,
+  updates: {
+    title?: string;
+    topic?: string | null;
+    start_time?: string | null;
+    end_time?: string | null;
+  }
+): Promise<{ data: EventWithStatus | null; error: string | null }> {
+  try {
+    const supabase = await createServerClient();
+    
+    // Get current user session
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError || !session?.user) {
+      return { data: null, error: 'Not authenticated' };
+    }
+
+    // Verify user owns the event
+    const { data: eventCheck, error: eventError } = await supabase
+      .from('events')
+      .select('id')
+      .eq('id', eventId)
+      .eq('owner_uid', session.user.id)
+      .single();
+
+    if (eventError || !eventCheck) {
+      return { data: null, error: 'Event not found or access denied' };
+    }
+
+    // Build update object (only include provided fields)
+    const updateData: Record<string, any> = {};
+    if (updates.title !== undefined) {
+      updateData.title = updates.title.trim();
+    }
+    if (updates.topic !== undefined) {
+      updateData.topic = updates.topic === '' ? null : updates.topic.trim();
+    }
+    if (updates.start_time !== undefined) {
+      updateData.start_time = updates.start_time;
+    }
+    if (updates.end_time !== undefined) {
+      updateData.end_time = updates.end_time;
+    }
+
+    // Update event
+    const { data, error } = await supabase
+      .from('events')
+      .update(updateData)
+      .eq('id', eventId)
+      .select()
+      .single();
+
+    if (error) {
+      return { data: null, error: error.message };
+    }
+
+    if (!data) {
+      return { data: null, error: 'Event not found after update' };
+    }
+
+    // Map to EventWithStatus
+    const event = mapDbEventToEventWithStatus(data);
+
+    return { data: event, error: null };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return { data: null, error: errorMessage };
+  }
+}
+
