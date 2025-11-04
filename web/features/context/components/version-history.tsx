@@ -19,6 +19,21 @@ interface GenerationCycle {
   error_message: string | null;
   version: number;
   parent_cycle_id: string | null;
+  cost?: number | null;
+  cost_breakdown?: {
+    total: number;
+    currency: string;
+    breakdown: Record<string, any>;
+    pricing_version?: string;
+  } | null;
+  metadata?: {
+    cost?: {
+      total: number;
+      currency: string;
+      breakdown: Record<string, any>;
+      pricing_version?: string;
+    };
+  };
 }
 
 interface VersionData {
@@ -32,22 +47,26 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
   const [loading, setLoading] = useState(true);
   const [isExpanded, setIsExpanded] = useState(embedded); // Auto-expand when embedded
   const [filterByType, setFilterByType] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchVersionHistory = async () => {
+    setRefreshing(true);
+    try {
+      const res = await fetch(`/api/context/${eventId}/versions`);
+      const data = await res.json();
+      if (data.ok) {
+        setVersionData(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch version history:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    async function fetchVersionHistory() {
-      try {
-        const res = await fetch(`/api/context/${eventId}/versions`);
-        const data = await res.json();
-        if (data.ok) {
-          setVersionData(data);
-        }
-      } catch (err) {
-        console.error('Failed to fetch version history:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
     fetchVersionHistory();
   }, [eventId]);
 
@@ -85,6 +104,14 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
 
   const filteredCycles = versionData?.cycles.filter((cycle) => {
     if (filterByType && cycle.cycle_type !== filterByType) return false;
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const matchesQuery = cycle.cycle_type.toLowerCase().includes(query) ||
+                           (cycle.component && cycle.component.toLowerCase().includes(query)) ||
+                           (cycle.status && cycle.status.toLowerCase().includes(query)) ||
+                           (cycle.error_message && cycle.error_message.toLowerCase().includes(query));
+      if (!matchesQuery) return false;
+    }
     return true;
   }) || [];
 
@@ -163,19 +190,54 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
         </div>
       )}
 
-      {/* Filters */}
+      {/* Search and Filters */}
       {isExpanded && uniqueTypes.length > 0 && (
         <div style={{
           display: 'flex',
           gap: '12px',
           marginBottom: '12px',
           flexWrap: 'wrap',
+          alignItems: 'center',
         }}>
+          <input
+            type="text"
+            placeholder="Search cycles..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              flex: 1,
+              minWidth: '200px',
+              padding: '8px 12px',
+              border: '1px solid #e2e8f0',
+              borderRadius: '6px',
+              fontSize: '14px',
+            }}
+          />
+          <button
+            onClick={fetchVersionHistory}
+            disabled={refreshing}
+            style={{
+              padding: '8px 16px',
+              border: '1px solid #e2e8f0',
+              borderRadius: '6px',
+              fontSize: '14px',
+              fontWeight: '500',
+              background: '#ffffff',
+              color: '#374151',
+              cursor: refreshing ? 'not-allowed' : 'pointer',
+              opacity: refreshing ? 0.6 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            {refreshing ? '↻' : '↻'} {refreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
           <select
             value={filterByType || ''}
             onChange={(e) => setFilterByType(e.target.value || null)}
             style={{
-              padding: '6px 12px',
+              padding: '8px 12px',
               border: '1px solid #e2e8f0',
               borderRadius: '6px',
               fontSize: '13px',
@@ -189,11 +251,14 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
               </option>
             ))}
           </select>
-          {filterByType && (
+          {(filterByType || searchQuery) && (
             <button
-              onClick={() => setFilterByType(null)}
+              onClick={() => {
+                setFilterByType(null);
+                setSearchQuery('');
+              }}
               style={{
-                padding: '6px 12px',
+                padding: '8px 12px',
                 border: '1px solid #e2e8f0',
                 borderRadius: '6px',
                 fontSize: '13px',
@@ -202,7 +267,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                 color: '#64748b',
               }}
             >
-              Clear Filter
+              Clear Filters
             </button>
           )}
         </div>
@@ -272,17 +337,36 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                       </span>
                     )}
                   </div>
-                  <span style={{
-                    fontSize: '11px',
-                    padding: '4px 8px',
-                    background: getStatusColor(cycle.status),
-                    color: '#ffffff',
-                    borderRadius: '4px',
-                    fontWeight: '500',
-                    textTransform: 'uppercase',
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
                   }}>
-                    {cycle.status}
-                  </span>
+                    {cycle.cost !== null && cycle.cost !== undefined && (
+                      <span style={{
+                        fontSize: '12px',
+                        padding: '4px 8px',
+                        background: '#ecfdf5',
+                        color: '#065f46',
+                        borderRadius: '4px',
+                        fontWeight: '600',
+                        border: '1px solid #a7f3d0',
+                      }}>
+                        ${cycle.cost.toFixed(4)}
+                      </span>
+                    )}
+                    <span style={{
+                      fontSize: '11px',
+                      padding: '4px 8px',
+                      background: getStatusColor(cycle.status),
+                      color: '#ffffff',
+                      borderRadius: '4px',
+                      fontWeight: '500',
+                      textTransform: 'uppercase',
+                    }}>
+                      {cycle.status}
+                    </span>
+                  </div>
                 </div>
                 <div style={{
                   display: 'flex',
@@ -326,6 +410,62 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                   }}>
                     Parent cycle: {cycle.parent_cycle_id.substring(0, 8)}...
                   </div>
+                )}
+                {cycle.cost_breakdown && (
+                  <details style={{
+                    marginTop: '8px',
+                    padding: '8px',
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '4px',
+                    fontSize: '11px',
+                  }}>
+                    <summary style={{
+                      cursor: 'pointer',
+                      fontWeight: '500',
+                      color: '#374151',
+                      marginBottom: '4px',
+                    }}>
+                      Cost Breakdown
+                    </summary>
+                    <div style={{
+                      marginTop: '4px',
+                      paddingLeft: '12px',
+                      color: '#64748b',
+                    }}>
+                      <div><strong>Total:</strong> ${cycle.cost_breakdown.total.toFixed(4)} {cycle.cost_breakdown.currency}</div>
+                      {cycle.cost_breakdown.breakdown?.openai && (
+                        <div style={{ marginTop: '4px' }}>
+                          <strong>OpenAI:</strong> ${cycle.cost_breakdown.breakdown.openai.total.toFixed(4)}
+                          {cycle.cost_breakdown.breakdown.openai.chat_completions?.length > 0 && (
+                            <span> ({cycle.cost_breakdown.breakdown.openai.chat_completions.length} chat completion{cycle.cost_breakdown.breakdown.openai.chat_completions.length > 1 ? 's' : ''})</span>
+                          )}
+                          {cycle.cost_breakdown.breakdown.openai.embeddings?.length > 0 && (
+                            <span> ({cycle.cost_breakdown.breakdown.openai.embeddings.length} embedding{cycle.cost_breakdown.breakdown.openai.embeddings.length > 1 ? 's' : ''})</span>
+                          )}
+                        </div>
+                      )}
+                      {cycle.cost_breakdown.breakdown?.exa && (
+                        <div style={{ marginTop: '4px' }}>
+                          <strong>Exa:</strong> ${cycle.cost_breakdown.breakdown.exa.total.toFixed(4)}
+                          {cycle.cost_breakdown.breakdown.exa.search?.queries > 0 && (
+                            <span> ({cycle.cost_breakdown.breakdown.exa.search.queries} search{cycle.cost_breakdown.breakdown.exa.search.queries > 1 ? 'es' : ''})</span>
+                          )}
+                          {cycle.cost_breakdown.breakdown.exa.research?.queries > 0 && (
+                            <span> ({cycle.cost_breakdown.breakdown.exa.research.queries} research task{cycle.cost_breakdown.breakdown.exa.research.queries > 1 ? 's' : ''})</span>
+                          )}
+                          {cycle.cost_breakdown.breakdown.exa.answer?.queries > 0 && (
+                            <span> ({cycle.cost_breakdown.breakdown.exa.answer.queries} answer{cycle.cost_breakdown.breakdown.exa.answer.queries > 1 ? 's' : ''})</span>
+                          )}
+                        </div>
+                      )}
+                      {cycle.cost_breakdown.pricing_version && (
+                        <div style={{ marginTop: '4px', fontSize: '10px', color: '#94a3b8' }}>
+                          Pricing version: {cycle.cost_breakdown.pricing_version}
+                        </div>
+                      )}
+                    </div>
+                  </details>
                 )}
               </div>
             ))

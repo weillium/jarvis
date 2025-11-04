@@ -29,17 +29,28 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
   const [isResetting, setIsResetting] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
   
+  // Regeneration status tracking
+  const [isRegeneratingResearch, setIsRegeneratingResearch] = useState(false);
+  const [isRegeneratingGlossary, setIsRegeneratingGlossary] = useState(false);
+  const [isRegeneratingChunks, setIsRegeneratingChunks] = useState(false);
+  
   // Get agent info for context generation panel
   const { agent: agentInfo } = useAgentInfo(eventId);
 
-  // Fetch agent status for context generation panel
+  // Fetch agent status for context generation panel and regeneration status
   useEffect(() => {
     async function fetchAgentStatus() {
       try {
         const res = await fetch(`/api/agent/${eventId}`);
         const data = await res.json();
         if (data.ok && data.agent) {
-          setAgentStatus(data.agent.status);
+          const status = data.agent.status;
+          setAgentStatus(status);
+          
+          // Check for regeneration status
+          setIsRegeneratingResearch(status === 'regenerating_research');
+          setIsRegeneratingGlossary(status === 'regenerating_glossary');
+          setIsRegeneratingChunks(status === 'regenerating_chunks');
         }
       } catch (err) {
         console.error('Failed to fetch agent status:', err);
@@ -131,9 +142,10 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
       } else {
         setResetError(data.error || 'Failed to reset context');
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to reset context:', err);
-      setResetError(err.message || 'Failed to reset context');
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setResetError(errorMessage || 'Failed to reset context');
     } finally {
       setIsResetting(false);
     }
@@ -226,7 +238,7 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
       content: (
         <div>
           <div style={{ marginBottom: '16px' }}>
-            <RegenerateButton eventId={eventId} stage="research" />
+            <RegenerateButton eventId={eventId} stage="research" isRegenerating={isRegeneratingResearch} />
           </div>
           <ResearchResultsVisualization eventId={eventId} embedded={true} />
         </div>
@@ -238,7 +250,7 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
       content: (
         <div>
           <div style={{ marginBottom: '16px' }}>
-            <RegenerateButton eventId={eventId} stage="glossary" />
+            <RegenerateButton eventId={eventId} stage="glossary" isRegenerating={isRegeneratingGlossary} />
           </div>
           <GlossaryVisualization eventId={eventId} embedded={true} />
         </div>
@@ -250,7 +262,7 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
       content: (
         <div>
           <div style={{ marginBottom: '16px' }}>
-            <RegenerateButton eventId={eventId} stage="chunks" />
+            <RegenerateButton eventId={eventId} stage="chunks" isRegenerating={isRegeneratingChunks} />
           </div>
           <ContextDatabaseVisualization eventId={eventId} agentStatus={agentStatus} embedded={true} />
         </div>

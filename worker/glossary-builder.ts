@@ -8,6 +8,18 @@ import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
 import { Exa } from 'exa-js';
 import { Blueprint } from './blueprint-generator';
+import {
+  calculateOpenAICost,
+  calculateExaAnswerCost,
+  getPricingVersion,
+} from './pricing-config';
+import {
+  EXA_ANSWER_SYSTEM_PROMPT,
+  GLOSSARY_DEFINITION_SYSTEM_PROMPT,
+  createGlossaryDefinitionUserPrompt,
+  EXA_ANSWER_TRANSFORM_SYSTEM_PROMPT,
+  createExaAnswerTransformUserPrompt,
+} from './prompts';
 
 export interface GlossaryBuilderOptions {
   supabase: ReturnType<typeof createClient>;
@@ -29,6 +41,22 @@ export interface ResearchResults {
  * Build glossary from blueprint plan and research results
  * Fetches research from research_results table if not provided
  */
+export interface GlossaryCostBreakdown {
+  openai: {
+    total: number;
+    chat_completions: Array<{ cost: number; usage: any; model: string }>;
+  };
+  exa: {
+    total: number;
+    answer: { cost: number; queries: number };
+  };
+}
+
+export interface GlossaryBuildResult {
+  termCount: number;
+  costBreakdown: GlossaryCostBreakdown;
+}
+
 export async function buildGlossary(
   eventId: string,
   blueprintId: string,
@@ -36,7 +64,7 @@ export async function buildGlossary(
   blueprint: Blueprint,
   researchResults: ResearchResults | null,
   options: GlossaryBuilderOptions
-): Promise<number> {
+): Promise<GlossaryBuildResult> {
   const { supabase, openai, genModel, exaApiKey } = options;
 
   console.log(`[glossary] Building glossary for event ${eventId}, cycle ${generationCycleId}`);
@@ -45,8 +73,26 @@ export async function buildGlossary(
   const termsToBuild = blueprint.glossary_plan.terms || [];
   if (termsToBuild.length === 0) {
     console.log(`[glossary] No terms to build, skipping`);
-    return 0;
+    return {
+      termCount: 0,
+      costBreakdown: {
+        openai: { total: 0, chat_completions: [] },
+        exa: { total: 0, answer: { cost: 0, queries: 0 } },
+      },
+    };
   }
+
+  // Initialize cost tracking
+  const costBreakdown: GlossaryCostBreakdown = {
+    openai: {
+      total: 0,
+      chat_completions: [],
+    },
+    exa: {
+      total: 0,
+      answer: { cost: 0, queries: 0 },
+    },
+  };
 
   // Fetch research from research_results table if not provided
   let research: ResearchResults;
@@ -110,13 +156,14 @@ export async function buildGlossary(
     const batch = termsToBuild.slice(i, i + batchSize);
     
     try {
-      const definitions = await generateTermDefinitions(
+      const { definitions } = await generateTermDefinitions(
         batch,
         researchContext,
         blueprint.important_details.join('\n'),
         openai,
         genModel,
-        exaApiKey ? new Exa(exaApiKey) : undefined
+        exaApiKey ? new Exa(exaApiKey) : undefined,
+        costBreakdown
       );
 
       // Store definitions in database
@@ -159,18 +206,43 @@ export async function buildGlossary(
     }
   }
 
-  // Mark cycle as completed
+  // Calculate total cost and store in cycle metadata
+  const totalCost = costBreakdown.openai.total + costBreakdown.exa.total;
+  const costMetadata = {
+    cost: {
+      total: totalCost,
+      currency: 'USD',
+      breakdown: {
+        openai: {
+          total: costBreakdown.openai.total,
+          chat_completions: costBreakdown.openai.chat_completions,
+        },
+        exa: {
+          total: costBreakdown.exa.total,
+          answer: costBreakdown.exa.answer,
+        },
+      },
+      tracked_at: new Date().toISOString(),
+      pricing_version: getPricingVersion(),
+    },
+  };
+
+  // Mark cycle as completed with cost metadata
   await (supabase
     .from('generation_cycles') as any)
     .update({
       status: 'completed',
       progress_current: insertedCount,
       completed_at: new Date().toISOString(),
+      metadata: costMetadata,
     })
     .eq('id', generationCycleId);
 
   console.log(`[glossary] Inserted ${insertedCount} glossary terms for event ${eventId}`);
-  return insertedCount;
+  return {
+    termCount: insertedCount,
+    costBreakdown,
+  };
 }
 
 interface TermDefinition {
@@ -194,10 +266,23 @@ async function generateTermDefinitions(
   importantDetails: string,
   openai: OpenAI,
   genModel: string,
-  exa?: Exa
-): Promise<TermDefinition[]> {
+  exa?: Exa,
+  costBreakdown?: GlossaryCostBreakdown
+): Promise<{ definitions: TermDefinition[]; batchCostBreakdown: GlossaryCostBreakdown }> {
   const definitions: TermDefinition[] = [];
   const termsForLLM: Array<{ term: string; is_acronym: boolean; category: string; priority: number }> = [];
+  
+  // Initialize batch cost breakdown
+  const batchCostBreakdown: GlossaryCostBreakdown = {
+    openai: {
+      total: 0,
+      chat_completions: [],
+    },
+    exa: {
+      total: 0,
+      answer: { cost: 0, queries: 0 },
+    },
+  };
 
   // Process high-priority terms (priority <= 3) with Exa /answer if available
   for (const term of terms) {
@@ -207,9 +292,7 @@ async function generateTermDefinitions(
         
         const answer = await exa.answer(`What is ${term.term}?`, {
           text: true,
-          systemPrompt: `Provide a comprehensive, technical definition suitable for professionals. 
-                        If this is an acronym, explain what it stands for. 
-                        Include relevant context and related concepts.`,
+          systemPrompt: EXA_ANSWER_SYSTEM_PROMPT,
         });
 
         if (answer.answer && answer.answer.trim()) {
@@ -232,6 +315,13 @@ async function generateTermDefinitions(
           if (transformedDef) {
             definitions.push(transformedDef);
             console.log(`[glossary] Generated definition for "${term.term}" using Exa /answer (transformed to glossary format)`);
+            
+            // Track Exa answer cost
+            const answerCost = calculateExaAnswerCost(1);
+            batchCostBreakdown.exa.total += answerCost;
+            batchCostBreakdown.exa.answer.cost += answerCost;
+            batchCostBreakdown.exa.answer.queries += 1;
+            
             continue; // Skip LLM generation for this term
           } else {
             console.warn(`[glossary] Failed to transform Exa answer for "${term.term}", falling back to LLM`);
@@ -250,43 +340,15 @@ async function generateTermDefinitions(
 
   // Generate remaining terms with LLM
   if (termsForLLM.length > 0) {
-    const systemPrompt = `You are a glossary assistant that creates clear, accurate definitions for technical and domain-specific terms.
-
-Your task: Generate definitions for terms based on research context and event information.
-
-Guidelines:
-- Create concise, clear definitions (1-3 sentences)
-- If a term is an acronym, provide what it stands for
-- Include 1-2 usage examples when helpful
-- Identify related terms
-- Assign confidence score (0.9-1.0 if highly certain, 0.7-0.9 if somewhat certain)
-- Use "llm_generation" as source
-
-Output format: Return a JSON array of term definitions.`;
+    const systemPrompt = GLOSSARY_DEFINITION_SYSTEM_PROMPT;
 
     const termsList = termsForLLM.map(t => `- ${t.term}${t.is_acronym ? ' (acronym)' : ''} - ${t.category}`).join('\n');
 
-    const userPrompt = `Generate definitions for the following terms:
-
-${termsList}
-
-Research Context:
-${researchContext.substring(0, 5000)}
-
-Important Event Details:
-${importantDetails.substring(0, 2000)}
-
-For each term, provide:
-- term: The exact term name
-- definition: Clear definition (1-3 sentences)
-- acronym_for: What the term stands for (if it's an acronym, otherwise omit)
-- category: Category (e.g., technical, business, domain-specific)
-- usage_examples: Array of 1-2 example sentences (optional)
-- related_terms: Array of related term names (optional)
-- confidence_score: Number between 0 and 1
-- source: "llm_generation"
-
-Return as JSON object with a "definitions" key containing an array of term definitions.`;
+    const userPrompt = createGlossaryDefinitionUserPrompt(
+      termsList,
+      researchContext,
+      importantDetails
+    );
 
     try {
       // Some models (like o1, o1-preview, o1-mini, gpt-5) don't support custom temperature values
@@ -318,6 +380,22 @@ Return as JSON object with a "definitions" key containing an array of term defin
       }
       
       const response = await openai.chat.completions.create(requestOptions);
+
+      // Track OpenAI cost
+      if (response.usage) {
+        const usage = response.usage;
+        const cost = calculateOpenAICost(usage, genModel, false);
+        batchCostBreakdown.openai.total += cost;
+        batchCostBreakdown.openai.chat_completions.push({
+          cost,
+          usage: {
+            prompt_tokens: usage.prompt_tokens,
+            completion_tokens: usage.completion_tokens,
+            total_tokens: usage.total_tokens,
+          },
+          model: genModel,
+        });
+      }
 
       const content = response.choices[0]?.message?.content;
       if (!content) {
@@ -360,7 +438,16 @@ Return as JSON object with a "definitions" key containing an array of term defin
     }
   }
 
-  return definitions;
+  // Merge batch costs into main cost breakdown if provided
+  if (costBreakdown) {
+    costBreakdown.openai.total += batchCostBreakdown.openai.total;
+    costBreakdown.openai.chat_completions.push(...batchCostBreakdown.openai.chat_completions);
+    costBreakdown.exa.total += batchCostBreakdown.exa.total;
+    costBreakdown.exa.answer.cost += batchCostBreakdown.exa.answer.cost;
+    costBreakdown.exa.answer.queries += batchCostBreakdown.exa.answer.queries;
+  }
+
+  return { definitions, batchCostBreakdown };
 }
 
 /**
@@ -377,44 +464,8 @@ async function transformExaAnswerToGlossary(
   genModel: string
 ): Promise<TermDefinition | null> {
   try {
-    const systemPrompt = `You are a glossary assistant that transforms authoritative answers into structured glossary entries.
-
-Your task: Transform a markdown-formatted answer (which may contain links, formatting, and citations) into a clean, structured glossary entry.
-
-Guidelines:
-- Extract a clean definition (1-3 sentences) without markdown formatting or links
-- If the term is an acronym, extract what it stands for
-- Generate 1-2 usage examples based on the answer content
-- Extract related terms mentioned in the answer (2-5 terms)
-- Preserve the authoritative nature of the source material
-- Remove markdown links, formatting, and citations from the definition text
-
-Output format: Return a JSON object with this exact structure:
-{
-  "term": "exact term name",
-  "definition": "clean definition without markdown (1-3 sentences)",
-  "acronym_for": "what it stands for (if acronym, otherwise omit this field)",
-  "category": "category name",
-  "usage_examples": ["example sentence 1", "example sentence 2"],
-  "related_terms": ["term1", "term2", "term3"]
-}`;
-
-    const userPrompt = `Transform this Exa answer into a structured glossary entry:
-
-Term: ${term}
-Is Acronym: ${isAcronym}
-Category: ${category}
-
-Exa Answer (markdown):
-${exaAnswer}
-
-Extract:
-1. A clean definition (remove markdown, links, citations)
-2. Acronym expansion (if applicable)
-3. 1-2 usage examples based on the answer
-4. 2-5 related terms mentioned in the answer
-
-Return as JSON object.`;
+    const systemPrompt = EXA_ANSWER_TRANSFORM_SYSTEM_PROMPT;
+    const userPrompt = createExaAnswerTransformUserPrompt(term, isAcronym, category, exaAnswer);
 
     // Some models (like o1, o1-preview, o1-mini, gpt-5) don't support custom temperature values
     const modelLower = genModel.toLowerCase();

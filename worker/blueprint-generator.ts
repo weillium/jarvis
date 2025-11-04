@@ -11,7 +11,10 @@
 
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
-import { BLUEPRINT_GENERATION_SYSTEM_PROMPT } from './prompts';
+import {
+  BLUEPRINT_GENERATION_SYSTEM_PROMPT,
+  createBlueprintUserPrompt,
+} from './prompts';
 
 // ============================================================================
 // Type Definitions
@@ -314,95 +317,7 @@ async function generateBlueprintWithLLM(
     ? `\n\nDocuments Available:\n${documentsText}\n\nConsider that documents are uploaded for this event. The blueprint should plan to extract and use content from these documents in the chunks construction phase.`
     : '\n\nNo documents have been uploaded for this event yet.';
 
-  const userPrompt = `Generate a context generation blueprint for the following event:
-
-Event Title: ${eventTitle}
-Event Topic: ${topic}${documentsSection}
-
-CRITICAL: You MUST populate ALL arrays with actual, relevant content. Empty arrays are NOT acceptable and will cause the request to fail.
-
-Your response must include:
-
-1. Important Details (array of 5-10 strings):
-   - Extract key points, insights, or highlights from the event information
-   - Think about what makes this event important or what attendees should know
-   - Example for topic "${topic}": ["Focuses on practical ${topic} implementation strategies", "Covers latest industry developments in ${topic}", "Provides hands-on experience with ${topic} tools"]
-   - REQUIRED: Minimum 5 items
-
-2. Inferred Topics (array of 5-10 strings):
-   - List specific topics that will likely be discussed during the event
-   - Think about subtopics, related areas, and themes
-   - Example for topic "${topic}": ["${topic} Fundamentals", "${topic} Best Practices", "${topic} Case Studies", "${topic} Tools and Frameworks"]
-   - REQUIRED: Minimum 5 items
-
-3. Key Terms (array of 10-20 strings):
-   - Identify terms, concepts, acronyms, or jargon that attendees might encounter
-   - These should be domain-specific terms related to "${topic}"
-   - Think about technical terms, industry jargon, acronyms, and key concepts
-   - Example: Extract terms from the topic itself, related technologies, methodologies
-   - REQUIRED: Minimum 10 items
-
-4. Research Plan (object with queries array):
-   - queries: Array of 5-12 search query objects, each with:
-     * query: string (specific search query related to "${topic}")
-     * api: "exa" or "wikipedia"
-     * priority: number (1-10, lower is higher priority)
-     * estimated_cost: number (0.10-0.50 for priority 1-2 exa /research, 0.02-0.04 for priority 3+ exa /search, 0.001 for wikipedia)
-   - PRIORITY GUIDANCE:
-     * Priority 1-2: Broad, comprehensive research questions that need deep analysis (uses Exa /research endpoint)
-       Example: "comprehensive overview of ${topic} including latest developments, industry standards, and best practices"
-     * Priority 3+: Specific, focused queries that benefit from fast search (uses Exa /search endpoint)
-       Example: "specific ${topic} implementation techniques", "${topic} case studies"
-   - Example queries for "${topic}":
-     * {"query": "comprehensive overview of ${topic} including latest developments, industry standards, best practices, and key insights", "api": "exa", "priority": 1, "estimated_cost": 0.30}
-     * {"query": "detailed analysis of ${topic} trends, applications, and practical implementations", "api": "exa", "priority": 2, "estimated_cost": 0.30}
-     * {"query": "best practices for ${topic} implementation", "api": "exa", "priority": 3, "estimated_cost": 0.03}
-     * {"query": "${topic} industry standards and guidelines", "api": "exa", "priority": 4, "estimated_cost": 0.03}
-   - total_searches: number (must match queries array length)
-   - estimated_total_cost: number (sum of all query costs, considering priority-based pricing)
-   - REQUIRED: Minimum 5 queries
-   - RECOMMENDED: Include 1-2 priority 1-2 queries for comprehensive research, rest as priority 3+
-
-5. Glossary Plan (object with terms array):
-   - terms: Array of 10-20 term objects, each with:
-     * term: string (the actual term)
-     * is_acronym: boolean
-     * category: string (e.g., "technical", "business", "domain-specific")
-     * priority: number (1-10, lower is higher priority)
-   - PRIORITY GUIDANCE:
-     * Priority 1-3: Most critical terms that need authoritative, citation-backed definitions (uses Exa /answer endpoint, ~$0.01-0.03 per term)
-     * Priority 4+: Standard terms that can use batch LLM generation (lower cost)
-     * Assign priority 1-3 to foundational concepts, key acronyms, and domain-specific terms that are essential to understanding
-   - estimated_count: number (must match terms array length)
-   - REQUIRED: Minimum 10 terms related to "${topic}"
-   - RECOMMENDED: Include 3-5 priority 1-3 terms for authoritative definitions, rest as priority 4+
-
-6. Chunks Plan (object):
-   - sources: Array of at least 3 source objects, each with:
-     * source: string (e.g., "research_results", "event_documents", "llm_generated")
-     * priority: number (1-10)
-     * estimated_chunks: number
-   - target_count: number (500 for basic, 1000 for comprehensive)
-   - quality_tier: "basic" or "comprehensive"
-   - ranking_strategy: string describing ranking approach
-   - REQUIRED: Minimum 3 sources
-
-7. Cost Breakdown (object):
-   - research: number (total cost from research plan)
-   - glossary: number (typically 0.01-0.02)
-   - chunks: number (approximately target_count * 0.0001 + 0.05)
-   - total: number (sum of all costs)
-
-VERIFY BEFORE RETURNING:
-- important_details array has at least 5 items
-- inferred_topics array has at least 5 items  
-- key_terms array has at least 10 items
-- research_plan.queries array has at least 5 items
-- glossary_plan.terms array has at least 10 items
-- chunks_plan.sources array has at least 3 items
-- All arrays are non-empty
-
-Return the blueprint as a JSON object with all fields properly structured and populated.`;
+  const baseUserPrompt = createBlueprintUserPrompt(eventTitle, topic, documentsSection);
 
   // Retry logic with validation
   const maxRetries = 2; // 3 attempts total (initial + 2 retries)
@@ -428,10 +343,10 @@ Return the blueprint as a JSON object with all fields properly structured and po
       
       // Enhance prompt on retries with more explicit requirements
       const currentUserPrompt = isRetry
-        ? `${userPrompt}
+        ? `${baseUserPrompt}
 
 IMPORTANT: This is a retry attempt. The previous response had empty or insufficient arrays. You MUST fill ALL arrays with actual, relevant content. Do not return empty arrays. Every array field must have the minimum required items as specified above.`
-        : userPrompt;
+        : baseUserPrompt;
 
       console.log(`[blueprint] LLM attempt ${attempt + 1}/${maxRetries + 1} for topic "${topic}"${isRetry && supportsCustomTemperature ? ' (retry with lower temperature)' : ''}`);
 

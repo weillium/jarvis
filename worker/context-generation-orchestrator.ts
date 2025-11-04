@@ -17,6 +17,17 @@ import { Exa } from 'exa-js';
 import { Blueprint } from './blueprint-generator';
 import { buildGlossary, GlossaryBuilderOptions, ResearchResults } from './glossary-builder';
 import { buildContextChunks, ChunksBuilderOptions } from './chunks-builder';
+import {
+  STUB_RESEARCH_SYSTEM_PROMPT,
+  createStubResearchUserPrompt,
+} from './prompts';
+import {
+  calculateOpenAICost,
+  calculateExaSearchCost,
+  calculateExaResearchCost,
+  calculateExaAnswerCost,
+  getPricingVersion,
+} from './pricing-config';
 
 export interface ContextGenerationOrchestratorOptions {
   supabase: ReturnType<typeof createClient>;
@@ -70,11 +81,25 @@ async function updateGenerationCycle(
     progress_current?: number;
     progress_total?: number;
     error_message?: string;
+    metadata?: any; // For storing cost data and other metadata
   }
 ): Promise<void> {
   const updateData: any = { ...updates };
   if (updates.status === 'completed') {
     updateData.completed_at = new Date().toISOString();
+  }
+
+  // If metadata is provided, merge with existing metadata
+  if (updates.metadata !== undefined) {
+    // Fetch existing metadata first
+    const { data: existingCycle } = await (supabase
+      .from('generation_cycles') as any)
+      .select('metadata')
+      .eq('id', cycleId)
+      .single();
+
+    const existingMetadata = existingCycle?.metadata || {};
+    updateData.metadata = { ...existingMetadata, ...updates.metadata };
   }
 
   const { error } = await (supabase
@@ -154,7 +179,7 @@ export async function executeContextGeneration(
     await updateAgentStatus(supabase, agentId, 'building_glossary');
 
     // 7. Build glossary (fetches research from research_results table)
-    const glossaryCount = await buildGlossary(
+    const glossaryResult = await buildGlossary(
       eventId,
       blueprintId,
       glossaryCycleId,
@@ -169,7 +194,7 @@ export async function executeContextGeneration(
       }
     );
 
-    console.log(`[context-gen] Glossary built: ${glossaryCount} terms`);
+    console.log(`[context-gen] Glossary built: ${glossaryResult.termCount} terms (cost: $${(glossaryResult.costBreakdown.openai.total + glossaryResult.costBreakdown.exa.total).toFixed(4)})`);
 
     // 8. Create chunks generation cycle
     const chunksCycleId = await createGenerationCycle(
@@ -199,7 +224,7 @@ export async function executeContextGeneration(
       }
     );
 
-    console.log(`[context-gen] Chunks built: ${chunksCount} chunks`);
+    console.log(`[context-gen] Context chunks built: ${chunksResult.chunkCount} chunks (cost: $${chunksResult.costBreakdown.openai.total.toFixed(4)})`);
 
     // 8. Update status to 'context_complete'
     await updateAgentStatus(supabase, agentId, 'context_complete');
@@ -251,6 +276,20 @@ async function executeResearchPlan(
 
   const chunks: ResearchResults['chunks'] = [];
   const insertedCount = { value: 0 }; // Use object to allow mutation in helper function
+
+  // Initialize cost tracking
+  const costBreakdown = {
+    openai: {
+      total: 0,
+      chat_completions: [] as Array<{ cost: number; usage: any; model: string }>,
+    },
+    exa: {
+      total: 0,
+      search: { cost: 0, queries: 0 },
+      research: { cost: 0, queries: 0, usage: { searches: 0, pages: 0, tokens: 0 } },
+      answer: { cost: 0, queries: 0 },
+    },
+  };
 
   // Initialize Exa client if API key is provided
   const exa = exaApiKey ? new Exa(exaApiKey) : null;
@@ -323,7 +362,7 @@ async function executeResearchPlan(
           const startTime = Date.now();
           
           try {
-            const stubChunks = await generateStubResearchChunks(queryItem.query, openai, genModel);
+            const stubChunks = await generateStubResearchChunks(queryItem.query, openai, genModel, costBreakdown);
             const duration = Date.now() - startTime;
             console.log(`[research] ${queryProgress} LLM stub generated ${stubChunks.length} chunks in ${duration}ms for query: "${queryItem.query}"`);
           
@@ -465,7 +504,7 @@ HOW TO COMPOSE:
                 if (!summary || summary.length < 50) {
                   console.warn(`[research] ${queryProgress} Exa /research output is empty or too short (${summary?.length || 0} chars) for query: "${queryItem.query}" - falling back to /search`);
                   // Fallback to /search
-                  await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount);
+                  await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount, costBreakdown);
                   continue;
                 }
                 
@@ -513,6 +552,25 @@ HOW TO COMPOSE:
 
                 const totalDuration = Date.now() - startTime;
                 console.log(`[research] ${queryProgress} ✓ Stored ${textChunks.length} chunks from Exa /research in ${totalDuration}ms for query: "${queryItem.query}"`);
+                
+                // Track Exa research cost (estimate based on typical usage)
+                // Note: Exa research cost is variable, we estimate based on typical usage
+                // If Exa provides usage data in response, we can use that
+                if (costBreakdown) {
+                  // Estimate: typical research uses ~5 searches, ~3 pages, ~50k tokens
+                  const estimatedUsage = {
+                    searches: 5,
+                    pages: 3,
+                    tokens: 50000,
+                  };
+                  const researchCost = calculateExaResearchCost(estimatedUsage);
+                  costBreakdown.exa.total += researchCost;
+                  costBreakdown.exa.research.cost += researchCost;
+                  costBreakdown.exa.research.queries += 1;
+                  costBreakdown.exa.research.usage.searches += estimatedUsage.searches;
+                  costBreakdown.exa.research.usage.pages += estimatedUsage.pages;
+                  costBreakdown.exa.research.usage.tokens += estimatedUsage.tokens;
+                }
               } else if (completedResearch.status === 'failed') {
                 const totalDuration = Date.now() - startTime;
                 console.error(`[research] ${queryProgress} ✗ Exa /research task FAILED for query "${queryItem.query}":`, {
@@ -523,13 +581,13 @@ HOW TO COMPOSE:
                 });
                 // Fallback to /search
                 console.log(`[research] ${queryProgress} Falling back to Exa /search for query: "${queryItem.query}"`);
-                await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount);
+                await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount, costBreakdown);
               } else {
                 const totalDuration = Date.now() - startTime;
                 console.warn(`[research] ${queryProgress} Exa /research task ended with unexpected status: ${completedResearch.status} (duration: ${totalDuration}ms) for query: "${queryItem.query}"`);
                 // Fallback to /search
                 console.log(`[research] ${queryProgress} Falling back to Exa /search for query: "${queryItem.query}"`);
-                await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount);
+                await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount, costBreakdown);
               }
             } catch (researchError: any) {
               const duration = Date.now() - startTime;
@@ -544,7 +602,7 @@ HOW TO COMPOSE:
               console.log(`[research] ${queryProgress} Attempting fallback to Exa /search for query: "${queryItem.query}"`);
               // Fallback to /search
               try {
-                await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount);
+                await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount, costBreakdown);
               } catch (searchError: any) {
                 console.error(`[research] ${queryProgress} ✗ Fallback Exa /search also FAILED for query "${queryItem.query}":`, {
                   error: searchError.message,
@@ -560,7 +618,7 @@ HOW TO COMPOSE:
             const startTime = Date.now();
             
             try {
-              await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount);
+              await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount, costBreakdown);
               const duration = Date.now() - startTime;
               console.log(`[research] ${queryProgress} ✓ Exa /search completed in ${duration}ms for query: "${queryItem.query}"`);
             } catch (searchError: any) {
@@ -596,14 +654,43 @@ HOW TO COMPOSE:
     }
   }
 
-  // Mark cycle as completed
+  // Calculate total cost
+  const totalCost = costBreakdown.openai.total + costBreakdown.exa.total;
+  
+  console.log(`[research] ========================================`);
+  console.log(`[research] Research plan execution COMPLETE`);
+  console.log(`[research] Total cost: $${totalCost.toFixed(4)} (OpenAI: $${costBreakdown.openai.total.toFixed(4)}, Exa: $${costBreakdown.exa.total.toFixed(4)})`);
+  
+  // Store cost data in generation cycle metadata
+  const costMetadata = {
+    cost: {
+      total: totalCost,
+      currency: 'USD',
+      breakdown: {
+        openai: {
+          total: costBreakdown.openai.total,
+          chat_completions: costBreakdown.openai.chat_completions,
+        },
+        exa: {
+          total: costBreakdown.exa.total,
+          search: costBreakdown.exa.search,
+          research: costBreakdown.exa.research,
+          answer: costBreakdown.exa.answer,
+        },
+      },
+      tracked_at: new Date().toISOString(),
+      pricing_version: getPricingVersion(),
+    },
+  };
+
+  // Mark cycle as completed with cost metadata
   await updateGenerationCycle(supabase, generationCycleId, {
     status: 'completed',
     progress_current: queries.length,
+    metadata: costMetadata,
   });
 
   console.log(`[research] ========================================`);
-  console.log(`[research] Research plan execution COMPLETE`);
   console.log(`[research] Total queries processed: ${queries.length}`);
   console.log(`[research] Total chunks created: ${insertedCount.value}`);
   console.log(`[research] Results stored in database: ${insertedCount.value}`);
@@ -618,24 +705,53 @@ HOW TO COMPOSE:
 async function generateStubResearchChunks(
   query: string,
   openai: OpenAI,
-  genModel: string
+  genModel: string,
+  costBreakdown?: { openai: { total: number; chat_completions: Array<{ cost: number; usage: any; model: string }> } }
 ): Promise<string[]> {
   try {
-    const response = await openai.chat.completions.create({
+    // Some models (like o1, o1-preview, o1-mini, gpt-5) don't support custom temperature values
+    const modelLower = genModel.toLowerCase();
+    const isO1Model = modelLower.startsWith('o1');
+    const isGpt5Model = modelLower.includes('gpt-5') || modelLower.startsWith('gpt5');
+    const onlySupportsDefaultTemp = isO1Model || isGpt5Model;
+    const supportsCustomTemperature = !onlySupportsDefaultTemp;
+
+    const requestOptions: any = {
       model: genModel,
       messages: [
         {
           role: 'system',
-          content: 'You are a research assistant. Generate 2-3 informative context chunks (200-300 words each) based on a research query.',
+          content: STUB_RESEARCH_SYSTEM_PROMPT,
         },
         {
           role: 'user',
-          content: `Generate informative context chunks about: ${query}\n\nReturn as JSON with "chunks" array.`,
+          content: createStubResearchUserPrompt(query),
         },
       ],
       response_format: { type: 'json_object' },
-      temperature: 0.7,
-    });
+    };
+
+    if (supportsCustomTemperature) {
+      requestOptions.temperature = 0.7;
+    }
+
+    const response = await openai.chat.completions.create(requestOptions);
+
+    // Track cost
+    if (costBreakdown && response.usage) {
+      const usage = response.usage;
+      const cost = calculateOpenAICost(usage, genModel, false);
+      costBreakdown.openai.total += cost;
+      costBreakdown.openai.chat_completions.push({
+        cost,
+        usage: {
+          prompt_tokens: usage.prompt_tokens,
+          completion_tokens: usage.completion_tokens,
+          total_tokens: usage.total_tokens,
+        },
+        model: genModel,
+      });
+    }
 
     const content = response.choices[0]?.message?.content;
     if (!content) {
@@ -696,12 +812,21 @@ async function executeExaSearch(
   blueprintId: string,
   generationCycleId: string,
   chunks: ResearchResults['chunks'],
-  insertedCount: { value: number }
+  insertedCount: { value: number },
+  costBreakdown?: { exa: { total: number; search: { cost: number; queries: number } } }
 ): Promise<void> {
   const startTime = Date.now();
   
   try {
     console.log(`[research] Exa /search: Initiating search for "${queryItem.query}"...`);
+    
+    // Track cost
+    if (costBreakdown) {
+      const searchCost = calculateExaSearchCost(1);
+      costBreakdown.exa.total += searchCost;
+      costBreakdown.exa.search.cost += searchCost;
+      costBreakdown.exa.search.queries += 1;
+    }
     
     // Search and get contents from Exa
     // Using search() with contents option (searchAndContents is deprecated)
@@ -1240,7 +1365,7 @@ export async function regenerateResearchStage(
     );
 
     await updateAgentStatus(supabase, agentId, 'building_chunks');
-    const chunksCount = await buildContextChunks(
+    const chunksResult = await buildContextChunks(
       eventId,
       blueprintId,
       chunksCycleId,
@@ -1253,7 +1378,7 @@ export async function regenerateResearchStage(
         genModel,
       }
     );
-    console.log(`[context-gen] Chunks auto-regenerated: ${chunksCount} chunks`);
+    console.log(`[context-gen] Chunks auto-regenerated: ${chunksResult.chunkCount} chunks (cost: $${chunksResult.costBreakdown.openai.total.toFixed(4)})`);
 
     // Mark as complete
     await updateAgentStatus(supabase, agentId, 'context_complete');
@@ -1379,7 +1504,7 @@ export async function regenerateChunksStage(
   await updateAgentStatus(supabase, agentId, 'building_chunks');
 
   // Build chunks (fetches research from research_results table, preserves research chunks)
-  const chunksCount = await buildContextChunks(
+  const chunksResult = await buildContextChunks(
     eventId,
     blueprintId,
     chunksCycleId,
@@ -1393,11 +1518,11 @@ export async function regenerateChunksStage(
     }
   );
 
-  console.log(`[context-gen] Chunks regeneration completed: ${chunksCount} chunks`);
+  console.log(`[context-gen] Chunks regeneration completed: ${chunksResult.chunkCount} chunks (cost: $${chunksResult.costBreakdown.openai.total.toFixed(4)})`);
 
   // Update to context_complete
   await updateAgentStatus(supabase, agentId, 'context_complete');
   // Blueprint status stays 'approved'
 
-  return chunksCount;
+  return chunksResult.chunkCount;
 }

@@ -8,6 +8,14 @@ import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
 import { Blueprint } from './blueprint-generator';
 import { ResearchResults } from './glossary-builder';
+import {
+  CONTEXT_CHUNKS_GENERATION_SYSTEM_PROMPT,
+  createContextChunksUserPrompt,
+} from './prompts';
+import {
+  calculateOpenAICost,
+  getPricingVersion,
+} from './pricing-config';
 
 export interface ChunksBuilderOptions {
   supabase: ReturnType<typeof createClient>;
@@ -30,6 +38,19 @@ export interface ChunkWithRank {
  * Ranks chunks and stores top N in context_items table
  * Fetches research from research_results table if not provided
  */
+export interface ChunksCostBreakdown {
+  openai: {
+    total: number;
+    chat_completions: Array<{ cost: number; usage: any; model: string }>;
+    embeddings: Array<{ cost: number; usage: any; model: string }>;
+  };
+}
+
+export interface ChunksBuildResult {
+  chunkCount: number;
+  costBreakdown: ChunksCostBreakdown;
+}
+
 export async function buildContextChunks(
   eventId: string,
   blueprintId: string,
@@ -37,11 +58,20 @@ export async function buildContextChunks(
   blueprint: Blueprint,
   researchResults: ResearchResults | null,
   options: ChunksBuilderOptions
-): Promise<number> {
+): Promise<ChunksBuildResult> {
   const { supabase, openai, embedModel, genModel } = options;
 
   console.log(`[chunks] Building context chunks for event ${eventId}, cycle ${generationCycleId}`);
   console.log(`[chunks] Target: ${blueprint.chunks_plan.target_count} chunks (${blueprint.chunks_plan.quality_tier} tier)`);
+
+  // Initialize cost tracking
+  const costBreakdown: ChunksCostBreakdown = {
+    openai: {
+      total: 0,
+      chat_completions: [],
+      embeddings: [],
+    },
+  };
 
   // Fetch research from research_results table if not provided
   let research: ResearchResults;
@@ -119,7 +149,8 @@ export async function buildContextChunks(
     blueprint,
     research,
     openai,
-    genModel
+    genModel,
+    costBreakdown
   );
 
   // 2. Add LLM-generated chunks (already validated in generateLLMChunks)
@@ -216,6 +247,24 @@ export async function buildContextChunks(
 
       const embeddingResponses = await Promise.all(embeddingPromises);
 
+      // Track embedding costs
+      for (const embeddingResponse of embeddingResponses) {
+        if (embeddingResponse.usage) {
+          const usage = embeddingResponse.usage;
+          const cost = calculateOpenAICost(usage, embedModel, true); // isEmbedding = true
+          costBreakdown.openai.total += cost;
+          costBreakdown.openai.embeddings.push({
+            cost,
+            usage: {
+              prompt_tokens: usage.prompt_tokens,
+              completion_tokens: usage.completion_tokens,
+              total_tokens: usage.total_tokens,
+            },
+            model: embedModel,
+          });
+        }
+      }
+
       // Store chunks with embeddings
       for (let j = 0; j < embeddingBatch.length; j++) {
         const chunk = embeddingBatch[j];
@@ -281,18 +330,40 @@ export async function buildContextChunks(
     }
   }
 
-  // Mark cycle as completed
+  // Calculate total cost and store in cycle metadata
+  const totalCost = costBreakdown.openai.total;
+  const costMetadata = {
+    cost: {
+      total: totalCost,
+      currency: 'USD',
+      breakdown: {
+        openai: {
+          total: costBreakdown.openai.total,
+          chat_completions: costBreakdown.openai.chat_completions,
+          embeddings: costBreakdown.openai.embeddings,
+        },
+      },
+      tracked_at: new Date().toISOString(),
+      pricing_version: getPricingVersion(),
+    },
+  };
+
+  // Mark cycle as completed with cost metadata
   await (supabase
     .from('generation_cycles') as any)
     .update({
       status: 'completed',
       progress_current: insertedCount,
       completed_at: new Date().toISOString(),
+      metadata: costMetadata,
     })
     .eq('id', generationCycleId);
 
-  console.log(`[chunks] Inserted ${insertedCount} context chunks for event ${eventId}`);
-  return insertedCount;
+  console.log(`[chunks] Inserted ${insertedCount} context chunks for event ${eventId} (cost: $${totalCost.toFixed(4)})`);
+  return {
+    chunkCount: insertedCount,
+    costBreakdown,
+  };
 }
 
 /**
@@ -302,7 +373,8 @@ async function generateLLMChunks(
   blueprint: Blueprint,
   researchResults: ResearchResults,
   openai: OpenAI,
-  genModel: string
+  genModel: string,
+  costBreakdown: ChunksCostBreakdown
 ): Promise<string[]> {
   // Calculate how many LLM chunks we need
   const targetCount = blueprint.chunks_plan.target_count || 500;
@@ -316,40 +388,19 @@ async function generateLLMChunks(
 
   console.log(`[chunks] Generating ${neededLLMChunks} additional LLM chunks`);
 
-  const systemPrompt = `You are a context generation assistant that creates informative context chunks about event topics.
-
-Your task: Generate context chunks that provide valuable background information about the event topic and key themes.
-
-Context: The research results provided may include:
-- Comprehensive research reports (from Exa /research endpoint) for high-priority queries - these are synthesized, in-depth analyses
-- Specific search results (from Exa /search endpoint) for focused queries - these are direct results from web searches
-- Both types complement each other: comprehensive reports provide broad context, specific searches provide detailed information
-
-Guidelines:
-- Each chunk should be 200-400 words
-- Be factual and informative
-- Cover different aspects of the topic
-- Each chunk should be self-contained
-- Build on the research results provided, whether they are comprehensive reports or specific search results
-
-Output format: Return a JSON object with a "chunks" field containing an array of strings, where each string is a context chunk. Example: {"chunks": ["chunk 1 text...", "chunk 2 text..."]}`;
+  const systemPrompt = CONTEXT_CHUNKS_GENERATION_SYSTEM_PROMPT;
 
   const researchSummary = researchResults.chunks
     .map(c => c.text)
     .join('\n\n')
     .substring(0, 3000);
 
-  const userPrompt = `Generate ${neededLLMChunks} context chunks about the following event:
-
-Event Topics: ${blueprint.inferred_topics.join(', ')}
-Key Terms: ${blueprint.key_terms.slice(0, 10).join(', ')}
-
-Research Summary:
-${researchSummary}
-
-Generate informative context chunks that complement the research results. Each chunk should cover a different aspect or provide additional context.
-
-Return as a JSON object with a "chunks" field containing an array of strings. Each string should be a complete context chunk (200-400 words).`;
+  const userPrompt = createContextChunksUserPrompt(
+    neededLLMChunks,
+    blueprint.inferred_topics.join(', '),
+    blueprint.key_terms.slice(0, 10).join(', '),
+    researchSummary
+  );
 
   try {
     // Some models (like o1, o1-preview, o1-mini, gpt-5) don't support custom temperature values
@@ -374,6 +425,22 @@ Return as a JSON object with a "chunks" field containing an array of strings. Ea
     }
     
     const response = await openai.chat.completions.create(requestOptions);
+
+    // Track OpenAI cost for chat completion
+    if (response.usage) {
+      const usage = response.usage;
+      const cost = calculateOpenAICost(usage, genModel, false);
+      costBreakdown.openai.total += cost;
+      costBreakdown.openai.chat_completions.push({
+        cost,
+        usage: {
+          prompt_tokens: usage.prompt_tokens,
+          completion_tokens: usage.completion_tokens,
+          total_tokens: usage.total_tokens,
+        },
+        model: genModel,
+      });
+    }
 
     const content = response.choices[0]?.message?.content;
     if (!content) {

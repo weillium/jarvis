@@ -55,10 +55,22 @@ export async function GET(
       );
     }
 
+    // Parse cost data from metadata
+    const cyclesWithCost = (cycles || []).map((cycle: any) => {
+      const cost = cycle.metadata?.cost?.total || null;
+      const costBreakdown = cycle.metadata?.cost || null;
+      
+      return {
+        ...cycle,
+        cost: cost ? parseFloat(cost) : null,
+        cost_breakdown: costBreakdown || null,
+      };
+    });
+
     return NextResponse.json({
       ok: true,
-      cycles: cycles || [],
-      count: (cycles || []).length,
+      cycles: cyclesWithCost,
+      count: cyclesWithCost.length,
     });
   } catch (error: any) {
     console.error('[api/context/versions] Unexpected error:', error);

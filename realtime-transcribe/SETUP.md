@@ -104,7 +104,7 @@ curl http://localhost:3001/health
 
 Expected response:
 ```json
-{"ok":true,"service":"realtime-transcribe","timestamp":"2025-01-04T12:00:00.000Z","uptime":5.123}
+{"ok":true,"service":"realtime-transcribe","timestamp":"2025-11-04T12:00:00.000Z","uptime":5.123}
 ```
 
 ### 6. Test WebSocket Connection

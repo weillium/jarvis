@@ -6,13 +6,17 @@ interface RegenerateButtonProps {
   eventId: string;
   stage: 'blueprint' | 'research' | 'glossary' | 'chunks';
   onComplete?: () => void;
+  isRegenerating?: boolean; // External regeneration status from parent
 }
 
-export function RegenerateButton({ eventId, stage, onComplete }: RegenerateButtonProps) {
+export function RegenerateButton({ eventId, stage, onComplete, isRegenerating: externalIsRegenerating }: RegenerateButtonProps) {
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasBlueprint, setHasBlueprint] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Use external regeneration status if provided, otherwise use internal state
+  const isCurrentlyRegenerating = externalIsRegenerating !== undefined ? externalIsRegenerating : isRegenerating;
 
   // Check if blueprint exists
   useEffect(() => {
@@ -75,9 +79,10 @@ export function RegenerateButton({ eventId, stage, onComplete }: RegenerateButto
       } else {
         setError(data.error || `Failed to ${hasBlueprint ? 'regenerate' : 'start'} ${stage}`);
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error(`Failed to ${hasBlueprint ? 'regenerate' : 'start'} ${stage}:`, err);
-      setError(err.message || `Failed to ${hasBlueprint ? 'regenerate' : 'start'} ${stage}`);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(errorMessage || `Failed to ${hasBlueprint ? 'regenerate' : 'start'} ${stage}`);
     } finally {
       setIsRegenerating(false);
     }
@@ -85,6 +90,11 @@ export function RegenerateButton({ eventId, stage, onComplete }: RegenerateButto
 
   const getButtonColor = () => {
     if (loading) return '#94a3b8';
+    
+    // Gray out if regenerating (from external status or internal state)
+    if (isCurrentlyRegenerating) {
+      return '#94a3b8';
+    }
     
     // Gray out if no blueprint and not blueprint stage
     if (stage !== 'blueprint' && !hasBlueprint) {
@@ -104,7 +114,7 @@ export function RegenerateButton({ eventId, stage, onComplete }: RegenerateButto
   };
 
   const getButtonLabel = () => {
-    if (isRegenerating) {
+    if (isCurrentlyRegenerating) {
       if (stage === 'blueprint' && !hasBlueprint) {
         return 'Starting...';
       }
@@ -130,7 +140,7 @@ export function RegenerateButton({ eventId, stage, onComplete }: RegenerateButto
   };
 
   const isDisabled = () => {
-    if (isRegenerating || loading) return true;
+    if (isCurrentlyRegenerating || loading) return true;
     // Disable research/glossary/chunks if no blueprint
     if (stage !== 'blueprint' && !hasBlueprint) return true;
     return false;
@@ -138,27 +148,42 @@ export function RegenerateButton({ eventId, stage, onComplete }: RegenerateButto
 
   return (
     <div style={{ marginBottom: 0 }}>
-      <button
-        onClick={handleStartOrRegenerate}
-        disabled={isDisabled()}
-        style={{
-          padding: '10px 16px',
-          background: getButtonColor(),
-          color: '#ffffff',
-          border: 'none',
-          borderRadius: '6px',
-          fontSize: '13px',
-          fontWeight: '500',
-          cursor: isDisabled() ? 'not-allowed' : 'pointer',
-          transition: 'background 0.2s',
-          opacity: isDisabled() ? 0.6 : 1,
-        }}
-      >
-        {getButtonLabel()}
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: error ? '8px' : '0' }}>
+        <button
+          onClick={handleStartOrRegenerate}
+          disabled={isDisabled()}
+          style={{
+            padding: '10px 16px',
+            background: getButtonColor(),
+            color: '#ffffff',
+            border: 'none',
+            borderRadius: '6px',
+            fontSize: '13px',
+            fontWeight: '500',
+            cursor: isDisabled() ? 'not-allowed' : 'pointer',
+            transition: 'background 0.2s',
+            opacity: isDisabled() ? 0.6 : 1,
+          }}
+        >
+          {getButtonLabel()}
+        </button>
+        {isCurrentlyRegenerating && (
+          <span
+            style={{
+              display: 'inline-block',
+              width: '16px',
+              height: '16px',
+              border: '2px solid #64748b',
+              borderTopColor: 'transparent',
+              borderRadius: '50%',
+              animation: 'spin 0.8s linear infinite',
+            }}
+            aria-label="Regenerating"
+          />
+        )}
+      </div>
       {error && (
         <div style={{
-          marginTop: '8px',
           padding: '8px 12px',
           background: '#fee2e2',
           border: '1px solid #fecaca',

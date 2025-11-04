@@ -5,6 +5,10 @@
 
 import OpenAI from 'openai';
 import { getPolicy } from './policies';
+import {
+  createRealtimeCardsUserPrompt,
+  createRealtimeFactsUserPrompt,
+} from './prompts';
 
 export type AgentType = 'cards' | 'facts';
 
@@ -134,7 +138,7 @@ export class RealtimeSession {
           content: [
             {
               type: 'input_text',
-              text: `Transcript: ${message}\n\nContext:\n${context?.bullets?.join('\n') || ''}\n\nGenerate a context card if the content is novel and useful.`,
+              text: createRealtimeCardsUserPrompt(message, context?.bullets || []),
             },
           ],
         },
@@ -149,7 +153,10 @@ export class RealtimeSession {
           content: [
             {
               type: 'input_text',
-              text: `Recent transcripts:\n${context?.recentText || message}\n\nCurrent facts:\n${JSON.stringify(context?.facts || {}, null, 2)}\n\nExtract or update stable facts.`,
+              text: createRealtimeFactsUserPrompt(
+                context?.recentText || message,
+                JSON.stringify(context?.facts || {}, null, 2)
+              ),
             },
           ],
         },

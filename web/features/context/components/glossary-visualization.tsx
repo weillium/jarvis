@@ -36,30 +36,33 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [expandedTerms, setExpandedTerms] = useState<Set<string>>(new Set());
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchGlossary = async () => {
+    setRefreshing(true);
+    try {
+      const params = new URLSearchParams();
+      if (selectedCategory) {
+        params.append('category', selectedCategory);
+      }
+      if (search) {
+        params.append('search', search);
+      }
+
+      const res = await fetch(`/api/context/${eventId}/glossary?${params.toString()}`);
+      const data = await res.json();
+      if (data.ok) {
+        setGlossaryData(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch glossary:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    async function fetchGlossary() {
-      try {
-        const params = new URLSearchParams();
-        if (selectedCategory) {
-          params.append('category', selectedCategory);
-        }
-        if (search) {
-          params.append('search', search);
-        }
-
-        const res = await fetch(`/api/context/${eventId}/glossary?${params.toString()}`);
-        const data = await res.json();
-        if (data.ok) {
-          setGlossaryData(data);
-        }
-      } catch (err) {
-        console.error('Failed to fetch glossary:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
     fetchGlossary();
   }, [eventId, search, selectedCategory]);
 
@@ -151,6 +154,7 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
         gap: '12px',
         marginBottom: '20px',
         flexWrap: 'wrap',
+        alignItems: 'center',
       }}>
         <input
           type="text"
@@ -166,6 +170,26 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
             fontSize: '14px',
           }}
         />
+        <button
+          onClick={fetchGlossary}
+          disabled={refreshing}
+          style={{
+            padding: '8px 16px',
+            border: '1px solid #e2e8f0',
+            borderRadius: '6px',
+            fontSize: '14px',
+            fontWeight: '500',
+            background: '#ffffff',
+            color: '#374151',
+            cursor: refreshing ? 'not-allowed' : 'pointer',
+            opacity: refreshing ? 0.6 : 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+          }}
+        >
+          {refreshing ? '↻' : '↻'} {refreshing ? 'Refreshing...' : 'Refresh'}
+        </button>
         {categories.length > 0 && (
           <select
             value={selectedCategory || ''}

@@ -43,7 +43,7 @@ POST /functions/v1/transcript-ingestion
 {
   "event_id": "uuid",
   "text": "Transcript text here",
-  "timestamp": "2025-01-04T12:00:00Z"  // optional, defaults to now
+  "timestamp": "2025-11-04T12:00:00Z"  // optional, defaults to now
 }
 ```
 
@@ -54,7 +54,7 @@ POST /functions/v1/transcript-ingestion
   "transcript": {
     "id": 123,
     "text": "Transcript text here",
-    "ts": "2025-01-04T12:00:00Z"
+    "ts": "2025-11-04T12:00:00Z"
   }
 }
 ```
@@ -70,8 +70,8 @@ POST /functions/v1/transcript-ingestion
 {
   "event_id": "uuid",
   "batch": [
-    { "text": "First chunk", "timestamp": "2025-01-04T12:00:00Z" },
-    { "text": "Second chunk", "timestamp": "2025-01-04T12:01:00Z" }
+    { "text": "First chunk", "timestamp": "2025-11-04T12:00:00Z" },
+    { "text": "Second chunk", "timestamp": "2025-11-04T12:01:00Z" }
   ]
 }
 ```
@@ -82,8 +82,8 @@ POST /functions/v1/transcript-ingestion
   "ok": true,
   "inserted": 2,
   "transcripts": [
-    { "id": 123, "text": "First chunk", "ts": "2025-01-04T12:00:00Z" },
-    { "id": 124, "text": "Second chunk", "ts": "2025-01-04T12:01:00Z" }
+    { "id": 123, "text": "First chunk", "ts": "2025-11-04T12:00:00Z" },
+    { "id": 124, "text": "Second chunk", "ts": "2025-11-04T12:01:00Z" }
   ]
 }
 ```

@@ -34,22 +34,26 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
   const [isExpanded, setIsExpanded] = useState(embedded); // Auto-expand when embedded
   const [filterByApi, setFilterByApi] = useState<string | null>(null);
   const [expandedResults, setExpandedResults] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchResearchResults = async () => {
+    setRefreshing(true);
+    try {
+      const res = await fetch(`/api/context/${eventId}/research`);
+      const data = await res.json();
+      if (data.ok) {
+        setResearchData(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch research results:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    async function fetchResearchResults() {
-      try {
-        const res = await fetch(`/api/context/${eventId}/research`);
-        const data = await res.json();
-        if (data.ok) {
-          setResearchData(data);
-        }
-      } catch (err) {
-        console.error('Failed to fetch research results:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
     fetchResearchResults();
   }, [eventId]);
 
@@ -94,6 +98,12 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
   // Filter results
   const filteredResults = researchData?.results.filter((result) => {
     if (filterByApi && result.api !== filterByApi) return false;
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const matchesQuery = result.query.toLowerCase().includes(query) ||
+                           result.content.toLowerCase().includes(query);
+      if (!matchesQuery) return false;
+    }
     return true;
   }) || [];
 
@@ -241,20 +251,55 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
         </div>
       )}
 
-      {/* Filters */}
+      {/* Search and Filters */}
       {isExpanded && researchData.count > 0 && (
         <div style={{
           display: 'flex',
           gap: '12px',
           marginBottom: '12px',
           flexWrap: 'wrap',
+          alignItems: 'center',
         }}>
+          <input
+            type="text"
+            placeholder="Search results..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              flex: 1,
+              minWidth: '200px',
+              padding: '8px 12px',
+              border: '1px solid #e2e8f0',
+              borderRadius: '6px',
+              fontSize: '14px',
+            }}
+          />
+          <button
+            onClick={fetchResearchResults}
+            disabled={refreshing}
+            style={{
+              padding: '8px 16px',
+              border: '1px solid #e2e8f0',
+              borderRadius: '6px',
+              fontSize: '14px',
+              fontWeight: '500',
+              background: '#ffffff',
+              color: '#374151',
+              cursor: refreshing ? 'not-allowed' : 'pointer',
+              opacity: refreshing ? 0.6 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            {refreshing ? '↻' : '↻'} {refreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
           {apis.length > 0 && (
             <select
               value={filterByApi || ''}
               onChange={(e) => setFilterByApi(e.target.value || null)}
               style={{
-                padding: '6px 12px',
+                padding: '8px 12px',
                 border: '1px solid #e2e8f0',
                 borderRadius: '6px',
                 fontSize: '13px',
@@ -269,11 +314,14 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
               ))}
             </select>
           )}
-          {filterByApi && (
+          {(filterByApi || searchQuery) && (
             <button
-              onClick={() => setFilterByApi(null)}
+              onClick={() => {
+                setFilterByApi(null);
+                setSearchQuery('');
+              }}
               style={{
-                padding: '6px 12px',
+                padding: '8px 12px',
                 border: '1px solid #e2e8f0',
                 borderRadius: '6px',
                 fontSize: '13px',
@@ -282,7 +330,7 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
                 color: '#64748b',
               }}
             >
-              Clear Filter
+              Clear Filters
             </button>
           )}
         </div>

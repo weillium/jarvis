@@ -135,7 +135,7 @@ Response:
 {
   "ok": true,
   "service": "realtime-transcribe",
-  "timestamp": "2025-01-04T12:00:00.000Z",
+  "timestamp": "2025-11-04T12:00:00.000Z",
   "uptime": 123.45
 }
 ```

@@ -43,6 +43,8 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
   const [isRealTime, setIsRealTime] = useState(false);
   const [filterByRank, setFilterByRank] = useState<string | null>(null);
   const [filterByResearchSource, setFilterByResearchSource] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
 
   // Calculate statistics
   useEffect(() => {
@@ -93,24 +95,25 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
   }, [contextItems]);
 
   // Initial fetch
-  useEffect(() => {
+  const fetchContextItems = async () => {
     if (!eventId) return;
-
-    async function fetchContextItems() {
-      setLoading(true);
-      try {
-        const res = await fetch(`/api/context/${eventId}`);
-        const result = await res.json();
-        if (result.data) {
-          setContextItems(result.data);
-        }
-      } catch (error) {
-        console.error('Failed to fetch context items:', error);
-      } finally {
-        setLoading(false);
+    setRefreshing(true);
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/context/${eventId}`);
+      const result = await res.json();
+      if (result.data) {
+        setContextItems(result.data);
       }
+    } catch (error) {
+      console.error('Failed to fetch context items:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
+  };
 
+  useEffect(() => {
     fetchContextItems();
   }, [eventId]);
 
@@ -247,6 +250,13 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
     if (filterByRank === 'ranked' && item.rank === null) return false;
     if (filterByRank === 'unranked' && item.rank !== null) return false;
     if (filterByResearchSource && item.research_source !== filterByResearchSource) return false;
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const matchesQuery = item.chunk.toLowerCase().includes(query) ||
+                           (item.source && item.source.toLowerCase().includes(query)) ||
+                           (item.research_source && item.research_source.toLowerCase().includes(query));
+      if (!matchesQuery) return false;
+    }
     return true;
   });
 
@@ -480,7 +490,7 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
         </div>
       )}
 
-      {/* Filters */}
+      {/* Search and Filters */}
       {isExpanded && contextItems.length > 0 && (
         <div style={{
           display: 'flex',
@@ -488,12 +498,47 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
           marginTop: '20px',
           marginBottom: '12px',
           flexWrap: 'wrap',
+          alignItems: 'center',
         }}>
+          <input
+            type="text"
+            placeholder="Search chunks..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              flex: 1,
+              minWidth: '200px',
+              padding: '8px 12px',
+              border: '1px solid #e2e8f0',
+              borderRadius: '6px',
+              fontSize: '14px',
+            }}
+          />
+          <button
+            onClick={fetchContextItems}
+            disabled={refreshing}
+            style={{
+              padding: '8px 16px',
+              border: '1px solid #e2e8f0',
+              borderRadius: '6px',
+              fontSize: '14px',
+              fontWeight: '500',
+              background: '#ffffff',
+              color: '#374151',
+              cursor: refreshing ? 'not-allowed' : 'pointer',
+              opacity: refreshing ? 0.6 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            {refreshing ? '↻' : '↻'} {refreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
           <select
             value={filterByRank || ''}
             onChange={(e) => setFilterByRank(e.target.value || null)}
             style={{
-              padding: '6px 12px',
+              padding: '8px 12px',
               border: '1px solid #e2e8f0',
               borderRadius: '6px',
               fontSize: '13px',
@@ -509,7 +554,7 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
               value={filterByResearchSource || ''}
               onChange={(e) => setFilterByResearchSource(e.target.value || null)}
               style={{
-                padding: '6px 12px',
+                padding: '8px 12px',
                 border: '1px solid #e2e8f0',
                 borderRadius: '6px',
                 fontSize: '13px',
@@ -524,14 +569,15 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
               ))}
             </select>
           )}
-          {(filterByRank || filterByResearchSource) && (
+          {(filterByRank || filterByResearchSource || searchQuery) && (
             <button
               onClick={() => {
                 setFilterByRank(null);
                 setFilterByResearchSource(null);
+                setSearchQuery('');
               }}
               style={{
-                padding: '6px 12px',
+                padding: '8px 12px',
                 border: '1px solid #e2e8f0',
                 borderRadius: '6px',
                 fontSize: '13px',

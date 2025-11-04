@@ -8,6 +8,10 @@
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
 import { EnrichmentOrchestrator, getEnrichmentConfig } from './enrichment';
+import {
+  TOPIC_CONTEXT_SYSTEM_PROMPT,
+  createTopicContextUserPrompt,
+} from './prompts';
 
 export interface ContextBuilderOptions {
   supabase: ReturnType<typeof createClient>;
@@ -104,40 +108,8 @@ async function generateTopicContext(
 ): Promise<string[]> {
   const topic = eventTopic || eventTitle;
 
-  const systemPrompt = `You are a knowledge assistant that generates comprehensive, factual context about topics for real-time event processing.
-
-Your task: Generate a structured set of context chunks about the given topic that will help an AI agent understand and generate relevant insights during a live event.
-
-Guidelines:
-- Generate factual, educational information about the topic
-- Include key concepts, terminology, historical context, and relevant details
-- Break information into digestible chunks (each chunk should be 200-400 words)
-- Focus on information that would be useful for generating context cards during a live discussion
-- Be comprehensive but concise
-
-Output format: Return a JSON array of strings, where each string is a context chunk.
-Example:
-{
-  "chunks": [
-    "Chunk 1 text here...",
-    "Chunk 2 text here...",
-    ...
-  ]
-}`;
-
-  const userPrompt = `Generate comprehensive context chunks about: ${topic}
-
-The event title is: ${eventTitle}
-
-Please provide 10-15 context chunks covering:
-1. Key concepts and definitions
-2. Important terminology
-3. Historical context or background
-4. Relevant examples or case studies
-5. Common discussion points or questions
-6. Related topics or connections
-
-Each chunk should be 200-400 words and be self-contained.`;
+  const systemPrompt = TOPIC_CONTEXT_SYSTEM_PROMPT;
+  const userPrompt = createTopicContextUserPrompt(topic, eventTitle);
 
   try {
     const response = await openai.chat.completions.create({

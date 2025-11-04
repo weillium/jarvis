@@ -10,6 +10,11 @@ import { FactsStore, Fact } from './facts-store';
 import { RealtimeSession, AgentType } from './realtime-session';
 import { buildTopicContext } from './context-builder';
 import { getPolicy } from './policies';
+import {
+  createCardGenerationUserPrompt,
+  FACTS_EXTRACTION_SYSTEM_PROMPT,
+  createFactsExtractionUserPrompt,
+} from './prompts';
 
 export interface OrchestratorConfig {
   supabase: ReturnType<typeof createClient>;
@@ -204,7 +209,12 @@ export class Orchestrator {
   ): Promise<void> {
     const policy = getPolicy('cards', 1);
 
-    const userPrompt = `Transcript:\n${chunk.text}\n\nRecent context:\n${context.bullets.join('\n')}\n\nRelevant facts:\n${JSON.stringify(context.facts, null, 2)}\n\nAdditional context:\n${context.vectorContext}\n\nDetermine the appropriate card_type (text, text_visual, or visual) and generate the card accordingly.`;
+    const userPrompt = createCardGenerationUserPrompt(
+      chunk.text,
+      context.bullets,
+      JSON.stringify(context.facts, null, 2),
+      context.vectorContext
+    );
 
     try {
       const response = await this.config.openai.chat.completions.create({
@@ -364,9 +374,12 @@ export class Orchestrator {
     recentText: string,
     currentFacts: Fact[]
   ): Promise<void> {
-    const policy = `You are a facts extractor. Track stable keys (agenda, decisions, deadlines, metrics). Return JSON array of facts.`;
+    const policy = FACTS_EXTRACTION_SYSTEM_PROMPT;
 
-    const userPrompt = `Recent transcripts:\n${recentText}\n\nCurrent facts:\n${JSON.stringify(currentFacts, null, 2)}\n\nExtract or update stable facts. Return JSON array with keys: key, value, confidence.`;
+    const userPrompt = createFactsExtractionUserPrompt(
+      recentText,
+      JSON.stringify(currentFacts, null, 2)
+    );
 
     try {
       // Some models (like o1, o1-preview, o1-mini) don't support temperature parameter
