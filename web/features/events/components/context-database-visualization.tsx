@@ -12,6 +12,8 @@ interface ContextItem {
   enrichment_timestamp: string | null;
   chunk_size: number | null;
   metadata: Record<string, any> | null;
+  rank: number | null;
+  research_source: string | null;
 }
 
 interface ContextStats {
@@ -20,6 +22,7 @@ interface ContextStats {
   byEnrichmentSource: Record<string, number>;
   avgQualityScore: number;
   totalChars: number;
+  byResearchSource?: Record<string, number>;
 }
 
 interface ContextDatabaseVisualizationProps {
@@ -33,6 +36,8 @@ export function ContextDatabaseVisualization({ eventId, agentStatus }: ContextDa
   const [isExpanded, setIsExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isRealTime, setIsRealTime] = useState(false);
+  const [filterByRank, setFilterByRank] = useState<string | null>(null);
+  const [filterByResearchSource, setFilterByResearchSource] = useState<string | null>(null);
 
   // Calculate statistics
   useEffect(() => {
@@ -65,12 +70,20 @@ export function ContextDatabaseVisualization({ eventId, agentStatus }: ContextDa
       totalChars += item.chunk_size || item.chunk.length;
     });
 
+    // Calculate unique research sources
+    const byResearchSource: Record<string, number> = {};
+    contextItems.forEach((item) => {
+      const researchSource = item.research_source || 'none';
+      byResearchSource[researchSource] = (byResearchSource[researchSource] || 0) + 1;
+    });
+
     setStats({
       total: contextItems.length,
       bySource,
       byEnrichmentSource,
       avgQualityScore: qualityCount > 0 ? totalQuality / qualityCount : 0,
       totalChars,
+      byResearchSource,
     });
   }, [contextItems]);
 
@@ -181,6 +194,20 @@ export function ContextDatabaseVisualization({ eventId, agentStatus }: ContextDa
   const isReady = agentStatus === 'ready';
   const isRunning = agentStatus === 'running';
 
+  // Filter context items
+  const filteredItems = contextItems.filter((item) => {
+    if (filterByRank && item.rank === null) return false;
+    if (filterByRank === 'ranked' && item.rank === null) return false;
+    if (filterByRank === 'unranked' && item.rank !== null) return false;
+    if (filterByResearchSource && item.research_source !== filterByResearchSource) return false;
+    return true;
+  });
+
+  // Get unique research sources for filter
+  const researchSources = Array.from(
+    new Set(contextItems.map((item) => item.research_source).filter(Boolean))
+  ).sort() as string[];
+
   return (
     <div style={{
       background: '#ffffff',
@@ -213,7 +240,7 @@ export function ContextDatabaseVisualization({ eventId, agentStatus }: ContextDa
             color: '#64748b',
           }}>
             <span>
-              {loading ? 'Loading...' : `${stats?.total || 0} chunks`}
+              {loading ? 'Loading...' : `${stats?.total || 0} / 1,000 chunks`}
             </span>
             {isRealTime && (
               <span style={{
@@ -443,6 +470,72 @@ export function ContextDatabaseVisualization({ eventId, agentStatus }: ContextDa
         </div>
       )}
 
+      {/* Filters */}
+      {isExpanded && contextItems.length > 0 && (
+        <div style={{
+          display: 'flex',
+          gap: '12px',
+          marginTop: '20px',
+          marginBottom: '12px',
+          flexWrap: 'wrap',
+        }}>
+          <select
+            value={filterByRank || ''}
+            onChange={(e) => setFilterByRank(e.target.value || null)}
+            style={{
+              padding: '6px 12px',
+              border: '1px solid #e2e8f0',
+              borderRadius: '6px',
+              fontSize: '13px',
+              background: '#ffffff',
+            }}
+          >
+            <option value="">All Ranks</option>
+            <option value="ranked">Ranked Only</option>
+            <option value="unranked">Unranked Only</option>
+          </select>
+          {researchSources.length > 0 && (
+            <select
+              value={filterByResearchSource || ''}
+              onChange={(e) => setFilterByResearchSource(e.target.value || null)}
+              style={{
+                padding: '6px 12px',
+                border: '1px solid #e2e8f0',
+                borderRadius: '6px',
+                fontSize: '13px',
+                background: '#ffffff',
+              }}
+            >
+              <option value="">All Research Sources</option>
+              {researchSources.map((source) => (
+                <option key={source} value={source}>
+                  {source}
+                </option>
+              ))}
+            </select>
+          )}
+          {(filterByRank || filterByResearchSource) && (
+            <button
+              onClick={() => {
+                setFilterByRank(null);
+                setFilterByResearchSource(null);
+              }}
+              style={{
+                padding: '6px 12px',
+                border: '1px solid #e2e8f0',
+                borderRadius: '6px',
+                fontSize: '13px',
+                background: '#ffffff',
+                cursor: 'pointer',
+                color: '#64748b',
+              }}
+            >
+              Clear Filters
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Expanded View */}
       {isExpanded && (
         <div style={{
@@ -457,15 +550,17 @@ export function ContextDatabaseVisualization({ eventId, agentStatus }: ContextDa
             <div style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
               Loading context items...
             </div>
-          ) : contextItems.length === 0 ? (
+          ) : filteredItems.length === 0 ? (
             <div style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
-              {isPrepping
+              {(filterByRank || filterByResearchSource)
+                ? 'No context items match the selected filters.'
+                : isPrepping
                 ? 'Context database is being built. Chunks will appear here as they are generated.'
                 : 'No context items found. Context will be generated when agent status is "prepping".'}
             </div>
           ) : (
             <div style={{ padding: '8px' }}>
-              {contextItems.map((item) => (
+              {filteredItems.map((item) => (
                 <div
                   key={item.id}
                   style={{
@@ -488,6 +583,18 @@ export function ContextDatabaseVisualization({ eventId, agentStatus }: ContextDa
                       alignItems: 'center',
                       gap: '8px',
                     }}>
+                      {item.rank !== null && (
+                        <div style={{
+                          fontSize: '11px',
+                          padding: '2px 8px',
+                          background: '#dbeafe',
+                          color: '#1e40af',
+                          borderRadius: '4px',
+                          fontWeight: '600',
+                        }}>
+                          Rank: {item.rank}
+                        </div>
+                      )}
                       <div style={{
                         width: '8px',
                         height: '8px',
@@ -502,6 +609,18 @@ export function ContextDatabaseVisualization({ eventId, agentStatus }: ContextDa
                       }}>
                         {getSourceLabel(item.enrichment_source || item.source || 'unknown')}
                       </div>
+                      {item.research_source && (
+                        <div style={{
+                          fontSize: '11px',
+                          padding: '2px 8px',
+                          background: '#f3f4f6',
+                          color: '#374151',
+                          borderRadius: '4px',
+                          fontWeight: '500',
+                        }}>
+                          Research: {item.research_source}
+                        </div>
+                      )}
                     </div>
                     <div style={{
                       display: 'flex',

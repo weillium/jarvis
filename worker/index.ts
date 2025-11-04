@@ -2,6 +2,8 @@ import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
 import { Orchestrator, OrchestratorConfig } from './orchestrator';
+import { generateContextBlueprint } from './blueprint-generator';
+import { executeContextGeneration } from './context-generation-orchestrator';
 
 /** ---------- env ---------- **/
 function need(name: string) {
@@ -36,46 +38,27 @@ const orchestrator = new Orchestrator(orchestratorConfig);
 // Track agents currently being processed to prevent duplicate processing
 const processingAgents = new Set<string>();
 
-/** ---------- prep loop (polling for agents that need prep) ---------- **/
-async function tickPrep() {
-  const { data: prep, error } = await supabase
+/** ---------- blueprint loop (polling for agents that need blueprint generation) ---------- **/
+async function tickBlueprint() {
+  const { data: blueprintAgents, error } = await supabase
     .from('agents')
     .select('id,event_id,status')
-    .eq('status', 'prepping')
+    .eq('status', 'blueprint_generating')
     .limit(20);
   
   if (error) {
-    log('[prep] fetch error:', error.message);
+    log('[blueprint] fetch error:', error.message);
     return;
   }
   
-  if (!prep || prep.length === 0) {
+  if (!blueprintAgents || blueprintAgents.length === 0) {
     return;
   }
 
-  for (const ag of prep) {
+  for (const ag of blueprintAgents) {
     // Skip if already processing this agent
     if (processingAgents.has(ag.id)) {
-      log('[prep] Agent', ag.id, 'already being processed, skipping');
-      continue;
-    }
-
-    // Check if context already exists for this event (prevent duplicates)
-    const { data: existingContext, error: contextError } = await supabase
-      .from('context_items')
-      .select('id')
-      .eq('event_id', ag.event_id)
-      .limit(1);
-
-    if (contextError) {
-      log('[prep] Error checking existing context:', contextError.message);
-      continue;
-    }
-
-    // If context already exists, mark agent as ready and skip
-    if (existingContext && existingContext.length > 0) {
-      log('[prep] Context already exists for event', ag.event_id, '- marking agent as ready');
-      await supabase.from('agents').update({ status: 'ready' }).eq('id', ag.id);
+      log('[blueprint] Agent', ag.id, 'already being processed, skipping');
       continue;
     }
 
@@ -83,11 +66,84 @@ async function tickPrep() {
     processingAgents.add(ag.id);
 
     try {
-      log('[prep] preparing agent', ag.id, 'event', ag.event_id);
-      await orchestrator.prepareEvent(ag.event_id, ag.id);
-      log('[prep] ready agent', ag.id, 'event', ag.event_id);
+      log('[blueprint] generating blueprint for agent', ag.id, 'event', ag.event_id);
+      const blueprintId = await generateContextBlueprint(
+        ag.event_id,
+        ag.id,
+        {
+          supabase,
+          openai,
+          genModel: GEN_MODEL,
+        }
+      );
+      log('[blueprint] blueprint generated successfully', blueprintId, 'for agent', ag.id);
     } catch (e: any) {
-      log('[prep] error', e?.message || e);
+      log('[blueprint] error', e?.message || e);
+      await supabase.from('agents').update({ status: 'error' }).eq('id', ag.id);
+    } finally {
+      // Always remove from processing set
+      processingAgents.delete(ag.id);
+    }
+  }
+}
+
+/** ---------- context generation loop (polling for approved blueprints to execute) ---------- **/
+async function tickContextGeneration() {
+  const { data: approvedAgents, error } = await supabase
+    .from('agents')
+    .select('id,event_id,status')
+    .eq('status', 'blueprint_approved')
+    .limit(20);
+  
+  if (error) {
+    log('[context-gen] fetch error:', error.message);
+    return;
+  }
+  
+  if (!approvedAgents || approvedAgents.length === 0) {
+    return;
+  }
+
+  for (const ag of approvedAgents) {
+    // Skip if already processing this agent
+    if (processingAgents.has(ag.id)) {
+      log('[context-gen] Agent', ag.id, 'already being processed, skipping');
+      continue;
+    }
+
+    // Fetch the blueprint for this agent
+    const { data: blueprint, error: blueprintError } = await ((supabase
+      .from('context_blueprints') as any)
+      .select('id')
+      .eq('agent_id', ag.id)
+      .eq('status', 'approved')
+      .limit(1)
+      .single()) as { data: { id: string } | null; error: any };
+
+    if (blueprintError || !blueprint) {
+      log('[context-gen] No approved blueprint found for agent', ag.id);
+      continue;
+    }
+
+    // Mark as processing
+    processingAgents.add(ag.id);
+
+    try {
+      log('[context-gen] executing context generation for agent', ag.id, 'event', ag.event_id, 'blueprint', blueprint.id);
+      await executeContextGeneration(
+        ag.event_id,
+        ag.id,
+        blueprint.id,
+        {
+          supabase,
+          openai,
+          embedModel: EMBED_MODEL,
+          genModel: GEN_MODEL,
+        }
+      );
+      log('[context-gen] context generation complete for agent', ag.id);
+    } catch (e: any) {
+      log('[context-gen] error', e?.message || e);
       await supabase.from('agents').update({ status: 'error' }).eq('id', ag.id);
     } finally {
       // Always remove from processing set
@@ -113,18 +169,23 @@ async function tickRun() {
   if (!live) return;
 
   for (const ev of live) {
-    // Check if we have a ready agent for this event
-    const { data: ready } = await supabase
+    // Check if we have a ready agent for this event (supports both legacy 'ready' and new 'context_complete' statuses)
+    const { data: readyAgents, error: agentError } = await supabase
       .from('agents')
       .select('id,event_id,status')
       .eq('event_id', ev.id)
-      .eq('status', 'ready')
+      .in('status', ['ready', 'context_complete'])
       .limit(1);
     
-    if (ready && ready[0]) {
+    if (agentError) {
+      log('[run] agent fetch error for event', ev.id, agentError.message);
+      continue;
+    }
+    
+    if (readyAgents && readyAgents[0]) {
       // Start the event in orchestrator
       try {
-        await orchestrator.startEvent(ev.id, ready[0].id);
+        await orchestrator.startEvent(ev.id, readyAgents[0].id);
       } catch (e: any) {
         log('[run] error starting event', ev.id, e?.message || e);
       }
@@ -140,10 +201,11 @@ async function main() {
     // Initialize orchestrator (subscribes to Realtime, resumes events)
     await orchestrator.initialize();
     
-    // Start polling loops for prep and run
-    // Note: These are fallbacks for agents that need prep or events that need to start
+    // Start polling loops for blueprint generation, context generation, and run
+    // Note: These are fallbacks for agents that need blueprint/execution or events that need to start
     // The main processing happens via Realtime subscriptions (event-driven)
-    setInterval(tickPrep, 3000); // Check for agents needing prep every 3s
+    setInterval(tickBlueprint, 3000); // Check for agents needing blueprint generation every 3s
+    setInterval(tickContextGeneration, 3000); // Check for approved blueprints needing execution every 3s
     setInterval(tickRun, 5000);  // Check for events needing start every 5s
     
     log('Worker/Orchestrator running...');

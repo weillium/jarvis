@@ -25,12 +25,27 @@ export function AgentPlaceholder({ agent, eventId }: AgentPlaceholderProps) {
   const [contextLoading, setContextLoading] = useState(false);
   const getStatusColor = (status: Agent['status']): string => {
     switch (status) {
+      // New context generation statuses
+      case 'idle':
+        return '#64748b'; // gray
+      case 'blueprint_generating':
+        return '#3b82f6'; // blue
+      case 'blueprint_ready':
+        return '#10b981'; // green
+      case 'blueprint_approved':
+      case 'researching':
+      case 'building_glossary':
+      case 'building_chunks':
+        return '#f59e0b'; // amber
+      case 'context_complete':
+        return '#10b981'; // green
+      // Legacy statuses
+      case 'prepping':
+        return '#f59e0b'; // amber
       case 'ready':
         return '#10b981'; // green
       case 'running':
         return '#3b82f6'; // blue
-      case 'prepping':
-        return '#f59e0b'; // amber
       case 'ended':
         return '#6b7280'; // gray
       case 'error':
@@ -42,18 +57,36 @@ export function AgentPlaceholder({ agent, eventId }: AgentPlaceholderProps) {
 
   const getStatusLabel = (status: Agent['status']): string => {
     switch (status) {
+      // New context generation statuses
+      case 'idle':
+        return 'Idle';
+      case 'blueprint_generating':
+        return 'Generating Blueprint';
+      case 'blueprint_ready':
+        return 'Blueprint Ready';
+      case 'blueprint_approved':
+        return 'Blueprint Approved';
+      case 'researching':
+        return 'Researching';
+      case 'building_glossary':
+        return 'Building Glossary';
+      case 'building_chunks':
+        return 'Building Chunks';
+      case 'context_complete':
+        return 'Context Complete';
+      // Legacy statuses
+      case 'prepping':
+        return 'Prepping';
       case 'ready':
         return 'Ready';
       case 'running':
         return 'Running';
-      case 'prepping':
-        return 'Prepping';
       case 'ended':
         return 'Ended';
       case 'error':
         return 'Error';
       default:
-        return 'Unknown';
+        return status || 'Unknown';
     }
   };
 

@@ -25,8 +25,9 @@ export async function GET(
     // Fetch context items directly using service role (bypasses RLS)
     const { data, error } = await supabase
       .from('context_items')
-      .select('id, source, chunk, enrichment_source, quality_score, enrichment_timestamp, chunk_size, metadata')
+      .select('id, source, chunk, enrichment_source, quality_score, enrichment_timestamp, chunk_size, metadata, rank, research_source')
       .eq('event_id', eventId)
+      .order('rank', { ascending: true, nullsFirst: true })
       .order('enrichment_timestamp', { ascending: false, nullsFirst: true });
 
     if (error) {
@@ -34,8 +35,18 @@ export async function GET(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Sort client-side: enrichment_timestamp first (newest first)
+    // Sort client-side: rank first (if exists), then enrichment_timestamp (newest first)
     const sorted = (data || []).sort((a: any, b: any) => {
+      // Primary sort: by rank (lower is better)
+      const aRank = a.rank;
+      const bRank = b.rank;
+      if (aRank !== null && bRank !== null) {
+        return aRank - bRank;
+      }
+      if (aRank !== null) return -1;
+      if (bRank !== null) return 1;
+
+      // Secondary sort: by enrichment_timestamp (newest first)
       const aTime = a.enrichment_timestamp || '';
       const bTime = b.enrichment_timestamp || '';
       if (!aTime && !bTime) return 0;
