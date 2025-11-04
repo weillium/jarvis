@@ -207,9 +207,9 @@ async function generateTermDefinitions(
         
         const answer = await exa.answer(`What is ${term.term}?`, {
           text: true,
-          systemPrompt: `Provide a concise, technical definition suitable for professionals. 
+          systemPrompt: `Provide a comprehensive, technical definition suitable for professionals. 
                         If this is an acronym, explain what it stands for. 
-                        Keep the definition to 1-3 sentences.`,
+                        Include relevant context and related concepts.`,
         });
 
         if (answer.answer && answer.answer.trim()) {
@@ -218,20 +218,25 @@ async function generateTermDefinitions(
             ? answer.citations[0].url 
             : undefined;
 
-          definitions.push({
-            term: term.term,
-            definition: answer.answer.trim(),
-            acronym_for: undefined, // Could be extracted from answer if needed
-            category: term.category,
-            usage_examples: [], // Exa answer doesn't provide examples
-            related_terms: [], // Could be extracted from answer if needed
-            confidence_score: 0.9, // High confidence for Exa answers
-            source: 'exa',
-            source_url: sourceUrl,
-          });
+          // Transform Exa markdown answer into structured glossary format using LLM
+          const transformedDef = await transformExaAnswerToGlossary(
+            term.term,
+            term.is_acronym,
+            term.category,
+            answer.answer.trim(),
+            sourceUrl,
+            openai,
+            genModel
+          );
 
-          console.log(`[glossary] Generated definition for "${term.term}" using Exa /answer`);
-          continue; // Skip LLM generation for this term
+          if (transformedDef) {
+            definitions.push(transformedDef);
+            console.log(`[glossary] Generated definition for "${term.term}" using Exa /answer (transformed to glossary format)`);
+            continue; // Skip LLM generation for this term
+          } else {
+            console.warn(`[glossary] Failed to transform Exa answer for "${term.term}", falling back to LLM`);
+            // Fall through to LLM generation
+          }
         }
       } catch (exaError: any) {
         console.warn(`[glossary] Exa /answer failed for term "${term.term}": ${exaError.message}. Falling back to LLM.`);
@@ -284,8 +289,18 @@ For each term, provide:
 Return as JSON object with a "definitions" key containing an array of term definitions.`;
 
     try {
-      // Some models (like o1, o1-preview, o1-mini) don't support temperature parameter
-      const supportsTemperature = !genModel.startsWith('o1');
+      // Some models (like o1, o1-preview, o1-mini, gpt-5) don't support custom temperature values
+      // Only set temperature if model supports custom values
+      // Check for models that only support default temperature (1) or don't support it at all
+      const modelLower = genModel.toLowerCase();
+      const isO1Model = modelLower.startsWith('o1');
+      const isGpt5Model = modelLower.includes('gpt-5') || modelLower.startsWith('gpt5');
+      const onlySupportsDefaultTemp = isO1Model || isGpt5Model;
+      const supportsCustomTemperature = !onlySupportsDefaultTemp;
+      
+      if (onlySupportsDefaultTemp) {
+        console.log(`[glossary] Model "${genModel}" only supports default temperature (1), skipping custom temperature setting`);
+      }
       
       // Build request options - conditionally include temperature
       const requestOptions: any = {
@@ -297,8 +312,8 @@ Return as JSON object with a "definitions" key containing an array of term defin
         response_format: { type: 'json_object' },
       };
       
-      // Only add temperature if model supports it
-      if (supportsTemperature) {
+      // Only add temperature if model supports custom temperature values
+      if (supportsCustomTemperature) {
         requestOptions.temperature = 0.5; // Lower temperature for more consistent definitions
       }
       
@@ -346,4 +361,121 @@ Return as JSON object with a "definitions" key containing an array of term defin
   }
 
   return definitions;
+}
+
+/**
+ * Transform Exa markdown answer into structured glossary format
+ * Extracts clean definition, usage examples, and related terms
+ */
+async function transformExaAnswerToGlossary(
+  term: string,
+  isAcronym: boolean,
+  category: string,
+  exaAnswer: string,
+  sourceUrl: string | undefined,
+  openai: OpenAI,
+  genModel: string
+): Promise<TermDefinition | null> {
+  try {
+    const systemPrompt = `You are a glossary assistant that transforms authoritative answers into structured glossary entries.
+
+Your task: Transform a markdown-formatted answer (which may contain links, formatting, and citations) into a clean, structured glossary entry.
+
+Guidelines:
+- Extract a clean definition (1-3 sentences) without markdown formatting or links
+- If the term is an acronym, extract what it stands for
+- Generate 1-2 usage examples based on the answer content
+- Extract related terms mentioned in the answer (2-5 terms)
+- Preserve the authoritative nature of the source material
+- Remove markdown links, formatting, and citations from the definition text
+
+Output format: Return a JSON object with this exact structure:
+{
+  "term": "exact term name",
+  "definition": "clean definition without markdown (1-3 sentences)",
+  "acronym_for": "what it stands for (if acronym, otherwise omit this field)",
+  "category": "category name",
+  "usage_examples": ["example sentence 1", "example sentence 2"],
+  "related_terms": ["term1", "term2", "term3"]
+}`;
+
+    const userPrompt = `Transform this Exa answer into a structured glossary entry:
+
+Term: ${term}
+Is Acronym: ${isAcronym}
+Category: ${category}
+
+Exa Answer (markdown):
+${exaAnswer}
+
+Extract:
+1. A clean definition (remove markdown, links, citations)
+2. Acronym expansion (if applicable)
+3. 1-2 usage examples based on the answer
+4. 2-5 related terms mentioned in the answer
+
+Return as JSON object.`;
+
+    // Some models (like o1, o1-preview, o1-mini, gpt-5) don't support custom temperature values
+    const modelLower = genModel.toLowerCase();
+    const isO1Model = modelLower.startsWith('o1');
+    const isGpt5Model = modelLower.includes('gpt-5') || modelLower.startsWith('gpt5');
+    const onlySupportsDefaultTemp = isO1Model || isGpt5Model;
+    const supportsCustomTemperature = !onlySupportsDefaultTemp;
+
+    const requestOptions: any = {
+      model: genModel,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      response_format: { type: 'json_object' },
+    };
+
+    if (supportsCustomTemperature) {
+      requestOptions.temperature = 0.3; // Low temperature for consistent transformation
+    }
+
+    const response = await openai.chat.completions.create(requestOptions);
+    const content = response.choices[0]?.message?.content;
+
+    if (!content) {
+      console.warn(`[glossary] Empty response when transforming Exa answer for "${term}"`);
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(content) as {
+        term?: string;
+        definition?: string;
+        acronym_for?: string;
+        category?: string;
+        usage_examples?: string[];
+        related_terms?: string[];
+      };
+
+      if (!parsed.definition || !parsed.definition.trim()) {
+        console.warn(`[glossary] Missing definition in transformed Exa answer for "${term}"`);
+        return null;
+      }
+
+      return {
+        term: parsed.term || term,
+        definition: parsed.definition.trim(),
+        acronym_for: parsed.acronym_for || undefined,
+        category: parsed.category || category,
+        usage_examples: parsed.usage_examples || [],
+        related_terms: parsed.related_terms || [],
+        confidence_score: 0.9, // High confidence for Exa answers
+        source: 'exa',
+        source_url: sourceUrl,
+      };
+    } catch (parseError: any) {
+      console.warn(`[glossary] Failed to parse transformed Exa answer for "${term}": ${parseError.message}`);
+      return null;
+    }
+  } catch (error: any) {
+    console.warn(`[glossary] Error transforming Exa answer for "${term}": ${error.message}`);
+    return null;
+  }
 }

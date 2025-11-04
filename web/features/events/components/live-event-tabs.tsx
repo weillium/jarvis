@@ -14,6 +14,7 @@ import { RegenerateButton } from '@/features/context/components/regenerate-butto
 import { LiveCards } from '@/features/cards/components/live-cards';
 import { LiveFacts } from '@/features/facts/components/live-facts';
 import { useState, useEffect } from 'react';
+import { useAgentInfo } from '@/shared/hooks/useAgentInfo';
 
 interface LiveEventTabsProps {
   event: EventWithStatus;
@@ -25,6 +26,11 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
   const [blueprintStatus, setBlueprintStatus] = useState<string | null>(null);
   const [canApprove, setCanApprove] = useState(false);
   const [approving, setApproving] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  
+  // Get agent info for context generation panel
+  const { agent: agentInfo } = useAgentInfo(eventId);
 
   // Fetch agent status for context generation panel
   useEffect(() => {
@@ -101,6 +107,38 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
     // BlueprintDisplay handles its own regenerate logic
   };
 
+  const handleReset = async () => {
+    if (!confirm('Are you sure you want to invalidate all context components? This will require restarting context building.')) {
+      return;
+    }
+
+    setIsResetting(true);
+    setResetError(null);
+
+    try {
+      const res = await fetch(`/api/context/${eventId}/reset`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+
+      if (data.ok) {
+        // Refresh agent status
+        const agentRes = await fetch(`/api/agent/${eventId}`);
+        const agentData = await agentRes.json();
+        if (agentData.ok && agentData.agent) {
+          setAgentStatus(agentData.agent.status);
+        }
+      } else {
+        setResetError(data.error || 'Failed to reset context');
+      }
+    } catch (err: any) {
+      console.error('Failed to reset context:', err);
+      setResetError(err.message || 'Failed to reset context');
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
   // Agent Information subtabs
   const agentSubtabs = [
     {
@@ -113,13 +151,43 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
       label: 'Context Blueprint',
       content: (
         <div>
+          {/* Context Generation Progress - moved from overview */}
+          <div style={{ marginBottom: '24px' }}>
+            {resetError && (
+              <div style={{
+                marginBottom: '16px',
+                padding: '8px 12px',
+                background: '#fee2e2',
+                border: '1px solid #fecaca',
+                borderRadius: '6px',
+                color: '#991b1b',
+                fontSize: '12px',
+              }}>
+                {resetError}
+              </div>
+            )}
+            <ContextGenerationPanel 
+              eventId={eventId} 
+              agentStatus={agentStatus} 
+              embedded={true}
+              onClearContext={agentInfo && agentInfo.status !== 'idle' ? handleReset : undefined}
+              isClearing={isResetting}
+            />
+          </div>
+          
+          {/* Divider line */}
+          <div style={{
+            height: '1px',
+            background: '#e2e8f0',
+            marginBottom: '24px',
+          }} />
+          
           <div style={{ 
             display: 'flex', 
             gap: '12px', 
             marginBottom: '16px',
             flexWrap: 'wrap',
           }}>
-            <RegenerateButton eventId={eventId} stage="blueprint" />
             {canApprove && (
               <button
                 onClick={handleApproveBlueprint}
@@ -157,7 +225,9 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
       label: 'Research Results',
       content: (
         <div>
-          <RegenerateButton eventId={eventId} stage="research" />
+          <div style={{ marginBottom: '16px' }}>
+            <RegenerateButton eventId={eventId} stage="research" />
+          </div>
           <ResearchResultsVisualization eventId={eventId} embedded={true} />
         </div>
       ),
@@ -167,7 +237,9 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
       label: 'Glossary',
       content: (
         <div>
-          <RegenerateButton eventId={eventId} stage="glossary" />
+          <div style={{ marginBottom: '16px' }}>
+            <RegenerateButton eventId={eventId} stage="glossary" />
+          </div>
           <GlossaryVisualization eventId={eventId} embedded={true} />
         </div>
       ),
@@ -177,7 +249,9 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
       label: 'Context Database',
       content: (
         <div>
-          <RegenerateButton eventId={eventId} stage="chunks" />
+          <div style={{ marginBottom: '16px' }}>
+            <RegenerateButton eventId={eventId} stage="chunks" />
+          </div>
           <ContextDatabaseVisualization eventId={eventId} agentStatus={agentStatus} embedded={true} />
         </div>
       ),

@@ -327,38 +327,6 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
           </div>
         </div>
       )}
-
-      {/* Context Generation Progress */}
-      <div>
-        <h4 style={{
-          fontSize: '16px',
-          fontWeight: '600',
-          color: '#0f172a',
-          margin: '0 0 16px 0',
-        }}>
-          Context Generation Progress
-        </h4>
-        {resetError && (
-          <div style={{
-            marginBottom: '16px',
-            padding: '8px 12px',
-            background: '#fee2e2',
-            border: '1px solid #fecaca',
-            borderRadius: '6px',
-            color: '#991b1b',
-            fontSize: '12px',
-          }}>
-            {resetError}
-          </div>
-        )}
-        <ContextGenerationPanel 
-          eventId={eventId} 
-          agentStatus={agent.status} 
-          embedded={true}
-          onClearContext={agent && agent.status !== 'idle' ? handleReset : undefined}
-          isClearing={isResetting}
-        />
-      </div>
     </div>
   );
 }

@@ -352,15 +352,28 @@ Generate informative context chunks that complement the research results. Each c
 Return as a JSON object with a "chunks" field containing an array of strings. Each string should be a complete context chunk (200-400 words).`;
 
   try {
-    const response = await openai.chat.completions.create({
+    // Some models (like o1, o1-preview, o1-mini, gpt-5) don't support custom temperature values
+    // Only set temperature if model supports custom values
+    const isO1Model = genModel.startsWith('o1');
+    const onlySupportsDefaultTemp = isO1Model || genModel.includes('gpt-5');
+    const supportsCustomTemperature = !onlySupportsDefaultTemp;
+    
+    // Build request options - conditionally include temperature
+    const requestOptions: any = {
       model: genModel,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
       response_format: { type: 'json_object' },
-      temperature: 0.7,
-    });
+    };
+    
+    // Only add temperature if model supports custom temperature values
+    if (supportsCustomTemperature) {
+      requestOptions.temperature = 0.7;
+    }
+    
+    const response = await openai.chat.completions.create(requestOptions);
 
     const content = response.choices[0]?.message?.content;
     if (!content) {
