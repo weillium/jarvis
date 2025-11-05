@@ -156,12 +156,6 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
     });
   };
 
-  // Start context generation (shows prompt preview first)
-  const handleStart = async () => {
-    setIsRegenerateFlow(false);
-    await fetchPromptPreview();
-  };
-
   // Handle regenerate blueprint (shows prompt preview first)
   const handleRegenerate = async () => {
     setIsRegenerateFlow(true);
@@ -216,9 +210,6 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
     });
   };
 
-  const canStart = (statusData?.agent?.status === 'idle' && (!statusData?.agent?.stage || statusData?.agent?.stage === 'prepping')) || 
-                   (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'blueprint') ||
-                   (statusData?.agent?.status === 'error' && !statusData?.blueprint);
   const canApprove = statusData?.agent?.status === 'idle' && 
                      statusData?.agent?.stage === 'blueprint' && 
                      statusData?.blueprint?.status === 'ready';
@@ -309,55 +300,6 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
           <p style={{ margin: '0 0 16px 0' }}>
             No agent found for this event. Please create an event with an agent first.
           </p>
-        </div>
-      )}
-
-      {/* Start/Regenerate button and Approve button */}
-      {statusData?.agent && canStart && (
-        <div style={{ 
-          marginBottom: '20px',
-          display: 'flex',
-          gap: '12px',
-          flexWrap: 'wrap',
-        }}>
-          <button
-            onClick={handleStart}
-            disabled={starting}
-            style={{
-              background: starting ? '#94a3b8' : (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'blueprint' ? '#8b5cf6' : '#3b82f6'),
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '8px',
-              padding: '12px 24px',
-              fontSize: '14px',
-              fontWeight: '500',
-              cursor: starting ? 'not-allowed' : 'pointer',
-              transition: 'background 0.2s',
-            }}
-          >
-            {starting 
-              ? 'Starting...' 
-              : (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'blueprint' ? 'Regenerate Blueprint' : 'Start Context Generation')}
-          </button>
-          {canApprove && (
-            <button
-              onClick={handleApprove}
-              disabled={approving}
-              style={{
-                background: approving ? '#94a3b8' : '#10b981',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '12px 24px',
-                fontSize: '14px',
-                fontWeight: '500',
-                cursor: approving ? 'not-allowed' : 'pointer',
-                transition: 'background 0.2s',
-              }}
-            >
-              {approving ? 'Approving...' : 'Approve Blueprint'}
-            </button>
-          )}
         </div>
       )}
 

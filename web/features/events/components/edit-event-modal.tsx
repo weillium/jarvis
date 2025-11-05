@@ -542,28 +542,14 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
                 fontSize: '14px',
                 fontWeight: '500',
                 color: '#374151',
-                marginBottom: '8px',
+                marginBottom: '12px',
               }}>
                 Event Documents
               </label>
               
               {/* Existing Documents List */}
               {existingDocs && existingDocs.length > 0 && (
-                <div style={{
-                  marginBottom: '16px',
-                  padding: '12px',
-                  background: '#f8fafc',
-                  borderRadius: '6px',
-                  border: '1px solid #e2e8f0',
-                }}>
-                  <div style={{
-                    fontSize: '13px',
-                    fontWeight: '500',
-                    color: '#374151',
-                    marginBottom: '8px',
-                  }}>
-                    Current Documents ({existingDocs.length})
-                  </div>
+                <div style={{ marginBottom: '16px' }}>
                   {existingDocs.map((doc) => (
                     <DocumentListItem
                       key={doc.id}

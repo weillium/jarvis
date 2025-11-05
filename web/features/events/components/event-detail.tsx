@@ -5,7 +5,7 @@ import { EventWithStatus } from '@/shared/types/event';
 import { format, parseISO } from 'date-fns';
 import { EditEventModal } from './edit-event-modal';
 import { useEventDocsQuery } from '@/shared/hooks/use-event-docs-query';
-import { DocumentCard } from './document-card';
+import { DocumentListItem } from './document-list-item';
 
 interface EventDetailProps {
   event: EventWithStatus;
@@ -169,13 +169,7 @@ export function EventDetail({ event, onEventUpdate }: EventDetailProps) {
       )}
 
       {/* Event Documents Section */}
-      <div style={{
-        marginBottom: '24px',
-        padding: '16px',
-        background: '#f8fafc',
-        borderRadius: '8px',
-        border: '1px solid #e2e8f0',
-      }}>
+      <div style={{ marginBottom: '24px' }}>
         <h3 style={{
           fontSize: '14px',
           fontWeight: '600',
@@ -196,13 +190,12 @@ export function EventDetail({ event, onEventUpdate }: EventDetailProps) {
             No documents attached
           </p>
         ) : (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-            gap: '12px',
-          }}>
+          <div>
             {docs.map((doc) => (
-              <DocumentCard key={doc.id} doc={doc} eventId={event.id} />
+              <DocumentListItem
+                key={doc.id}
+                doc={doc}
+              />
             ))}
           </div>
         )}

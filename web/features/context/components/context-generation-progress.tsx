@@ -17,6 +17,8 @@ export function ContextGenerationProgress({
 }: ContextGenerationProgressProps) {
   const getStageLabel = (stage: string): string => {
     switch (stage) {
+      case 'idle':
+        return 'Ready to Begin Context Building';
       case 'blueprint_generating':
         return 'Generating Blueprint';
       case 'researching':
