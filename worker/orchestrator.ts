@@ -7,6 +7,9 @@ import { RingBuffer } from './ring-buffer';
 import { FactsStore } from './facts-store';
 import { RealtimeSession, AgentType } from './realtime-session';
 import type { RealtimeSessionStatus } from './realtime-session';
+import { SupabaseService } from './services/supabase-service';
+import { OpenAIService } from './services/openai-service';
+import { SSEService } from './services/sse-service';
 import { getPolicy } from './policies';
 import {
   createCardGenerationUserPrompt,
@@ -21,16 +24,23 @@ import type {
   OrchestratorConfig,
   TranscriptChunk,
   Fact,
+  SessionStatus,
 } from './types';
 export type { OrchestratorConfig } from './types';
 
 export class Orchestrator {
   private config: OrchestratorConfig;
   private runtimes: Map<string, EventRuntime> = new Map();
-  private supabaseRealtimeChannel?: any; // Supabase Realtime subscription
+  private supabaseSubscription?: { unsubscribe: () => Promise<void> };
+  private supabaseService: SupabaseService;
+  private openaiService: OpenAIService;
+  private sseService: SSEService;
 
   constructor(config: OrchestratorConfig) {
     this.config = config;
+    this.supabaseService = config.supabaseService ?? new SupabaseService(config.supabase);
+    this.openaiService = config.openaiService ?? new OpenAIService(config.openai, config.embedModel, config.genModel);
+    this.sseService = config.sseService ?? new SSEService(config.sseEndpoint);
   }
 
   /**
@@ -41,22 +51,9 @@ export class Orchestrator {
 
     // Subscribe to Supabase Realtime for transcript inserts
     // This enables event-driven processing instead of polling
-    const channel = this.config.supabase
-      .channel('transcript_events')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'transcripts',
-        },
-        (payload: any) => {
-          this.handleTranscriptInsert(payload.new);
-        }
-      )
-      .subscribe();
-
-    this.supabaseRealtimeChannel = channel;
+    this.supabaseSubscription = this.supabaseService.subscribeToTranscripts(({ new: record }) => {
+      this.handleTranscriptInsert(record);
+    });
     console.log('[orchestrator] Subscribed to transcript events');
 
     // Resume existing events (read checkpoints and rebuild state)
@@ -231,12 +228,9 @@ export class Orchestrator {
    */
   private async updateSessionStatus(runtime: EventRuntime): Promise<void> {
     // Get current session records from database
-    const { data: sessions } = await this.config.supabase
-      .from('agent_sessions')
-      .select('*')
-      .eq('event_id', runtime.eventId);
+    const sessions = await this.supabaseService.getAgentSessionsByEvent(runtime.eventId);
 
-    if (!sessions || sessions.length === 0) {
+    if (sessions.length === 0) {
       return;
     }
 
@@ -249,19 +243,39 @@ export class Orchestrator {
     const factsSession = sessions.find(s => s.agent_type === 'facts');
 
     if (cardsSession) {
-      cardsStatus.status = cardsSession.status;
-      cardsStatus.session_id = cardsSession.provider_session_id;
-      cardsStatus.metadata.created_at = cardsSession.created_at;
-      cardsStatus.metadata.updated_at = cardsSession.updated_at;
-      cardsStatus.metadata.closed_at = cardsSession.closed_at;
+      if (cardsSession.status) {
+        cardsStatus.status = cardsSession.status as SessionStatus;
+      }
+      if (cardsSession.provider_session_id) {
+        cardsStatus.session_id = cardsSession.provider_session_id;
+      }
+      if (cardsSession.created_at) {
+        cardsStatus.metadata.created_at = cardsSession.created_at;
+      }
+      if (cardsSession.updated_at) {
+        cardsStatus.metadata.updated_at = cardsSession.updated_at;
+      }
+      if (cardsSession.closed_at !== undefined) {
+        cardsStatus.metadata.closed_at = cardsSession.closed_at ?? null;
+      }
     }
 
     if (factsSession) {
-      factsStatus.status = factsSession.status;
-      factsStatus.session_id = factsSession.provider_session_id;
-      factsStatus.metadata.created_at = factsSession.created_at;
-      factsStatus.metadata.updated_at = factsSession.updated_at;
-      factsStatus.metadata.closed_at = factsSession.closed_at;
+      if (factsSession.status) {
+        factsStatus.status = factsSession.status as SessionStatus;
+      }
+      if (factsSession.provider_session_id) {
+        factsStatus.session_id = factsSession.provider_session_id;
+      }
+      if (factsSession.created_at) {
+        factsStatus.metadata.created_at = factsSession.created_at;
+      }
+      if (factsSession.updated_at) {
+        factsStatus.metadata.updated_at = factsSession.updated_at;
+      }
+      if (factsSession.closed_at !== undefined) {
+        factsStatus.metadata.closed_at = factsSession.closed_at ?? null;
+      }
     }
 
     // Update runtime metadata
@@ -279,87 +293,12 @@ export class Orchestrator {
     cardsStatus: AgentSessionStatus,
     factsStatus: AgentSessionStatus
   ): Promise<void> {
-    // Only push if SSE endpoint is configured
     if (!this.config.sseEndpoint) {
       return;
     }
 
-    try {
-      // Clean and validate base URL
-      let baseUrl = (this.config.sseEndpoint || '').trim().replace(/\/$/, ''); // Remove trailing slash
-      // Remove any backticks or other invalid characters
-      baseUrl = baseUrl.replace(/[`'"]/g, '');
-      
-      if (!baseUrl || !baseUrl.startsWith('http')) {
-        console.warn(`[orchestrator] Invalid SSE endpoint configured: ${this.config.sseEndpoint}`);
-        return;
-      }
-
-      // Push cards status with timeout
-      try {
-        const cardsResponse = await fetch(`${baseUrl}/api/agent-sessions/${runtime.eventId}/status`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(cardsStatus),
-          signal: AbortSignal.timeout(5000), // 5 second timeout
-        });
-
-        if (!cardsResponse.ok) {
-          const errorBody = (await cardsResponse
-            .json()
-            .catch(() => ({ error: 'Unknown error' }))) as { error?: string };
-          console.warn(`[orchestrator] Failed to push cards status: ${errorBody.error || cardsResponse.statusText} (status: ${cardsResponse.status})`);
-        }
-      } catch (fetchError: any) {
-        // Handle timeout or network errors separately
-        if (fetchError.name === 'AbortError' || fetchError.name === 'TimeoutError') {
-          console.warn(`[orchestrator] Timeout pushing cards status to ${baseUrl} (endpoint may be unreachable)`);
-        } else {
-          throw fetchError; // Re-throw to be caught by outer catch
-        }
-      }
-
-      // Push facts status with timeout
-      try {
-        const factsResponse = await fetch(`${baseUrl}/api/agent-sessions/${runtime.eventId}/status`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(factsStatus),
-          signal: AbortSignal.timeout(5000), // 5 second timeout
-        });
-
-        if (!factsResponse.ok) {
-          const errorBody = (await factsResponse
-            .json()
-            .catch(() => ({ error: 'Unknown error' }))) as { error?: string };
-          console.warn(`[orchestrator] Failed to push facts status: ${errorBody.error || factsResponse.statusText} (status: ${factsResponse.status})`);
-        }
-      } catch (fetchError: any) {
-        // Handle timeout or network errors separately
-        if (fetchError.name === 'AbortError' || fetchError.name === 'TimeoutError') {
-          console.warn(`[orchestrator] Timeout pushing facts status to ${baseUrl} (endpoint may be unreachable)`);
-        } else {
-          throw fetchError; // Re-throw to be caught by outer catch
-        }
-      }
-    } catch (error: any) {
-      // Don't throw - status push failure shouldn't break processing
-      // Log the full URL that failed to help debug
-      const baseUrl = this.config.sseEndpoint?.replace(/\/$/, '') || 'N/A';
-      const attemptedUrl = `${baseUrl}/api/agent-sessions/${runtime.eventId}/status`;
-      
-      // Provide more detailed error information
-      const errorDetails = error.cause 
-        ? ` (cause: ${error.cause.message || error.cause})`
-        : error.code 
-        ? ` (code: ${error.code})`
-        : '';
-      
-      console.error(`[orchestrator] Error pushing session status: ${error.message}${errorDetails}`);
-      console.error(`[orchestrator] Attempted URL: ${attemptedUrl}`);
-      console.error(`[orchestrator] SSE_ENDPOINT config: ${this.config.sseEndpoint}`);
-      console.error(`[orchestrator] Note: Ensure Next.js is running on the configured port and the endpoint is accessible`);
-    }
+    await this.sseService.pushSessionStatus(runtime.eventId, cardsStatus);
+    await this.sseService.pushSessionStatus(runtime.eventId, factsStatus);
   }
 
   /**
@@ -437,10 +376,12 @@ export class Orchestrator {
     // Persist to database (already done via insert, but update seq if needed)
     if (!chunk.seq || chunk.seq === 0) {
       // Update sequence number if missing
-      await this.config.supabase
-        .from('transcripts')
-        .update({ seq: runtime.cardsLastSeq + 1 })
-        .eq('id', chunk.transcript_id);
+      if (chunk.transcript_id !== undefined && chunk.transcript_id !== null) {
+        await this.supabaseService.updateTranscriptSeq(
+          chunk.transcript_id,
+          runtime.cardsLastSeq + 1
+        );
+      }
       chunk.seq = runtime.cardsLastSeq + 1;
     }
 
@@ -566,15 +507,16 @@ export class Orchestrator {
     );
 
     try {
-      const response = await this.config.openai.chat.completions.create({
-        model: this.config.genModel,
-        messages: [
+      const response = await this.openaiService.createChatCompletion(
+        [
           { role: 'system', content: policy },
           { role: 'user', content: userPrompt },
         ],
-        response_format: { type: 'json_object' },
-        temperature: 0.7,
-      });
+        {
+          responseFormat: { type: 'json_object' },
+          temperature: 0.7,
+        }
+      );
 
       const cardJson = response.choices[0]?.message?.content;
       if (!cardJson) return;
@@ -601,7 +543,7 @@ export class Orchestrator {
       }
 
       // Store in agent_outputs
-      await this.config.supabase.from('agent_outputs').insert({
+      await this.supabaseService.insertAgentOutput({
         event_id: runtime.eventId,
         agent_id: runtime.agentId,
         agent_type: 'cards',
@@ -611,7 +553,7 @@ export class Orchestrator {
       });
 
       // Also store in legacy cards table for compatibility
-      await this.config.supabase.from('cards').insert({
+      await this.supabaseService.insertCard({
         event_id: runtime.eventId,
         kind: card.kind || 'Context',
         payload: card,
@@ -807,7 +749,16 @@ export class Orchestrator {
         requestOptions.temperature = 0.5;
       }
       
-      const response = await this.config.openai.chat.completions.create(requestOptions);
+      const response = await this.openaiService.createChatCompletion(
+        [
+          { role: 'system', content: policy },
+          { role: 'user', content: userPrompt },
+        ],
+        {
+          responseFormat: { type: 'json_object' },
+          temperature: supportsTemperature ? 0.5 : undefined,
+        }
+      );
 
       const factsJson = response.choices[0]?.message?.content;
       if (!factsJson) return;
@@ -829,22 +780,17 @@ export class Orchestrator {
         );
 
         // Upsert to database
-        await this.config.supabase.from('facts').upsert(
-          {
-            event_id: runtime.eventId,
-            fact_key: fact.key,
-            fact_value: fact.value,
-            confidence,
-            last_seen_seq: runtime.factsLastSeq,
-            sources: [], // TODO: Track source transcript IDs
-          },
-          {
-            onConflict: 'event_id,fact_key',
-          }
-        );
+        await this.supabaseService.upsertFact({
+          event_id: runtime.eventId,
+          fact_key: fact.key,
+          fact_value: fact.value,
+          confidence,
+          last_seen_seq: runtime.factsLastSeq,
+          sources: [],
+        });
 
         // Store in agent_outputs
-        await this.config.supabase.from('agent_outputs').insert({
+        await this.supabaseService.insertAgentOutput({
           event_id: runtime.eventId,
           agent_id: runtime.agentId,
           agent_type: 'facts',
@@ -886,16 +832,15 @@ export class Orchestrator {
     // Check if sessions already exist in database
     // Look for sessions with 'starting' status (activated but not yet connected)
     // Also check for 'generated' status sessions that need to be activated
-    const { data: existingSessions } = await this.config.supabase
-      .from('agent_sessions')
-      .select('id, agent_type, status')
-      .eq('event_id', eventId)
-      .eq('agent_id', agentId)
-      .in('status', ['generated', 'starting', 'active', 'paused']);
+    const existingSessions = await this.supabaseService.getAgentSessionsForAgent(
+      eventId,
+      agentId,
+      ['generated', 'starting', 'active', 'paused']
+    );
 
     // Allow starting if status is context_complete OR if we have generated/starting sessions
     // (testing workflow: sessions generated, now activating them)
-    const hasGeneratedOrStartingSessions = existingSessions?.some(
+    const hasGeneratedOrStartingSessions = existingSessions.some(
       s => s.status === 'generated' || s.status === 'starting'
     ) || false;
 
@@ -906,13 +851,13 @@ export class Orchestrator {
     // }
 
     // Handle paused sessions - resume them
-    const pausedSessions = existingSessions?.filter(s => s.status === 'paused') || [];
+    const pausedSessions = existingSessions.filter(s => s.status === 'paused');
     if (pausedSessions.length > 0) {
       console.log(`[orchestrator] Event ${eventId} has ${pausedSessions.length} paused session(s), resuming...`);
       // If runtime exists but sessions are null, recreate them
       if (!runtime.cardsSession || !runtime.factsSession) {
         // Recreate session objects (they were cleared on pause)
-        runtime.cardsSession = new RealtimeSession(this.config.openai, {
+        runtime.cardsSession = new RealtimeSession(this.openaiService.getClient(), {
           eventId,
           agentType: 'cards',
           model: this.config.realtimeModel,
@@ -922,7 +867,7 @@ export class Orchestrator {
           onLog: (level, message, context) => {
             this.captureLog(runtime, 'cards', level, message, context);
           },
-          supabase: this.config.supabase,
+          supabase: this.supabaseService.getClient(),
           onRetrieve: async (query: string, topK: number) => {
             return await this.handleRetrieveQuery(runtime, query, topK);
           },
@@ -931,7 +876,7 @@ export class Orchestrator {
           },
         });
 
-        runtime.factsSession = new RealtimeSession(this.config.openai, {
+        runtime.factsSession = new RealtimeSession(this.openaiService.getClient(), {
           eventId,
           agentType: 'facts',
           model: this.config.realtimeModel,
@@ -941,7 +886,7 @@ export class Orchestrator {
           onLog: (level, message, context) => {
             this.captureLog(runtime, 'facts', level, message, context);
           },
-          supabase: this.config.supabase,
+          supabase: this.supabaseService.getClient(),
           onRetrieve: async (query: string, topK: number) => {
             return await this.handleRetrieveQuery(runtime, query, topK);
           },
@@ -955,11 +900,8 @@ export class Orchestrator {
         
         // Update runtime status
         runtime.status = 'running';
-        await this.config.supabase
-          .from('agents')
-          .update({ status: 'running' })
-          .eq('id', agentId);
-        
+        await this.supabaseService.updateAgentStatus(agentId, 'running');
+
         console.log(`[orchestrator] Event ${eventId} resumed successfully`);
         return;
       } catch (error: any) {
@@ -969,7 +911,7 @@ export class Orchestrator {
     }
 
     // Check for active sessions (not paused or generated)
-    const activeSessions = existingSessions?.filter(s => s.status === 'active' || s.status === 'starting') || [];
+    const activeSessions = existingSessions.filter(s => s.status === 'active' || s.status === 'starting');
     if (activeSessions.length > 0) {
       console.log(`[orchestrator] Event ${eventId} already has ${activeSessions.length} active session(s) in database`);
       
@@ -983,24 +925,16 @@ export class Orchestrator {
         console.log(`[orchestrator] Runtime already has session objects, skipping creation`);
         runtime.status = 'running';
         // Only update agent status if it's not in 'testing' status (testing workflow)
-        const { data: currentAgentCheck } = await this.config.supabase
-          .from('agents')
-          .select('status')
-          .eq('id', agentId)
-          .single();
-        
+        const currentAgentCheck = await this.supabaseService.getAgentStatus(agentId);
         if (currentAgentCheck && currentAgentCheck.status !== 'testing') {
-          await this.config.supabase
-            .from('agents')
-            .update({ status: 'running' })
-            .eq('id', agentId);
+          await this.supabaseService.updateAgentStatus(agentId, 'running');
         }
         return;
       }
     }
 
     // Create Realtime sessions with status callbacks and tool handlers
-    runtime.cardsSession = new RealtimeSession(this.config.openai, {
+    runtime.cardsSession = new RealtimeSession(this.openaiService.getClient(), {
       eventId,
       agentType: 'cards',
       model: this.config.realtimeModel,
@@ -1010,7 +944,7 @@ export class Orchestrator {
       onLog: (level, message, context) => {
         this.captureLog(runtime, 'cards', level, message, context);
       },
-      supabase: this.config.supabase,
+      supabase: this.supabaseService.getClient(),
       onRetrieve: async (query: string, topK: number) => {
         return await this.handleRetrieveQuery(runtime, query, topK);
       },
@@ -1019,7 +953,7 @@ export class Orchestrator {
       },
     });
 
-    runtime.factsSession = new RealtimeSession(this.config.openai, {
+    runtime.factsSession = new RealtimeSession(this.openaiService.getClient(), {
       eventId,
       agentType: 'facts',
       model: this.config.realtimeModel,
@@ -1029,7 +963,7 @@ export class Orchestrator {
       onLog: (level, message, context) => {
         this.captureLog(runtime, 'facts', level, message, context);
       },
-      supabase: this.config.supabase,
+      supabase: this.supabaseService.getClient(),
       onRetrieve: async (query: string, topK: number) => {
         return await this.handleRetrieveQuery(runtime, query, topK);
       },
@@ -1040,46 +974,34 @@ export class Orchestrator {
 
     // Update existing sessions from 'generated' or 'starting' to 'starting' if needed
     // If sessions don't exist, create them (shouldn't happen in testing workflow, but handle it)
-    const { data: existingSessionRecords } = await this.config.supabase
-      .from('agent_sessions')
-      .select('id, agent_type, status')
-      .eq('event_id', eventId)
-      .eq('agent_id', agentId);
+    const existingSessionRecords = await this.supabaseService.getAgentSessionsForAgent(eventId, agentId);
 
-    if (existingSessionRecords && existingSessionRecords.length > 0) {
-      // Update existing sessions to 'starting' if they're 'generated'
-      const { error: updateError } = await this.config.supabase
-        .from('agent_sessions')
-        .update({ status: 'starting' })
-        .eq('event_id', eventId)
-        .eq('agent_id', agentId)
-        .in('status', ['generated']);
-
-      if (updateError) {
+    if (existingSessionRecords.length > 0) {
+      try {
+        await this.supabaseService.updateAgentSessionsStatus(eventId, agentId, ['generated'], 'starting');
+      } catch (updateError: any) {
         console.warn(`[orchestrator] Failed to update session status: ${updateError.message}`);
       }
     } else {
       // Create sessions if they don't exist (fallback - shouldn't happen in testing workflow)
-      const { error: sessionsError } = await this.config.supabase.from('agent_sessions').upsert([
-        {
-          event_id: eventId,
-          agent_id: agentId,
-          provider_session_id: 'pending',
-          agent_type: 'cards',
-          status: 'starting',
-        },
-        {
-          event_id: eventId,
-          agent_id: agentId,
-          provider_session_id: 'pending',
-          agent_type: 'facts',
-          status: 'starting',
-        },
-      ], {
-        onConflict: 'event_id,agent_type',
-      });
-
-      if (sessionsError) {
+      try {
+        await this.supabaseService.upsertAgentSessions([
+          {
+            event_id: eventId,
+            agent_id: agentId,
+            provider_session_id: 'pending',
+            agent_type: 'cards',
+            status: 'starting',
+          },
+          {
+            event_id: eventId,
+            agent_id: agentId,
+            provider_session_id: 'pending',
+            agent_type: 'facts',
+            status: 'starting',
+          },
+        ]);
+      } catch (sessionsError: any) {
         console.error(`[orchestrator] Failed to create session records: ${sessionsError.message}`);
       }
     }
@@ -1110,17 +1032,9 @@ export class Orchestrator {
     runtime.status = 'running';
     // Only update agent status to 'running' if it's not already in 'testing' status
     // This allows testing workflow where agent stays in 'testing' while sessions are active
-    const { data: currentAgent } = await this.config.supabase
-      .from('agents')
-      .select('status')
-      .eq('id', agentId)
-      .single();
-    
+    const currentAgent = await this.supabaseService.getAgentStatus(agentId);
     if (currentAgent && currentAgent.status !== 'testing') {
-      await this.config.supabase
-        .from('agents')
-        .update({ status: 'running' })
-        .eq('id', agentId);
+      await this.supabaseService.updateAgentStatus(agentId, 'running');
     }
 
     console.log(`[orchestrator] Event ${eventId} started`);
@@ -1163,83 +1077,69 @@ export class Orchestrator {
     }
 
     // Check database for existing sessions
-    const { data: existingSessions } = await this.config.supabase
-      .from('agent_sessions')
-      .select('id, agent_type, status')
-      .eq('event_id', eventId)
-      .eq('agent_id', agentId)
-      .in('status', ['generated', 'starting']);
+    const existingSessions = await this.supabaseService.getAgentSessionsForAgent(
+      eventId,
+      agentId,
+      ['generated', 'starting']
+    );
 
-    if (!existingSessions || existingSessions.length === 0) {
+    if (existingSessions.length === 0) {
       throw new Error(`No generated or starting sessions found for event ${eventId}. Create sessions first.`);
     }
 
     // Update sessions to 'starting' if they're 'generated'
-    const { error: updateError } = await this.config.supabase
-      .from('agent_sessions')
-      .update({ status: 'starting' })
-      .eq('event_id', eventId)
-      .eq('agent_id', agentId)
-      .in('status', ['generated']);
-
-    if (updateError) {
+    try {
+      await this.supabaseService.updateAgentSessionsStatus(eventId, agentId, ['generated'], 'starting');
+    } catch (updateError: any) {
       console.warn(`[orchestrator] Failed to update session status: ${updateError.message}`);
     }
 
     // Create minimal session objects with basic callbacks
-    runtime.cardsSession = new RealtimeSession(this.config.openai, {
+    runtime.cardsSession = new RealtimeSession(this.openaiService.getClient(), {
       eventId,
       agentType: 'cards',
       model: this.config.realtimeModel,
       onStatusChange: async (status, sessionId) => {
         console.log(`[orchestrator] Cards session status: ${status} (${sessionId || 'no ID'})`);
         // Minimal status update - just update database
-        if (this.config.supabase && sessionId) {
-          await this.config.supabase
-            .from('agent_sessions')
-            .update({ 
-              status: status as any,
-              provider_session_id: sessionId,
-              model: this.config.realtimeModel,
-              updated_at: new Date().toISOString()
-            })
-            .eq('event_id', eventId)
-            .eq('agent_type', 'cards');
+        if (sessionId) {
+          await this.supabaseService.updateAgentSession(eventId, 'cards', {
+            status,
+            provider_session_id: sessionId,
+            model: this.config.realtimeModel,
+            updated_at: new Date().toISOString(),
+          });
         }
       },
       onLog: (level, message, context) => {
         console.log(`[cards-test] ${message}`);
       },
-      supabase: this.config.supabase,
+      supabase: this.supabaseService.getClient(),
       // Minimal tool handlers - just return empty for testing
       onRetrieve: async () => [],
       embedText: async () => [],
     });
 
-    runtime.factsSession = new RealtimeSession(this.config.openai, {
+    runtime.factsSession = new RealtimeSession(this.openaiService.getClient(), {
       eventId,
       agentType: 'facts',
       model: this.config.realtimeModel,
       onStatusChange: async (status, sessionId) => {
         console.log(`[orchestrator] Facts session status: ${status} (${sessionId || 'no ID'})`);
         // Minimal status update - just update database
-        if (this.config.supabase && sessionId) {
-          await this.config.supabase
-            .from('agent_sessions')
-            .update({ 
-              status: status as any,
-              provider_session_id: sessionId,
-              model: this.config.realtimeModel,
-              updated_at: new Date().toISOString()
-            })
-            .eq('event_id', eventId)
-            .eq('agent_type', 'facts');
+        if (sessionId) {
+          await this.supabaseService.updateAgentSession(eventId, 'facts', {
+            status,
+            provider_session_id: sessionId,
+            model: this.config.realtimeModel,
+            updated_at: new Date().toISOString(),
+          });
         }
       },
       onLog: (level, message, context) => {
         console.log(`[facts-test] ${message}`);
       },
-      supabase: this.config.supabase,
+      supabase: this.supabaseService.getClient(),
       // Minimal tool handlers - just return empty for testing
       onRetrieve: async () => [],
     });
@@ -1320,20 +1220,19 @@ export class Orchestrator {
     }
 
     // Check if sessions are paused in database
-    const { data: pausedSessions } = await this.config.supabase
-      .from('agent_sessions')
-      .select('id, agent_type, status')
-      .eq('event_id', eventId)
-      .eq('agent_id', agentId)
-      .eq('status', 'paused');
+    const pausedSessions = await this.supabaseService.getAgentSessionsForAgent(
+      eventId,
+      agentId,
+      ['paused']
+    );
 
-    if (!pausedSessions || pausedSessions.length === 0) {
+    if (pausedSessions.length === 0) {
       throw new Error(`No paused sessions found for event ${eventId}`);
     }
 
     // Recreate session objects if they don't exist
     if (!runtime.cardsSession || !runtime.factsSession) {
-      runtime.cardsSession = new RealtimeSession(this.config.openai, {
+      runtime.cardsSession = new RealtimeSession(this.openaiService.getClient(), {
         eventId,
         agentType: 'cards',
         model: this.config.realtimeModel,
@@ -1343,7 +1242,7 @@ export class Orchestrator {
         onLog: (level, message, context) => {
           this.captureLog(runtime, 'cards', level, message, context);
         },
-        supabase: this.config.supabase,
+        supabase: this.supabaseService.getClient(),
         onRetrieve: async (query: string, topK: number) => {
           return await this.handleRetrieveQuery(runtime, query, topK);
         },
@@ -1352,7 +1251,7 @@ export class Orchestrator {
         },
       });
 
-      runtime.factsSession = new RealtimeSession(this.config.openai, {
+      runtime.factsSession = new RealtimeSession(this.openaiService.getClient(), {
         eventId,
         agentType: 'facts',
         model: this.config.realtimeModel,
@@ -1362,7 +1261,7 @@ export class Orchestrator {
         onLog: (level, message, context) => {
           this.captureLog(runtime, 'facts', level, message, context);
         },
-        supabase: this.config.supabase,
+        supabase: this.supabaseService.getClient(),
         onRetrieve: async (query: string, topK: number) => {
           return await this.handleRetrieveQuery(runtime, query, topK);
         },
@@ -1385,10 +1284,7 @@ export class Orchestrator {
 
       // Update runtime status
       runtime.status = 'running';
-      await this.config.supabase
-        .from('agents')
-        .update({ status: 'running' })
-        .eq('id', agentId);
+      await this.supabaseService.updateAgentStatus(agentId, 'running');
 
       console.log(`[orchestrator] Event ${eventId} resumed successfully`);
     } catch (error: any) {
@@ -1401,25 +1297,30 @@ export class Orchestrator {
    * Load glossary for event and cache in runtime
    */
   private async loadGlossary(eventId: string): Promise<Map<string, GlossaryEntry>> {
-    const { data: terms, error } = await this.config.supabase
-      .from('glossary_terms')
-      .select('*')
-      .eq('event_id', eventId)
-      .eq('is_active', true)
-      .order('confidence_score', { ascending: false });
+    let terms: Array<{
+      term: string;
+      definition: string;
+      acronym_for: string | null;
+      category: string | null;
+      usage_examples: string[];
+      related_terms: string[];
+      confidence_score: number;
+    }> = [];
 
-    if (error) {
+    try {
+      terms = await this.supabaseService.getGlossaryTerms(eventId);
+    } catch (error: any) {
       console.error(`[orchestrator] Error loading glossary: ${error.message}`);
       return new Map();
     }
 
     const cache = new Map<string, GlossaryEntry>();
-    for (const term of terms || []) {
+    for (const term of terms) {
       cache.set(term.term.toLowerCase(), {
         term: term.term,
         definition: term.definition,
-        acronym_for: term.acronym_for,
-        category: term.category,
+        acronym_for: term.acronym_for || undefined,
+        category: term.category || undefined,
         usage_examples: term.usage_examples || [],
         related_terms: term.related_terms || [],
         confidence_score: term.confidence_score || 0.5,
@@ -1511,13 +1412,10 @@ export class Orchestrator {
     agentId: string
   ): Promise<EventRuntime> {
     // Read checkpoints
-    const { data: checkpoints } = await this.config.supabase
-      .from('checkpoints')
-      .select('agent_type, last_seq_processed')
-      .eq('event_id', eventId);
+    const checkpoints = await this.supabaseService.getCheckpoints(eventId);
 
-    const cardsCheckpoint = checkpoints?.find((c) => c.agent_type === 'cards');
-    const factsCheckpoint = checkpoints?.find((c) => c.agent_type === 'facts');
+    const cardsCheckpoint = checkpoints.find((c) => c.agent_type === 'cards');
+    const factsCheckpoint = checkpoints.find((c) => c.agent_type === 'facts');
 
     // Load glossary for event
     const glossaryCache = await this.loadGlossary(eventId);
@@ -1553,13 +1451,9 @@ export class Orchestrator {
    */
   private async resumeExistingEvents(): Promise<void> {
     // Find events with running agents
-    const { data: agents } = await this.config.supabase
-      .from('agents')
-      .select('id, event_id, status')
-      .eq('status', 'running')
-      .limit(50);
+    const agents = await this.supabaseService.getAgentsByStatus('running', 50);
 
-    if (!agents || agents.length === 0) {
+    if (agents.length === 0) {
       console.log('[orchestrator] No running events to resume');
       return;
     }
@@ -1588,15 +1482,13 @@ export class Orchestrator {
    * Replay transcripts to rebuild ring buffer and facts store
    */
   private async replayTranscripts(runtime: EventRuntime): Promise<void> {
-    const { data: transcripts } = await this.config.supabase
-      .from('transcripts')
-      .select('id, seq, at_ms, speaker, text, final')
-      .eq('event_id', runtime.eventId)
-      .gt('seq', Math.max(runtime.cardsLastSeq, runtime.factsLastSeq))
-      .order('seq', { ascending: true })
-      .limit(1000);
+    const transcripts = await this.supabaseService.getTranscriptsForReplay(
+      runtime.eventId,
+      Math.max(runtime.cardsLastSeq, runtime.factsLastSeq),
+      1000
+    );
 
-    if (!transcripts || transcripts.length === 0) {
+    if (transcripts.length === 0) {
       return;
     }
 
@@ -1634,17 +1526,7 @@ export class Orchestrator {
     const runtime = this.runtimes.get(eventId);
     if (!runtime) return;
 
-    await this.config.supabase.from('checkpoints').upsert(
-      {
-        event_id: eventId,
-        agent_id: runtime.agentId,
-        agent_type: agentType,
-        last_seq_processed: lastSeq,
-      },
-      {
-        onConflict: 'event_id,agent_type',
-      }
-    );
+    await this.supabaseService.upsertCheckpoint(eventId, runtime.agentId, agentType, lastSeq);
   }
 
 
@@ -1652,11 +1534,7 @@ export class Orchestrator {
    * Helper: Embed text
    */
   private async embedText(text: string): Promise<number[]> {
-    const res = await this.config.openai.embeddings.create({
-      model: this.config.embedModel,
-      input: text,
-    });
-    return res.data[0].embedding;
+    return this.openaiService.createEmbedding(text);
   }
 
   /**
@@ -1667,18 +1545,12 @@ export class Orchestrator {
     query: number[],
     k: number = 5
   ): Promise<{ id: string; chunk: string; similarity: number }[]> {
-    const { data, error } = await this.config.supabase.rpc('match_context', {
-      p_event: eventId,
-      p_query: query,
-      p_limit: k,
-    });
-
-    if (error) {
+    try {
+      return await this.supabaseService.vectorSearch(eventId, query, k);
+    } catch (error: any) {
       console.error(`[orchestrator] Context search error: ${error.message}`);
       return [];
     }
-
-    return (data || []) as { id: string; chunk: string; similarity: number }[];
   }
 
   /**
@@ -1767,7 +1639,7 @@ export class Orchestrator {
       }
 
       // Store in agent_outputs
-      await this.config.supabase.from('agent_outputs').insert({
+      await this.supabaseService.insertAgentOutput({
         event_id: runtime.eventId,
         agent_id: runtime.agentId,
         agent_type: 'cards',
@@ -1777,7 +1649,7 @@ export class Orchestrator {
       });
 
       // Also store in legacy cards table
-      await this.config.supabase.from('cards').insert({
+      await this.supabaseService.insertCard({
         event_id: runtime.eventId,
         kind: card.kind || 'Context',
         payload: card,
@@ -1815,22 +1687,16 @@ export class Orchestrator {
         );
 
         // Upsert to database
-        await this.config.supabase.from('facts').upsert(
-          {
-            event_id: runtime.eventId,
-            fact_key: fact.key,
-            fact_value: fact.value,
-            confidence,
-            last_seen_seq: runtime.factsLastSeq,
-            sources: [],
-          },
-          {
-            onConflict: 'event_id,fact_key',
-          }
-        );
+        await this.supabaseService.upsertFact({
+          event_id: runtime.eventId,
+          fact_key: fact.key,
+          fact_value: fact.value,
+          confidence,
+          last_seen_seq: runtime.factsLastSeq,
+          sources: [],
+        });
 
-        // Store in agent_outputs
-        await this.config.supabase.from('agent_outputs').insert({
+        await this.supabaseService.insertAgentOutput({
           event_id: runtime.eventId,
           agent_id: runtime.agentId,
           agent_type: 'facts',
@@ -1944,8 +1810,10 @@ export class Orchestrator {
     }
 
     // Unsubscribe from Realtime
-    if (this.supabaseRealtimeChannel) {
-      await this.config.supabase.removeChannel(this.supabaseRealtimeChannel);
+    if (this.supabaseSubscription) {
+      await this.supabaseSubscription.unsubscribe().catch((error: any) => {
+        console.error(`[orchestrator] Error unsubscribing from Supabase channel: ${error.message}`);
+      });
     }
 
     console.log('[orchestrator] Shutdown complete');
