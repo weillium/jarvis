@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
-import { Orchestrator, OrchestratorConfig } from './orchestrator';
+import { Orchestrator, OrchestratorConfig } from './core/orchestrator';
 import { generateContextBlueprint } from './blueprint-generator';
 import { executeContextGeneration, regenerateResearchStage, regenerateGlossaryStage, regenerateChunksStage } from './context-generation-orchestrator';
 import http from 'http';

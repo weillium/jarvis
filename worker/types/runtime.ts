@@ -1,11 +1,6 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-import type OpenAI from 'openai';
 import type { RingBuffer, TranscriptChunk } from '../ring-buffer';
 import type { FactsStore, Fact } from '../facts-store';
 import type { RealtimeSession } from '../sessions/realtime-session';
-import type { SupabaseService } from '../services/supabase-service';
-import type { OpenAIService } from '../services/openai-service';
-import type { SSEService } from '../services/sse-service';
 
 export type EventRuntimeStatus =
   | 'prepping'
@@ -40,6 +35,8 @@ export interface EventRuntime {
   factsSession?: RealtimeSession;
   cardsSessionId?: string;
   factsSessionId?: string;
+  cardsHandlerSession?: RealtimeSession;
+  factsHandlerSession?: RealtimeSession;
 
   // Checkpoints
   cardsLastSeq: number;
@@ -58,18 +55,6 @@ export interface EventRuntime {
   // Metadata
   createdAt: Date;
   updatedAt: Date;
-}
-
-export interface OrchestratorConfig {
-  supabase: SupabaseClient;
-  openai: OpenAI;
-  embedModel: string;
-  genModel: string;
-  realtimeModel: string;
-  sseEndpoint?: string;
-  supabaseService?: SupabaseService;
-  openaiService?: OpenAIService;
-  sseService?: SSEService;
 }
 
 export type { TranscriptChunk, Fact };

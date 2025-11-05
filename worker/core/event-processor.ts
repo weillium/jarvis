@@ -1,0 +1,169 @@
+import { EventRuntime } from '../types';
+import { CardsProcessor } from '../processing/cards-processor';
+import { FactsProcessor } from '../processing/facts-processor';
+import { TranscriptProcessor } from '../processing/transcript-processor';
+import { SupabaseService } from '../services/supabase-service';
+import type { TranscriptChunk } from '../types';
+
+type DetermineCardTypeFn = (card: any, transcriptText: string) => 'text' | 'text_visual' | 'visual';
+
+export class EventProcessor {
+  private readonly FACTS_DEBOUNCE_MS = 25000;
+
+  constructor(
+    private readonly cardsProcessor: CardsProcessor,
+    private readonly factsProcessor: FactsProcessor,
+    private readonly transcriptProcessor: TranscriptProcessor,
+    private readonly supabase: SupabaseService,
+    private readonly determineCardType: DetermineCardTypeFn
+  ) {}
+
+  async handleTranscript(runtime: EventRuntime, transcript: any): Promise<void> {
+    const chunk = this.transcriptProcessor.convertToChunk(transcript);
+    await this.processTranscriptChunk(runtime, chunk);
+  }
+
+  attachSessionHandlers(runtime: EventRuntime): void {
+    if (runtime.cardsSession && runtime.cardsSession !== runtime.cardsHandlerSession) {
+      runtime.cardsSession.on('card', async (card: any) => {
+        await this.handleCardResponse(runtime, card);
+      });
+      runtime.cardsHandlerSession = runtime.cardsSession;
+    }
+
+    if (runtime.factsSession && runtime.factsSession !== runtime.factsHandlerSession) {
+      runtime.factsSession.on('facts', async (facts: any[]) => {
+        await this.handleFactsResponse(runtime, facts);
+      });
+      runtime.factsHandlerSession = runtime.factsSession;
+    }
+  }
+
+  cleanup(eventId: string, runtime: EventRuntime): void {
+    if (runtime.factsUpdateTimer) {
+      clearTimeout(runtime.factsUpdateTimer);
+      runtime.factsUpdateTimer = undefined;
+    }
+    runtime.cardsHandlerSession = undefined;
+    runtime.factsHandlerSession = undefined;
+  }
+
+  private async processTranscriptChunk(runtime: EventRuntime, chunk: TranscriptChunk): Promise<void> {
+    runtime.ringBuffer.add(chunk);
+
+    if (!chunk.final) {
+      return;
+    }
+
+    if (!chunk.seq || chunk.seq === 0) {
+      const nextSeq = runtime.cardsLastSeq + 1;
+      if (chunk.transcript_id) {
+        await this.transcriptProcessor.ensureSequenceNumber(chunk.transcript_id, nextSeq);
+      }
+      chunk.seq = nextSeq;
+    }
+
+    runtime.cardsLastSeq = Math.max(runtime.cardsLastSeq, chunk.seq);
+    runtime.factsLastSeq = Math.max(runtime.factsLastSeq, chunk.seq);
+
+    await this.cardsProcessor.process(runtime, chunk, runtime.cardsSession, runtime.cardsSessionId);
+
+    this.scheduleFactsUpdate(runtime);
+  }
+
+  private scheduleFactsUpdate(runtime: EventRuntime): void {
+    if (runtime.factsUpdateTimer) {
+      clearTimeout(runtime.factsUpdateTimer);
+    }
+
+    runtime.factsUpdateTimer = setTimeout(() => {
+      runtime.factsUpdateTimer = undefined;
+      void this.factsProcessor.process(runtime, runtime.factsSession, runtime.factsSessionId);
+    }, this.FACTS_DEBOUNCE_MS);
+  }
+
+  async handleCardResponse(runtime: EventRuntime, card: any): Promise<void> {
+    try {
+      if (!card) {
+        return;
+      }
+
+      if (!card.kind || !card.title) {
+        console.warn(`[cards] Invalid card structure: missing kind or title`);
+        return;
+      }
+
+      if (!card.card_type || !['text', 'text_visual', 'visual'].includes(card.card_type)) {
+        card.card_type = this.determineCardType(card, '');
+      }
+
+      if (card.card_type === 'visual') {
+        if (!card.label) card.label = card.title || 'Image';
+        if (!card.body) card.body = null;
+      } else if (card.card_type === 'text_visual') {
+        if (!card.body) card.body = card.title || 'Definition';
+      } else {
+        if (!card.body) card.body = card.title || 'Definition';
+        card.image_url = null;
+      }
+
+      await this.supabase.insertAgentOutput({
+        event_id: runtime.eventId,
+        agent_id: runtime.agentId,
+        agent_type: 'cards',
+        for_seq: card.source_seq || runtime.cardsLastSeq,
+        type: 'card',
+        payload: card,
+      });
+
+      await this.supabase.insertCard({
+        event_id: runtime.eventId,
+        kind: card.kind || 'Context',
+        payload: card,
+      });
+
+      console.log(
+        `[cards] Card received from Realtime API (seq: ${card.source_seq || runtime.cardsLastSeq}, type: ${card.card_type})`
+      );
+    } catch (error: any) {
+      console.error(`[event-processor] Error storing card: ${error.message}`);
+    }
+  }
+
+  async handleFactsResponse(runtime: EventRuntime, facts: any[]): Promise<void> {
+    try {
+      if (!facts || facts.length === 0) {
+        return;
+      }
+
+      for (const fact of facts) {
+        if (!fact.key || fact.value === undefined) continue;
+
+        const confidence = fact.confidence || 0.7;
+        runtime.factsStore.upsert(fact.key, fact.value, confidence, runtime.factsLastSeq, undefined);
+
+        await this.supabase.upsertFact({
+          event_id: runtime.eventId,
+          fact_key: fact.key,
+          fact_value: fact.value,
+          confidence,
+          last_seen_seq: runtime.factsLastSeq,
+          sources: [],
+        });
+
+        await this.supabase.insertAgentOutput({
+          event_id: runtime.eventId,
+          agent_id: runtime.agentId,
+          agent_type: 'facts',
+          for_seq: runtime.factsLastSeq,
+          type: 'fact_update',
+          payload: fact,
+        });
+      }
+
+      console.log(`[facts] ${facts.length} facts updated from Realtime API`);
+    } catch (error: any) {
+      console.error(`[event-processor] Error storing facts: ${error.message}`);
+    }
+  }
+}
