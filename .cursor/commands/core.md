@@ -1,595 +1,479 @@
 ---
 type: command
-version: 1
+version: 2
 scope: repository
-generated_by: Repo Architect Agent
+generated_by: System Architecture Update
 description: >
-  Core contextual commands for this repository. Each command maps plain-language user prompts to deterministic actions.
+  Contextual commands for Jarvis project. Commands follow 2025 Cursor AI best practices:
+  explicit steps, clear validation, proper error handling, React Query patterns.
 ---
 
-# Project Commands
+# Jarvis Project Commands
 
-> Use commands verbatim (e.g., "Command: Add Feature Module").  
-> Cursor will expand each into stepwise edits following `.cursor/rules/project.mdc`.
+> **Usage**: Reference commands by name (e.g., "Command: Add React Query Hook")
+> Commands follow project rules in `.cursor/rules/project.mdc`
 
 ## Command Schema
 
-```yaml
-fields:
-  - name: name
-    desc: short command title
-  - name: intent
-    desc: goal in one sentence
-  - name: triggers
-    desc: natural language prompts that activate this command
-  - name: prechecks
-    desc: files or configs to inspect before execution
-  - name: steps
-    desc: explicit edit sequence
-  - name: validations
-    desc: tests or checks to confirm correctness
-  - name: rollback
-    desc: how to revert safely
-```
+Each command includes:
+- **name**: Short, action-oriented title
+- **intent**: Clear goal statement
+- **triggers**: Natural language phrases that activate
+- **context**: What to understand before executing
+- **steps**: Explicit, ordered sequence
+- **validation**: Checks to confirm success
+- **rollback**: How to safely revert
 
 ---
 
-### Commands
+## Frontend Commands
 
-```yaml
-- name: Add Feature Module
-  intent: Create a new feature folder with component, hooks, and types scaffolding.
-  triggers:
-    - "add new feature"
-    - "create feature module"
-    - "scaffold feature"
-  prechecks:
-    - "verify web/features directory exists"
-    - "check tsconfig.json paths alias @/*"
-  steps:
-    - "create web/features/<name>/index.tsx (or .ts if no UI)"
-    - "create web/features/<name>/hooks/use<Name>.ts if needed"
-    - "create web/features/<name>/types.ts for domain types"
-    - "add exports to web/features/<name>/index.ts"
-    - "import and use in relevant page or component"
-  validations:
-    - "run pnpm lint in web/"
-    - "verify TypeScript compiles (tsc --noEmit)"
-    - "check no unused imports"
-  rollback:
-    - "delete web/features/<name>/ directory"
-    - "remove imports from consuming files"
-```
+### Add React Query Hook
 
-```yaml
-- name: Add Migration
-  intent: Create a new Supabase database migration with timestamp and SQL changes.
-  triggers:
-    - "add migration"
-    - "create migration"
-    - "database schema change"
-  prechecks:
-    - "verify supabase/migrations/ directory exists"
-    - "check latest migration timestamp to ensure ordering"
-    - "review existing migrations for patterns"
-  steps:
-    - "generate timestamp: YYYYMMDDHHMMSS"
-    - "create supabase/migrations/<timestamp>_<descriptive_name>.sql"
-    - "write CREATE/ALTER/DROP statements with proper rollback comments"
-    - "add RLS policies if creating tables (grant/revoke)"
-    - "add indexes for foreign keys and frequently queried columns"
-  validations:
-    - "run supabase db reset locally to test migration"
-    - "verify no syntax errors (supabase migration list)"
-    - "check RLS policies are correct for authenticated users"
-  rollback:
-    - "create reverse migration file with opposite operations"
-    - "or manually revert changes if migration not applied to production"
-```
+**Intent**: Create a new `useQuery` or `useMutation` hook following project patterns.
 
-```yaml
-- name: Add Edge Function
-  intent: Create a new Supabase Edge Function with Deno runtime and CORS setup.
-  triggers:
-    - "add edge function"
-    - "create supabase function"
-    - "add serverless endpoint"
-  prechecks:
-    - "verify supabase/functions/ directory exists"
-    - "check supabase/config.toml for function configuration format"
-    - "review orchestrator function as reference"
-  steps:
-    - "create supabase/functions/<name>/index.ts"
-    - "create supabase/functions/<name>/deno.json with imports map"
-    - "create supabase/functions/<name>/types.d.ts for Deno types"
-    - "add function config to supabase/config.toml [functions.<name>]"
-    - "implement CORS headers and OPTIONS handler"
-    - "add JWT verification if needed (verify_jwt = true)"
-  validations:
-    - "run supabase start and test function via curl"
-    - "verify CORS headers in response"
-    - "check error handling returns JSON { ok: false, error: string }"
-  rollback:
-    - "delete supabase/functions/<name>/ directory"
-    - "remove [functions.<name>] section from config.toml"
-```
+**Triggers**: "add query hook", "create mutation hook", "add react query hook"
 
-```yaml
-- name: Add RPC Function
-  intent: Create a PostgreSQL stored procedure/function for atomic operations or complex queries.
-  triggers:
-    - "add RPC function"
-    - "create stored procedure"
-    - "add database function"
-  prechecks:
-    - "verify supabase/migrations/ directory"
-    - "check existing RPC functions (create_event_with_agent, match_context) for patterns"
-    - "confirm function should be RPC vs. Edge Function vs. application code"
-  steps:
-    - "create migration file: supabase/migrations/<timestamp>_rpc_<name>.sql"
-    - "write CREATE OR REPLACE FUNCTION <name>(...) RETURNS ... LANGUAGE plpgsql"
-    - "add SECURITY DEFINER if needed (with caution)"
-    - "add GRANT EXECUTE to authenticated and/or service_role"
-    - "include comments describing parameters and return value"
-  validations:
-    - "test function via supabase.rpc() call in local environment"
-    - "verify return type matches TypeScript expectations"
-    - "check performance with EXPLAIN ANALYZE if query-heavy"
-  rollback:
-    - "create migration with DROP FUNCTION <name>"
-    - "or comment out function in migration file"
-```
+**Context**:
+- Check existing hooks in `web/shared/hooks/use-*-query.ts` and `use-mutations.ts`
+- Determine if query (data fetching) or mutation (data modification)
+- Identify API endpoint to call
+- Determine query keys and cache invalidation strategy
 
-```yaml
-- name: Add Page Route
-  intent: Create a new Next.js App Router page with proper layout and TypeScript types.
-  triggers:
-    - "add page"
-    - "create route"
-    - "new page component"
-  prechecks:
-    - "verify web/app/ directory structure"
-    - "determine route group: (app) for authenticated, (marketing) for public"
-    - "check if dynamic route needed ([param])"
-  steps:
-    - "create web/app/<path>/page.tsx"
-    - "add default export function with proper Props type for params"
-    - "add metadata export if SEO needed"
-    - "create layout.tsx if route group needs custom layout"
-    - "import shared components from web/shared/ui/ or web/features/"
-  validations:
-    - "run pnpm dev and navigate to route"
-    - "verify TypeScript types for params are correct"
-    - "check page renders without errors"
-  rollback:
-    - "delete page.tsx and layout.tsx files"
-    - "remove route from navigation if added"
-```
+**Steps**:
+1. Create file: `web/shared/hooks/use-<name>-query.ts` (for queries) or add to `use-mutations.ts` (for mutations)
+2. Import: `useQuery`/`useMutation` and `useQueryClient` from `@tanstack/react-query`
+3. For queries:
+   - Define `queryKey`: `['resource', identifier]` (e.g., `['agent', eventId]`)
+   - Define `queryFn`: async function calling API endpoint
+   - Add `enabled` option if conditional
+   - Add `refetchInterval` if polling needed
+   - Add `staleTime` if appropriate
+4. For mutations:
+   - Define `mutationFn`: async function calling API endpoint
+   - Add `onSuccess`: `queryClient.invalidateQueries({ queryKey: [...] })`
+   - Handle errors with user-friendly messages
+5. Export hook function
+6. Use in component (replace any manual `fetch` + `useState` patterns)
 
-```yaml
-- name: Add Server Action
-  intent: Create a Next.js Server Action for form submissions or data mutations.
-  triggers:
-    - "add server action"
-    - "create form handler"
-    - "server-side mutation"
-  prechecks:
-    - "verify web/server/actions/ directory exists"
-    - "check if action should be in route or separate file"
-    - "review Supabase client setup in web/shared/lib/supabase.ts"
-  steps:
-    - "create web/server/actions/<name>.ts with 'use server' directive"
-    - "import Supabase client (server-side, use service role if privileged)"
-    - "add input validation (Zod schema if complex)"
-    - "export async function with proper error handling"
-    - "call from client component or form action"
-  validations:
-    - "test action from client component"
-    - "verify error messages are user-friendly"
-    - "check TypeScript types for parameters and return"
-  rollback:
-    - "delete action file"
-    - "remove imports and calls from consuming components"
-```
+**Validation**:
+- ✅ Hook compiles (`tsc --noEmit`)
+- ✅ Hook used in component and works
+- ✅ Mutations invalidate related queries
+- ✅ No manual `fetch` patterns remain
+- ✅ ESLint passes
 
-```yaml
-- name: Add API Route
-  intent: Create a new Next.js API route for server-side endpoints (ingestion, streaming, etc.).
-  triggers:
-    - "add API route"
-    - "create endpoint"
-    - "new API handler"
-    - "add SSE endpoint"
-  prechecks:
-    - "verify web/app/api/ directory exists"
-    - "check if Server Action would be more appropriate"
-    - "review existing API routes (/api/ingest, /api/stream) for patterns"
-    - "determine if SSE streaming needed (use ReadableStream pattern from /api/stream)"
-  steps:
-    - "create web/app/api/<name>/route.ts"
-    - "export GET, POST, PUT, DELETE handlers as needed"
-    - "for SSE: use ReadableStream pattern (see /api/stream/route.ts)"
-    - "for JSON: use NextResponse.json() with proper status codes"
-    - "add CORS headers if needed (see /api/ingest for example)"
-    - "add error handling with try-catch"
-    - "use SUPABASE_SERVICE_ROLE_KEY for privileged operations (server-side only)"
-  validations:
-    - "test endpoint via curl or browser"
-    - "verify CORS headers if calling from browser"
-    - "check error handling works correctly"
-    - "if SSE: verify stream stays open and handles client disconnect"
-  rollback:
-    - "delete route.ts file"
-    - "remove any client-side calls to the endpoint"
-```
+**Rollback**:
+- Delete hook file or remove from `use-mutations.ts`
+- Restore previous manual fetch patterns if needed
 
-```yaml
-- name: Add Vector Search Index
-  intent: Create or optimize pgvector index for semantic search performance.
-  triggers:
-    - "add vector index"
-    - "optimize embedding search"
-    - "improve similarity search"
-  prechecks:
-    - "verify pgvector extension is enabled"
-    - "check existing index on context_items.embedding"
-    - "review index type (IVFFlat vs. HNSW) for data size"
-  steps:
-    - "create migration: supabase/migrations/<timestamp>_index_<table>_embedding.sql"
-    - "write CREATE INDEX using ivfflat or hnsw with vector_cosine_ops"
-    - "set lists parameter for IVFFlat (100 default, increase for large datasets)"
-    - "include WHERE clause if filtering by event_id (partial index)"
-  validations:
-    - "test query performance with EXPLAIN ANALYZE"
-    - "verify index is used in query plan"
-    - "check index size doesn't exceed memory limits"
-  rollback:
-    - "DROP INDEX in new migration"
-    - "or recreate with different parameters"
-```
+---
 
-```yaml
-- name: Add Enrichment Enricher
-  intent: Add a new enricher to the context enrichment framework.
-  triggers:
-    - "add enricher"
-    - "create enrichment source"
-    - "add context enrichment"
-  prechecks:
-    - "verify worker/enrichment/ directory structure exists"
-    - "review worker/enrichment/enrichers/base-enricher.ts for interface"
-    - "check existing enrichers (web-search, document-extractor, wikipedia) for patterns"
-    - "determine if new enricher needs API keys or external services"
-  steps:
-    - "create worker/enrichment/enrichers/<name>.ts"
-    - "extend BaseEnricher class and implement enrich() method"
-    - "override getChunkingStrategy() and getQualityScore() if needed"
-    - "register enricher in worker/enrichment/index.ts (EnrichmentOrchestrator)"
-    - "add environment variables for configuration (ENRICHMENT_<NAME>_ENABLED, etc.)"
-    - "update getEnrichmentConfig() in worker/enrichment/index.ts if needed"
-  validations:
-    - "test enricher in isolation with sample input"
-    - "verify chunks are generated with proper metadata"
-    - "check quality scores are reasonable (0-1 range)"
-    - "test with context builder integration"
-  rollback:
-    - "delete enricher file"
-    - "remove from EnrichmentOrchestrator"
-    - "remove environment variables"
-```
+### Add Feature Module
 
-```yaml
-- name: Add Worker Task
-  intent: Add a new background processing task to the orchestrator service.
-  triggers:
-    - "add worker task"
-    - "background job"
-    - "worker processing"
-    - "add orchestrator task"
-  prechecks:
-    - "review worker/index.ts structure (tickPrep, tickRun polling loops for fallback)"
-    - "review worker/orchestrator.ts structure (event-driven processing via Realtime)"
-    - "verify worker has access to required env vars"
-    - "determine if task should be event-driven (Realtime subscription) or polling-based (fallback)"
-  steps:
-    - "For event-driven: add handler in orchestrator.ts (e.g., handleTranscriptInsert, processCardsAgent)"
-    - "For polling: add async function in worker/index.ts and integrate into tickPrep() or tickRun()"
-    - "add error handling with logging and status updates"
-    - "update EventRuntime interface if extending state (in orchestrator.ts)"
-    - "if polling: add setInterval() call in main() if periodic task"
-    - "if Realtime-driven: subscribe to appropriate Supabase Realtime channel in orchestrator.initialize()"
-  validations:
-    - "run worker locally with test data"
-    - "verify logs show task execution"
-    - "check database state changes are correct"
-    - "if Realtime-driven: verify Supabase Realtime subscription works"
-  rollback:
-    - "remove function and subscription/interval call"
-    - "revert database changes if made"
-```
+**Intent**: Create a new feature module with components, hooks, and types.
 
-```yaml
-- name: Add Realtime Subscription
-  intent: Set up real-time data updates via SSE streaming or Supabase Realtime subscriptions.
-  triggers:
-    - "add realtime"
-    - "live updates"
-    - "subscribe to changes"
-    - "add SSE stream"
-  prechecks:
-    - "determine if client-side (SSE via /api/stream) or server-side (Supabase Realtime in worker)"
-    - "verify supabase/config.toml has [realtime] enabled"
-    - "check table has Realtime enabled in Supabase Dashboard (or via SQL)"
-    - "review web/shared/hooks/use-sse-stream.ts for client-side SSE pattern"
-  steps:
-    - "For client-side SSE: use existing useSSEStream hook or create new hook"
-    - "For client-side Supabase Realtime: create hook: web/shared/hooks/use<Name>Realtime.ts"
-    - "For server-side (worker): add subscription in orchestrator.ts initialize() method"
-    - "import supabase client from appropriate location (web/shared/lib/supabase.ts or worker)"
-    - "use useEffect to set up .from('<table>').on('*', callback) for client-side"
-    - "return cleanup function to unsubscribe"
-    - "use hook in page or component (e.g., live event page uses LiveCards/LiveFacts)"
-  validations:
-    - "test subscription/stream in browser DevTools"
-    - "verify updates appear in UI when DB changes"
-    - "check memory leak (unsubscribe on unmount)"
-    - "if SSE: verify /api/stream route handles Realtime subscriptions correctly"
-  rollback:
-    - "remove hook file or subscription code"
-    - "remove subscription code from component or orchestrator"
-```
+**Triggers**: "add feature", "create feature module", "new feature"
 
-```yaml
-- name: Add Type Definitions
-  intent: Generate or manually add TypeScript types for Supabase tables and functions.
-  triggers:
-    - "add types"
-    - "generate supabase types"
-    - "type definitions"
-  prechecks:
-    - "verify supabase CLI is installed"
-    - "check if types already exist in web/shared/types/"
-    - "review database schema for table structures"
-  steps:
-    - "run: supabase gen types typescript --local > web/shared/types/database.ts"
-    - "or manually create types based on schema in web/shared/types/"
-    - "export Database type and helper types (Tables, Functions)"
-    - "import in components and server actions for type safety"
-    - "create domain-specific types in web/features/*/types.ts if needed"
-  validations:
-    - "verify types match actual schema (run supabase db diff)"
-    - "check TypeScript compiles without errors"
-    - "test autocomplete in IDE"
-  rollback:
-    - "delete or revert types file"
-    - "remove type imports if breaking"
-```
+**Context**:
+- Check `web/features/` directory structure
+- Determine feature domain (agents, cards, events, context, facts, etc.)
+- Identify if UI components needed or just logic/hooks
 
-```yaml
-- name: Add Environment Variable
-  intent: Document and configure a new environment variable across services.
-  triggers:
-    - "add env variable"
-    - "new configuration"
-    - "environment setting"
-  prechecks:
-    - "check existing env vars in worker/index.ts and web/shared/lib/supabase.ts"
-    - "determine if variable should be NEXT_PUBLIC_ (exposed to browser)"
-    - "verify .env.example or documentation exists"
-  steps:
-    - "add variable to worker/.env.example (if worker-related)"
-    - "add variable to web/.env.local.example (if web-related)"
-    - "update .cursor/rules/project.mdc section 8 with new variable"
-    - "add usage in code with need() helper or process.env"
-    - "document purpose and default value in code comments"
-  validations:
-    - "test local setup with missing var (should error gracefully)"
-    - "verify variable is used correctly in runtime"
-    - "check no secrets are exposed to client (NEXT_PUBLIC_ prefix)"
-  rollback:
-    - "remove env var usage from code"
-    - "remove from .env.example files"
-    - "revert documentation"
-```
+**Steps**:
+1. Create directory: `web/features/<domain>/`
+2. Create component file: `web/features/<domain>/components/<name>.tsx`
+3. Add `'use client'` directive if client component
+4. Create types: `web/features/<domain>/types.ts` if domain-specific types needed
+5. Create hooks: `web/features/<domain>/hooks/use<Name>.ts` if feature-specific hooks
+6. Use React Query hooks from `web/shared/hooks/` for server state
+7. Export from `web/features/<domain>/index.ts` if barrel export needed
+8. Import and use in page or parent component
 
-```yaml
-- name: Refactor Component
-  intent: Restructure a React component to improve maintainability or extract reusable parts.
-  triggers:
-    - "refactor component"
-    - "extract component"
-    - "split component"
-  prechecks:
-    - "identify component location and dependencies"
-    - "check if logic should move to server component or action"
-    - "review component size and complexity"
-  steps:
-    - "extract sub-components to web/shared/ui/ or feature-specific directory"
-    - "move hooks to web/shared/hooks/ or feature hooks/"
-    - "split server and client components (remove 'use client' where possible)"
-    - "extract types to shared types file"
-    - "update imports in consuming components"
-  validations:
-    - "verify component still renders correctly"
-    - "run pnpm lint and fix issues"
-    - "check no prop drilling or unnecessary re-renders"
-  rollback:
-    - "revert component to previous structure"
-    - "restore imports"
-```
+**Validation**:
+- ✅ Component renders without errors
+- ✅ TypeScript compiles
+- ✅ No unused imports
+- ✅ ESLint passes
+- ✅ React Query hooks used correctly
 
-```yaml
-- name: Harden Authentication
-  intent: Add or improve authentication checks, RLS policies, and security measures.
-  triggers:
-    - "add auth check"
-    - "secure endpoint"
-    - "add RLS policy"
-  prechecks:
-    - "review existing auth patterns (if any)"
-    - "check Supabase auth setup in web/shared/lib/supabase.ts"
-    - "verify RLS policies in migrations"
-  steps:
-    - "create middleware.ts in web/ for route protection"
-    - "add RLS policy migration: CREATE POLICY ... ON <table> FOR SELECT USING (owner_uid = auth.uid())"
-    - "add auth check in Server Actions: const { data: { user } } = await supabase.auth.getUser()"
-    - "add JWT verification in Edge Functions (verify_jwt = true in config.toml)"
-    - "add error boundaries for auth failures"
-  validations:
-    - "test unauthorized access is blocked"
-    - "verify users can only access their own data"
-    - "check auth errors are handled gracefully"
-  rollback:
-    - "remove RLS policies (DROP POLICY)"
-    - "revert middleware changes"
-    - "remove auth checks from code"
-```
+**Rollback**:
+- Delete `web/features/<domain>/` directory
+- Remove imports from consuming files
 
-```yaml
-- name: Add Error Boundary
-  intent: Implement error handling UI and recovery for React components.
-  triggers:
-    - "add error handling"
-    - "error boundary"
-    - "catch errors"
-  prechecks:
-    - "check if Next.js error.tsx exists in route"
-    - "review error patterns in current codebase"
-    - "identify error-prone components"
-  steps:
-    - "create web/app/<route>/error.tsx with 'use client' directive"
-    - "export default function Error({ error, reset }) { ... }"
-    - "add user-friendly error message and reset button"
-    - "create global-error.tsx in web/app/ for root-level errors"
-    - "add try-catch in Server Actions with proper error responses"
-  validations:
-    - "test error boundary by throwing error in component"
-    - "verify reset() function works"
-    - "check error messages are helpful (not exposing internals)"
-  rollback:
-    - "delete error.tsx files"
-    - "remove error handling code"
-```
+---
 
-```yaml
-- name: Run Database Migration
-  intent: Apply a new migration to local or remote Supabase database.
-  triggers:
-    - "run migration"
-    - "apply schema change"
-    - "push database"
-  prechecks:
-    - "verify migration file exists in supabase/migrations/"
-    - "check supabase CLI is authenticated (supabase login)"
-    - "review migration SQL for syntax errors"
-  steps:
-    - "Local: run supabase db reset (applies all migrations + seed)"
-    - "Remote: run supabase db push (applies new migrations only)"
-    - "Verify: run supabase migration list to see applied migrations"
-    - "Test: query database to confirm changes"
-  validations:
-    - "check migration applied without errors"
-    - "verify schema matches migration (describe table in Studio)"
-    - "test queries on new tables/columns work"
-  rollback:
-    - "Create reverse migration and apply"
-    - "Or use supabase db reset to revert to previous state (destructive)"
-```
+### Add Page Route
 
-```yaml
-- name: Deploy Edge Function
-  intent: Deploy a Supabase Edge Function to production or staging.
-  triggers:
-    - "deploy function"
-    - "publish edge function"
-    - "release function"
-  prechecks:
-    - "verify supabase CLI is logged in (supabase login)"
-    - "check function code is complete and tested locally"
-    - "review function config in supabase/config.toml"
-  steps:
-    - "test locally: supabase functions serve <name>"
-    - "deploy: supabase functions deploy <name>"
-    - "verify: curl production function endpoint"
-    - "check logs: supabase functions logs <name>"
-  validations:
-    - "test function endpoint returns expected response"
-    - "verify CORS headers if calling from browser"
-    - "check error handling works in production"
-  rollback:
-    - "redeploy previous version (if versioned)"
-    - "or manually fix and redeploy"
-```
+**Intent**: Create a new Next.js App Router page.
 
-```yaml
-- name: Add Test Suite
-  intent: Set up testing framework and add tests for a component or module.
-  triggers:
-    - "add tests"
-    - "write test"
-    - "test coverage"
-  prechecks:
-    - "check if test framework exists (Jest, Vitest, etc.)"
-    - "review testing patterns in codebase (if any)"
-    - "identify what to test (unit, integration, E2E)"
-  steps:
-    - "install test framework: pnpm add -D vitest @testing-library/react"
-    - "create vitest.config.ts in web/ or worker/"
-    - "create <module>.test.ts or <component>.test.tsx"
-    - "add test script to package.json: 'test': 'vitest'"
-    - "write test cases for happy path and error cases"
-  validations:
-    - "run pnpm test"
-    - "verify tests pass"
-    - "check coverage report (if configured)"
-  rollback:
-    - "remove test files"
-    - "uninstall test dependencies"
-    - "remove test script"
-```
+**Triggers**: "add page", "create route", "new page"
 
-```yaml
-- name: Generate Documentation
-  intent: Create analysis, architecture, or explanatory documentation files for developer reference.
-  triggers:
-    - "generate documentation"
-    - "create analysis"
-    - "write architecture doc"
-    - "document analysis"
-  prechecks:
-    - "verify dev_docs/ directory exists at repository root"
-    - "determine if file is user-facing documentation (goes in dev_docs/) vs code docs (JSDoc/README)"
-  steps:
-    - "generate timestamp: date +%Y%m%d_%H%M%S"
-    - "create file: dev_docs/<timestamp>_<descriptive_name>.md"
-    - "write markdown content with proper headings and structure"
-    - "ensure file serves descriptive/analytical purpose for users"
-  validations:
-    - "verify file is in dev_docs/ directory"
-    - "verify filename has timestamp prefix (YYYYMMDD_HHMMSS format)"
-    - "check markdown syntax is valid"
-  rollback:
-    - "delete dev_docs/<timestamp>_<descriptive_name>.md"
-```
+**Context**:
+- Check `web/app/` directory structure
+- Determine route group: `(app)` for authenticated, `(marketing)` for public
+- Check if dynamic route needed (`[param]`)
+- Identify if server or client component
 
-## Documentation Generation Rules
+**Steps**:
+1. Create `web/app/<path>/page.tsx`
+2. For dynamic routes: `web/app/<path>/[param]/page.tsx`
+3. Add proper Props type: `{ params: Promise<{ param: string }> }` for dynamic routes
+4. Use `await params` in Next.js 16
+5. Import React Query hooks for server state
+6. Add metadata export if SEO needed
+7. Create `layout.tsx` if route group needs custom layout
+8. Use shared components from `web/shared/ui/` or `web/features/`
 
-**All generated documentation files must follow these rules**:
+**Validation**:
+- ✅ Page renders at route
+- ✅ TypeScript types correct
+- ✅ React Query hooks work
+- ✅ No console errors
 
-1. **Location**: Place all user-facing generated documentation in `dev_docs/` directory at repository root
-2. **Naming**: Use timestamp prefix format: `YYYYMMDD_HHMMSS_<descriptive_name>.md`
-   - Generate timestamp: `date +%Y%m%d_%H%M%S`
-   - Example: `20251031_141610_ARCHITECTURE_ANALYSIS.md`
-3. **Purpose**: Only files that provide descriptions, analysis, or explanations to users belong in `dev_docs/`
-   - Code documentation (JSDoc, inline comments) stays with source files
-   - README files follow standard conventions (project root or feature directories)
-   - Generated analysis, architecture reviews, and explanatory docs go in `dev_docs/`
-4. **Content**: Files should be well-structured Markdown with clear headings and sections
-5. **Scope**: Apply to all commands that generate documentation files, including but not limited to:
-   - Architecture analysis
-   - Performance analysis
-   - Code review summaries
-   - Dependency analysis
-   - Security audits
-   - Any explanatory documentation created by AI agents
+**Rollback**:
+- Delete `page.tsx` and `layout.tsx` if created
+- Remove route from navigation
 
+---
+
+### Add API Route
+
+**Intent**: Create a Next.js API route for server-side endpoints.
+
+**Triggers**: "add API route", "create endpoint", "add SSE endpoint"
+
+**Context**:
+- Check if Server Action would be more appropriate
+- Review existing routes (`/api/ingest`, `/api/stream`) for patterns
+- Determine if SSE streaming needed (use ReadableStream pattern)
+- Check if service role key needed
+
+**Steps**:
+1. Create `web/app/api/<name>/route.ts`
+2. Export handlers: `GET`, `POST`, `PUT`, `DELETE` as needed
+3. For SSE: Use ReadableStream pattern (see `/api/stream/route.ts`)
+   - Create `ReadableStream` with `start` controller
+   - Subscribe to Supabase Realtime channels
+   - Handle client disconnect with `req.signal.addEventListener('abort')`
+   - Return Response with `text/event-stream` headers
+4. For JSON: Use `NextResponse.json()` with proper status codes
+5. Add CORS headers if needed
+6. Use `SUPABASE_SERVICE_ROLE_KEY` for privileged operations (server-only)
+7. Add error handling with try-catch
+
+**Validation**:
+- ✅ Endpoint works via curl or browser
+- ✅ CORS headers correct if needed
+- ✅ Error handling works
+- ✅ SSE stream stays open and handles disconnect
+
+**Rollback**:
+- Delete `route.ts` file
+- Remove client-side calls
+
+---
+
+### Refactor to React Query
+
+**Intent**: Replace manual `fetch` + `useState` patterns with React Query hooks.
+
+**Triggers**: "refactor to react query", "use react query", "replace fetch"
+
+**Context**:
+- Find all manual `fetch` calls in component
+- Identify if query (GET) or mutation (POST/PUT/DELETE)
+- Determine query keys and cache invalidation needs
+
+**Steps**:
+1. Create or use existing React Query hook (`use-*-query.ts` or `use-mutations.ts`)
+2. Replace `useState` for data with `useQuery` result
+3. Replace `useState` for loading with `isLoading` from `useQuery`
+4. Replace `useState` for error with `error` from `useQuery`
+5. Replace manual `fetch` handlers with `useMutation` hooks
+6. Add `queryClient.invalidateQueries()` in mutation `onSuccess`
+7. Remove manual `useEffect` for data fetching
+8. Update component to use hook results
+
+**Validation**:
+- ✅ No manual `fetch` patterns remain
+- ✅ All server state via React Query
+- ✅ Mutations invalidate queries
+- ✅ Component works correctly
+- ✅ ESLint passes
+
+**Rollback**:
+- Restore previous `useState` + `fetch` patterns
+- Remove React Query hook if created
+
+---
+
+## Backend Commands
+
+### Add Migration
+
+**Intent**: Create a new Supabase database migration.
+
+**Triggers**: "add migration", "create migration", "database schema change"
+
+**Context**:
+- Check latest migration timestamp in `supabase/migrations/`
+- Review existing migrations for patterns
+- Determine if RLS policies needed
+
+**Steps**:
+1. **CRITICAL**: Use Supabase CLI: `supabase migration new <descriptive_name>`
+   - Generates correct timestamp: `YYYYMMDDHHMMSS_<name>.sql`
+   - NEVER manually create with hardcoded dates
+2. Write SQL: CREATE/ALTER/DROP statements
+3. Add comments for rollback
+4. Add RLS policies if creating tables: `CREATE POLICY ... FOR SELECT USING (owner_uid = auth.uid())`
+5. Add indexes for foreign keys and frequently queried columns
+6. Add GRANT statements if needed
+
+**Validation**:
+- ✅ Migration applies: `supabase db reset`
+- ✅ No syntax errors: `supabase migration list`
+- ✅ RLS policies correct
+- ✅ Indexes created
+
+**Rollback**:
+- Create reverse migration with opposite operations
+- Or manually revert if not applied to production
+
+---
+
+### Add RPC Function
+
+**Intent**: Create a PostgreSQL stored procedure/function.
+
+**Triggers**: "add RPC function", "create stored procedure", "add database function"
+
+**Context**:
+- Check existing RPC functions (`create_event_with_agent`, `match_context`) for patterns
+- Determine if RPC vs. Edge Function vs. application code
+- Review if SECURITY DEFINER needed (use with caution)
+
+**Steps**:
+1. Create migration: `supabase migration new rpc_<name>`
+2. Write function: `CREATE OR REPLACE FUNCTION <name>(...) RETURNS ... LANGUAGE plpgsql`
+3. Add `SECURITY DEFINER` if needed (with caution)
+4. Add `GRANT EXECUTE` to `authenticated` and/or `service_role`
+5. Add comments describing parameters and return value
+6. Test function locally
+
+**Validation**:
+- ✅ Function works via `supabase.rpc()` call
+- ✅ Return type matches TypeScript expectations
+- ✅ Performance acceptable (EXPLAIN ANALYZE if query-heavy)
+
+**Rollback**:
+- Create migration with `DROP FUNCTION <name>`
+- Or comment out in migration file
+
+---
+
+### Add Edge Function
+
+**Intent**: Create a Supabase Edge Function (Deno runtime).
+
+**Triggers**: "add edge function", "create supabase function", "add serverless endpoint"
+
+**Context**:
+- Check `supabase/functions/` directory
+- Review `orchestrator` function as reference
+- Determine if JWT verification needed
+
+**Steps**:
+1. Create `supabase/functions/<name>/index.ts`
+2. Create `supabase/functions/<name>/deno.json` with imports map
+3. Add function config to `supabase/config.toml`: `[functions.<name>]`
+4. Implement CORS headers and OPTIONS handler
+5. Add JWT verification if needed: `verify_jwt = true` in config
+6. Return JSON: `{ ok: boolean, error?: string, ...data }`
+7. Add error handling
+
+**Validation**:
+- ✅ Function works: `supabase functions serve <name>`
+- ✅ CORS headers correct
+- ✅ Error handling returns proper JSON
+- ✅ JWT verification works if enabled
+
+**Rollback**:
+- Delete `supabase/functions/<name>/` directory
+- Remove `[functions.<name>]` from `config.toml`
+
+---
+
+## Worker Commands
+
+### Add Worker Task
+
+**Intent**: Add a new background processing task to the orchestrator.
+
+**Triggers**: "add worker task", "background job", "add orchestrator task"
+
+**Context**:
+- Review `worker/core/orchestrator.ts` for event-driven patterns
+- Review `worker/index.ts` for polling patterns
+- Determine if event-driven (Realtime) or polling-based (fallback)
+- Check worker has required env vars
+
+**Steps**:
+1. **For event-driven**:
+   - Add handler in `worker/core/orchestrator.ts` (e.g., `handleTranscriptInsert`)
+   - Subscribe to Supabase Realtime in `orchestrator.initialize()`
+   - Use `supabaseService.subscribeToTranscripts()` pattern
+2. **For polling** (fallback):
+   - Create poller class in `worker/polling/`
+   - Add to `worker/index.ts` with `setInterval()`
+   - Use `processingAgents` Set to prevent duplicates
+3. Add error handling with logging
+4. Update `EventRuntime` interface if extending state
+5. Add status updates to database if needed
+
+**Validation**:
+- ✅ Task executes correctly
+- ✅ Logs show execution
+- ✅ Database state changes correct
+- ✅ Realtime subscription works (if event-driven)
+
+**Rollback**:
+- Remove handler/subscription code
+- Remove poller and interval
+- Revert database changes
+
+---
+
+### Add Enrichment Enricher
+
+**Intent**: Add a new enricher to the context enrichment framework.
+
+**Triggers**: "add enricher", "create enrichment source", "add context enrichment"
+
+**Context**:
+- Review `worker/enrichment/enrichers/base-enricher.ts` for interface
+- Check existing enrichers for patterns
+- Determine if API keys or external services needed
+
+**Steps**:
+1. Create `worker/enrichment/enrichers/<name>.ts`
+2. Extend `BaseEnricher` class
+3. Implement `enrich()` method
+4. Override `getChunkingStrategy()` and `getQualityScore()` if needed
+5. Register in `worker/enrichment/index.ts` (EnrichmentOrchestrator)
+6. Add env vars: `ENRICHMENT_<NAME>_ENABLED`, etc.
+7. Update `getEnrichmentConfig()` if needed
+
+**Validation**:
+- ✅ Enricher works in isolation
+- ✅ Chunks generated with proper metadata
+- ✅ Quality scores reasonable (0-1 range)
+- ✅ Integration with context builder works
+
+**Rollback**:
+- Delete enricher file
+- Remove from EnrichmentOrchestrator
+- Remove env vars
+
+---
+
+## General Commands
+
+### Add Type Definitions
+
+**Intent**: Generate or manually add TypeScript types for Supabase.
+
+**Triggers**: "add types", "generate supabase types", "type definitions"
+
+**Context**:
+- Check if types exist in `web/shared/types/`
+- Review database schema
+- Determine if generated or manual
+
+**Steps**:
+1. Generate: `supabase gen types typescript --local > web/shared/types/database.ts`
+2. Or manually create based on schema
+3. Export `Database` type and helpers (`Tables`, `Functions`)
+4. Import in components and server actions
+5. Create domain-specific types in `web/features/*/types.ts` if needed
+
+**Validation**:
+- ✅ Types match schema (`supabase db diff`)
+- ✅ TypeScript compiles
+- ✅ Autocomplete works
+
+**Rollback**:
+- Delete or revert types file
+- Remove type imports
+
+---
+
+### Add Environment Variable
+
+**Intent**: Document and configure a new environment variable.
+
+**Triggers**: "add env variable", "new configuration", "environment setting"
+
+**Context**:
+- Check existing env vars in `worker/index.ts` and codebase
+- Determine if `NEXT_PUBLIC_` prefix needed (exposed to browser)
+- Check if worker or web app variable
+
+**Steps**:
+1. Add to `worker/.env.example` (if worker-related)
+2. Add to `web/.env.local.example` (if web-related)
+3. Update `.cursor/rules/project.mdc` section 8
+4. Add usage in code with `need()` helper or `process.env`
+5. Document purpose and default in comments
+
+**Validation**:
+- ✅ Missing var errors gracefully
+- ✅ Variable used correctly
+- ✅ No secrets exposed to client
+
+**Rollback**:
+- Remove env var usage
+- Remove from `.env.example` files
+- Revert documentation
+
+---
+
+### Generate Documentation
+
+**Intent**: Create analysis or architecture documentation.
+
+**Triggers**: "generate documentation", "create analysis", "write architecture doc"
+
+**Context**:
+- Verify `dev_docs/` directory exists
+- Determine if user-facing (goes in `dev_docs/`) vs. code docs (JSDoc)
+
+**Steps**:
+1. Generate timestamp: `date +%Y%m%d_%H%M%S`
+2. Create file: `dev_docs/<timestamp>_<descriptive_name>.md`
+3. Write markdown with clear headings
+4. Ensure descriptive/analytical purpose
+
+**Validation**:
+- ✅ File in `dev_docs/` directory
+- ✅ Filename has timestamp prefix (`YYYYMMDD_HHMMSS`)
+- ✅ Markdown syntax valid
+
+**Rollback**:
+- Delete `dev_docs/<timestamp>_<descriptive_name>.md`
+
+---
+
+## Command Best Practices
+
+1. **Always use React Query** for server state (never manual `fetch` + `useState`)
+2. **Always use Supabase CLI** for migrations (never manual timestamp files)
+3. **Always invalidate queries** in mutations (`queryClient.invalidateQueries()`)
+4. **Always handle errors** with user-friendly messages
+5. **Always validate** before marking complete
+6. **Always check context** before executing steps
+
+---
+
+**Last Updated:** 2025-11-05

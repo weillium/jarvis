@@ -98,7 +98,11 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
   // Initial fetch
   useEffect(() => {
     if (!eventId) return;
-    fetchStatus();
+    // Defer to avoid cascading renders
+    const timeoutId = setTimeout(() => {
+      void fetchStatus();
+    }, 0);
+    return () => clearTimeout(timeoutId);
   }, [eventId, fetchStatus]);
 
   // Poll for status updates (every 3 seconds)
