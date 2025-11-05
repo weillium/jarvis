@@ -34,7 +34,37 @@ export class BlueprintPoller implements Poller {
       return;
     }
 
+    // Filter out agents that already have a non-superseded blueprint
+    // Only generate blueprints for agents with no blueprints or only superseded/error blueprints
+    const agentsNeedingBlueprints = [];
     for (const agent of blueprintAgents) {
+      // Check for existing blueprints in active states (generating, ready, approved)
+      // These indicate a blueprint is already in progress or waiting for approval
+      const { data: existingBlueprints, error: blueprintCheckError } = await this.supabase
+        .from('context_blueprints')
+        .select('id, status')
+        .eq('agent_id', agent.id)
+        .in('status', ['generating', 'ready', 'approved']);
+
+      if (blueprintCheckError) {
+        this.log('[blueprint] Error checking blueprints for agent', agent.id, ':', blueprintCheckError.message);
+        // On error, skip this agent to be safe
+        continue;
+      }
+
+      // Only process if no active blueprints exist
+      if (!existingBlueprints || existingBlueprints.length === 0) {
+        agentsNeedingBlueprints.push(agent);
+      } else {
+        this.log('[blueprint] Agent', agent.id, 'already has', existingBlueprints.length, 'active blueprint(s), skipping');
+      }
+    }
+
+    if (agentsNeedingBlueprints.length === 0) {
+      return;
+    }
+
+    for (const agent of agentsNeedingBlueprints) {
       if (this.processingAgents.has(agent.id)) {
         this.log('[blueprint] Agent', agent.id, 'already being processed, skipping');
         continue;

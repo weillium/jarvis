@@ -8,18 +8,32 @@ interface ContextGenerationProgressProps {
     total: number;
     percentage: number;
   } | null;
+  blueprintStatus?: string | null;
 }
 
 export function ContextGenerationProgress({
   status,
   stage,
   progress,
+  blueprintStatus,
 }: ContextGenerationProgressProps) {
-  const getStageLabel = (stage: string): string => {
+  const getStageLabel = (stage: string, blueprintStatus?: string | null): string => {
     switch (stage) {
       case 'idle':
         return 'Ready to Begin Context Building';
+      case 'blueprint':
       case 'blueprint_generating':
+        // Show different label based on blueprint status
+        if (blueprintStatus === 'ready') {
+          return 'Blueprint Ready';
+        }
+        if (blueprintStatus === 'approved') {
+          return 'Blueprint Approved';
+        }
+        if (blueprintStatus === 'error') {
+          return 'Blueprint Error';
+        }
+        // Default to generating if no blueprint or blueprint is generating
         return 'Generating Blueprint';
       case 'researching':
         return 'Researching';
@@ -57,7 +71,7 @@ export function ContextGenerationProgress({
           fontWeight: '500',
           color: '#0f172a',
         }}>
-          {getStageLabel(stage)}
+          {getStageLabel(stage, blueprintStatus)}
         </span>
         {progress && (
           <span style={{
@@ -114,7 +128,8 @@ export function ContextGenerationProgress({
         flexWrap: 'wrap',
       }}>
         {['blueprint_generating', 'researching', 'building_glossary', 'building_chunks', 'context_complete'].map((s, index) => {
-          const isActive = stage === s;
+          // Handle both 'blueprint' and 'blueprint_generating' as the same stage
+          const isActive = stage === s || (stage === 'blueprint' && s === 'blueprint_generating');
           const isCompleted = getStageOrder(stage) > getStageOrder(s);
 
           return (
@@ -144,6 +159,7 @@ export function ContextGenerationProgress({
 
 function getStageOrder(stage: string): number {
   const order: Record<string, number> = {
+    'blueprint': 1,
     'blueprint_generating': 1,
     'researching': 2,
     'building_glossary': 3,

@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 /**
- * Start Context Generation API Route
+ * Start Context Generation API Route (Consolidated)
  * 
- * Initiates context generation by setting agent status to 'blueprint_generating'.
+ * Initiates context generation by setting agent status to 'blueprint'.
+ * If blueprints already exist, marks them as 'superseded' before generating a new one.
  * The worker will pick this up via tickBlueprint() and generate a blueprint.
  * 
  * POST /api/context/[eventId]/start
@@ -58,6 +59,7 @@ export async function POST(
     }
 
     let agentId: string;
+    let existingBlueprints: Array<{ id: string }> | null = null;
 
     if (existingAgents && existingAgents.length > 0) {
       // Agent exists, check if we can start blueprint generation
@@ -79,6 +81,42 @@ export async function POST(
       }
 
       agentId = agent.id;
+
+      // Check if blueprints exist (for regeneration case)
+      const { data: blueprints, error: blueprintCheckError } = await (supabase
+        .from('context_blueprints') as any)
+        .select('id')
+        .eq('agent_id', agentId)
+        .in('status', ['generating', 'ready', 'approved']);
+
+      if (blueprintCheckError) {
+        console.error('[api/context/start] Error checking existing blueprints:', blueprintCheckError);
+        // Continue anyway - might not have blueprints
+      } else {
+        existingBlueprints = blueprints;
+      }
+
+      // If blueprints exist, mark them as superseded (regeneration case)
+      if (existingBlueprints && existingBlueprints.length > 0) {
+        const { error: supersedeError } = await (supabase
+          .from('context_blueprints') as any)
+          .update({ 
+            status: 'superseded',
+            superseded_at: new Date().toISOString(),
+          })
+          .eq('agent_id', agentId)
+          .in('status', ['generating', 'ready', 'approved']);
+
+        if (supersedeError) {
+          console.error('[api/context/start] Error superseding blueprints:', supersedeError);
+          return NextResponse.json(
+            { ok: false, error: `Failed to supersede existing blueprints: ${supersedeError.message}` },
+            { status: 500 }
+          );
+        }
+
+        console.log(`[api/context/start] Marked ${existingBlueprints.length} blueprint(s) as superseded`);
+      }
 
       // Update agent status to 'idle' with 'blueprint' stage
       const { error: updateError } = await (supabase
@@ -105,13 +143,18 @@ export async function POST(
       );
     }
 
+    const isRegeneration = existingBlueprints && existingBlueprints.length > 0;
+
     return NextResponse.json({
       ok: true,
       agent_id: agentId,
       event_id: eventId,
       status: 'idle',
       stage: 'blueprint',
-      message: 'Context generation started. Blueprint will be generated shortly.',
+      is_regeneration: isRegeneration,
+      message: isRegeneration 
+        ? 'Blueprint regeneration started. A new blueprint will be generated shortly.' 
+        : 'Context generation started. Blueprint will be generated shortly.',
     });
   } catch (error: any) {
     console.error('[api/context/start] Unexpected error:', error);

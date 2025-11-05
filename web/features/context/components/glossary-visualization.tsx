@@ -19,7 +19,6 @@ interface GlossaryTerm {
   source: string | null;
   source_url: string | null;
   created_at: string;
-  version: number | null;
   generation_cycle_id: string | null;
 }
 
@@ -273,19 +272,6 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
                         fontWeight: '500',
                       }}>
                         {term.category}
-                      </span>
-                    )}
-                    {term.version && term.version > 1 && (
-                      <span style={{
-                        display: 'inline-block',
-                        padding: '2px 8px',
-                        background: '#f3f4f6',
-                        color: '#64748b',
-                        borderRadius: '4px',
-                        fontSize: '11px',
-                        fontWeight: '500',
-                      }}>
-                        v{term.version}
                       </span>
                     )}
                   </div>

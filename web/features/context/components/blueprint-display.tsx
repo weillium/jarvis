@@ -4,9 +4,6 @@ import { useState, useEffect } from 'react';
 
 interface BlueprintDisplayProps {
   eventId: string;
-  onApprove: () => void;
-  approving: boolean;
-  canApprove: boolean;
   onRegenerate?: () => void;
   embedded?: boolean; // If true, removes expand button and regenerate button
 }
@@ -29,9 +26,6 @@ interface Blueprint {
 
 export function BlueprintDisplay({
   eventId,
-  onApprove,
-  approving,
-  canApprove,
   onRegenerate,
   embedded = false,
 }: BlueprintDisplayProps) {

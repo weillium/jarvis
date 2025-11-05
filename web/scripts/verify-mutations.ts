@@ -35,7 +35,6 @@ const EXPECTED_MUTATIONS = [
   'useApproveBlueprintMutation',
   'useResetContextMutation',
   'useStartContextGenerationMutation',
-  'useRegenerateBlueprintMutation',
   'useRegenerateStageMutation',
   'useStartOrRegenerateMutation',
   'useCreateSessionsMutation',

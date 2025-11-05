@@ -67,7 +67,7 @@ export async function GET(
     // Fetch blueprint
     const { data: blueprints, error: blueprintError } = await (supabase
       .from('context_blueprints') as any)
-      .select('id, status, created_at, approved_at, execution_started_at, completed_at, target_chunk_count, estimated_cost')
+      .select('id, status, created_at, approved_at, target_chunk_count, estimated_cost')
       .eq('agent_id', agentId)
       .order('created_at', { ascending: false })
       .limit(1);
@@ -80,6 +80,15 @@ export async function GET(
     // Determine overall status and progress
     let stage: string = agent.stage || agent.status;
     let progress: { current: number; total: number; percentage: number } | null = null;
+
+    // Special handling for blueprint stage: show 'blueprint_generating' when blueprint is being generated
+    if (agent.stage === 'blueprint') {
+      // If no blueprint exists yet, or blueprint is in 'generating' status, show as generating
+      if (!blueprint || blueprint.status === 'generating') {
+        stage = 'blueprint_generating';
+      }
+      // Otherwise, keep as 'blueprint' (blueprint is ready/approved)
+    }
 
     // Calculate progress based on stage
     if (agent.stage === 'researching' || (agent.status === 'idle' && agent.stage === 'researching')) {
@@ -137,8 +146,6 @@ export async function GET(
         status: blueprint.status,
         created_at: blueprint.created_at,
         approved_at: blueprint.approved_at,
-        execution_started_at: blueprint.execution_started_at,
-        completed_at: blueprint.completed_at,
         target_chunk_count: blueprint.target_chunk_count,
         estimated_cost: blueprint.estimated_cost,
       } : null,

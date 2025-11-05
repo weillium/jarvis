@@ -6,7 +6,6 @@ import { BlueprintDisplay } from './blueprint-display';
 import {
   useStartContextGenerationMutation,
   useRegenerateStageMutation,
-  useRegenerateBlueprintMutation,
   useApproveBlueprintMutation,
 } from '@/shared/hooks/use-mutations';
 
@@ -30,8 +29,6 @@ interface StatusData {
     status: string;
     created_at: string;
     approved_at: string | null;
-    execution_started_at: string | null;
-    completed_at: string | null;
     target_chunk_count: number | null;
     estimated_cost: number | null;
   } | null;
@@ -57,25 +54,35 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
       documentCount: number;
     };
   } | null>(null);
-  const [isRegenerateFlow, setIsRegenerateFlow] = useState(false);
-
   // Mutation hooks
   const startContextGenerationMutation = useStartContextGenerationMutation(eventId);
   const regenerateStageMutation = useRegenerateStageMutation(eventId);
-  const regenerateBlueprintMutation = useRegenerateBlueprintMutation(eventId);
   const approveBlueprintMutation = useApproveBlueprintMutation(eventId);
 
   // Track which stage is currently regenerating
   const [currentRegeneratingStage, setCurrentRegeneratingStage] = useState<string | null>(null);
 
   // Get mutation states
-  const starting = startContextGenerationMutation.isPending;
   const approving = approveBlueprintMutation.isPending;
-  const isRegenerating = regenerateBlueprintMutation.isPending;
+  const isRegenerating = startContextGenerationMutation.isPending; // Blueprint start/regenerate uses same mutation
   const regeneratingStage = regenerateStageMutation.isPending ? currentRegeneratingStage : null;
-  const regenerationError = regenerateStageMutation.error || regenerateBlueprintMutation.error
-    ? (regenerateStageMutation.error instanceof Error ? regenerateStageMutation.error.message : regenerateBlueprintMutation.error instanceof Error ? regenerateBlueprintMutation.error.message : 'Failed to regenerate')
-    : null;
+  
+  // Consolidated error handling
+  const getErrorMessage = (): string | null => {
+    if (error) return error;
+    if (regenerateStageMutation.error) {
+      return regenerateStageMutation.error instanceof Error ? regenerateStageMutation.error.message : 'Failed to regenerate stage';
+    }
+    if (startContextGenerationMutation.error) {
+      return startContextGenerationMutation.error instanceof Error ? startContextGenerationMutation.error.message : 'Failed to start context generation';
+    }
+    if (approveBlueprintMutation.error) {
+      return approveBlueprintMutation.error instanceof Error ? approveBlueprintMutation.error.message : 'Failed to approve blueprint';
+    }
+    return null;
+  };
+  
+  const consolidatedError = getErrorMessage();
 
   // Fetch status
   const fetchStatus = useCallback(async () => {
@@ -141,38 +148,38 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
     }
   };
 
-  // Actually start context generation (called after user confirms in modal)
-  const actuallyStartGeneration = () => {
+  // Start/regenerate context generation (consolidated - called after user confirms in modal)
+  // The endpoint now handles both start and regenerate cases automatically
+  const actuallyStartOrRegenerate = () => {
     setShowPromptPreview(false);
+    setError(null); // Clear any previous errors
     startContextGenerationMutation.mutate(undefined, {
       onSuccess: () => {
         // Immediately fetch updated status
         fetchStatus();
       },
-      onError: (err) => {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to start context generation';
-        setError(errorMessage);
+      onError: () => {
+        // Error is handled by consolidated error display
       },
     });
   };
 
   // Handle regenerate blueprint (shows prompt preview first)
   const handleRegenerate = async () => {
-    setIsRegenerateFlow(true);
     await fetchPromptPreview();
   };
 
   // Handle stage regeneration (research, glossary, chunks)
   const handleRegenerateStage = (stage: 'research' | 'glossary' | 'chunks') => {
     setCurrentRegeneratingStage(stage);
+    setError(null); // Clear any previous errors
     regenerateStageMutation.mutate(stage, {
       onSuccess: () => {
         // Immediately fetch updated status to show progress
         fetchStatus();
       },
-      onError: (err) => {
-        const errorMessage = err instanceof Error ? err.message : `Failed to regenerate ${stage}`;
-        setError(errorMessage);
+      onError: () => {
+        // Error is handled by consolidated error display
       },
       onSettled: () => {
         setCurrentRegeneratingStage(null);
@@ -180,42 +187,76 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
     });
   };
 
-  // Actually regenerate blueprint (called after user confirms in modal)
-  const actuallyRegenerate = () => {
-    setShowPromptPreview(false);
-    setIsRegenerateFlow(false);
-    regenerateBlueprintMutation.mutate(undefined, {
-      onSuccess: () => {
-        // Immediately fetch updated status
-        fetchStatus();
-      },
-      onError: (err) => {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to regenerate blueprint';
-        setError(errorMessage);
-      },
-    });
-  };
-
   // Approve blueprint
   const handleApprove = () => {
+    setError(null); // Clear any previous errors
     approveBlueprintMutation.mutate(undefined, {
       onSuccess: () => {
         // Immediately fetch updated status
         fetchStatus();
       },
-      onError: (err) => {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to approve blueprint';
-        setError(errorMessage);
+      onError: () => {
+        // Error is handled by consolidated error display
       },
     });
   };
 
+  // Enhanced state logic based on combined agent + blueprint status
   const canApprove = statusData?.agent?.status === 'idle' && 
                      statusData?.agent?.stage === 'blueprint' && 
                      statusData?.blueprint?.status === 'ready';
+  
   const showBlueprint = statusData?.blueprint?.status === 'ready' || 
-                        statusData?.blueprint?.status === 'approved' ||
-                        statusData?.blueprint?.status === 'completed';
+                        statusData?.blueprint?.status === 'approved';
+  
+  // Determine if we should show "Start Context Generation" button
+  const canStartGeneration = 
+    // No agent stage set yet
+    (!statusData?.agent?.stage) ||
+    // Or agent is in blueprint stage but no blueprint exists or blueprint is in error
+    (statusData?.agent?.stage === 'blueprint' && 
+     (!statusData?.blueprint || statusData?.blueprint?.status === 'error'));
+  
+  // Determine if we should show "Regenerate Blueprint" button
+  const canRegenerateBlueprint = 
+    statusData?.blueprint?.status === 'ready' || 
+    statusData?.blueprint?.status === 'approved';
+  
+  // Check for blueprint errors
+  const hasBlueprintError = statusData?.blueprint?.status === 'error';
+  
+  // Check for agent errors
+  const hasAgentError = statusData?.agent?.status === 'error';
+
+  // Helper function to determine if stage regeneration controls should be shown
+  const shouldShowStageControls = (): boolean => {
+    if (!statusData?.agent) return false;
+    
+    // Always show when embedded
+    if (embedded) return true;
+    
+    // Show when we can start/regenerate blueprint
+    if (canStartGeneration || canRegenerateBlueprint) return true;
+    
+    // Show during active generation stages
+    if (statusData.agent.status === 'idle') {
+      const activeStages = [
+        'context_complete',
+        'researching',
+        'building_glossary',
+        'building_chunks',
+        'regenerating_research',
+        'regenerating_glossary',
+        'regenerating_chunks',
+      ];
+      return activeStages.includes(statusData.agent.stage || '');
+    }
+    
+    // Show on error
+    if (statusData.agent.status === 'error') return true;
+    
+    return false;
+  };
 
   // Show loading state when statusData is null (initial load)
   if (statusData === null) {
@@ -262,21 +303,21 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
             <span style={{
               display: 'inline-block',
               padding: '6px 12px',
-              background: getStatusColor(statusData.agent.status, statusData.agent.stage),
+              background: getStatusColor(statusData.agent.status, statusData.agent.stage, statusData?.blueprint?.status),
               color: '#ffffff',
               borderRadius: '6px',
               fontSize: '12px',
               fontWeight: '500',
               textTransform: 'uppercase',
             }}>
-              {getStatusLabel(statusData.agent.status, statusData.agent.stage)}
+              {getStatusLabel(statusData.agent.status, statusData.agent.stage, statusData?.blueprint?.status)}
             </span>
           )}
         </div>
       )}
 
-      {/* Error message */}
-      {error && (
+      {/* Consolidated error messages */}
+      {consolidatedError && (
         <div style={{
           background: '#fee2e2',
           border: '1px solid #fca5a5',
@@ -286,7 +327,43 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
           color: '#991b1b',
           fontSize: '14px',
         }}>
-          {error}
+          {consolidatedError}
+        </div>
+      )}
+      
+      {/* Blueprint error message */}
+      {hasBlueprintError && statusData?.blueprint && (
+        <div style={{
+          background: '#fee2e2',
+          border: '1px solid #fca5a5',
+          borderRadius: '8px',
+          padding: '12px',
+          marginBottom: '16px',
+          color: '#991b1b',
+          fontSize: '14px',
+        }}>
+          <strong>Blueprint Generation Failed</strong>
+          <p style={{ margin: '8px 0 0 0' }}>
+            The blueprint generation encountered an error. You can try generating a new blueprint.
+          </p>
+        </div>
+      )}
+      
+      {/* Agent error message */}
+      {hasAgentError && (
+        <div style={{
+          background: '#fee2e2',
+          border: '1px solid #fca5a5',
+          borderRadius: '8px',
+          padding: '12px',
+          marginBottom: '16px',
+          color: '#991b1b',
+          fontSize: '14px',
+        }}>
+          <strong>Agent Error</strong>
+          <p style={{ margin: '8px 0 0 0' }}>
+            The agent encountered an error during context generation. Please check the logs or try resetting.
+          </p>
         </div>
       )}
 
@@ -310,21 +387,13 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
             status={statusData.agent.status}
             stage={statusData.stage}
             progress={statusData.progress}
+            blueprintStatus={statusData?.blueprint?.status}
           />
         </div>
       )}
 
       {/* Stage Regeneration Controls - Modular Regeneration */}
-      {/* Always show when embedded, otherwise show for specific statuses */}
-      {((embedded && statusData?.agent) || 
-       ((statusData?.agent?.status === 'idle' && (statusData?.agent?.stage === 'context_complete' ||
-        statusData?.agent?.stage === 'researching' ||
-        statusData?.agent?.stage === 'building_glossary' ||
-        statusData?.agent?.stage === 'building_chunks' ||
-        statusData?.agent?.stage === 'regenerating_research' ||
-        statusData?.agent?.stage === 'regenerating_glossary' ||
-        statusData?.agent?.stage === 'regenerating_chunks')) ||
-        statusData?.agent?.status === 'error')) && (
+      {shouldShowStageControls() && (
         <div style={{
           marginBottom: '20px',
           ...(embedded ? {} : {
@@ -339,101 +408,158 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
             gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
             gap: '8px',
           }}>
-            <button
-              onClick={() => handleRegenerate()}
-              disabled={!!isRegenerating || !!regeneratingStage}
-              style={{
-                padding: '10px 16px',
-                background: (isRegenerating) 
-                  ? '#94a3b8' 
-                  : (statusData?.blueprint ? '#8b5cf6' : '#3b82f6'),
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: '500',
-                cursor: (isRegenerating || regeneratingStage) 
-                  ? 'not-allowed' 
-                  : 'pointer',
-                transition: 'background 0.2s',
-              }}
-            >
-              {isRegenerating 
-                ? (statusData?.blueprint ? 'Regenerating...' : 'Starting...')
-                : (statusData?.blueprint ? 'Regenerate Blueprint' : 'Start Context Generation')}
-            </button>
-            <button
-              onClick={() => handleRegenerateStage('research')}
-              disabled={!!regeneratingStage || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research') || !statusData?.blueprint}
-              style={{
-                padding: '10px 16px',
-                background: (regeneratingStage === 'research' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research') || !statusData?.blueprint) 
-                  ? '#94a3b8' 
-                  : '#3b82f6',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: '500',
-                cursor: (regeneratingStage || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research') || !statusData?.blueprint) 
-                  ? 'not-allowed' 
-                  : 'pointer',
-                transition: 'background 0.2s',
-                opacity: !statusData?.blueprint ? 0.6 : 1,
-              }}
-            >
-              {(regeneratingStage === 'research' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research')) 
-                ? 'Regenerating...' 
-                : 'Regenerate Research'}
-            </button>
-            <button
-              onClick={() => handleRegenerateStage('glossary')}
-              disabled={!!regeneratingStage || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary') || !statusData?.blueprint}
-              style={{
-                padding: '10px 16px',
-                background: (regeneratingStage === 'glossary' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary') || !statusData?.blueprint) 
-                  ? '#94a3b8' 
-                  : '#3b82f6',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: '500',
-                cursor: (regeneratingStage || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary') || !statusData?.blueprint) 
-                  ? 'not-allowed' 
-                  : 'pointer',
-                transition: 'background 0.2s',
-                opacity: !statusData?.blueprint ? 0.6 : 1,
-              }}
-            >
-              {(regeneratingStage === 'glossary' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary')) 
-                ? 'Regenerating...' 
-                : 'Regenerate Glossary'}
-            </button>
-            <button
-              onClick={() => handleRegenerateStage('chunks')}
-              disabled={!!regeneratingStage || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks') || !statusData?.blueprint}
-              style={{
-                padding: '10px 16px',
-                background: (regeneratingStage === 'chunks' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks') || !statusData?.blueprint) 
-                  ? '#94a3b8' 
-                  : '#3b82f6',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: '500',
-                cursor: (regeneratingStage || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks') || !statusData?.blueprint) 
-                  ? 'not-allowed' 
-                  : 'pointer',
-                transition: 'background 0.2s',
-                opacity: !statusData?.blueprint ? 0.6 : 1,
-              }}
-            >
-              {(regeneratingStage === 'chunks' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks')) 
-                ? 'Regenerating...' 
-                : 'Regenerate Chunks'}
-            </button>
+            {/* Start Context Generation button - show when no blueprint or blueprint is in error */}
+            {canStartGeneration && (
+              <button
+                onClick={() => handleRegenerate()}
+                disabled={!!isRegenerating || !!regeneratingStage}
+                style={{
+                  padding: '10px 16px',
+                  background: (isRegenerating) 
+                    ? '#94a3b8' 
+                    : '#3b82f6',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontWeight: '500',
+                  cursor: (isRegenerating || regeneratingStage) 
+                    ? 'not-allowed' 
+                    : 'pointer',
+                  transition: 'background 0.2s',
+                }}
+              >
+                {isRegenerating 
+                  ? 'Starting...'
+                  : 'Start Context Generation'}
+              </button>
+            )}
+            
+            {/* Regenerate Blueprint button - show when blueprint is ready or approved */}
+            {canRegenerateBlueprint && (
+              <button
+                onClick={() => handleRegenerate()}
+                disabled={!!isRegenerating || !!regeneratingStage}
+                style={{
+                  padding: '10px 16px',
+                  background: (isRegenerating) 
+                    ? '#94a3b8' 
+                    : '#8b5cf6',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontWeight: '500',
+                  cursor: (isRegenerating || regeneratingStage) 
+                    ? 'not-allowed' 
+                    : 'pointer',
+                  transition: 'background 0.2s',
+                }}
+              >
+                {isRegenerating 
+                  ? 'Regenerating...'
+                  : 'Regenerate Blueprint'}
+              </button>
+            )}
+            
+            {/* Approve Blueprint button - show when blueprint is ready */}
+            {canApprove && (
+              <button
+                onClick={handleApprove}
+                disabled={approving}
+                style={{
+                  padding: '10px 16px',
+                  background: approving 
+                    ? '#94a3b8' 
+                    : '#10b981',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontWeight: '500',
+                  cursor: approving 
+                    ? 'not-allowed' 
+                    : 'pointer',
+                  transition: 'background 0.2s',
+                }}
+              >
+                {approving ? 'Approving...' : 'Approve Blueprint'}
+              </button>
+            )}
+            {/* Stage regeneration buttons - only show when blueprint is approved */}
+            {statusData?.blueprint?.status === 'approved' && (
+              <>
+                <button
+                  onClick={() => handleRegenerateStage('research')}
+                  disabled={!!regeneratingStage || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research')}
+                  style={{
+                    padding: '10px 16px',
+                    background: (regeneratingStage === 'research' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research')) 
+                      ? '#94a3b8' 
+                      : '#3b82f6',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: '500',
+                    cursor: (regeneratingStage || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research')) 
+                      ? 'not-allowed' 
+                      : 'pointer',
+                    transition: 'background 0.2s',
+                  }}
+                >
+                  {(regeneratingStage === 'research' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research')) 
+                    ? 'Regenerating...' 
+                    : 'Regenerate Research'}
+                </button>
+                <button
+                  onClick={() => handleRegenerateStage('glossary')}
+                  disabled={!!regeneratingStage || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary')}
+                  style={{
+                    padding: '10px 16px',
+                    background: (regeneratingStage === 'glossary' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary')) 
+                      ? '#94a3b8' 
+                      : '#3b82f6',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: '500',
+                    cursor: (regeneratingStage || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary')) 
+                      ? 'not-allowed' 
+                      : 'pointer',
+                    transition: 'background 0.2s',
+                  }}
+                >
+                  {(regeneratingStage === 'glossary' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary')) 
+                    ? 'Regenerating...' 
+                    : 'Regenerate Glossary'}
+                </button>
+                <button
+                  onClick={() => handleRegenerateStage('chunks')}
+                  disabled={!!regeneratingStage || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks')}
+                  style={{
+                    padding: '10px 16px',
+                    background: (regeneratingStage === 'chunks' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks')) 
+                      ? '#94a3b8' 
+                      : '#3b82f6',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: '500',
+                    cursor: (regeneratingStage || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks')) 
+                      ? 'not-allowed' 
+                      : 'pointer',
+                    transition: 'background 0.2s',
+                  }}
+                >
+                  {(regeneratingStage === 'chunks' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks')) 
+                    ? 'Regenerating...' 
+                    : 'Regenerate Chunks'}
+                </button>
+              </>
+            )}
             {onClearContext && (
               <button
                 onClick={onClearContext}
@@ -458,19 +584,6 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
               </button>
             )}
           </div>
-          {regenerationError && (
-            <div style={{
-              marginTop: '12px',
-              padding: '8px 12px',
-              background: '#fee2e2',
-              border: '1px solid #fecaca',
-              borderRadius: '6px',
-              color: '#991b1b',
-              fontSize: '12px',
-            }}>
-              {regenerationError}
-            </div>
-          )}
         </div>
       )}
 
@@ -479,9 +592,6 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
         <div style={{ marginBottom: '20px' }}>
           <BlueprintDisplay
             eventId={eventId}
-            onApprove={handleApprove}
-            approving={approving}
-            canApprove={canApprove}
             onRegenerate={handleRegenerate}
           />
         </div>
@@ -578,7 +688,6 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
                 onClick={() => {
                   setShowPromptPreview(false);
                   setPromptPreview(null);
-                  setIsRegenerateFlow(false);
                 }}
                 style={{
                   background: '#ffffff',
@@ -594,28 +703,20 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
                 Cancel
               </button>
               <button
-                onClick={() => {
-                  if (isRegenerateFlow) {
-                    actuallyRegenerate();
-                  } else {
-                    actuallyStartGeneration();
-                  }
-                }}
-                disabled={starting || isRegenerating}
+                onClick={actuallyStartOrRegenerate}
+                disabled={isRegenerating}
                 style={{
-                  background: (starting || isRegenerating) ? '#94a3b8' : '#10b981',
+                  background: isRegenerating ? '#94a3b8' : '#10b981',
                   color: '#ffffff',
                   border: 'none',
                   borderRadius: '6px',
                   padding: '8px 16px',
                   fontSize: '14px',
                   fontWeight: '500',
-                  cursor: (starting || isRegenerating) ? 'not-allowed' : 'pointer',
+                  cursor: isRegenerating ? 'not-allowed' : 'pointer',
                 }}
               >
-                {(starting || isRegenerating) 
-                  ? (isRegenerating ? 'Regenerating...' : 'Starting...') 
-                  : (isRegenerateFlow ? 'Confirm & Regenerate' : 'Confirm & Start Generation')}
+                {isRegenerating ? 'Starting...' : 'Confirm'}
               </button>
             </div>
           </div>
@@ -625,7 +726,7 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
   );
 }
 
-function getStatusColor(status: string, stage?: string | null): string {
+function getStatusColor(status: string, stage?: string | null, blueprintStatus?: string | null): string {
   if (status === 'error') return '#ef4444'; // red
   if (status === 'ended') return '#64748b'; // gray
   if (status === 'paused') return '#f59e0b'; // amber
@@ -634,7 +735,13 @@ function getStatusColor(status: string, stage?: string | null): string {
   }
   if (status === 'idle') {
     switch (stage) {
-      case 'blueprint': return '#8b5cf6'; // purple
+      case 'blueprint':
+        // Blueprint phase: use blueprint status for color
+        if (blueprintStatus === 'generating') return '#3b82f6'; // blue - generating
+        if (blueprintStatus === 'ready') return '#f59e0b'; // amber - awaiting approval
+        if (blueprintStatus === 'approved') return '#10b981'; // green - approved
+        if (blueprintStatus === 'error') return '#ef4444'; // red - error
+        return '#8b5cf6'; // purple - default blueprint state
       case 'researching': return '#f59e0b'; // amber
       case 'building_glossary': return '#f59e0b'; // amber
       case 'building_chunks': return '#f59e0b'; // amber
@@ -643,15 +750,13 @@ function getStatusColor(status: string, stage?: string | null): string {
       case 'regenerating_chunks': return '#f59e0b'; // amber
       case 'context_complete': return '#10b981'; // green
       case 'testing': return '#8b5cf6'; // purple
-      case 'ready': return '#10b981'; // green
-      case 'prepping': return '#f59e0b'; // amber
       default: return '#64748b'; // gray
     }
   }
   return '#6b7280';
 }
 
-function getStatusLabel(status: string, stage?: string | null): string {
+function getStatusLabel(status: string, stage?: string | null, blueprintStatus?: string | null): string {
   if (status === 'error') return 'Error';
   if (status === 'ended') return 'Ended';
   if (status === 'paused') return 'Paused';
@@ -660,7 +765,14 @@ function getStatusLabel(status: string, stage?: string | null): string {
   }
   if (status === 'idle') {
     switch (stage) {
-      case 'blueprint': return 'Blueprint';
+      case 'blueprint':
+        // Enhanced blueprint phase labels based on blueprint status
+        if (!blueprintStatus) return 'Waiting for Blueprint';
+        if (blueprintStatus === 'generating') return 'Generating Blueprint';
+        if (blueprintStatus === 'ready') return 'Blueprint Ready';
+        if (blueprintStatus === 'approved') return 'Blueprint Approved';
+        if (blueprintStatus === 'error') return 'Blueprint Error';
+        return 'Blueprint';
       case 'researching': return 'Researching';
       case 'building_glossary': return 'Building Glossary';
       case 'building_chunks': return 'Building Chunks';
@@ -669,8 +781,6 @@ function getStatusLabel(status: string, stage?: string | null): string {
       case 'regenerating_chunks': return 'Regenerating Chunks';
       case 'context_complete': return 'Context Complete';
       case 'testing': return 'Testing';
-      case 'ready': return 'Ready';
-      case 'prepping': return 'Prepping';
       default: return 'Idle';
     }
   }

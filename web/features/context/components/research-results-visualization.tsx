@@ -17,7 +17,6 @@ interface ResearchResult {
   metadata: Record<string, any> | null;
   created_at: string;
   generation_cycle_id: string | null;
-  version: number;
 }
 
 interface ResearchData {
@@ -398,18 +397,6 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
                           }}>
                             {getApiLabel(result.api)}
                           </span>
-                          {result.version > 1 && (
-                            <span style={{
-                              fontSize: '11px',
-                              padding: '2px 8px',
-                              background: '#e0e7ff',
-                              color: '#4338ca',
-                              borderRadius: '4px',
-                              fontWeight: '500',
-                            }}>
-                              v{result.version}
-                            </span>
-                          )}
                         </div>
                         <div style={{
                           fontSize: '14px',

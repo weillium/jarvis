@@ -143,7 +143,7 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
   const isResetting = resetContextMutation.isPending;
   const resetError = resetContextMutation.error ? (resetContextMutation.error instanceof Error ? resetContextMutation.error.message : 'Failed to reset context') : null;
 
-  const getStatusColor = (status: string | null, stage?: string | null): string => {
+  const getStatusColor = (status: string | null, stage?: string | null, blueprintStatus?: string | null): string => {
     if (!status) return '#6b7280';
     
     if (status === 'error') return '#ef4444'; // red
@@ -154,7 +154,13 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
     }
     if (status === 'idle') {
       switch (stage) {
-        case 'blueprint': return '#8b5cf6'; // purple
+        case 'blueprint':
+          // Blueprint phase: use blueprint status for color
+          if (blueprintStatus === 'generating') return '#3b82f6'; // blue - generating
+          if (blueprintStatus === 'ready') return '#f59e0b'; // amber - awaiting approval
+          if (blueprintStatus === 'approved') return '#10b981'; // green - approved
+          if (blueprintStatus === 'error') return '#ef4444'; // red - error
+          return '#8b5cf6'; // purple - default blueprint state
         case 'researching': return '#f59e0b'; // amber
         case 'building_glossary': return '#f59e0b'; // amber
         case 'building_chunks': return '#f59e0b'; // amber
@@ -171,7 +177,7 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
     return '#6b7280';
   };
 
-  const getStatusLabel = (status: string | null, stage?: string | null): string => {
+  const getStatusLabel = (status: string | null, stage?: string | null, blueprintStatus?: string | null): string => {
     if (!status) return 'Unknown';
     
     if (status === 'error') return 'Error';
@@ -182,7 +188,14 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
     }
     if (status === 'idle') {
       switch (stage) {
-        case 'blueprint': return 'Blueprint';
+        case 'blueprint':
+          // Enhanced blueprint phase labels based on blueprint status
+          if (!blueprintStatus) return 'Waiting for Blueprint';
+          if (blueprintStatus === 'generating') return 'Generating Blueprint';
+          if (blueprintStatus === 'ready') return 'Blueprint Ready';
+          if (blueprintStatus === 'approved') return 'Blueprint Approved';
+          if (blueprintStatus === 'error') return 'Blueprint Error';
+          return 'Blueprint';
         case 'researching': return 'Researching';
         case 'building_glossary': return 'Building Glossary';
         case 'building_chunks': return 'Building Chunks';
@@ -866,8 +879,8 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
     );
   }
 
-  const statusColor = getStatusColor(agent.status, agent.stage);
-  const statusLabel = getStatusLabel(agent.status, agent.stage);
+  const statusColor = getStatusColor(agent.status, agent.stage, blueprint?.status);
+  const statusLabel = getStatusLabel(agent.status, agent.stage, blueprint?.status);
 
   return (
     <div>

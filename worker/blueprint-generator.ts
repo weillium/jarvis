@@ -15,6 +15,11 @@ import {
   BLUEPRINT_GENERATION_SYSTEM_PROMPT,
   createBlueprintUserPrompt,
 } from './prompts';
+import {
+  calculateOpenAICost,
+  getPricingVersion,
+  type OpenAIUsage,
+} from './pricing-config';
 
 // ============================================================================
 // Type Definitions
@@ -188,10 +193,12 @@ export async function generateContextBlueprint(
   console.log(`[blueprint] Generating blueprint for event ${eventId}, agent ${agentId}`);
 
   try {
-    // 1. Update agent status to 'blueprint_generating'
+    // 1. Update agent to ensure it's in the correct state for blueprint generation
+    // Status should be 'idle' with stage 'blueprint' (already set by /start endpoint)
+    // We just ensure it's correct - no need to change status during generation
     const { error: statusError } = await (supabase
       .from('agents') as any)
-      .update({ status: 'blueprint_generating' })
+      .update({ status: 'idle', stage: 'blueprint' })
       .eq('id', agentId);
 
     if (statusError) {
@@ -215,7 +222,53 @@ export async function generateContextBlueprint(
     const documentsText = await extractDocumentsText(eventId, supabase);
     const hasDocuments = documentsText.length > 0 && !documentsText.includes('will be available');
 
-    // 4. Generate blueprint using LLM
+    // 4. Insert blueprint record with 'generating' status first (so we can create generation cycle)
+    const { data: blueprintRecord, error: insertError } = await (supabase
+      .from('context_blueprints') as any)
+      .insert({
+        event_id: eventId,
+        agent_id: agentId,
+        status: 'generating',
+      })
+      .select('id')
+      .single() as { data: { id: string } | null; error: any };
+
+    if (insertError || !blueprintRecord) {
+      throw new Error(`Failed to create blueprint record: ${insertError?.message || 'Insert failed'}`);
+    }
+
+    const blueprintId = blueprintRecord.id;
+    console.log(`[blueprint] Blueprint record created with ID: ${blueprintId}`);
+
+    // 5. Create generation cycle for blueprint generation (to track costs)
+    let generationCycleId: string | null = null;
+    try {
+      const { data: cycleData, error: cycleError } = await (supabase
+        .from('generation_cycles') as any)
+        .insert({
+          event_id: eventId,
+          agent_id: agentId,
+          blueprint_id: blueprintId,
+          cycle_type: 'blueprint',
+          component: 'blueprint',
+          status: 'processing',
+          progress_current: 0,
+          progress_total: 0,
+        })
+        .select('id')
+        .single() as { data: { id: string } | null; error: any };
+
+      if (!cycleError && cycleData) {
+        generationCycleId = cycleData.id;
+        console.log(`[blueprint] Generation cycle created with ID: ${generationCycleId}`);
+      } else {
+        console.warn(`[blueprint] Failed to create generation cycle: ${cycleError?.message || 'Unknown error'}`);
+      }
+    } catch (err: any) {
+      console.warn(`[blueprint] Error creating generation cycle: ${err.message}`);
+    }
+
+    // 6. Generate blueprint using LLM
     const blueprint = await generateBlueprintWithLLM(
       event.title,
       event.topic,
@@ -225,12 +278,10 @@ export async function generateContextBlueprint(
       genModel
     );
 
-    // 5. Store blueprint in database
-    const { data: blueprintRecord, error: insertError } = await (supabase
+    // 7. Update blueprint with generated data and mark as 'ready'
+    const { error: updateError } = await (supabase
       .from('context_blueprints') as any)
-      .insert({
-        event_id: eventId,
-        agent_id: agentId,
+      .update({
         status: 'ready',
         blueprint: blueprint as any,
         important_details: blueprint.important_details,
@@ -245,28 +296,106 @@ export async function generateContextBlueprint(
         target_chunk_count: blueprint.chunks_plan.target_count,
         quality_tier: blueprint.chunks_plan.quality_tier,
       })
+      .eq('id', blueprintId);
+
+    if (updateError) {
+      throw new Error(`Failed to update blueprint: ${updateError.message}`);
+    }
+
+    console.log(`[blueprint] Blueprint updated with generated data and marked as ready`);
+
+    // 8. Update generation cycle with cost information and mark as completed
+    if (generationCycleId) {
+      try {
+        // Calculate actual cost from LLM usage (passed from generateBlueprintWithLLM)
+        const actualUsage = (blueprint as any).__actualUsage as OpenAIUsage | null;
+        let actualCost = 0;
+        let estimatedCost = blueprint.cost_breakdown.total || 0;
+
+        if (actualUsage) {
+          actualCost = calculateOpenAICost(actualUsage, genModel, false);
+          console.log(`[blueprint] Actual LLM cost: $${actualCost.toFixed(4)} (tokens: ${actualUsage.prompt_tokens} prompt + ${actualUsage.completion_tokens} completion = ${actualUsage.total_tokens} total)`);
+        } else {
+          console.warn(`[blueprint] No usage data available, using estimated cost: $${estimatedCost.toFixed(4)}`);
+          actualCost = estimatedCost;
+        }
+
+        // Store cost metadata in generation cycle (following pattern from other cycles)
+        const costMetadata = {
+          cost_breakdown: {
+            openai: {
+              total: actualCost,
+              chat_completions: [{
+                cost: actualCost,
+                model: genModel,
+                prompt_tokens: actualUsage?.prompt_tokens ?? 0,
+                completion_tokens: actualUsage?.completion_tokens ?? 0,
+                total_tokens: actualUsage?.total_tokens ?? 0,
+              }],
+            },
+          },
+          estimated_cost: estimatedCost,
+          actual_cost: actualCost,
+          tracked_at: new Date().toISOString(),
+          pricing_version: getPricingVersion(),
+        };
+
+        const { error: cycleUpdateError } = await (supabase
+          .from('generation_cycles') as any)
+          .update({
+            status: 'completed',
+            progress_current: 1,
+            progress_total: 1,
+            metadata: costMetadata,
+          })
+          .eq('id', generationCycleId);
+
+        if (cycleUpdateError) {
+          console.warn(`[blueprint] Failed to update generation cycle: ${cycleUpdateError.message}`);
+        } else {
+          console.log(`[blueprint] Generation cycle updated with actual cost: $${actualCost.toFixed(4)}`);
+        }
+      } catch (err: any) {
+        console.warn(`[blueprint] Error updating generation cycle: ${err.message}`);
+      }
+    }
+
+    // 9. Mark any remaining non-superseded blueprints as superseded (safety check)
+    // The API endpoint should have already handled this, but we do it here as a safety measure
+    const { data: existingBlueprints, error: checkError } = await (supabase
+      .from('context_blueprints') as any)
       .select('id')
-      .single() as { data: { id: string } | null; error: any };
+      .eq('agent_id', agentId)
+      .neq('id', blueprintId)
+      .in('status', ['generating', 'ready', 'approved']);
 
-    if (insertError || !blueprintRecord) {
-      throw new Error(`Failed to store blueprint: ${insertError?.message || 'Insert failed'}`);
+    if (!checkError && existingBlueprints && existingBlueprints.length > 0) {
+      const { error: supersedeError } = await (supabase
+        .from('context_blueprints') as any)
+        .update({
+          status: 'superseded',
+          superseded_at: new Date().toISOString(),
+          replaced_by: blueprintId,
+        })
+        .eq('agent_id', agentId)
+        .neq('id', blueprintId)
+        .in('status', ['generating', 'ready', 'approved']);
+
+      if (supersedeError) {
+        console.warn(`[blueprint] Warning: Failed to mark existing blueprints as superseded: ${supersedeError.message}`);
+        // Don't throw - new blueprint is created, this is just cleanup
+      } else {
+        console.log(`[blueprint] Marked ${existingBlueprints.length} existing blueprint(s) as superseded`);
+      }
     }
 
-    console.log(`[blueprint] Blueprint stored with ID: ${blueprintRecord.id}`);
-
-    // 6. Update agent status to 'blueprint_ready'
-    const { error: finalStatusError } = await (supabase
-      .from('agents') as any)
-      .update({ status: 'blueprint_ready' })
-      .eq('id', agentId);
-
-    if (finalStatusError) {
-      console.warn(`[blueprint] Warning: Failed to update agent status to blueprint_ready: ${finalStatusError.message}`);
-      // Don't throw - blueprint is stored, status update can be retried
-    }
+    // 6. Agent remains in 'idle' status with 'blueprint' stage
+    // The blueprint is now ready for approval - no status change needed
+    // The agent status/stage is already correct (idle/blueprint) and will be updated
+    // when the blueprint is approved or when the user starts the next phase
 
     console.log(`[blueprint] Blueprint generation complete for event ${eventId}`);
-    return blueprintRecord.id;
+    return blueprintId;
   } catch (error: any) {
     console.error(`[blueprint] Error generating blueprint: ${error.message}`);
     
@@ -282,15 +411,47 @@ export async function generateContextBlueprint(
 
     // Try to store error in blueprint record if it exists
     try {
-      await (supabase
+      // Find the blueprint record that was created (if any)
+      const { data: blueprintRecords } = await (supabase
         .from('context_blueprints') as any)
-        .update({
-          status: 'error',
-          error_message: error.message,
-        })
-        .eq('agent_id', agentId);
-    } catch {
-      // Ignore if blueprint doesn't exist yet
+        .select('id')
+        .eq('agent_id', agentId)
+        .eq('status', 'generating')
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (blueprintRecords && blueprintRecords.length > 0) {
+        const blueprintId = blueprintRecords[0].id;
+        
+        // Update blueprint status to error
+        await (supabase
+          .from('context_blueprints') as any)
+          .update({
+            status: 'error',
+            error_message: error.message,
+          })
+          .eq('id', blueprintId);
+
+        // Update generation cycle to failed if it exists
+        const { data: cycles } = await (supabase
+          .from('generation_cycles') as any)
+          .select('id')
+          .eq('blueprint_id', blueprintId)
+          .eq('cycle_type', 'blueprint')
+          .in('status', ['started', 'processing']);
+
+        if (cycles && cycles.length > 0) {
+          await (supabase
+            .from('generation_cycles') as any)
+            .update({
+              status: 'failed',
+              error_message: error.message,
+            })
+            .in('id', cycles.map(c => c.id));
+        }
+      }
+    } catch (err: any) {
+      console.error(`[blueprint] Failed to update blueprint/generation cycle error status: ${err.message}`);
     }
 
     throw error;
@@ -324,6 +485,7 @@ async function generateBlueprintWithLLM(
   let attempt = 0;
   let parsed: LLMBlueprintResponse | null = null;
   let lastError: Error | null = null;
+  let totalUsage: OpenAIUsage | null = null; // Track cumulative usage across retries
 
   while (attempt <= maxRetries) {
     try {
@@ -371,6 +533,26 @@ IMPORTANT: This is a retry attempt. The previous response had empty or insuffici
       const content = response.choices[0]?.message?.content;
       if (!content) {
         throw new Error('Empty response from LLM');
+      }
+
+      // Track actual usage for cost calculation (accumulate across retries)
+      const attemptUsage: OpenAIUsage | null = response.usage ? {
+        prompt_tokens: response.usage.prompt_tokens,
+        completion_tokens: response.usage.completion_tokens ?? 0,
+        total_tokens: response.usage.total_tokens ?? (response.usage.prompt_tokens + (response.usage.completion_tokens ?? 0)),
+      } : null;
+
+      // Accumulate usage across retry attempts
+      if (attemptUsage) {
+        if (totalUsage) {
+          totalUsage = {
+            prompt_tokens: totalUsage.prompt_tokens + attemptUsage.prompt_tokens,
+            completion_tokens: totalUsage.completion_tokens + attemptUsage.completion_tokens,
+            total_tokens: totalUsage.total_tokens + attemptUsage.total_tokens,
+          };
+        } else {
+          totalUsage = attemptUsage;
+        }
       }
 
       parsed = JSON.parse(content) as LLMBlueprintResponse;
@@ -569,6 +751,11 @@ IMPORTANT: This is a retry attempt. The previous response had empty or insuffici
     }
 
     console.log(`[blueprint] LLM generated blueprint with ${blueprint.important_details.length} important details, ${blueprint.inferred_topics.length} inferred topics, ${blueprint.key_terms.length} key terms, ${blueprint.research_plan.queries.length} research queries, ${blueprint.glossary_plan.terms.length} glossary terms, target ${blueprint.chunks_plan.target_count} chunks`);
+    
+    // Attach actual usage for cost calculation (will be removed before storing in DB)
+    if (totalUsage) {
+      (blueprint as any).__actualUsage = totalUsage;
+    }
     
     return blueprint;
 }

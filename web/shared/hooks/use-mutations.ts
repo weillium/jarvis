@@ -60,7 +60,7 @@ export function useResetContextMutation(eventId: string) {
 }
 
 /**
- * Start context generation mutation
+ * Start context generation mutation (consolidated - handles both start and regenerate)
  */
 export function useStartContextGenerationMutation(eventId: string) {
   const queryClient = useQueryClient();
@@ -77,31 +77,7 @@ export function useStartContextGenerationMutation(eventId: string) {
       return data;
     },
     onSuccess: () => {
-      // Invalidate agent query to show updated status
-      queryClient.invalidateQueries({ queryKey: ['agent', eventId] });
-    },
-  });
-}
-
-/**
- * Regenerate blueprint mutation
- */
-export function useRegenerateBlueprintMutation(eventId: string) {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/context/${eventId}/blueprint/regenerate`, {
-        method: 'POST',
-      });
-      const data = await res.json();
-      if (!data.ok) {
-        throw new Error(data.error || 'Failed to regenerate blueprint');
-      }
-      return data;
-    },
-    onSuccess: () => {
-      // Invalidate agent and blueprint queries
+      // Invalidate agent and blueprint queries to show updated status
       queryClient.invalidateQueries({ queryKey: ['agent', eventId] });
       queryClient.invalidateQueries({ queryKey: ['blueprint', eventId] });
     },
@@ -133,38 +109,42 @@ export function useRegenerateStageMutation(eventId: string) {
 }
 
 /**
- * Start or regenerate mutation (conditional endpoint based on hasBlueprint)
+ * Start or regenerate mutation (consolidated endpoint)
  * Used by regenerate-button component
+ * 
+ * For blueprint operations, delegates to useStartContextGenerationMutation to avoid duplication.
+ * For other stages (research, glossary, chunks), uses the regenerate endpoint.
  */
 export function useStartOrRegenerateMutation(eventId: string) {
   const queryClient = useQueryClient();
+  // Always call the blueprint mutation hook (React rules), but only use it when stage is 'blueprint'
+  const blueprintMutation = useStartContextGenerationMutation(eventId);
 
   return useMutation({
-    mutationFn: async ({ stage, hasBlueprint }: { stage: 'blueprint' | 'research' | 'glossary' | 'chunks'; hasBlueprint: boolean }) => {
-      let endpoint = '';
+    mutationFn: async ({ stage }: { stage: 'blueprint' | 'research' | 'glossary' | 'chunks'; hasBlueprint: boolean }) => {
+      // For blueprint, reuse the blueprint mutation's logic
       if (stage === 'blueprint') {
-        // If no blueprint, start generation; otherwise regenerate
-        endpoint = hasBlueprint 
-          ? `/api/context/${eventId}/blueprint/regenerate`
-          : `/api/context/${eventId}/start`;
-      } else {
-        endpoint = `/api/context/${eventId}/regenerate?stage=${stage}`;
+        return blueprintMutation.mutateAsync(undefined);
       }
-
+      
+      // For other stages, use the regenerate endpoint
+      const endpoint = `/api/context/${eventId}/regenerate?stage=${stage}`;
       const res = await fetch(endpoint, {
         method: 'POST',
       });
       const data = await res.json();
       if (!data.ok) {
-        throw new Error(data.error || `Failed to ${hasBlueprint ? 'regenerate' : 'start'} ${stage}`);
+        throw new Error(data.error || `Failed to regenerate ${stage}`);
       }
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       // Invalidate agent query to show updated status
       queryClient.invalidateQueries({ queryKey: ['agent', eventId] });
       // Invalidate blueprint query if it was a blueprint operation
-      queryClient.invalidateQueries({ queryKey: ['blueprint', eventId] });
+      if (variables.stage === 'blueprint') {
+        queryClient.invalidateQueries({ queryKey: ['blueprint', eventId] });
+      }
     },
   });
 }

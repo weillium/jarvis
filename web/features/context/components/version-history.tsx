@@ -18,8 +18,6 @@ interface GenerationCycle {
   started_at: string;
   completed_at: string | null;
   error_message: string | null;
-  version: number;
-  parent_cycle_id: string | null;
   cost?: number | null;
   cost_breakdown?: {
     total: number;
@@ -301,18 +299,6 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                     }}>
                       {getTypeLabel(cycle.cycle_type)}
                     </span>
-                    {cycle.version > 1 && (
-                      <span style={{
-                        fontSize: '11px',
-                        padding: '2px 8px',
-                        background: '#e0e7ff',
-                        color: '#4338ca',
-                        borderRadius: '4px',
-                        fontWeight: '500',
-                      }}>
-                        v{cycle.version}
-                      </span>
-                    )}
                     {cycle.component && cycle.component !== cycle.cycle_type && (
                       <span style={{
                         fontSize: '11px',
@@ -388,15 +374,6 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                     color: '#991b1b',
                   }}>
                     <strong>Error:</strong> {cycle.error_message}
-                  </div>
-                )}
-                {cycle.parent_cycle_id && (
-                  <div style={{
-                    marginTop: '4px',
-                    fontSize: '11px',
-                    color: '#94a3b8',
-                  }}>
-                    Parent cycle: {cycle.parent_cycle_id.substring(0, 8)}...
                   </div>
                 )}
                 {cycle.cost_breakdown && (

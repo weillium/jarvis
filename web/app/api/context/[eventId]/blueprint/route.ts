@@ -125,7 +125,7 @@ export async function POST(
     // Find agent for this event
     const { data: agents, error: agentError } = await (supabase
       .from('agents') as any)
-      .select('id, status')
+      .select('id, status, stage')
       .eq('event_id', eventId)
       .limit(1);
 
@@ -146,12 +146,12 @@ export async function POST(
 
     const agentId = agents[0].id;
 
-    // Verify agent is in correct state
-    if (agents[0].status !== 'blueprint_ready') {
+    // Verify agent is in correct state (idle with blueprint stage)
+    if (agents[0].status !== 'idle' || agents[0].stage !== 'blueprint') {
       return NextResponse.json(
         { 
           ok: false, 
-          error: `Cannot approve blueprint. Agent status is '${agents[0].status}'. Expected 'blueprint_ready'.` 
+          error: `Cannot approve blueprint. Agent status is '${agents[0].status}' with stage '${agents[0].stage}'. Expected status 'idle' with stage 'blueprint'.` 
         },
         { status: 400 }
       );
@@ -191,25 +191,9 @@ export async function POST(
       );
     }
 
-    // Update agent status to 'blueprint_approved'
-    const { error: updateAgentError } = await (supabase
-      .from('agents') as any)
-      .update({ status: 'blueprint_approved' })
-      .eq('id', agentId);
-
-    if (updateAgentError) {
-      console.error('[api/context/blueprint] Error updating agent:', updateAgentError);
-      // Try to rollback blueprint status
-      await (supabase
-        .from('context_blueprints') as any)
-        .update({ status: 'ready' })
-        .eq('id', blueprint.id);
-      
-      return NextResponse.json(
-        { ok: false, error: `Failed to update agent status: ${updateAgentError.message}` },
-        { status: 500 }
-      );
-    }
+    // Agent remains in 'idle'/'blueprint' state after approval
+    // The worker will pick up the approved blueprint and move to the next stage
+    // No agent status update needed - the blueprint status change is sufficient
 
     return NextResponse.json({
       ok: true,
