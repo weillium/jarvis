@@ -5,19 +5,19 @@ import { supabase } from '@/shared/lib/supabase/client';
 
 interface ContextItem {
   id: string;
-  source: string;
   chunk: string;
-  enrichment_source: string | null;
-  quality_score: number | null;
-  enrichment_timestamp: string | null;
-  chunk_size: number | null;
-  metadata: Record<string, any> | null;
+  metadata: {
+    source?: string;
+    enrichment_source?: string;
+    research_source?: string;
+    component_type?: string;
+    quality_score?: number | string;
+    chunk_size?: number | string;
+    enrichment_timestamp?: string;
+  } | null;
   rank: number | null;
-  research_source: string | null;
-  component_type: string | null;
-  version: number | null;
   generation_cycle_id: string | null;
-  // is_active removed in Phase 3 - use generation_cycle_id instead
+  // Phase 4: All metadata fields (source, enrichment_source, etc.) are now in metadata JSONB
 }
 
 interface ContextStats {
@@ -60,27 +60,37 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
     let totalChars = 0;
 
     contextItems.forEach((item) => {
-      // Count by source
-      bySource[item.source] = (bySource[item.source] || 0) + 1;
+      // Count by source (from metadata)
+      const source = item.metadata?.source || 'unknown';
+      bySource[source] = (bySource[source] || 0) + 1;
       
-      // Count by enrichment source
-      const enrichmentSource = item.enrichment_source || item.source || 'unknown';
+      // Count by enrichment source (from metadata)
+      const enrichmentSource = item.metadata?.enrichment_source || item.metadata?.source || 'unknown';
       byEnrichmentSource[enrichmentSource] = (byEnrichmentSource[enrichmentSource] || 0) + 1;
       
-      // Quality score
-      if (item.quality_score !== null) {
-        totalQuality += item.quality_score;
-        qualityCount++;
+      // Quality score (from metadata)
+      const qualityScore = item.metadata?.quality_score;
+      if (qualityScore !== null && qualityScore !== undefined) {
+        const score = typeof qualityScore === 'string' ? parseFloat(qualityScore) : qualityScore;
+        if (!isNaN(score)) {
+          totalQuality += score;
+          qualityCount++;
+        }
       }
       
-      // Character count
-      totalChars += item.chunk_size || item.chunk.length;
+      // Character count (from metadata or chunk length)
+      const chunkSize = item.metadata?.chunk_size;
+      if (chunkSize !== null && chunkSize !== undefined) {
+        totalChars += typeof chunkSize === 'string' ? parseInt(chunkSize, 10) : chunkSize;
+      } else {
+        totalChars += item.chunk.length;
+      }
     });
 
-    // Calculate unique research sources
+    // Calculate unique research sources (from metadata)
     const byResearchSource: Record<string, number> = {};
     contextItems.forEach((item) => {
-      const researchSource = item.research_source || 'none';
+      const researchSource = item.metadata?.research_source || 'none';
       byResearchSource[researchSource] = (byResearchSource[researchSource] || 0) + 1;
     });
 
@@ -146,9 +156,9 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
                 return prev;
               }
               return [...prev, newItem].sort((a, b) => {
-                // Sort by enrichment_timestamp descending, then by created_at
-                const aTime = a.enrichment_timestamp || '';
-                const bTime = b.enrichment_timestamp || '';
+                // Sort by enrichment_timestamp from metadata descending
+                const aTime = a.metadata?.enrichment_timestamp || '';
+                const bTime = b.metadata?.enrichment_timestamp || '';
                 return bTime.localeCompare(aTime);
               });
             });
@@ -177,15 +187,15 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
                 const updated = [...prev];
                 updated[existingIndex] = updatedItem;
                 return updated.sort((a, b) => {
-                  const aTime = a.enrichment_timestamp || '';
-                  const bTime = b.enrichment_timestamp || '';
+                  const aTime = a.metadata?.enrichment_timestamp || '';
+                  const bTime = b.metadata?.enrichment_timestamp || '';
                   return bTime.localeCompare(aTime);
                 });
               } else {
                 // Add new item
                 return [...prev, updatedItem].sort((a, b) => {
-                  const aTime = a.enrichment_timestamp || '';
-                  const bTime = b.enrichment_timestamp || '';
+                  const aTime = a.metadata?.enrichment_timestamp || '';
+                  const bTime = b.metadata?.enrichment_timestamp || '';
                   return bTime.localeCompare(aTime);
                 });
               }
@@ -249,20 +259,20 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
     if (filterByRank && item.rank === null) return false;
     if (filterByRank === 'ranked' && item.rank === null) return false;
     if (filterByRank === 'unranked' && item.rank !== null) return false;
-    if (filterByResearchSource && item.research_source !== filterByResearchSource) return false;
+    if (filterByResearchSource && item.metadata?.research_source !== filterByResearchSource) return false;
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       const matchesQuery = item.chunk.toLowerCase().includes(query) ||
-                           (item.source && item.source.toLowerCase().includes(query)) ||
-                           (item.research_source && item.research_source.toLowerCase().includes(query));
+                           (item.metadata?.source && item.metadata.source.toLowerCase().includes(query)) ||
+                           (item.metadata?.research_source && item.metadata.research_source.toLowerCase().includes(query));
       if (!matchesQuery) return false;
     }
     return true;
   });
 
-  // Get unique research sources for filter
+  // Get unique research sources for filter (from metadata)
   const researchSources = Array.from(
-    new Set(contextItems.map((item) => item.research_source).filter(Boolean))
+    new Set(contextItems.map((item) => item.metadata?.research_source).filter(Boolean))
   ).sort() as string[];
 
   return (
@@ -651,23 +661,12 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
                           Rank: {item.rank}
                         </div>
                       )}
-                      {item.version && item.version > 1 && (
-                        <div style={{
-                          fontSize: '11px',
-                          padding: '2px 8px',
-                          background: '#e0e7ff',
-                          color: '#4338ca',
-                          borderRadius: '4px',
-                          fontWeight: '500',
-                        }}>
-                          v{item.version}
-                        </div>
-                      )}
+                      {/* Version column removed in Phase 3 */}
                       <div style={{
                         width: '8px',
                         height: '8px',
                         borderRadius: '50%',
-                        background: getSourceColor(item.enrichment_source || item.source || 'unknown'),
+                        background: getSourceColor(item.metadata?.enrichment_source || item.metadata?.source || 'unknown'),
                       }} />
                       <div style={{
                         fontSize: '12px',
@@ -675,9 +674,9 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
                         color: '#64748b',
                         textTransform: 'uppercase',
                       }}>
-                        {getSourceLabel(item.enrichment_source || item.source || 'unknown')}
+                        {getSourceLabel(item.metadata?.enrichment_source || item.metadata?.source || 'unknown')}
                       </div>
-                      {item.research_source && (
+                      {item.metadata?.research_source && (
                         <div style={{
                           fontSize: '11px',
                           padding: '2px 8px',
@@ -686,7 +685,7 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
                           borderRadius: '4px',
                           fontWeight: '500',
                         }}>
-                          Research: {item.research_source}
+                          Research: {item.metadata.research_source}
                         </div>
                       )}
                     </div>
@@ -695,24 +694,36 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
                       alignItems: 'center',
                       gap: '8px',
                     }}>
-                      {item.quality_score !== null && (
+                      {item.metadata?.quality_score !== null && item.metadata?.quality_score !== undefined && (
                         <div style={{
                           fontSize: '11px',
                           padding: '2px 8px',
-                          background: item.quality_score >= 0.7 ? '#dcfce7' : item.quality_score >= 0.4 ? '#fef3c7' : '#fee2e2',
+                          background: (() => {
+                            const score = typeof item.metadata.quality_score === 'string' 
+                              ? parseFloat(item.metadata.quality_score) 
+                              : item.metadata.quality_score;
+                            return score >= 0.7 ? '#dcfce7' : score >= 0.4 ? '#fef3c7' : '#fee2e2';
+                          })(),
                           color: '#0f172a',
                           borderRadius: '4px',
                           fontWeight: '500',
                         }}>
-                          Quality: {(item.quality_score * 100).toFixed(0)}%
+                          Quality: {(() => {
+                            const score = typeof item.metadata.quality_score === 'string' 
+                              ? parseFloat(item.metadata.quality_score) 
+                              : item.metadata.quality_score;
+                            return (score * 100).toFixed(0);
+                          })()}%
                         </div>
                       )}
-                      {item.chunk_size && (
+                      {item.metadata?.chunk_size && (
                         <div style={{
                           fontSize: '11px',
                           color: '#94a3b8',
                         }}>
-                          {item.chunk_size} chars
+                          {typeof item.metadata.chunk_size === 'string' 
+                            ? parseInt(item.metadata.chunk_size, 10) 
+                            : item.metadata.chunk_size} chars
                         </div>
                       )}
                     </div>
@@ -750,13 +761,13 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
                       </pre>
                     </details>
                   )}
-                  {item.enrichment_timestamp && (
+                  {item.metadata?.enrichment_timestamp && (
                     <div style={{
                       fontSize: '11px',
                       color: '#94a3b8',
                       marginTop: '4px',
                     }}>
-                      Added: {new Date(item.enrichment_timestamp).toLocaleTimeString()}
+                      Added: {new Date(item.metadata.enrichment_timestamp).toLocaleTimeString()}
                     </div>
                   )}
                 </div>

@@ -23,14 +23,13 @@ export async function GET(
     const supabase = getSupabaseClient();
 
     // Fetch context items from current generation cycle
-    // Note: After Phase 3, we filter by generation_cycle_id instead of is_active
-    // For now, get all items (we'll filter by cycle in later updates)
+    // Note: After Phase 4, metadata fields are in JSONB metadata column
     const { data, error } = await supabase
       .from('context_items')
-      .select('id, source, chunk, enrichment_source, quality_score, enrichment_timestamp, chunk_size, metadata, rank, research_source, component_type, generation_cycle_id')
+      .select('id, chunk, metadata, rank, generation_cycle_id')
       .eq('event_id', eventId)
       .order('rank', { ascending: true, nullsFirst: true })
-      .order('enrichment_timestamp', { ascending: false, nullsFirst: true });
+      .order('metadata->>enrichment_timestamp', { ascending: false, nullsFirst: true });
 
     if (error) {
       console.error('[api/context] Query error:', error.message, error);
@@ -48,9 +47,9 @@ export async function GET(
       if (aRank !== null) return -1;
       if (bRank !== null) return 1;
 
-      // Secondary sort: by enrichment_timestamp (newest first)
-      const aTime = a.enrichment_timestamp || '';
-      const bTime = b.enrichment_timestamp || '';
+      // Secondary sort: by enrichment_timestamp from metadata (newest first)
+      const aTime = a.metadata?.enrichment_timestamp || '';
+      const bTime = b.metadata?.enrichment_timestamp || '';
       if (!aTime && !bTime) return 0;
       if (!aTime) return 1;
       if (!bTime) return -1;

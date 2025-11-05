@@ -290,22 +290,27 @@ export async function buildContextChunks(
             ? 'llm_generated' 
             : chunk.rank ? 'ranked' : 'research';
 
+          // Build metadata JSONB with all metadata fields
+          const itemMetadata = {
+            ...(chunk.metadata || {}),
+            source: chunk.source,
+            enrichment_source: chunk.research_source,
+            research_source: chunk.research_source,
+            component_type: componentType,
+            quality_score: chunk.quality_score || 0.8,
+            chunk_size: chunk.text.length,
+            enrichment_timestamp: new Date().toISOString(),
+          };
+
           const { error } = await (supabase
             .from('context_items') as any)
             .insert({
               event_id: eventId,
               generation_cycle_id: generationCycleId,
-              source: chunk.source,
               chunk: chunk.text,
               embedding: embedding,
-              enrichment_source: chunk.research_source,
-              chunk_size: chunk.text.length,
-              enrichment_timestamp: new Date().toISOString(),
               rank: chunk.rank,
-              research_source: chunk.research_source,
-              quality_score: chunk.quality_score || 0.8,
-              metadata: chunk.metadata || {},
-              component_type: componentType,
+              metadata: itemMetadata,
             });
 
           if (error) {
