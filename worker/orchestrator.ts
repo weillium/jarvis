@@ -3,152 +3,26 @@
  * Handles dual-agent architecture (Cards + Facts) per event
  */
 
-import { createClient } from '@supabase/supabase-js';
-import OpenAI from 'openai';
-import { RingBuffer, TranscriptChunk } from './ring-buffer';
-import { FactsStore, Fact } from './facts-store';
+import { RingBuffer } from './ring-buffer';
+import { FactsStore } from './facts-store';
 import { RealtimeSession, AgentType } from './realtime-session';
+import type { RealtimeSessionStatus } from './realtime-session';
 import { getPolicy } from './policies';
 import {
   createCardGenerationUserPrompt,
   FACTS_EXTRACTION_SYSTEM_PROMPT,
   createFactsExtractionUserPrompt,
 } from './prompts';
-
-export interface OrchestratorConfig {
-  supabase: ReturnType<typeof createClient>;
-  openai: OpenAI;
-  embedModel: string;
-  genModel: string;
-  realtimeModel: string;
-  sseEndpoint?: string; // Base URL for SSE push endpoint (e.g., 'http://localhost:3000')
-}
-
-export interface GlossaryEntry {
-  term: string;
-  definition: string;
-  acronym_for?: string;
-  category?: string;
-  usage_examples?: string[];
-  related_terms?: string[];
-  confidence_score?: number;
-}
-
-export interface LogEntry {
-  level: 'log' | 'warn' | 'error';
-  message: string;
-  timestamp: string;
-  context?: {
-    seq?: number;
-    agent_type?: 'cards' | 'facts';
-    event_id?: string;
-  };
-}
-
-export interface AgentSessionStatus {
-  agent_type: 'cards' | 'facts';
-  session_id: string;
-  status: 'generated' | 'starting' | 'active' | 'paused' | 'closed' | 'error';
-  websocket_state?: 'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED'; // Actual WebSocket readyState
-  ping_pong?: {
-    enabled: boolean;
-    missedPongs: number;
-    lastPongReceived?: string;
-    pingIntervalMs: number;
-    pongTimeoutMs: number;
-    maxMissedPongs: number;
-  };
-  runtime: {
-    event_id: string;
-    agent_id: string;
-    runtime_status: string;
-    cards_last_seq: number;
-    facts_last_seq: number;
-    facts_last_update: string;
-    ring_buffer_stats: any;
-    facts_store_stats: any;
-  };
-  token_metrics: {
-    total_tokens: number;
-    request_count: number;
-    max_tokens: number;
-    avg_tokens: number;
-    warnings: number;
-    criticals: number;
-    last_request?: {
-      tokens: number;
-      percentage: number;
-      breakdown: Record<string, number>;
-      timestamp: string;
-    };
-  };
-  recent_logs: LogEntry[];
-  metadata: {
-    created_at: string;
-    updated_at: string;
-    closed_at: string | null;
-    model: string;
-  };
-}
-
-export interface EventRuntime {
-  eventId: string;
-  agentId: string;
-  status: 'prepping' | 'context_complete' | 'ready' | 'running' | 'ended' | 'error';
-  
-  // In-memory state
-  ringBuffer: RingBuffer;
-  factsStore: FactsStore;
-  glossaryCache?: Map<string, GlossaryEntry>; // Glossary terms cache
-  
-  // Realtime sessions
-  cardsSession?: RealtimeSession;
-  factsSession?: RealtimeSession;
-  cardsSessionId?: string;
-  factsSessionId?: string;
-  
-  // Checkpoints
-  cardsLastSeq: number;
-  factsLastSeq: number;
-  
-  // Debouncing for Facts agent
-  factsUpdateTimer?: NodeJS.Timeout;
-  factsLastUpdate: number;
-  
-  // Context metrics tracking
-  contextMetrics?: {
-    cards: {
-      total: number;
-      count: number;
-      max: number;
-      warnings: number;
-      criticals: number;
-    };
-    facts: {
-      total: number;
-      count: number;
-      max: number;
-      warnings: number;
-      criticals: number;
-    };
-  };
-  
-  // Log buffers for each agent
-  logBuffers?: {
-    cards: LogEntry[];
-    facts: LogEntry[];
-  };
-  
-  // Periodic summary timer
-  summaryTimer?: NodeJS.Timeout;
-  
-  // Status update timer
-  statusUpdateTimer?: NodeJS.Timeout;
-  
-  // Metadata
-  createdAt: Date;
-  updatedAt: Date;
-}
+import type {
+  AgentSessionStatus,
+  EventRuntime,
+  GlossaryEntry,
+  LogEntry,
+  OrchestratorConfig,
+  TranscriptChunk,
+  Fact,
+} from './types';
+export type { OrchestratorConfig } from './types';
 
 export class Orchestrator {
   private config: OrchestratorConfig;
@@ -259,15 +133,8 @@ export class Orchestrator {
 
     // Get session status from session state
     let status: 'starting' | 'active' | 'closed' | 'error' = 'starting';
-    let websocketState: string | undefined;
-    let pingPong: {
-      enabled: boolean;
-      missedPongs: number;
-      lastPongReceived?: string;
-      pingIntervalMs: number;
-      pongTimeoutMs: number;
-      maxMissedPongs: number;
-    } | undefined;
+    let websocketState: RealtimeSessionStatus['websocketState'];
+    let pingPong: RealtimeSessionStatus['pingPong'];
     if (session) {
       const sessionStatus = session.getStatus();
       websocketState = sessionStatus.websocketState;
@@ -438,8 +305,10 @@ export class Orchestrator {
         });
 
         if (!cardsResponse.ok) {
-          const error = await cardsResponse.json().catch(() => ({ error: 'Unknown error' }));
-          console.warn(`[orchestrator] Failed to push cards status: ${error.error || cardsResponse.statusText} (status: ${cardsResponse.status})`);
+          const errorBody = (await cardsResponse
+            .json()
+            .catch(() => ({ error: 'Unknown error' }))) as { error?: string };
+          console.warn(`[orchestrator] Failed to push cards status: ${errorBody.error || cardsResponse.statusText} (status: ${cardsResponse.status})`);
         }
       } catch (fetchError: any) {
         // Handle timeout or network errors separately
@@ -460,8 +329,10 @@ export class Orchestrator {
         });
 
         if (!factsResponse.ok) {
-          const error = await factsResponse.json().catch(() => ({ error: 'Unknown error' }));
-          console.warn(`[orchestrator] Failed to push facts status: ${error.error || factsResponse.statusText} (status: ${factsResponse.status})`);
+          const errorBody = (await factsResponse
+            .json()
+            .catch(() => ({ error: 'Unknown error' }))) as { error?: string };
+          console.warn(`[orchestrator] Failed to push facts status: ${errorBody.error || factsResponse.statusText} (status: ${factsResponse.status})`);
         }
       } catch (fetchError: any) {
         // Handle timeout or network errors separately
@@ -1391,10 +1262,10 @@ export class Orchestrator {
       console.error(`[orchestrator] Failed to connect sessions: ${error.message}`);
       // Update status to error
       if (runtime.cardsSession) {
-        await runtime.cardsSession.onStatusChange?.('error');
+        runtime.cardsSession.notifyStatus('error');
       }
       if (runtime.factsSession) {
-        await runtime.factsSession.onStatusChange?.('error');
+        runtime.factsSession.notifyStatus('error');
       }
       throw error;
     }
@@ -1438,10 +1309,10 @@ export class Orchestrator {
 
   /**
    * Resume paused event sessions
-   */
+  */
   async resumeEvent(eventId: string, agentId: string): Promise<void> {
     console.log(`[orchestrator] Resuming event ${eventId}`);
-    const runtime = this.runtimes.get(eventId);
+    let runtime = this.runtimes.get(eventId);
 
     if (!runtime) {
       // Try to resume from database state
@@ -2080,4 +1951,3 @@ export class Orchestrator {
     console.log('[orchestrator] Shutdown complete');
   }
 }
-

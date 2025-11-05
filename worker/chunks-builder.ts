@@ -16,6 +16,7 @@ import {
   calculateOpenAICost,
   getPricingVersion,
 } from './pricing-config';
+import type { OpenAIUsage } from './pricing-config';
 
 export interface ChunksBuilderOptions {
   supabase: ReturnType<typeof createClient>;
@@ -250,15 +251,23 @@ export async function buildContextChunks(
       // Track embedding costs
       for (const embeddingResponse of embeddingResponses) {
         if (embeddingResponse.usage) {
-          const usage = embeddingResponse.usage;
-          const cost = calculateOpenAICost(usage, embedModel, true); // isEmbedding = true
+          const usage = embeddingResponse.usage as Partial<OpenAIUsage>;
+          const promptTokens = usage.prompt_tokens ?? 0;
+          const completionTokens = usage.completion_tokens ?? 0;
+          const totalTokens = usage.total_tokens ?? promptTokens + completionTokens;
+          const usageForCost: OpenAIUsage = {
+            prompt_tokens: promptTokens,
+            completion_tokens: completionTokens,
+            total_tokens: totalTokens,
+          };
+          const cost = calculateOpenAICost(usageForCost, embedModel, true); // isEmbedding = true
           costBreakdown.openai.total += cost;
           costBreakdown.openai.embeddings.push({
             cost,
             usage: {
-              prompt_tokens: usage.prompt_tokens,
-              completion_tokens: usage.completion_tokens,
-              total_tokens: usage.total_tokens,
+              prompt_tokens: promptTokens,
+              completion_tokens: completionTokens,
+              total_tokens: totalTokens,
             },
             model: embedModel,
           });
@@ -427,18 +436,26 @@ async function generateLLMChunks(
     const response = await openai.chat.completions.create(requestOptions);
 
     // Track OpenAI cost for chat completion
-    if (response.usage) {
-      const usage = response.usage;
-      const cost = calculateOpenAICost(usage, genModel, false);
-      costBreakdown.openai.total += cost;
-      costBreakdown.openai.chat_completions.push({
-        cost,
-        usage: {
-          prompt_tokens: usage.prompt_tokens,
-          completion_tokens: usage.completion_tokens,
-          total_tokens: usage.total_tokens,
-        },
-        model: genModel,
+  if (response.usage) {
+    const usage = response.usage as Partial<OpenAIUsage>;
+    const promptTokens = usage.prompt_tokens ?? 0;
+    const completionTokens = usage.completion_tokens ?? 0;
+    const totalTokens = usage.total_tokens ?? promptTokens + completionTokens;
+    const usageForCost: OpenAIUsage = {
+      prompt_tokens: promptTokens,
+      completion_tokens: completionTokens,
+      total_tokens: totalTokens,
+    };
+    const cost = calculateOpenAICost(usageForCost, genModel, false);
+    costBreakdown.openai.total += cost;
+    costBreakdown.openai.chat_completions.push({
+      cost,
+      usage: {
+        prompt_tokens: promptTokens,
+        completion_tokens: completionTokens,
+        total_tokens: totalTokens,
+      },
+      model: genModel,
       });
     }
 

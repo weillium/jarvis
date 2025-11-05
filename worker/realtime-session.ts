@@ -38,6 +38,23 @@ export interface RealtimeSessionConfig {
   embedText?: (text: string) => Promise<number[]>;
 }
 
+export interface RealtimeSessionStatus {
+  isActive: boolean;
+  queueLength: number;
+  websocketState?: 'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED';
+  connectionUrl?: string;
+  sessionId?: string;
+  connectedAt?: string;
+  pingPong?: {
+    enabled: boolean;
+    missedPongs: number;
+    lastPongReceived?: string;
+    pingIntervalMs: number;
+    pongTimeoutMs: number;
+    maxMissedPongs: number;
+  };
+}
+
 export class RealtimeSession {
   private openai: OpenAI;
   private session?: OpenAIRealtimeWebSocket;
@@ -715,15 +732,8 @@ export class RealtimeSession {
   /**
    * Get session status
    */
-  getStatus(): { 
-    isActive: boolean; 
-    queueLength: number; 
-    websocketState?: string;
-    connectionUrl?: string;
-    sessionId?: string;
-    connectedAt?: string;
-  } {
-    let websocketState: string | undefined;
+  getStatus(): RealtimeSessionStatus {
+    let websocketState: 'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED' | undefined;
     let connectionUrl: string | undefined;
     let sessionId: string | undefined;
     let connectedAt: string | undefined;
@@ -780,6 +790,10 @@ export class RealtimeSession {
         maxMissedPongs: this.MAX_MISSED_PONGS,
       },
     };
+  }
+
+  notifyStatus(status: 'starting' | 'active' | 'paused' | 'closed' | 'error', sessionId?: string): void {
+    this.onStatusChange?.(status, sessionId);
   }
 
   /**
@@ -978,4 +992,3 @@ export class RealtimeSession {
     }
   }
 }
-

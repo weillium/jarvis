@@ -29,6 +29,23 @@ import {
   getPricingVersion,
 } from './pricing-config';
 
+type ExaCostUsage = {
+  searches: number;
+  pages: number;
+  tokens: number;
+};
+
+type ExaCostBreakdown = {
+  total: number;
+  search: { cost: number; queries: number };
+  research: { cost: number; queries: number; usage: ExaCostUsage };
+  answer: { cost: number; queries: number };
+};
+
+type ResearchCostTracker = {
+  exa: ExaCostBreakdown;
+};
+
 export interface ContextGenerationOrchestratorOptions {
   supabase: ReturnType<typeof createClient>;
   openai: OpenAI;
@@ -280,7 +297,7 @@ async function pollResearchTasks(
   generationCycleId: string,
   chunks: ResearchResults['chunks'],
   insertedCount: { value: number },
-  costBreakdown: { exa: { total: number; research: { cost: number; queries: number; usage: { searches: number; pages: number; tokens: number } } } }
+  costBreakdown: ResearchCostTracker
 ): Promise<void> {
   const MAX_POLL_TIME_MS = 5 * 60 * 1000; // 5 minutes per task
   const POLL_INTERVAL_MS = 10000; // Poll every 10 seconds (per Exa docs, status checks are not billable)
@@ -413,7 +430,7 @@ async function processCompletedResearchTask(
   generationCycleId: string,
   chunks: ResearchResults['chunks'],
   insertedCount: { value: number },
-  costBreakdown: { exa: { total: number; research: { cost: number; queries: number; usage: { searches: number; pages: number; tokens: number } } } }
+  costBreakdown: ResearchCostTracker
 ): Promise<void> {
   const { queryItem, queryProgress } = task;
   

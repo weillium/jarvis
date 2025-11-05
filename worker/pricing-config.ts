@@ -133,8 +133,14 @@ export const pricingConfig: PricingConfig = {
 /**
  * Calculate OpenAI cost from usage data
  */
+export interface OpenAIUsage {
+  prompt_tokens: number;
+  completion_tokens?: number;
+  total_tokens: number;
+}
+
 export function calculateOpenAICost(
-  usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number },
+  usage: OpenAIUsage,
   model: string,
   isEmbedding: boolean = false
 ): number {
@@ -145,7 +151,7 @@ export function calculateOpenAICost(
     // Fallback to gpt-4o-mini pricing
     return (
       (usage.prompt_tokens / 1000) * 0.00015 +
-      (usage.completion_tokens / 1000) * 0.0006
+      ((usage.completion_tokens ?? 0) / 1000) * 0.0006
     );
   }
 
@@ -156,7 +162,8 @@ export function calculateOpenAICost(
 
   // For chat completions, use input/output pricing
   const inputCost = (usage.prompt_tokens / 1000) * modelPricing.inputPricePer1k;
-  const outputCost = (usage.completion_tokens / 1000) * modelPricing.outputPricePer1k;
+  const completionTokens = usage.completion_tokens ?? 0;
+  const outputCost = (completionTokens / 1000) * modelPricing.outputPricePer1k;
   
   return inputCost + outputCost;
 }
@@ -205,4 +212,3 @@ export function getPricingVersion(): string {
 export function getPricingLastUpdated(): string {
   return pricingConfig.lastUpdated;
 }
-

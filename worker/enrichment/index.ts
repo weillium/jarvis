@@ -107,17 +107,18 @@ export class EnrichmentOrchestrator {
         const embedding = embeddingRes.data[0].embedding;
 
         // Store in database
-        const { error } = await this.supabase.from('context_items').insert({
-          event_id: eventId,
-          source: 'enrichment',
-          chunk,
-          embedding,
-          enrichment_source: result.source,
-          metadata: result.metadata,
-          quality_score: result.qualityScore,
-          chunk_size: chunk.length,
-          enrichment_timestamp: new Date().toISOString(),
-        });
+        const { error } = await (this.supabase
+          .from('context_items') as any).insert({
+            event_id: eventId,
+            source: 'enrichment',
+            chunk,
+            embedding,
+            enrichment_source: result.source,
+            metadata: result.metadata,
+            quality_score: result.qualityScore,
+            chunk_size: chunk.length,
+            enrichment_timestamp: new Date().toISOString(),
+          });
 
         if (error) {
           console.error(`[enrichment] Error storing chunk: ${error.message}`);
@@ -170,4 +171,3 @@ export function getEnrichmentConfig(): EnrichmentConfig {
       : undefined,
   };
 }
-

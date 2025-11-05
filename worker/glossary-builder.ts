@@ -295,10 +295,11 @@ async function generateTermDefinitions(
           systemPrompt: EXA_ANSWER_SYSTEM_PROMPT,
         });
 
-        if (answer.answer && answer.answer.trim()) {
+        const answerText = typeof answer.answer === 'string' ? answer.answer.trim() : '';
+        if (answerText) {
           // Extract source URL from citations if available
-          const sourceUrl = answer.citations && answer.citations.length > 0 
-            ? answer.citations[0].url 
+          const sourceUrl = Array.isArray(answer.citations) && answer.citations.length > 0
+            ? answer.citations[0]?.url 
             : undefined;
 
           // Transform Exa markdown answer into structured glossary format using LLM
@@ -306,7 +307,7 @@ async function generateTermDefinitions(
             term.term,
             term.is_acronym,
             term.category,
-            answer.answer.trim(),
+            answerText,
             sourceUrl,
             openai,
             genModel

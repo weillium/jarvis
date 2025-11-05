@@ -46,15 +46,16 @@ export async function buildTopicContext(
       const embedding = embeddingRes.data[0].embedding;
 
       // Store in database
-      const { error } = await supabase.from('context_items').insert({
-        event_id: eventId,
-        source: 'topic_prep',
-        chunk,
-        embedding,
-        enrichment_source: 'llm_generation',
-        chunk_size: chunk.length,
-        enrichment_timestamp: new Date().toISOString(),
-      });
+      const { error } = await (supabase
+        .from('context_items') as any).insert({
+          event_id: eventId,
+          source: 'topic_prep',
+          chunk,
+          embedding,
+          enrichment_source: 'llm_generation',
+          chunk_size: chunk.length,
+          enrichment_timestamp: new Date().toISOString(),
+        });
 
       if (error) {
         console.error(`[context] Error inserting LLM chunk: ${error.message}`);
@@ -154,4 +155,3 @@ function generateFallbackChunks(topic: string, eventTitle: string): string[] {
     `The event "${eventTitle}" focuses on ${topic}. Important context and background information will be shared during the discussion.`,
   ];
 }
-
