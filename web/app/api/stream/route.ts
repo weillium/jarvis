@@ -103,7 +103,7 @@ export async function GET(req: NextRequest) {
                     payload: {
                       agent_type: session.agent_type,
                       session_id: session.provider_session_id || session.id,
-                      status: session.status, // Can be 'generated', 'starting', 'active', 'paused', 'closed', 'error'
+                      status: session.status, // Can be 'active', 'paused', 'closed', 'error'
                       metadata: {
                         created_at: session.created_at,
                         updated_at: session.updated_at,

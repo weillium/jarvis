@@ -17,7 +17,7 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
   const checkingRef = useRef(false);
   const [initialSessions, setInitialSessions] = useState<AgentSessionStatus[]>([]);
   
-  // Check if sessions exist and determine if SSE should connect (only for starting/active)
+  // Check if sessions exist and determine if SSE should connect (only for active)
   const checkForActiveSessions = useCallback(async () => {
     if (!eventId) {
       setCheckingSessions(false);
@@ -55,7 +55,7 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
           setInitialSessions([]);
         }
         
-        // Only set hasActiveSessions to true if sessions are starting/active (for SSE connection)
+        // Only set hasActiveSessions to true if sessions are active (for SSE connection)
         setHasActiveSessions(data.hasActiveSessions || false);
       } else {
         setHasActiveSessions(false);
@@ -75,7 +75,7 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
     checkForActiveSessions();
     
     // Poll periodically to check for sessions
-    // - Every 5 seconds if not connected (to detect when sessions advance to starting/active)
+    // - Every 5 seconds if not connected (to detect when sessions advance to active)
     // - Every 30 seconds if connected (to detect if connection dropped and sessions are still active)
     const pollInterval = hasActiveSessions ? 30000 : 5000;
     const interval = setInterval(() => {
@@ -85,7 +85,7 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
     return () => clearInterval(interval);
   }, [checkForActiveSessions, hasActiveSessions]);
   
-  // Only connect to SSE when sessions actually exist and are starting/active
+  // Only connect to SSE when sessions actually exist and are active
   const shouldConnectToSessions = useCallback(() => {
     return hasActiveSessions;
   }, [hasActiveSessions]);
@@ -245,8 +245,8 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
       // Refresh agent info to reflect status change (context_complete -> testing)
       await refetch();
       
-      // Immediately check for sessions (they will be in 'generated' state)
-      // This will display them immediately, but SSE won't connect until they advance to starting/active
+      // Immediately check for sessions (they will be in 'closed' state)
+      // This will display them immediately, but SSE won't connect until they advance to active
       await checkForActiveSessions();
       
       console.log('[AgentOverview] Sessions created successfully. Agent status set to testing.');
@@ -276,8 +276,8 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
       // Refresh agent info
       await refetch();
       
-      // Check for sessions - they should now be in 'starting' state
-      // This will trigger SSE connection since they're now starting/active
+      // Check for sessions - they should now be in 'active' state
+      // This will trigger SSE connection since they're now active
       setTimeout(() => {
         checkForActiveSessions();
       }, 1000);
@@ -433,18 +433,22 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
     }
   };
 
-  const getSessionStatusColor = (status: string): string => {
+  const getSessionStatusColor = (status: string, created_at?: string): string => {
     switch (status) {
-      case 'generated':
-        return '#64748b'; // Gray for generated (not started)
-      case 'starting':
-        return '#f59e0b';
       case 'active':
         return '#10b981';
       case 'paused':
         return '#8b5cf6'; // Purple for paused
       case 'closed':
-        return '#6b7280';
+        // Check if closed session is new (created in last minute)
+        if (created_at) {
+          const created = new Date(created_at);
+          const now = new Date();
+          if (now.getTime() - created.getTime() < 60000) {
+            return '#64748b'; // Gray for new (not started)
+          }
+        }
+        return '#6b7280'; // Dark gray for old closed
       case 'error':
         return '#ef4444';
       default:
@@ -452,12 +456,8 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
     }
   };
 
-  const getSessionStatusLabel = (status: string): string => {
+  const getSessionStatusLabel = (status: string, created_at?: string): string => {
     switch (status) {
-      case 'generated':
-        return 'Generated';
-      case 'starting':
-        return 'Starting';
       case 'active':
         return 'Active';
       case 'paused':
@@ -474,8 +474,8 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
   const SessionStatusCard = ({ title, status }: { title: string; status: AgentSessionStatus | null }) => {
     if (!status) return null;
 
-    const statusColor = getSessionStatusColor(status.status);
-    const statusLabel = getSessionStatusLabel(status.status);
+    const statusColor = getSessionStatusColor(status.status, status.metadata?.created_at);
+    const statusLabel = getSessionStatusLabel(status.status, status.metadata?.created_at);
     const agentType = status.agent_type;
     const isExpanded = expandedLogs[agentType];
 
@@ -513,8 +513,11 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
       }
     } else {
       // Fall back to database status
-      connectionStatus = status.status === 'active' ? 'Live' : status.status === 'paused' ? 'Paused' : status.status === 'starting' ? 'Connecting' : 'Disconnected';
-      connectionColor = status.status === 'active' ? '#10b981' : status.status === 'paused' ? '#8b5cf6' : status.status === 'starting' ? '#f59e0b' : '#6b7280';
+      // Check if closed session is new (created in last minute)
+      const isNewClosed = status.status === 'closed' && status.metadata?.created_at && 
+        (new Date().getTime() - new Date(status.metadata.created_at).getTime()) < 60000;
+      connectionStatus = status.status === 'active' ? 'Live' : status.status === 'paused' ? 'Paused' : isNewClosed ? 'Ready' : 'Disconnected';
+      connectionColor = status.status === 'active' ? '#10b981' : status.status === 'paused' ? '#8b5cf6' : isNewClosed ? '#64748b' : '#6b7280';
     }
 
     // Real-time runtime calculation with state to trigger updates
@@ -725,7 +728,8 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
             fontFamily: 'monospace',
             marginBottom: '4px',
           }}>
-            {status.session_id === 'pending' || status.status === 'generated' ? (
+            {status.session_id === 'pending' || (status.status === 'closed' && status.metadata?.created_at && 
+              (new Date().getTime() - new Date(status.metadata.created_at).getTime()) < 60000) ? (
               <span style={{ fontStyle: 'italic', color: '#94a3b8' }}>
                 Pending activation
               </span>
@@ -1269,17 +1273,23 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
                 </button>
               )}
               
-              {/* Start/Resume Sessions button - visible when sessions are generated or paused */}
-              {/* Show button when: sessions are 'generated' (new) or 'paused' (resume) */}
+              {/* Start/Resume Sessions button - visible when sessions are new (closed) or paused */}
+              {/* Show button when: sessions are 'closed' (new, created in last minute) or 'paused' (resume) */}
               {/* Works for both 'testing' and 'running' agent status */}
-              {((cardsStatus?.status === 'generated' && factsStatus?.status === 'generated') ||
-                (cardsStatus?.status === 'generated' && !factsStatus) ||
-                (!cardsStatus && factsStatus?.status === 'generated') ||
-                (cardsStatus?.status === 'paused' && factsStatus?.status === 'paused') ||
-                (cardsStatus?.status === 'paused' && !factsStatus) ||
-                (!cardsStatus && factsStatus?.status === 'paused') ||
-                // Also show if we're in testing/running state but haven't received status yet (sessions might be loading)
-                (!cardsStatus && !factsStatus && ((agent?.status === 'active' && agent?.stage === 'testing') || (agent?.status === 'active' && agent?.stage === 'running')) && sessionsLoading)) && (
+              {(() => {
+                const isNewClosed = (s: typeof cardsStatus) => 
+                  s?.status === 'closed' && s?.metadata?.created_at && 
+                  (new Date().getTime() - new Date(s.metadata.created_at).getTime()) < 60000;
+                return (
+                  (isNewClosed(cardsStatus) && (isNewClosed(factsStatus) || !factsStatus)) ||
+                  (!cardsStatus && isNewClosed(factsStatus)) ||
+                  (cardsStatus?.status === 'paused' && factsStatus?.status === 'paused') ||
+                  (cardsStatus?.status === 'paused' && !factsStatus) ||
+                  (!cardsStatus && factsStatus?.status === 'paused') ||
+                  // Also show if we're in testing/running state but haven't received status yet (sessions might be loading)
+                  (!cardsStatus && !factsStatus && ((agent?.status === 'active' && agent?.stage === 'testing') || (agent?.status === 'active' && agent?.stage === 'running')) && sessionsLoading)
+                );
+              })() && (
                     <button
                       onClick={handleStartSessions}
                       disabled={isStartingSessions}
@@ -1306,7 +1316,7 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
                       }}
                       title={(cardsStatus?.status === 'paused' || factsStatus?.status === 'paused') 
                         ? 'Resume paused sessions' 
-                        : 'Start generated sessions'}
+                        : 'Start sessions'}
                     >
                       {isStartingSessions 
                         ? (cardsStatus?.status === 'paused' || factsStatus?.status === 'paused' 

@@ -108,7 +108,7 @@ export class StatusUpdater {
     const metrics = this.metrics.getMetrics(runtime.eventId, agentType);
     const logs = this.logger.getLogs(runtime.eventId, agentType);
 
-    let status: SessionStatus = 'starting';
+    let status: SessionStatus = 'closed';
     let websocketState: AgentSessionStatus['websocket_state'];
     let pingPong: AgentSessionStatus['ping_pong'];
 

@@ -5,7 +5,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 export interface AgentSessionStatus {
   agent_type: 'cards' | 'facts';
   session_id: string;
-  status: 'generated' | 'starting' | 'active' | 'paused' | 'closed' | 'error';
+  status: 'active' | 'paused' | 'closed' | 'error';
   websocket_state?: 'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED'; // Actual WebSocket readyState
   ping_pong?: {
     enabled: boolean;

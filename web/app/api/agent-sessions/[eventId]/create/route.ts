@@ -8,7 +8,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
  * Create agent sessions (generate without starting)
  * POST /api/agent-sessions/[eventId]/create
  * 
- * Creates sessions with 'generated' status but does not start them.
+ * Creates sessions with 'closed' status but does not start them.
  * Updates agent status to 'testing' after successful creation.
  */
 export async function POST(
@@ -86,7 +86,7 @@ export async function POST(
     
     console.log(`[api/agent-sessions/create] Using Realtime model: ${model} for event ${eventId}`);
 
-    // Create new sessions with 'generated' status (not 'starting')
+    // Create new sessions with 'closed' status (will be updated to 'active' when started)
     const { data: newSessions, error: createError } = await supabase
       .from('agent_sessions')
       .insert([
@@ -95,7 +95,7 @@ export async function POST(
           agent_id: agentId,
           provider_session_id: 'pending', // Will be set when actually started
           agent_type: 'cards',
-          status: 'generated',
+          status: 'closed', // Will be updated to 'active' when started
           model: model,
         },
         {
@@ -103,7 +103,7 @@ export async function POST(
           agent_id: agentId,
           provider_session_id: 'pending',
           agent_type: 'facts',
-          status: 'generated',
+          status: 'closed', // Will be updated to 'active' when started
           model: model,
         },
       ])

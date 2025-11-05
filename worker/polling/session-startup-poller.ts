@@ -11,10 +11,13 @@ export class SessionStartupPoller implements Poller {
   ) {}
 
   async tick(): Promise<void> {
-    const { data: startingSessions, error } = await this.supabase
+    // Find closed sessions created in the last minute (new sessions ready to start)
+    const oneMinuteAgo = new Date(Date.now() - 60000).toISOString();
+    const { data: newSessions, error } = await this.supabase
       .from('agent_sessions')
-      .select('event_id, agent_id')
-      .eq('status', 'starting')
+      .select('event_id, agent_id, created_at')
+      .eq('status', 'closed')
+      .gte('created_at', oneMinuteAgo)
       .limit(50);
 
     if (error) {
@@ -22,12 +25,12 @@ export class SessionStartupPoller implements Poller {
       return;
     }
 
-    if (!startingSessions || startingSessions.length === 0) {
+    if (!newSessions || newSessions.length === 0) {
       return;
     }
 
     const eventsToStart = new Map<string, string>();
-    for (const session of startingSessions) {
+    for (const session of newSessions) {
       if (!eventsToStart.has(session.event_id)) {
         eventsToStart.set(session.event_id, session.agent_id);
       }

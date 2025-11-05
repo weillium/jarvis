@@ -4,7 +4,7 @@ import { SessionFactory } from './session-factory';
 import { SupabaseService } from '../services/supabase-service';
 import { Logger } from '../monitoring/logger';
 
-type SessionStatus = 'starting' | 'active' | 'paused' | 'closed' | 'error';
+type SessionStatus = 'active' | 'paused' | 'closed' | 'error';
 
 type SessionStatusHandler = (
   agentType: AgentType,

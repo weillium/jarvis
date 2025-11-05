@@ -121,8 +121,7 @@ export class Orchestrator {
     }
 
     const existingSessions = await this.supabaseService.getAgentSessionsForAgent(eventId, agentId, [
-      'generated',
-      'starting',
+      'closed',
       'active',
       'paused',
     ]);
@@ -160,7 +159,7 @@ export class Orchestrator {
     }
 
     const activeSessions = existingSessions.filter(
-      (s) => s.status === 'active' || s.status === 'starting'
+      (s) => s.status === 'active'
     );
     if (activeSessions.length > 0 && runtime.cardsSession && runtime.factsSession) {
       console.log(
@@ -183,11 +182,8 @@ export class Orchestrator {
       agentId
     );
     if (existingSessionRecords.length > 0) {
-      try {
-        await this.supabaseService.updateAgentSessionsStatus(eventId, agentId, ['generated'], 'starting');
-      } catch (error: any) {
-        console.warn(`[orchestrator] Failed to update session status: ${error.message}`);
-      }
+      // Sessions exist but are closed - update to active when we connect
+      // No need to update status here, will be updated when connected
     } else {
       try {
         await this.supabaseService.upsertAgentSessions([
@@ -196,14 +192,14 @@ export class Orchestrator {
             agent_id: agentId,
             provider_session_id: 'pending',
             agent_type: 'cards',
-            status: 'starting',
+            status: 'closed', // Will be updated to 'active' when connected
           },
           {
             event_id: eventId,
             agent_id: agentId,
             provider_session_id: 'pending',
             agent_type: 'facts',
-            status: 'starting',
+            status: 'closed', // Will be updated to 'active' when connected
           },
         ]);
       } catch (error: any) {
@@ -251,19 +247,26 @@ export class Orchestrator {
     }
 
     const existingSessions = await this.supabaseService.getAgentSessionsForAgent(eventId, agentId, [
-      'generated',
-      'starting',
+      'closed',
     ]);
     if (!existingSessions.length) {
       throw new Error(
-        `No generated or starting sessions found for event ${eventId}. Create sessions first.`
+        `No closed sessions found for event ${eventId}. Create sessions first.`
       );
     }
 
-    try {
-      await this.supabaseService.updateAgentSessionsStatus(eventId, agentId, ['generated'], 'starting');
-    } catch (error: any) {
-      console.warn(`[orchestrator] Failed to update session status: ${error.message}`);
+    // Check if sessions are new (created in last minute) - if so, they're ready to start
+    const newSessions = existingSessions.filter((s) => {
+      if (!s.created_at) return false;
+      const created = new Date(s.created_at);
+      const now = new Date();
+      return (now.getTime() - created.getTime()) < 60000; // Created in last minute
+    });
+
+    if (!newSessions.length) {
+      throw new Error(
+        `No new sessions found for event ${eventId}. Sessions may have expired.`
+      );
     }
 
     const { cardsSession, factsSession } = await this.sessionManager.createSessions(

@@ -88,7 +88,7 @@ export async function POST(
     
     console.log(`[api/agent-sessions/confirm-ready] Using Realtime model: ${model} for event ${eventId}`);
 
-    // Step 3: Create new sessions with 'generated' status
+    // Step 3: Create new sessions with 'closed' status (will be updated to 'active' when started)
     const { data: newSessions, error: createError } = await supabase
       .from('agent_sessions')
       .insert([
@@ -97,7 +97,7 @@ export async function POST(
           agent_id: agentId,
           provider_session_id: 'pending',
           agent_type: 'cards',
-          status: 'generated',
+          status: 'closed', // Will be updated to 'active' when started
           model: model,
         },
         {
@@ -105,7 +105,7 @@ export async function POST(
           agent_id: agentId,
           provider_session_id: 'pending',
           agent_type: 'facts',
-          status: 'generated',
+          status: 'closed', // Will be updated to 'active' when started
           model: model,
         },
       ])

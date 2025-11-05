@@ -45,7 +45,7 @@ export async function GET(
     const hasSessions = sessions && sessions.length > 0;
     // Only consider sessions as "active" if they're in starting/active status (for SSE connection)
     // SSE should only connect when sessions are actively processing content, not when paused
-    const activeSessions = sessions?.filter(s => s.status === 'starting' || s.status === 'active') || [];
+    const activeSessions = sessions?.filter(s => s.status === 'active') || [];
     const hasActiveSessions = activeSessions.length > 0;
 
     return NextResponse.json({

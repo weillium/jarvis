@@ -5,7 +5,7 @@ import type { EventRuntime } from '../types';
 import { VectorSearchService } from '../context/vector-search';
 import { OpenAIService } from '../services/openai-service';
 
-type SessionStatus = 'starting' | 'active' | 'paused' | 'closed' | 'error';
+type SessionStatus = 'active' | 'paused' | 'closed' | 'error';
 type StatusHandler = (status: SessionStatus, sessionId?: string) => Promise<void>;
 type LogHandler = (
   level: 'log' | 'warn' | 'error',

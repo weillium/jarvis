@@ -24,7 +24,7 @@ export interface RealtimeSessionConfig {
   agentType: AgentType;
   model?: string;
   onStatusChange?: (
-    status: 'starting' | 'active' | 'paused' | 'closed' | 'error',
+    status: 'active' | 'paused' | 'closed' | 'error',
     sessionId?: string
   ) => void;
   onLog?: (
@@ -63,7 +63,7 @@ export class RealtimeSession {
   private messageQueue: any[] = [];
   private eventHandlers: Map<string, ((data: any) => void)[]> = new Map();
   private onStatusChange?: (
-    status: 'starting' | 'active' | 'paused' | 'closed' | 'error',
+    status: 'active' | 'paused' | 'closed' | 'error',
     sessionId?: string
   ) => void;
   private onLog?: (
@@ -117,13 +117,8 @@ export class RealtimeSession {
     const model = this.config.model || 'gpt-4o-realtime-preview-2024-10-01';
     const policy = getPolicy(this.config.agentType);
 
-    // Notify starting status
-    this.onStatusChange?.('starting');
-
-    // Update database if Supabase provided
-    if (this.supabase && this.config.eventId) {
-      await this.updateDatabaseStatus('starting');
-    }
+    // Notify that we're connecting (but status is still 'closed' until connected)
+    // Status will be updated to 'active' when connection is established
 
     try {
       console.log(`[realtime] Creating session for ${this.config.agentType} agent (event: ${this.config.eventId})`);
@@ -381,7 +376,7 @@ export class RealtimeSession {
    * Update agent_sessions table status
    */
   private async updateDatabaseStatus(
-    status: 'starting' | 'active' | 'paused' | 'closed' | 'error',
+    status: 'active' | 'paused' | 'closed' | 'error',
     sessionId?: string
   ): Promise<void> {
     if (!this.supabase || !this.config.eventId) {
@@ -926,7 +921,7 @@ export class RealtimeSession {
     };
   }
 
-  notifyStatus(status: 'starting' | 'active' | 'paused' | 'closed' | 'error', sessionId?: string): void {
+  notifyStatus(status: 'active' | 'paused' | 'closed' | 'error', sessionId?: string): void {
     this.onStatusChange?.(status, sessionId);
   }
 

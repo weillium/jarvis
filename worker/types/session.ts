@@ -1,8 +1,6 @@
 export type AgentType = 'cards' | 'facts';
 
 export type SessionStatus =
-  | 'generated'
-  | 'starting'
   | 'active'
   | 'paused'
   | 'closed'

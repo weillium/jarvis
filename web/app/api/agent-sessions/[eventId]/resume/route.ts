@@ -86,10 +86,10 @@ export async function POST(
       );
     }
 
-    // Update session status from 'paused' or 'closed' to 'starting' so worker can resume
+    // Update session status from 'paused' or 'closed' to 'active' so worker can resume
     const { error: sessionsUpdateError } = await supabase
       .from('agent_sessions')
-      .update({ status: 'starting' })
+      .update({ status: 'active' })
       .eq('event_id', eventId)
       .in('status', ['paused', 'closed']);
 
