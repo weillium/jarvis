@@ -13,8 +13,9 @@ import { VersionHistory } from '@/features/context/components/version-history';
 import { RegenerateButton } from '@/features/context/components/regenerate-button';
 import { LiveCards } from '@/features/cards/components/live-cards';
 import { LiveFacts } from '@/features/facts/components/live-facts';
-import { useState, useEffect } from 'react';
-import { useAgentInfo } from '@/shared/hooks/useAgentInfo';
+import { useState } from 'react';
+import { useAgentQuery } from '@/shared/hooks/use-agent-query';
+import { useBlueprintQuery } from '@/shared/hooks/use-blueprint-query';
 
 interface LiveEventTabsProps {
   event: EventWithStatus;
@@ -22,76 +23,29 @@ interface LiveEventTabsProps {
 }
 
 export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
-  const [agentStatus, setAgentStatus] = useState<string | null>(null);
-  const [agentStage, setAgentStage] = useState<string | null>(null);
-  const [blueprintStatus, setBlueprintStatus] = useState<string | null>(null);
-  const [canApprove, setCanApprove] = useState(false);
   const [approving, setApproving] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
   
-  // Regeneration status tracking
-  const [isRegeneratingResearch, setIsRegeneratingResearch] = useState(false);
-  const [isRegeneratingGlossary, setIsRegeneratingGlossary] = useState(false);
-  const [isRegeneratingChunks, setIsRegeneratingChunks] = useState(false);
+  // Use React Query hooks for agent and blueprint data
+  const { data: agentData, refetch: refetchAgent } = useAgentQuery(eventId);
+  const { data: blueprint, refetch: refetchBlueprint } = useBlueprintQuery(eventId);
   
   // Get agent info for context generation panel
-  const { agent: agentInfo } = useAgentInfo(eventId);
-
-  // Fetch agent status for context generation panel and regeneration status
-  useEffect(() => {
-    async function fetchAgentStatus() {
-      try {
-        const res = await fetch(`/api/agent/${eventId}`);
-        const data = await res.json();
-        if (data.ok && data.agent) {
-          const status = data.agent.status;
-          const stage = data.agent.stage || null;
-          setAgentStatus(status);
-          setAgentStage(stage);
-          
-          // Check for regeneration status (using stage)
-          setIsRegeneratingResearch(stage === 'regenerating_research');
-          setIsRegeneratingGlossary(stage === 'regenerating_glossary');
-          setIsRegeneratingChunks(stage === 'regenerating_chunks');
-        }
-      } catch (err) {
-        console.error('Failed to fetch agent status:', err);
-      }
-    }
-
-    fetchAgentStatus();
-    const interval = setInterval(fetchAgentStatus, 3000);
-    return () => clearInterval(interval);
-  }, [eventId]);
-
-  // Fetch blueprint status
-  useEffect(() => {
-    async function fetchBlueprintStatus() {
-      try {
-        const [statusRes, agentRes] = await Promise.all([
-          fetch(`/api/context/${eventId}/status`),
-          fetch(`/api/agent/${eventId}`),
-        ]);
-        const statusData = await statusRes.json();
-        const agentData = await agentRes.json();
-        
-        if (statusData.ok) {
-          setBlueprintStatus(statusData.blueprint?.status || null);
-          // Can approve when agent status is blueprint_ready AND blueprint status is ready
-          const agentIsReady = agentData.ok && agentData.agent?.status === 'blueprint_ready';
-          const blueprintIsReady = statusData.blueprint?.status === 'ready' && !statusData.blueprint?.approved_at;
-          setCanApprove(agentIsReady && blueprintIsReady);
-        }
-      } catch (err) {
-        console.error('Failed to fetch blueprint status:', err);
-      }
-    }
-
-    fetchBlueprintStatus();
-    const interval = setInterval(fetchBlueprintStatus, 3000);
-    return () => clearInterval(interval);
-  }, [eventId]);
+  const agentInfo = agentData?.agent ?? null;
+  
+  // Derive state from queries
+  const agentStatus = agentData?.agent?.status ?? null;
+  const agentStage = agentData?.agent?.stage ?? null;
+  const blueprintStatus = blueprint?.status ?? null;
+  
+  // Can approve when agent status is blueprint_ready AND blueprint status is ready
+  const canApprove = agentStatus === 'blueprint_ready' && blueprintStatus === 'ready' && !blueprint?.approved_at;
+  
+  // Regeneration status tracking (derived from agent stage)
+  const isRegeneratingResearch = agentStage === 'regenerating_research';
+  const isRegeneratingGlossary = agentStage === 'regenerating_glossary';
+  const isRegeneratingChunks = agentStage === 'regenerating_chunks';
 
   const handleApproveBlueprint = async () => {
     setApproving(true);
@@ -101,15 +55,8 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
       });
       const data = await res.json();
       if (data.ok) {
-        setBlueprintStatus('approved');
-        setCanApprove(false);
-        // Refresh agent status
-        const agentRes = await fetch(`/api/agent/${eventId}`);
-        const agentData = await agentRes.json();
-        if (agentData.ok && agentData.agent) {
-          setAgentStatus(agentData.agent.status);
-          setAgentStage(agentData.agent.stage || null);
-        }
+        // Refetch queries to get updated data
+        await Promise.all([refetchAgent(), refetchBlueprint()]);
       }
     } catch (err) {
       console.error('Failed to approve blueprint:', err);
@@ -137,13 +84,8 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
       const data = await res.json();
 
       if (data.ok) {
-        // Refresh agent status
-        const agentRes = await fetch(`/api/agent/${eventId}`);
-        const agentData = await agentRes.json();
-        if (agentData.ok && agentData.agent) {
-          setAgentStatus(agentData.agent.status);
-          setAgentStage(agentData.agent.stage || null);
-        }
+        // Refetch queries to get updated data
+        await refetchAgent();
       } else {
         setResetError(data.error || 'Failed to reset context');
       }

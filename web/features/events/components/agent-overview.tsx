@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useAgentInfo } from '@/shared/hooks/useAgentInfo';
+import { useAgentQuery } from '@/shared/hooks/use-agent-query';
+import { useContextVersionsQuery } from '@/shared/hooks/use-context-versions-query';
 import { useAgentSessions, AgentSessionStatus } from '@/shared/hooks/use-agent-sessions';
 import { ContextGenerationPanel } from '@/features/context/components/context-generation-panel';
 import { TestTranscriptModal } from './test-transcript-modal';
@@ -11,7 +12,12 @@ interface AgentOverviewProps {
 }
 
 export function AgentOverview({ eventId }: AgentOverviewProps) {
-  const { agent, contextStats, blueprint, loading, error, refetch } = useAgentInfo(eventId);
+  const { data: agentData, isLoading, error, refetch } = useAgentQuery(eventId);
+  const { data: cycles } = useContextVersionsQuery(eventId);
+  
+  const agent = agentData?.agent;
+  const contextStats = agentData?.contextStats;
+  const blueprint = agentData?.blueprint;
   const [hasActiveSessions, setHasActiveSessions] = useState(false);
   const [checkingSessions, setCheckingSessions] = useState(true);
   const checkingRef = useRef(false);
@@ -100,8 +106,6 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
   }, [cardsStatus, factsStatus]);
   const [isResetting, setIsResetting] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
-  const [totalCost, setTotalCost] = useState<number | null>(null);
-  const [costLoading, setCostLoading] = useState(false);
   const [expandedLogs, setExpandedLogs] = useState<{ cards: boolean; facts: boolean }>({ cards: false, facts: false });
   const [isStartingSessions, setIsStartingSessions] = useState(false);
   const [startSessionsError, setStartSessionsError] = useState<string | null>(null);
@@ -110,33 +114,11 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
   const [pauseResumeError, setPauseResumeError] = useState<string | null>(null);
   const [isTestTranscriptModalOpen, setIsTestTranscriptModalOpen] = useState(false);
 
-  // Fetch total cost from all generation cycles
-  useEffect(() => {
-    const fetchTotalCost = async () => {
-      setCostLoading(true);
-      try {
-        const res = await fetch(`/api/context/${eventId}/versions`);
-        const data = await res.json();
-        
-        if (data.ok && data.cycles) {
-          // Sum up costs from all cycles
-          const total = data.cycles.reduce((sum: number, cycle: any) => {
-            const cycleCost = cycle.cost;
-            return sum + (cycleCost !== null && cycleCost !== undefined ? parseFloat(cycleCost) : 0);
-          }, 0);
-          setTotalCost(total);
-        }
-      } catch (err) {
-        console.error('Failed to fetch total cost:', err);
-      } finally {
-        setCostLoading(false);
-      }
-    };
-
-    if (eventId) {
-      fetchTotalCost();
-    }
-  }, [eventId]);
+  // Calculate total cost from cycles (from React Query)
+  const totalCost = cycles?.reduce((sum: number, cycle: any) => {
+    const cycleCost = cycle.cost;
+    return sum + (cycleCost !== null && cycleCost !== undefined ? parseFloat(cycleCost) : 0);
+  }, 0) ?? null;
 
   const handleReset = async () => {
     if (!confirm('Are you sure you want to invalidate all context components? This will require restarting context building.')) {
@@ -936,7 +918,7 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
     );
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div style={{
         padding: '32px 24px',
@@ -1087,9 +1069,7 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
             alignItems: 'center',
             gap: '4px',
           }}>
-            {costLoading ? (
-              <span style={{ fontSize: '12px', color: '#64748b' }}>Loading...</span>
-            ) : totalCost !== null ? (
+            {totalCost !== null ? (
               <>${totalCost.toFixed(4)}</>
             ) : (
               <span style={{ fontSize: '12px', color: '#94a3b8' }}>N/A</span>

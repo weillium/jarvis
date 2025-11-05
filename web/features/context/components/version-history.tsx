@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useContextVersionsQuery } from '@/shared/hooks/use-context-versions-query';
 
 interface VersionHistoryProps {
   eventId: string;
@@ -36,15 +37,8 @@ interface GenerationCycle {
   };
 }
 
-interface VersionData {
-  ok: boolean;
-  cycles: GenerationCycle[];
-  count: number;
-}
-
 export function VersionHistory({ eventId, embedded = false }: VersionHistoryProps) {
-  const [versionData, setVersionData] = useState<VersionData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: cycles, isLoading, refetch } = useContextVersionsQuery(eventId);
   const [isExpanded, setIsExpanded] = useState(embedded); // Auto-expand when embedded
   const [filterByType, setFilterByType] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -53,22 +47,16 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
   const fetchVersionHistory = async () => {
     setRefreshing(true);
     try {
-      const res = await fetch(`/api/context/${eventId}/versions`);
-      const data = await res.json();
-      if (data.ok) {
-        setVersionData(data);
-      }
+      await refetch();
     } catch (err) {
       console.error('Failed to fetch version history:', err);
     } finally {
-      setLoading(false);
       setRefreshing(false);
     }
   };
 
-  useEffect(() => {
-    fetchVersionHistory();
-  }, [eventId]);
+  const versionData = cycles ? { cycles, count: cycles.length } : null;
+  const loading = isLoading;
 
   const getStatusColor = (status: string): string => {
     switch (status) {
@@ -102,7 +90,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
     }
   };
 
-  const filteredCycles = versionData?.cycles.filter((cycle) => {
+  const filteredCycles = cycles?.filter((cycle) => {
     if (filterByType && cycle.cycle_type !== filterByType) return false;
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -115,8 +103,8 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
     return true;
   }) || [];
 
-  const uniqueTypes = versionData
-    ? Array.from(new Set(versionData.cycles.map((c) => c.cycle_type))).sort()
+  const uniqueTypes = cycles
+    ? Array.from(new Set(cycles.map((c) => c.cycle_type))).sort()
     : [];
 
   if (loading) {
