@@ -80,6 +80,7 @@ export class RealtimeSession {
   private pongTimeout?: NodeJS.Timeout;
   private missedPongs: number = 0;
   private lastPongReceived?: Date;
+  private pingStartTime?: number; // Track ping start time for latency calculation
   private readonly PING_INTERVAL_MS = parseInt(process.env.REALTIME_PING_INTERVAL_MS || '25000', 10); // Default 25 seconds
   private readonly PONG_TIMEOUT_MS = parseInt(process.env.REALTIME_PONG_TIMEOUT_MS || '10000', 10); // Default 10 seconds
   private readonly MAX_MISSED_PONGS = parseInt(process.env.REALTIME_MAX_MISSED_PONGS || '3', 10); // Reconnect after 3 missed pongs
@@ -102,6 +103,17 @@ export class RealtimeSession {
       throw new Error('Session already connected');
     }
 
+    // Phase 1: Pre-connection validation logging
+    console.log(`[realtime] [${this.config.agentType}] Starting connection attempt`, {
+      eventId: this.config.eventId,
+      model: this.config.model || 'default',
+      hasApiKey: !!this.openai.apiKey,
+      hasSupabase: !!this.supabase,
+      hasOnRetrieve: !!this.onRetrieve,
+      hasEmbedText: !!this.embedText,
+    });
+    this.onLog?.('log', 'Connection attempt started', { event_id: this.config.eventId });
+
     const model = this.config.model || 'gpt-4o-realtime-preview-2024-10-01';
     const policy = getPolicy(this.config.agentType);
 
@@ -116,11 +128,32 @@ export class RealtimeSession {
     try {
       console.log(`[realtime] Creating session for ${this.config.agentType} agent (event: ${this.config.eventId})`);
 
+      // Phase 2: WebSocket creation timing
+      const connectStartTime = Date.now();
+      console.log(`[realtime] [${this.config.agentType}] Creating WebSocket connection`, {
+        model,
+        eventId: this.config.eventId,
+        timestamp: new Date().toISOString(),
+      });
+      this.onLog?.('log', `Creating WebSocket connection with model: ${model}`);
+
       // Create actual WebSocket connection
       this.session = await OpenAIRealtimeWebSocket.create(this.openai, {
         model,
         dangerouslyAllowBrowser: false,
       });
+
+      // Log WebSocket creation success
+      const connectDuration = Date.now() - connectStartTime;
+      console.log(`[realtime] [${this.config.agentType}] WebSocket created successfully`, {
+        duration: `${connectDuration}ms`,
+        url: this.session?.url?.toString(),
+        eventId: this.config.eventId,
+      });
+      this.onLog?.('log', `WebSocket created in ${connectDuration}ms`);
+      
+      // Log WebSocket state after creation
+      this.logWebSocketState('After WebSocket.create()');
 
       // Set up event handlers BEFORE marking as active
       this.setupEventHandlers();
@@ -129,6 +162,21 @@ export class RealtimeSession {
       // The create() method returns a WebSocket, but we should wait for it to be ready
       // Use a small delay to allow the WebSocket to establish connection
       await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Phase 3: Connection readiness check
+      try {
+        const underlyingSocket = (this.session as any).socket || (this.session as any).ws;
+        const readyState = underlyingSocket?.readyState;
+        const readyStateNames = ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'];
+        console.log(`[realtime] [${this.config.agentType}] Connection readiness check`, {
+          readyState: readyState !== undefined ? `${readyState} (${readyStateNames[readyState]})` : 'unknown',
+          hasUnderlyingSocket: !!underlyingSocket,
+          eventId: this.config.eventId,
+        });
+        this.onLog?.('log', `Connection readyState: ${readyStateNames[readyState] || 'unknown'}`);
+      } catch (error: any) {
+        console.warn(`[realtime] [${this.config.agentType}] Could not check readiness: ${error.message}`);
+      }
 
       // Define retrieve tool for RAG (available to all agents)
       const retrieveTool: any = {
@@ -207,6 +255,16 @@ export class RealtimeSession {
       // Configure session (instructions, output format, tools, etc.)
       // Note: For Cards agent, we remove response_format requirement since output is via tool
       // Wrap in try-catch to handle cases where connection isn't fully ready
+      
+      // Phase 4: Session configuration send logging
+      console.log(`[realtime] [${this.config.agentType}] Sending session configuration`, {
+        toolsCount: tools.length,
+        toolNames: tools.map(t => t.name),
+        policyLength: policy.length,
+        eventId: this.config.eventId,
+      });
+      this.onLog?.('log', `Sending session config with ${tools.length} tools`);
+      
       try {
         this.session.send({
           type: 'session.update',
@@ -218,6 +276,9 @@ export class RealtimeSession {
             tools,
           },
         } as RealtimeClientEvent);
+        
+        console.log(`[realtime] [${this.config.agentType}] Session configuration sent successfully`);
+        this.onLog?.('log', 'Session configuration sent');
       } catch (error: any) {
         // If send fails, wait a bit and retry once
         if (error.message?.includes('could not send data') || error.message?.includes('not ready')) {
@@ -235,7 +296,13 @@ export class RealtimeSession {
             } as RealtimeClientEvent);
           } catch (retryError: any) {
             // Log but don't throw - connection might still work
-            console.warn(`[realtime] Session update send failed (will retry): ${retryError.message}`);
+            console.error(`[realtime] [${this.config.agentType}] Session update send failed after retry`, {
+              error: retryError.message,
+              stack: retryError.stack,
+              readyState: (this.session as any)?.socket?.readyState,
+              eventId: this.config.eventId,
+            });
+            this.onLog?.('error', `Session update failed: ${retryError.message}`, { event_id: this.config.eventId });
             // The session might still work, so we continue
           }
         } else {
@@ -245,6 +312,9 @@ export class RealtimeSession {
 
       // Mark as active (connection established)
       this.isActive = true;
+      
+      // Log WebSocket state after marking active
+      this.logWebSocketState('After marking active');
 
       // Get session ID from URL or generate one
       const sessionId =
@@ -278,9 +348,22 @@ export class RealtimeSession {
 
       return sessionId;
     } catch (error: any) {
-      const errorMessage = `Connection failed: ${error.message}`;
-      console.error(`[realtime] ${errorMessage}`);
-      this.onLog?.('error', errorMessage);
+      // Phase 9: Enhanced error context
+      const errorContext = {
+        errorType: error.constructor?.name || 'Unknown',
+        message: error.message,
+        stack: error.stack,
+        code: error.code,
+        eventId: this.config.eventId,
+        agentType: this.config.agentType,
+        model: this.config.model,
+        isActive: this.isActive,
+        readyState: (this.session as any)?.socket?.readyState,
+        timestamp: new Date().toISOString(),
+      };
+      
+      console.error(`[realtime] [${this.config.agentType}] Connection failed`, errorContext);
+      this.onLog?.('error', `Connection failed: ${error.message}`, { event_id: this.config.eventId });
 
       // Notify error status
       this.onStatusChange?.('error');
@@ -304,6 +387,14 @@ export class RealtimeSession {
     if (!this.supabase || !this.config.eventId) {
       return;
     }
+
+    // Phase 10: Database update status logging
+    console.log(`[realtime] [${this.config.agentType}] Updating database status`, {
+      status,
+      sessionId,
+      eventId: this.config.eventId,
+      hasSupabase: !!this.supabase,
+    });
 
     try {
       const updateData: any = {
@@ -331,10 +422,18 @@ export class RealtimeSession {
           event_id: this.config.eventId,
           agent_type: this.config.agentType,
         });
+        
+      console.log(`[realtime] [${this.config.agentType}] Database status updated successfully`, {
+        status,
+        eventId: this.config.eventId,
+      });
     } catch (error: any) {
-      console.error(
-        `[realtime] Failed to update DB status: ${error.message}`
-      );
+      console.error(`[realtime] [${this.config.agentType}] Database status update failed`, {
+        error: error.message,
+        status,
+        eventId: this.config.eventId,
+        stack: error.stack,
+      });
       // Don't throw - status update failure shouldn't break session
     }
   }
@@ -354,20 +453,40 @@ export class RealtimeSession {
       this.onLog?.('log', message);
     });
 
+    // Phase 5: Event handler registration confirmation
+    console.log(`[realtime] [${this.config.agentType}] Event handlers registered`, {
+      handlersRegistered: [
+        'session.created',
+        'response.function_call_arguments.done',
+        'response.output_text.done',
+        'response.done',
+        'error',
+        'event',
+      ],
+      eventId: this.config.eventId,
+    });
+    this.onLog?.('log', 'Event handlers registered');
+
     // Handle pong responses (WebSocket ping-pong)
     // Note: OpenAI SDK may handle ping/pong at the WebSocket level, but we'll track it
     // Check if the underlying socket supports ping/pong events
     try {
       const underlyingSocket = (this.session as any).socket || (this.session as any).ws;
-      if (underlyingSocket) {
+      if (underlyingSocket && typeof underlyingSocket.on === 'function') {
         // Standard WebSocket 'pong' event (fires when pong frame is received)
         underlyingSocket.on('pong', () => {
           this.handlePong();
         });
+      } else {
+        // Ping/pong not available on this socket - disable ping/pong mechanism
+        console.log(`[realtime] Ping/pong not available on socket (${this.config.agentType}) - SDK may handle it internally`);
+        this.stopPingPong();
       }
-    } catch (error) {
+    } catch (error: any) {
       // If we can't access underlying socket, ping-pong may still work at SDK level
-      console.warn(`[realtime] Could not attach pong handler: ${error}`);
+      console.warn(`[realtime] Could not attach pong handler: ${error.message}`);
+      // Disable ping/pong if we can't set it up
+      this.stopPingPong();
     }
 
     // Handle function call arguments completion
@@ -839,7 +958,7 @@ export class RealtimeSession {
     try {
       // Get underlying WebSocket to send ping frame
       const underlyingSocket = (this.session as any).socket || (this.session as any).ws;
-      if (underlyingSocket && underlyingSocket.readyState === 1) { // OPEN
+      if (underlyingSocket && underlyingSocket.readyState === 1 && typeof underlyingSocket.ping === 'function') {
         // Send WebSocket ping frame (not application message)
         underlyingSocket.ping();
         
@@ -848,11 +967,24 @@ export class RealtimeSession {
           this.handlePongTimeout();
         }, this.PONG_TIMEOUT_MS);
       } else {
+        // Ping not available - skip ping/pong (SDK may handle it internally)
+        // Don't treat as error, just skip
+        if (underlyingSocket && typeof underlyingSocket.ping !== 'function') {
+          // Ping not supported - disable ping/pong mechanism
+          this.stopPingPong();
+          return;
+        }
         // Socket not available or not open - connection may be dead
         console.warn(`[realtime] Cannot send ping - socket not available (${this.config.agentType})`);
         this.handlePongTimeout();
       }
     } catch (error: any) {
+      // If ping fails, disable ping/pong mechanism
+      if (error.message?.includes('ping is not a function') || error.message?.includes('underlyingSocket')) {
+        console.log(`[realtime] Ping/pong not supported - disabling (${this.config.agentType})`);
+        this.stopPingPong();
+        return;
+      }
       console.error(`[realtime] Error sending ping: ${error.message}`);
       this.handlePongTimeout();
     }
