@@ -13,6 +13,9 @@ import { Logger } from './monitoring/logger';
 import { MetricsCollector } from './monitoring/metrics-collector';
 import { StatusUpdater } from './monitoring/status-updater';
 import { CheckpointManager } from './monitoring/checkpoint-manager';
+import { GlossaryManager } from './context/glossary-manager';
+import { ContextBuilder, AgentContext as ContextAgentContext } from './context/context-builder';
+import { VectorSearchService } from './context/vector-search';
 import { getPolicy } from './policies';
 import {
   createCardGenerationUserPrompt,
@@ -40,6 +43,9 @@ export class Orchestrator {
   private metrics: MetricsCollector;
   private statusUpdater: StatusUpdater;
   private checkpointManager: CheckpointManager;
+  private glossaryManager: GlossaryManager;
+  private contextBuilder: ContextBuilder;
+  private vectorSearch: VectorSearchService;
 
   constructor(config: OrchestratorConfig) {
     this.config = config;
@@ -56,6 +62,9 @@ export class Orchestrator {
       this.config.realtimeModel
     );
     this.checkpointManager = new CheckpointManager(this.supabaseService);
+    this.glossaryManager = new GlossaryManager(this.supabaseService);
+    this.contextBuilder = new ContextBuilder(this.glossaryManager);
+    this.vectorSearch = new VectorSearchService(this.supabaseService, this.openaiService);
   }
 
   /**
@@ -184,31 +193,11 @@ export class Orchestrator {
     }
 
     try {
-      // Get context bullets from ring buffer (capped at 2048 tokens)
-      const contextBullets = runtime.ringBuffer.getContextBullets(10, 2048);
-      
-      // Get relevant facts
-      const factsContext = runtime.factsStore.getContextFormat();
+      // Build full context for Cards agent
+      const cardsContext = this.contextBuilder.buildCardsContext(runtime, chunk.text);
 
-      // Note: Vector search removed - agent will use retrieve() tool when needed
-      // Vector DB is available but not automatically loaded into context
-
-      // Glossary extraction
-      const combinedText = `${chunk.text} ${contextBullets.join(' ')}`;
-      const glossaryTerms = this.extractGlossaryTerms(
-        combinedText,
-        runtime.glossaryCache || new Map()
-      );
-      const glossaryContext = this.formatGlossaryContext(glossaryTerms);
-
-      // Log token usage for monitoring with budget warnings
-      const { getTokenBreakdown, checkBudgetStatus, formatTokenBreakdown } = await import('./utils/token-counter');
-      const tokenBreakdown = getTokenBreakdown({
-        currentChunk: chunk.text,
-        ringBuffer: contextBullets.join('\n'),
-        facts: JSON.stringify(factsContext),
-        glossaryContext,
-      });
+      const { checkBudgetStatus, formatTokenBreakdown } = await import('./utils/token-counter');
+      const tokenBreakdown = this.contextBuilder.getCardsTokenBreakdown(cardsContext, chunk.text);
       
       const budgetStatus = checkBudgetStatus(tokenBreakdown.total, 2048);
       const breakdownStr = formatTokenBreakdown(tokenBreakdown.breakdown);
@@ -237,19 +226,11 @@ export class Orchestrator {
       );
 
       // Send to Realtime session
-      await runtime.cardsSession.sendMessage(chunk.text, {
-        bullets: contextBullets,
-        facts: factsContext,
-        glossaryContext,
-      });
+      await runtime.cardsSession.sendMessage(chunk.text, cardsContext);
 
       // Note: In real implementation, we'd receive the response via WebSocket
       // For now, we'll use a fallback to standard API
-      await this.generateCardFallback(runtime, chunk, {
-        bullets: contextBullets,
-        facts: factsContext,
-        glossaryContext,
-      });
+      await this.generateCardFallback(runtime, chunk, cardsContext);
 
       // Update checkpoint
       await this.persistCheckpoint(runtime.eventId, 'cards', runtime.cardsLastSeq);
@@ -264,7 +245,7 @@ export class Orchestrator {
   private async generateCardFallback(
     runtime: EventRuntime,
     chunk: TranscriptChunk,
-    context: any
+    context: ContextAgentContext
   ): Promise<void> {
     const policy = getPolicy('cards', 1);
 
@@ -401,31 +382,11 @@ export class Orchestrator {
 
     try {
       // Get condensed context (capped at 2048 tokens)
-      const recentText = runtime.ringBuffer.getRecentText(20, 2048);
-      const currentFacts = runtime.factsStore.getAll();
+      const { context: factsContext, recentText } = this.contextBuilder.buildFactsContext(runtime);
 
-      // Note: Vector search removed - agent will use retrieve() tool when needed
-      // Vector DB is available but not automatically loaded into context
+      const { checkBudgetStatus, formatTokenBreakdown } = await import('./utils/token-counter');
+      const tokenBreakdown = this.contextBuilder.getFactsTokenBreakdown(factsContext, recentText);
 
-      // Glossary extraction
-      const glossaryTerms = this.extractGlossaryTerms(
-        recentText,
-        runtime.glossaryCache || new Map()
-      );
-      const glossaryContext = this.formatGlossaryContext(glossaryTerms);
-
-      // Log token usage for monitoring with budget warnings
-      const { getTokenBreakdown, checkBudgetStatus, formatTokenBreakdown } = await import('./utils/token-counter');
-      const tokenBreakdown = getTokenBreakdown({
-        recentText,
-        facts: JSON.stringify(currentFacts.map((f) => ({
-          key: f.key,
-          value: f.value,
-          confidence: f.confidence,
-        }))),
-        glossaryContext,
-      });
-      
       const budgetStatus = checkBudgetStatus(tokenBreakdown.total, 2048);
       const breakdownStr = formatTokenBreakdown(tokenBreakdown.breakdown);
       
@@ -452,20 +413,14 @@ export class Orchestrator {
         budgetStatus.critical
       );
 
-      // Send to Realtime session
+      const currentFacts = runtime.factsStore.getAll();
       await runtime.factsSession.sendMessage(recentText, {
         recentText,
-        facts: currentFacts.map((f) => ({
-          key: f.key,
-          value: f.value,
-          confidence: f.confidence,
-        })),
-        glossaryContext,
+        facts: currentFacts,
+        glossaryContext: factsContext.glossaryContext,
       });
 
-      // Note: In real implementation, we'd receive the response via WebSocket
-      // For now, we'll use a fallback to standard API
-      await this.generateFactsFallback(runtime, recentText, currentFacts, undefined, glossaryContext);
+      await this.generateFactsFallback(runtime, recentText, currentFacts, factsContext.glossaryContext);
 
       // Update checkpoint
       await this.persistCheckpoint(runtime.eventId, 'facts', runtime.factsLastSeq);
@@ -482,7 +437,6 @@ export class Orchestrator {
     runtime: EventRuntime,
     recentText: string,
     currentFacts: Fact[],
-    vectorContext?: string,
     glossaryContext?: string
   ): Promise<void> {
     const policy = FACTS_EXTRACTION_SYSTEM_PROMPT;
@@ -635,7 +589,7 @@ export class Orchestrator {
             return await this.handleRetrieveQuery(runtime, query, topK);
           },
           embedText: async (text: string) => {
-            return await this.embedText(text);
+            return await this.openaiService.createEmbedding(text);
           },
         });
 
@@ -713,7 +667,7 @@ export class Orchestrator {
         return await this.handleRetrieveQuery(runtime, query, topK);
       },
       embedText: async (text: string) => {
-        return await this.embedText(text);
+        return await this.openaiService.createEmbedding(text);
       },
     });
 
@@ -732,7 +686,7 @@ export class Orchestrator {
         return await this.handleRetrieveQuery(runtime, query, topK);
       },
       embedText: async (text: string) => {
-        return await this.embedText(text);
+        return await this.openaiService.createEmbedding(text);
       },
     });
 
@@ -817,7 +771,9 @@ export class Orchestrator {
     if (!runtime) {
       // Create minimal runtime without full setup
       // Load minimal glossary (empty map is fine for testing)
-      const glossaryCache = await this.loadGlossary(eventId).catch(() => new Map<string, GlossaryEntry>());
+      const glossaryCache = await this.glossaryManager
+        .loadGlossary(eventId)
+        .catch(() => new Map<string, GlossaryEntry>());
       
       runtime = {
         eventId,
@@ -1013,7 +969,7 @@ export class Orchestrator {
           return await this.handleRetrieveQuery(runtime, query, topK);
         },
         embedText: async (text: string) => {
-          return await this.embedText(text);
+          return await this.openaiService.createEmbedding(text);
         },
       });
 
@@ -1060,116 +1016,6 @@ export class Orchestrator {
     }
   }
 
-  /**
-   * Load glossary for event and cache in runtime
-   */
-  private async loadGlossary(eventId: string): Promise<Map<string, GlossaryEntry>> {
-    let terms: Array<{
-      term: string;
-      definition: string;
-      acronym_for: string | null;
-      category: string | null;
-      usage_examples: string[];
-      related_terms: string[];
-      confidence_score: number;
-    }> = [];
-
-    try {
-      terms = await this.supabaseService.getGlossaryTerms(eventId);
-    } catch (error: any) {
-      console.error(`[orchestrator] Error loading glossary: ${error.message}`);
-      return new Map();
-    }
-
-    const cache = new Map<string, GlossaryEntry>();
-    for (const term of terms) {
-      cache.set(term.term.toLowerCase(), {
-        term: term.term,
-        definition: term.definition,
-        acronym_for: term.acronym_for || undefined,
-        category: term.category || undefined,
-        usage_examples: term.usage_examples || [],
-        related_terms: term.related_terms || [],
-        confidence_score: term.confidence_score || 0.5,
-      });
-    }
-
-    console.log(`[orchestrator] Loaded ${cache.size} glossary terms for event ${eventId}`);
-    return cache;
-  }
-
-  /**
-   * Extract relevant glossary terms from text
-   * Returns up to 15 most relevant terms
-   */
-  private extractGlossaryTerms(
-    text: string,
-    glossaryCache: Map<string, GlossaryEntry>
-  ): GlossaryEntry[] {
-    if (!glossaryCache || glossaryCache.size === 0) {
-      return [];
-    }
-
-    const lowerText = text.toLowerCase();
-    const words = lowerText.split(/\W+/).filter(w => w.length > 2);
-    const foundTerms = new Set<string>();
-    const results: GlossaryEntry[] = [];
-
-    // Direct matches
-    for (const word of words) {
-      const term = glossaryCache.get(word);
-      if (term && !foundTerms.has(term.term.toLowerCase())) {
-        foundTerms.add(term.term.toLowerCase());
-        results.push(term);
-        
-        // Include related terms
-        for (const related of term.related_terms || []) {
-          const relatedTerm = glossaryCache.get(related.toLowerCase());
-          if (relatedTerm && !foundTerms.has(relatedTerm.term.toLowerCase())) {
-            foundTerms.add(relatedTerm.term.toLowerCase());
-            results.push(relatedTerm);
-          }
-        }
-      }
-    }
-
-    // Phrase matches (2-4 word phrases)
-    for (let i = 0; i < words.length - 1; i++) {
-      for (let len = 2; len <= Math.min(4, words.length - i); len++) {
-        const phrase = words.slice(i, i + len).join(' ');
-        const term = glossaryCache.get(phrase);
-        if (term && !foundTerms.has(term.term.toLowerCase())) {
-          foundTerms.add(term.term.toLowerCase());
-          results.push(term);
-        }
-      }
-    }
-
-    // Sort by confidence and limit
-    return results
-      .sort((a, b) => (b.confidence_score || 0) - (a.confidence_score || 0))
-      .slice(0, 15);
-  }
-
-  /**
-   * Format glossary entries for prompt inclusion
-   */
-  private formatGlossaryContext(terms: GlossaryEntry[]): string {
-    if (terms.length === 0) return '';
-
-    const lines = terms.map(term => {
-      let line = `- ${term.term}: ${term.definition}`;
-      if (term.acronym_for) {
-        line += ` (Stands for: ${term.acronym_for})`;
-      }
-      if (term.category) {
-        line += ` [${term.category}]`;
-      }
-      return line;
-    });
-
-    return `Glossary Definitions:\n${lines.join('\n')}`;
-  }
 
   /**
    * Create runtime for an event
@@ -1182,7 +1028,7 @@ export class Orchestrator {
     const checkpointValues = await this.checkpointManager.loadCheckpoints(eventId);
 
     // Load glossary for event
-    const glossaryCache = await this.loadGlossary(eventId);
+    const glossaryCache = await this.glossaryManager.loadGlossary(eventId);
 
     this.metrics.clear(eventId);
     this.logger.clearLogs(eventId, 'cards');
@@ -1291,22 +1137,15 @@ export class Orchestrator {
 
 
   /**
-   * Helper: Embed text
-   */
-  private async embedText(text: string): Promise<number[]> {
-    return this.openaiService.createEmbedding(text);
-  }
-
-  /**
    * Helper: Search context
    */
   private async searchContext(
     eventId: string,
-    query: number[],
-    k: number = 5
-  ): Promise<{ id: string; chunk: string; similarity: number }[]> {
+    query: string,
+    topK: number = 5
+  ): Promise<Array<{ id: string; chunk: string; similarity: number }>> {
     try {
-      return await this.supabaseService.vectorSearch(eventId, query, k);
+      return await this.vectorSearch.search(eventId, query, topK);
     } catch (error: any) {
       console.error(`[orchestrator] Context search error: ${error.message}`);
       return [];
@@ -1352,10 +1191,7 @@ export class Orchestrator {
       console.log(`[rag] retrieve() called: query="${query}", top_k=${topK}`);
 
       // Embed query
-      const queryEmb = await this.embedText(query);
-
-      // Search vector database
-      const results = await this.searchContext(runtime.eventId, queryEmb, Math.min(topK, 10));
+      const results = await this.searchContext(runtime.eventId, query, topK);
 
       console.log(`[rag] retrieve() returned ${results.length} chunks`);
       return results;
