@@ -1,30 +1,14 @@
 'use server';
 
 import { createServerClient } from '@/shared/lib/supabase/server';
+import { requireAuth, requireEventOwnership } from '@/shared/lib/auth';
 import { Agent } from '@/shared/types/agent';
 
 export async function getAgentByEventId(eventId: string): Promise<{ data: Agent | null; error: string | null }> {
   try {
     const supabase = await createServerClient();
-    
-    // Get current user session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    
-    if (sessionError || !session?.user) {
-      return { data: null, error: 'Not authenticated' };
-    }
-
-    // Verify user owns the event
-    const { data: event, error: eventError } = await supabase
-      .from('events')
-      .select('id')
-      .eq('id', eventId)
-      .eq('owner_uid', session.user.id)
-      .single();
-
-    if (eventError || !event) {
-      return { data: null, error: 'Event not found or access denied' };
-    }
+    const user = await requireAuth(supabase);
+    await requireEventOwnership(supabase, user.id, eventId);
 
     // Fetch agent for the event
     const { data, error } = await supabase

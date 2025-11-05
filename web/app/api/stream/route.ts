@@ -1,5 +1,7 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@/shared/lib/supabase/server';
+import { requireAuth, requireEventOwnership } from '@/shared/lib/auth';
 import { connectionManager } from './connection-manager';
 
 /**
@@ -56,6 +58,24 @@ export async function GET(req: NextRequest) {
       JSON.stringify({ ok: false, error: 'Invalid event_id format (must be UUID)' }),
       {
         status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  }
+
+  // Check authentication and event ownership
+  try {
+    const supabase = await createServerClient();
+    const user = await requireAuth(supabase);
+    await requireEventOwnership(supabase, user.id, eventId);
+  } catch (error) {
+    return new Response(
+      JSON.stringify({ 
+        ok: false, 
+        error: error instanceof Error ? error.message : 'Not authenticated' 
+      }),
+      {
+        status: 401,
         headers: { 'Content-Type': 'application/json' },
       }
     );

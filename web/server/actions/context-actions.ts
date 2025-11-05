@@ -1,6 +1,7 @@
 'use server';
 
 import { createServerClient } from '@/shared/lib/supabase/server';
+import { requireAuth, requireEventOwnership } from '@/shared/lib/auth';
 
 export interface ContextItem {
   id: string;
@@ -25,27 +26,8 @@ export async function getContextItemsByEventId(
 ): Promise<{ data: ContextItem[] | null; error: string | null }> {
   try {
     const supabase = await createServerClient();
-    
-    // Get current user session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    
-    if (sessionError || !session?.user) {
-      console.error('[context-actions] Session error:', sessionError?.message || 'No session');
-      return { data: null, error: 'Not authenticated' };
-    }
-
-    // Verify user owns the event (via RLS or explicit check)
-    const { data: eventCheck, error: eventError } = await supabase
-      .from('events')
-      .select('id')
-      .eq('id', eventId)
-      .eq('owner_uid', session.user.id)
-      .single();
-
-    if (eventError || !eventCheck) {
-      console.error('[context-actions] Event check error:', eventError?.message || 'Event not found');
-      return { data: null, error: 'Event not found or access denied' };
-    }
+    const user = await requireAuth(supabase);
+    await requireEventOwnership(supabase, user.id, eventId);
 
     // Fetch context items - metadata fields are now in JSONB metadata column (Phase 4)
     const { data, error } = await supabase

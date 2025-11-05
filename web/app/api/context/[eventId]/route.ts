@@ -1,18 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-function getSupabaseClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error('Missing Supabase configuration');
-  }
-
-  return createClient(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false },
-  });
-}
+import { createServerClient } from '@/shared/lib/supabase/server';
+import { requireAuth, requireEventOwnership } from '@/shared/lib/auth';
 
 export async function GET(
   req: NextRequest,
@@ -20,7 +8,11 @@ export async function GET(
 ) {
   try {
     const { eventId } = await params;
-    const supabase = getSupabaseClient();
+    
+    // Check authentication and event ownership
+    const supabase = await createServerClient();
+    const user = await requireAuth(supabase);
+    await requireEventOwnership(supabase, user.id, eventId);
 
     // Fetch context items from current generation cycle
     // Note: After Phase 4, metadata fields are in JSONB metadata column

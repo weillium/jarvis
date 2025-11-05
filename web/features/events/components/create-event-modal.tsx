@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, FormEvent, useEffect } from 'react';
+import { useState, FormEvent, useEffect, useMemo } from 'react';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
@@ -10,6 +10,9 @@ import timezone from 'dayjs/plugin/timezone';
 import { supabase } from '@/shared/lib/supabase/client';
 import { MarkdownEditor } from '@/shared/ui/markdown-editor';
 import { FileUpload } from '@/shared/ui/file-upload';
+import { useCreateEventMutation } from '@/shared/hooks/use-mutations';
+import { withTimeout } from '@/shared/utils/promise-timeout';
+import { validateFiles, MAX_FILE_SIZE } from '@/shared/utils/file-validation';
 
 // Extend dayjs with plugins
 dayjs.extend(utc);
@@ -29,6 +32,102 @@ interface EventData {
   end_time?: string;
 }
 
+/**
+ * Helper to get current user session with timeout
+ */
+async function getSessionWithTimeout(timeoutMs: number = 5000): Promise<{ user: { id: string } }> {
+  const sessionPromise = supabase.auth.getSession();
+  const result = await withTimeout(sessionPromise, timeoutMs, 'Session retrieval timed out. Please refresh the page and try again.');
+  
+  const session = result.data?.session;
+  if (!session?.user) {
+    throw new Error('You must be logged in to create an event');
+  }
+  
+  return { user: session.user };
+}
+
+/**
+ * Helper to upload a single file with error handling and cleanup
+ */
+async function uploadFile(
+  file: File,
+  eventId: string
+): Promise<void> {
+  const fileExt = file.name.split('.').pop() || 'file';
+  const fileName = `${eventId}/${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+  const filePath = fileName;
+
+  // Upload to storage with timeout
+  const uploadResult = await withTimeout(
+    supabase.storage
+      .from('event-docs')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false,
+      }),
+    60000, // 60 seconds per file
+    `Upload timeout for ${file.name}. This may be due to large file size or slow network connection.`
+  );
+
+  const { error: uploadError, data } = uploadResult;
+
+  if (uploadError) {
+    let errorMsg = `Failed to upload ${file.name}`;
+    
+    if (uploadError.message?.includes('bucket') || uploadError.message?.includes('not found')) {
+      errorMsg += ': Storage bucket "event-docs" does not exist. Please create the bucket in Supabase Dashboard or contact support.';
+    } else if (uploadError.message?.includes('permission') || uploadError.message?.includes('policy')) {
+      errorMsg += ': Permission denied. Please verify you own this event and try again.';
+    } else if (uploadError.message?.includes('size') || uploadError.message?.includes('limit')) {
+      errorMsg += `: File size exceeds limit (${MAX_FILE_SIZE / 1024 / 1024}MB). Please upload a smaller file.`;
+    } else {
+      errorMsg += `: ${uploadError.message}`;
+    }
+    
+    throw new Error(errorMsg);
+  }
+
+  // Create database record with timeout
+  const insertPromise = supabase
+    .from('event_docs')
+    .insert([
+      {
+        event_id: eventId,
+        path: filePath,
+      },
+    ]);
+  
+  const insertResult = await withTimeout(
+    Promise.resolve(insertPromise),
+    10000, // 10 seconds for database insert
+    `Database insert timeout for ${file.name}. The file was uploaded but the record could not be created.`
+  ) as { error: { message: string } | null };
+
+  const { error: docError } = insertResult;
+
+  if (docError) {
+    // Clean up uploaded file
+    if (data?.path) {
+      try {
+        await supabase.storage.from('event-docs').remove([data.path]);
+      } catch (cleanupError) {
+        console.error('Failed to cleanup uploaded file after DB insert failure:', cleanupError);
+      }
+    }
+    
+    let errorMsg = `Failed to create document record for ${file.name}`;
+    
+    if (docError.message?.includes('permission') || docError.message?.includes('policy')) {
+      errorMsg += ': Permission denied. Please verify you own this event.';
+    } else {
+      errorMsg += `: ${docError.message}`;
+    }
+    
+    throw new Error(errorMsg);
+  }
+}
+
 export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModalProps) {
   const [title, setTitle] = useState('');
   const [topic, setTopic] = useState('');
@@ -36,11 +135,13 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
   const [endDate, setEndDate] = useState<Dayjs | null>(null);
   const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [files, setFiles] = useState<File[]>([]);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({});
 
-  // Get list of common timezones
-  const timezones = Intl.supportedValuesOf('timeZone').sort();
+  const createEventMutation = useCreateEventMutation();
+
+  // Memoize timezone list to avoid recalculating on every render
+  const timezones = useMemo(() => Intl.supportedValuesOf('timeZone').sort(), []);
 
   // Auto-set end date to 1 hour after start date when start date changes
   useEffect(() => {
@@ -52,19 +153,20 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
 
   if (!isOpen) return null;
 
-
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    setLoading(true);
 
     try {
-      // Get current user
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError || !session?.user) {
-        throw new Error('You must be logged in to create an event');
+      // Validate files before proceeding
+      const fileErrors = validateFiles(files);
+      if (fileErrors.length > 0) {
+        setError(fileErrors.join('\n'));
+        return;
       }
+
+      // Get user session
+      const { user } = await getSessionWithTimeout(5000);
 
       // Validate required dates
       if (!startDate) {
@@ -85,135 +187,80 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
         throw new Error('End time must be within 12 hours of start time');
       }
 
-      // Prepare event data
+      // Prepare event data with timezone conversion
       const eventData: EventData = {
-        owner_uid: session.user.id,
+        owner_uid: user.id,
         title: title.trim(),
       };
 
-      // Add optional fields if provided
       if (topic.trim()) {
         eventData.topic = topic.trim();
       }
 
       // Convert dates to UTC timestamps
-      if (startDate) {
-        // Format the date/time as a string and interpret it as being in the selected timezone
-        const dateString = startDate.format('YYYY-MM-DD HH:mm:ss');
-        const dateInTimezone = dayjs.tz(dateString, timezone);
-        eventData.start_time = dateInTimezone.utc().toISOString();
-      }
+      const startDateString = startDate.format('YYYY-MM-DD HH:mm:ss');
+      const startDateInTimezone = dayjs.tz(startDateString, timezone);
+      eventData.start_time = startDateInTimezone.utc().toISOString();
 
-      if (endDate) {
-        // Format the date/time as a string and interpret it as being in the selected timezone
-        const dateString = endDate.format('YYYY-MM-DD HH:mm:ss');
-        const dateInTimezone = dayjs.tz(dateString, timezone);
-        eventData.end_time = dateInTimezone.utc().toISOString();
-      }
+      const endDateString = endDate.format('YYYY-MM-DD HH:mm:ss');
+      const endDateInTimezone = dayjs.tz(endDateString, timezone);
+      eventData.end_time = endDateInTimezone.utc().toISOString();
 
-      // Call Orchestrator Edge Function to create event and agent
-      console.log('Calling orchestrator to create event...');
-      
-      // Add timeout wrapper to prevent hanging
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Request timed out after 30 seconds')), 30000);
-      });
-      
-      const invokePromise = supabase.functions.invoke('orchestrator', {
-        body: {
-          action: 'create_event_and_agent',
-          payload: {
-            owner_uid: session.user.id,
-            title: title.trim(),
-            topic: topic.trim() || null,
-            start_time: eventData.start_time || null,
-            end_time: eventData.end_time || null,
-          },
-        },
-      });
+      // Create event using React Query mutation
+      const eventResult = await createEventMutation.mutateAsync(eventData);
 
-      const { data: orchestratorResult, error: orchestratorError } = await Promise.race([
-        invokePromise,
-        timeoutPromise,
-      ]) as { data: any; error: any };
-
-      console.log('Orchestrator response:', { orchestratorResult, orchestratorError });
-
-      if (orchestratorError) {
-        console.error('Orchestrator error:', orchestratorError);
-        throw orchestratorError;
-      }
-
-      if (!orchestratorResult?.ok || !orchestratorResult?.event) {
-        console.error('Orchestrator returned invalid response:', orchestratorResult);
-        throw new Error(orchestratorResult?.error || 'Failed to create event');
-      }
-
-      // Extract event from orchestrator response
-      const eventResult = orchestratorResult.event;
-      console.log('Event created successfully:', eventResult.id);
-
-      // Upload files to Supabase storage and create event_docs records
+      // Upload files if any
       if (files.length > 0) {
-        // Verify the event is accessible (helps with RLS policy checks)
-        const { error: verifyError } = await supabase
+        // Verify event is accessible (helps with RLS policy checks)
+        const verifyPromise = supabase
           .from('events')
           .select('id')
           .eq('id', eventResult.id)
           .single();
+        
+        const verifyResult = await withTimeout(
+          Promise.resolve(verifyPromise),
+          5000,
+          'Cannot verify event ownership. The event may not be accessible yet. Please try again.'
+        ) as { error: { message: string } | null };
+
+        const { error: verifyError } = verifyResult;
 
         if (verifyError) {
-          throw new Error(`Cannot verify event ownership: ${verifyError.message}`);
+          throw new Error(
+            `Cannot verify event ownership: ${verifyError.message}. ` +
+            `This may indicate an RLS policy issue or the event was not created properly.`
+          );
         }
 
+        // Upload files sequentially with progress tracking
         const uploadPromises = files.map(async (file) => {
-          // Generate a unique path for the file
-          const fileExt = file.name.split('.').pop();
-          const fileName = `${eventResult.id}/${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
-          const filePath = fileName;
-
-          // Upload to Supabase storage
-          const { error: uploadError, data: uploadData } = await supabase.storage
-            .from('event-docs')
-            .upload(filePath, file, {
-              cacheControl: '3600',
-              upsert: false,
-            });
-
-          if (uploadError) {
-            console.error('Storage upload error:', uploadError);
-            throw new Error(`Failed to upload ${file.name}: ${uploadError.message}`);
-          }
-
-          // Create event_docs record
-          const { error: docError } = await supabase
-            .from('event_docs')
-            .insert([
-              {
-                event_id: eventResult.id,
-                path: filePath,
-              },
-            ]);
-
-          if (docError) {
-            console.error('Event docs insert error:', docError);
-            // If database insert fails but upload succeeded, try to clean up the file
-            if (uploadData?.path) {
-              await supabase.storage.from('event-docs').remove([uploadData.path]);
-            }
-            throw new Error(`Failed to create document record for ${file.name}: ${docError.message}`);
+          try {
+            await uploadFile(file, eventResult.id);
+            setUploadProgress(prev => ({ ...prev, [file.name]: 100 }));
+          } catch (err) {
+            // Clean up any partial uploads by removing files that were uploaded
+            // but failed during database insert
+            throw err;
           }
         });
 
-        await Promise.all(uploadPromises);
+        // Wait for all uploads with overall timeout
+        await withTimeout(
+          Promise.all(uploadPromises),
+          300000, // 5 minutes total for all files
+          'Total file upload time exceeded 5 minutes. This may be due to too many large files or slow network connection.'
+        );
       }
 
-      // Reset form and close modal
+      // Reset form and close modal only after complete success
       setTitle('');
       setTopic('');
       setStartDate(null);
       setEndDate(null);
       setFiles([]);
+      setUploadProgress({});
+      setError(null);
       onClose();
       
       // Trigger success callback if provided
@@ -221,26 +268,25 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
         onSuccess();
       }
     } catch (err) {
-      console.error('Error creating event:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to create event';
       setError(errorMessage);
-    } finally {
-      setLoading(false);
     }
   };
 
   const handleClose = () => {
-    if (!loading) {
+    if (!createEventMutation.isPending) {
       setTitle('');
       setTopic('');
       setStartDate(null);
       setEndDate(null);
       setFiles([]);
+      setUploadProgress({});
       setError(null);
       onClose();
     }
   };
 
+  const isLoading = createEventMutation.isPending || Object.keys(uploadProgress).length > 0;
 
   return (
     <div
@@ -292,13 +338,13 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
           </h2>
           <button
             onClick={handleClose}
-            disabled={loading}
+            disabled={isLoading}
             style={{
               background: 'transparent',
               border: 'none',
               fontSize: '24px',
               color: '#64748b',
-              cursor: loading ? 'not-allowed' : 'pointer',
+              cursor: isLoading ? 'not-allowed' : 'pointer',
               padding: '0',
               width: '32px',
               height: '32px',
@@ -323,6 +369,7 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
                   color: '#991b1b',
                   fontSize: '14px',
                   marginBottom: '24px',
+                  whiteSpace: 'pre-line',
                 }}
               >
                 {error}
@@ -349,7 +396,7 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   required
-                  disabled={loading}
+                  disabled={isLoading}
                   placeholder="Enter event title"
                   style={{
                     width: '100%',
@@ -357,7 +404,7 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
                     border: '1px solid #e2e8f0',
                     borderRadius: '6px',
                     fontSize: '15px',
-                    background: loading ? '#f8fafc' : '#ffffff',
+                    background: isLoading ? '#f8fafc' : '#ffffff',
                     boxSizing: 'border-box',
                   }}
                 />
@@ -380,18 +427,18 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
                   id="timezone"
                   value={timezone}
                   onChange={(e) => setTimezone(e.target.value)}
-                  disabled={loading}
+                  disabled={isLoading}
                   style={{
                     width: '100%',
                     padding: '12px 16px',
                     border: '1px solid #e2e8f0',
                     borderRadius: '6px',
                     fontSize: '15px',
-                    backgroundColor: loading ? '#f8fafc' : '#ffffff',
+                    backgroundColor: isLoading ? '#f8fafc' : '#ffffff',
                     boxSizing: 'border-box',
-                    cursor: loading ? 'not-allowed' : 'pointer',
+                    cursor: isLoading ? 'not-allowed' : 'pointer',
                     appearance: 'none',
-                    backgroundImage: loading
+                    backgroundImage: isLoading
                       ? 'none'
                       : `url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L6 6L11 1' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
                     backgroundRepeat: 'no-repeat',
@@ -400,7 +447,7 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
                     transition: 'all 0.2s',
                   }}
                   onMouseEnter={(e) => {
-                    if (!loading) {
+                    if (!isLoading) {
                       e.currentTarget.style.borderColor = '#cbd5e1';
                     }
                   }}
@@ -434,7 +481,7 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
                 <DateTimePicker
                   value={startDate}
                   onChange={(newValue) => setStartDate(newValue)}
-                  disabled={loading}
+                  disabled={isLoading}
                   minDate={dayjs()}
                   minutesStep={15}
                   slotProps={{
@@ -473,7 +520,7 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
                 <DateTimePicker
                   value={endDate}
                   onChange={(newValue) => setEndDate(newValue)}
-                  disabled={loading || !startDate}
+                  disabled={isLoading || !startDate}
                   minDate={startDate || dayjs()}
                   minutesStep={15}
                   slotProps={{
@@ -500,7 +547,7 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
                 label="Topic"
                 instructions="Briefly describe the event. You can use markdown formatting for rich text."
                 height={180}
-                disabled={loading}
+                disabled={isLoading}
               />
             </div>
 
@@ -509,56 +556,56 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
                 files={files}
                 onFilesChange={setFiles}
                 label="Event Documents"
-                instructions="Upload documents related to this event. You can select multiple files at once."
-                disabled={loading}
+                instructions={`Upload documents related to this event. Maximum file size: ${MAX_FILE_SIZE / 1024 / 1024}MB. You can select multiple files at once.`}
+                disabled={isLoading}
               />
             </div>
 
-          <div
-            style={{
-              display: 'flex',
-              gap: '12px',
-              justifyContent: 'flex-end',
-              width: '100%',
-              boxSizing: 'border-box',
-            }}
-          >
-            <button
-              type="button"
-              onClick={handleClose}
-              disabled={loading}
+            <div
               style={{
-                padding: '10px 20px',
-                border: '1px solid #e2e8f0',
-                borderRadius: '6px',
-                fontSize: '15px',
-                fontWeight: '500',
-                color: '#374151',
-                background: '#ffffff',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                opacity: loading ? 0.6 : 1,
+                display: 'flex',
+                gap: '12px',
+                justifyContent: 'flex-end',
+                width: '100%',
+                boxSizing: 'border-box',
               }}
             >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading || !title.trim()}
-              style={{
-                padding: '10px 20px',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '15px',
-                fontWeight: '500',
-                color: '#ffffff',
-                background: loading || !title.trim() ? '#94a3b8' : '#1e293b',
-                cursor: loading || !title.trim() ? 'not-allowed' : 'pointer',
-                transition: 'background 0.2s',
-              }}
-            >
-              {loading ? 'Creating...' : 'Create Event'}
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={handleClose}
+                disabled={isLoading}
+                style={{
+                  padding: '10px 20px',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '6px',
+                  fontSize: '15px',
+                  fontWeight: '500',
+                  color: '#374151',
+                  background: '#ffffff',
+                  cursor: isLoading ? 'not-allowed' : 'pointer',
+                  opacity: isLoading ? 0.6 : 1,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isLoading || !title.trim()}
+                style={{
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '15px',
+                  fontWeight: '500',
+                  color: '#ffffff',
+                  background: isLoading || !title.trim() ? '#94a3b8' : '#1e293b',
+                  cursor: isLoading || !title.trim() ? 'not-allowed' : 'pointer',
+                  transition: 'background 0.2s',
+                }}
+              >
+                {isLoading ? 'Creating...' : 'Create Event'}
+              </button>
+            </div>
           </form>
         </LocalizationProvider>
       </div>

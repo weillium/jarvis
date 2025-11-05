@@ -351,7 +351,6 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 [functions.orchestrator]
 enabled = true
 verify_jwt = true
-import_map = "./functions/orchestrator/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
 entrypoint = "./functions/orchestrator/index.ts"
@@ -362,5 +361,4 @@ entrypoint = "./functions/orchestrator/index.ts"
 [functions.transcript-ingestion]
 enabled = true
 verify_jwt = false
-import_map = "./functions/transcript-ingestion/deno.json"
 entrypoint = "./functions/transcript-ingestion/index.ts"

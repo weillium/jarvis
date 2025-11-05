@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@/shared/lib/supabase/server';
+import { requireAuth, requireEventOwnership } from '@/shared/lib/auth';
 
 /**
  * Agent Information API Route
@@ -10,20 +11,9 @@ import { createClient } from '@supabase/supabase-js';
  * - Blueprint information (if exists)
  * 
  * GET /api/agent/[eventId]
+ * 
+ * Requires authentication and event ownership.
  */
-
-function getSupabaseClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error('Missing Supabase configuration');
-  }
-
-  return createClient(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false },
-  });
-}
 
 export async function GET(
   req: NextRequest,
@@ -41,7 +31,10 @@ export async function GET(
       );
     }
 
-    const supabase = getSupabaseClient();
+    // Check authentication and event ownership
+    const supabase = await createServerClient();
+    const user = await requireAuth(supabase);
+    await requireEventOwnership(supabase, user.id, eventId);
 
     // Fetch agent with all details
     const { data: agents, error: agentError } = await (supabase

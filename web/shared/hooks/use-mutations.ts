@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/shared/lib/supabase/client';
 
 /**
  * Mutation hooks for all POST/PUT/DELETE operations
@@ -315,6 +316,50 @@ export function useSendTestTranscriptMutation(eventId: string) {
 // ============================================================================
 // Event Mutations
 // ============================================================================
+
+/**
+ * Create event mutation
+ */
+export function useCreateEventMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (eventData: {
+      owner_uid: string;
+      title: string;
+      topic?: string | null;
+      start_time?: string | null;
+      end_time?: string | null;
+    }) => {
+      const { data, error } = await supabase.functions.invoke('orchestrator', {
+        body: {
+          action: 'create_event_and_agent',
+          payload: {
+            owner_uid: eventData.owner_uid,
+            title: eventData.title,
+            topic: eventData.topic || null,
+            start_time: eventData.start_time || null,
+            end_time: eventData.end_time || null,
+          },
+        },
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Failed to create event');
+      }
+
+      if (!data?.ok || !data?.event) {
+        throw new Error(data?.error || 'Failed to create event');
+      }
+
+      return data.event as { id: string };
+    },
+    onSuccess: () => {
+      // Invalidate events list query to show new event
+      queryClient.invalidateQueries({ queryKey: ['events'] });
+    },
+  });
+}
 
 /**
  * Update event mutation
