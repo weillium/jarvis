@@ -18,13 +18,20 @@ export async function createServerClient() {
 
     if (accessToken && refreshToken) {
       // Use setSession with error handling
-      const { error } = await supabase.auth.setSession({
+      const { data: sessionData, error } = await supabase.auth.setSession({
         access_token: accessToken,
         refresh_token: refreshToken,
       });
       
-      // If session is invalid, clear the cookies and return client without session
-      if (error) {
+      // Verify session was actually set
+      if (!error && sessionData?.session) {
+        // Session successfully set
+        console.log('[Supabase Server] Session set from cookies:', {
+          userId: sessionData.session.user?.id,
+          hasAccessToken: !!sessionData.session.access_token,
+        });
+      } else if (error) {
+        // If session is invalid, clear the cookies and return client without session
         // Check if user doesn't exist (common after DB reset)
         const isUserNotFound = error.message.includes('User from sub claim in JWT does not exist') ||
                                error.message.includes('user not found') ||
@@ -49,7 +56,16 @@ export async function createServerClient() {
             name: error.name,
           });
         }
+      } else {
+        // No error but no session either - this shouldn't happen but log it
+        console.warn('[Supabase Server] setSession returned no error but no session data');
       }
+    } else {
+      // No cookies found - log for debugging
+      console.log('[Supabase Server] No auth cookies found:', {
+        hasAccessToken: !!accessToken,
+        hasRefreshToken: !!refreshToken,
+      });
     }
   } catch (error) {
     // Gracefully handle any errors (e.g., invalid tokens, network issues)

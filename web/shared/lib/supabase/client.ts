@@ -74,6 +74,59 @@ if (typeof window !== 'undefined') {
     }
   };
 
+  // Sync initial session to cookies IMMEDIATELY from localStorage if available
+  // This ensures cookies are available synchronously for server actions on first load
+  // Try to read from localStorage directly (Supabase stores session there)
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+    const urlHash = supabaseUrl.split('//')[1]?.split('.')[0] || supabaseUrl.replace(/[^a-z0-9]/gi, '');
+    const possibleKeys = [
+      `sb-${urlHash}-auth-token`,
+      `supabase.auth.token`,
+    ];
+    
+    // Check all localStorage keys for auth data
+    const allKeys = Object.keys(localStorage);
+    const authKeys = allKeys.filter(k => k.includes('supabase') || (k.includes('sb-') && k.includes('auth')));
+    
+    for (const key of [...possibleKeys, ...authKeys]) {
+      try {
+        const stored = localStorage.getItem(key);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          let session: any = null;
+          
+          // Check different storage formats
+          if (parsed?.currentSession && parsed.currentSession.access_token) {
+            session = parsed.currentSession;
+          } else if (parsed?.access_token && parsed?.user) {
+            session = parsed;
+          }
+          
+          if (session && session.access_token && session.refresh_token) {
+            console.log('[Supabase Client] Found session in localStorage, syncing to cookies immediately:', { key });
+            syncSessionToCookies(session);
+            break; // Found and synced, no need to check more keys
+          }
+        }
+      } catch (e) {
+        // Not valid JSON or wrong format, continue
+      }
+    }
+  } catch (err) {
+    console.warn('[Supabase Client] Error reading localStorage for initial cookie sync:', err);
+  }
+  
+  // Also use getSession() as fallback (async, but ensures we catch any session Supabase has)
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    if (session) {
+      console.log('[Supabase Client] Syncing session from getSession() to cookies');
+      syncSessionToCookies(session);
+    }
+  }).catch((err) => {
+    console.error('[Supabase Client] Error getting initial session for cookie sync:', err);
+  });
+
   // Use setTimeout to defer initialization after module load
   setTimeout(() => {
     let isInitialAuthState = true;
@@ -116,6 +169,11 @@ if (typeof window !== 'undefined') {
       // Sync session to cookies (for server-side access)
       try {
         syncSessionToCookies(session);
+        console.log('[Supabase Client] Cookies synced:', {
+          event,
+          hasSession: !!session,
+          hasAccessToken: !!session?.access_token,
+        });
       } catch (error) {
         console.error('[Supabase Client] Error syncing session to cookies:', {
           error,

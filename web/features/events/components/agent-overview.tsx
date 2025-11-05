@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAgentInfo } from '@/shared/hooks/useAgentInfo';
 import { useAgentSessions, AgentSessionStatus } from '@/shared/hooks/use-agent-sessions';
 import { ContextGenerationPanel } from '@/features/context/components/context-generation-panel';
@@ -14,36 +14,68 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
   const { agent, contextStats, blueprint, loading, error, refetch } = useAgentInfo(eventId);
   const [hasActiveSessions, setHasActiveSessions] = useState(false);
   const [checkingSessions, setCheckingSessions] = useState(true);
+  const checkingRef = useRef(false);
+  const [initialSessions, setInitialSessions] = useState<AgentSessionStatus[]>([]);
   
-  // Check if sessions exist and are in starting/active states before connecting
+  // Check if sessions exist and determine if SSE should connect (only for starting/active)
   const checkForActiveSessions = useCallback(async () => {
     if (!eventId) {
       setCheckingSessions(false);
+      checkingRef.current = false;
       return;
     }
+    
+    // Prevent concurrent checks
+    if (checkingRef.current) {
+      return;
+    }
+    
+    checkingRef.current = true;
+    setCheckingSessions(true);
     
     try {
       const res = await fetch(`/api/agent-sessions/${eventId}/check`);
       const data = await res.json();
       
-      if (data.ok && data.hasActiveSessions) {
-        setHasActiveSessions(true);
+      if (data.ok) {
+        // Store initial sessions data for immediate display (any status)
+        if (data.sessions && data.sessions.length > 0) {
+          const sessions: AgentSessionStatus[] = data.sessions.map((s: any) => ({
+            agent_type: s.agent_type,
+            session_id: s.session_id || 'pending',
+            status: s.status,
+            metadata: s.metadata || {
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              closed_at: null,
+            },
+          }));
+          setInitialSessions(sessions);
+        } else {
+          setInitialSessions([]);
+        }
+        
+        // Only set hasActiveSessions to true if sessions are starting/active (for SSE connection)
+        setHasActiveSessions(data.hasActiveSessions || false);
       } else {
         setHasActiveSessions(false);
+        setInitialSessions([]);
       }
     } catch (err) {
       console.error('[AgentOverview] Failed to check for active sessions:', err);
       setHasActiveSessions(false);
+      setInitialSessions([]);
     } finally {
       setCheckingSessions(false);
+      checkingRef.current = false;
     }
   }, [eventId]);
   
   useEffect(() => {
     checkForActiveSessions();
     
-    // Poll periodically to check for new sessions
-    // - Every 5 seconds if not connected (to detect when sessions become active)
+    // Poll periodically to check for sessions
+    // - Every 5 seconds if not connected (to detect when sessions advance to starting/active)
     // - Every 30 seconds if connected (to detect if connection dropped and sessions are still active)
     const pollInterval = hasActiveSessions ? 30000 : 5000;
     const interval = setInterval(() => {
@@ -59,6 +91,13 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
   }, [hasActiveSessions]);
   
   const { cards: cardsStatus, facts: factsStatus, isLoading: sessionsLoading, error: sessionsError, reconnect } = useAgentSessions(eventId, shouldConnectToSessions);
+  
+  // Clear initial sessions when SSE provides updates (to avoid showing stale data)
+  useEffect(() => {
+    if (cardsStatus || factsStatus) {
+      setInitialSessions([]);
+    }
+  }, [cardsStatus, factsStatus]);
   const [isResetting, setIsResetting] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
   const [totalCost, setTotalCost] = useState<number | null>(null);
@@ -217,11 +256,9 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
       // Refresh agent info to reflect status change (context_complete -> testing)
       await refetch();
       
-      // Check for active sessions (they will be in 'generated' state initially, so we wait)
-      // The status will change to 'starting' when user clicks "Start Sessions"
-      setTimeout(() => {
-        checkForActiveSessions();
-      }, 1000);
+      // Immediately check for sessions (they will be in 'generated' state)
+      // This will display them immediately, but SSE won't connect until they advance to starting/active
+      await checkForActiveSessions();
       
       console.log('[AgentOverview] Sessions created successfully. Agent status set to testing.');
     } catch (err: any) {
@@ -250,7 +287,8 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
       // Refresh agent info
       await refetch();
       
-      // Check for active sessions (they should now be in 'starting' state)
+      // Check for sessions - they should now be in 'starting' state
+      // This will trigger SSE connection since they're now starting/active
       setTimeout(() => {
         checkForActiveSessions();
       }, 1000);
@@ -326,6 +364,28 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
       // Refresh agent info to reflect status change
       await refetch();
       
+      // Update session status directly from API - don't rely on SSE for status changes
+      // Fetch updated sessions and update local state immediately
+      const sessionRes = await fetch(`/api/agent-sessions/${eventId}/check`);
+      const sessionData = await sessionRes.json();
+      
+      if (sessionData.ok && sessionData.sessions) {
+        const updatedSessions: AgentSessionStatus[] = sessionData.sessions.map((s: any) => ({
+          agent_type: s.agent_type,
+          session_id: s.session_id || 'pending',
+          status: s.status,
+          metadata: s.metadata || {
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            closed_at: null,
+          },
+        }));
+        setInitialSessions(updatedSessions);
+      }
+      
+      // Update hasActiveSessions (SSE will disconnect since sessions are now paused)
+      await checkForActiveSessions();
+      
       console.log('[AgentOverview] Sessions paused');
     } catch (err: any) {
       console.error('Failed to pause sessions:', err);
@@ -352,6 +412,28 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
 
       // Refresh agent info to reflect status change
       await refetch();
+      
+      // Update session status directly from API - don't rely on SSE for status changes
+      // Fetch updated sessions and update local state immediately
+      const sessionRes = await fetch(`/api/agent-sessions/${eventId}/check`);
+      const sessionData = await sessionRes.json();
+      
+      if (sessionData.ok && sessionData.sessions) {
+        const updatedSessions: AgentSessionStatus[] = sessionData.sessions.map((s: any) => ({
+          agent_type: s.agent_type,
+          session_id: s.session_id || 'pending',
+          status: s.status,
+          metadata: s.metadata || {
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            closed_at: null,
+          },
+        }));
+        setInitialSessions(updatedSessions);
+      }
+      
+      // Update hasActiveSessions (SSE will reconnect when sessions become active)
+      await checkForActiveSessions();
       
       console.log('[AgentOverview] Sessions will be resumed by worker');
     } catch (err: any) {
@@ -408,6 +490,86 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
     const agentType = status.agent_type;
     const isExpanded = expandedLogs[agentType];
 
+    // Determine WebSocket connection status
+    // Prefer actual WebSocket state if available, otherwise fall back to status field
+    const actualWebSocketState = status.websocket_state;
+    const isWebSocketLive = actualWebSocketState === 'OPEN' || (actualWebSocketState === undefined && status.status === 'active');
+    
+    // Determine connection status label
+    let connectionStatus: string;
+    let connectionColor: string;
+    
+    if (actualWebSocketState) {
+      // Use actual WebSocket readyState
+      switch (actualWebSocketState) {
+        case 'OPEN':
+          connectionStatus = 'Live';
+          connectionColor = '#10b981';
+          break;
+        case 'CONNECTING':
+          connectionStatus = 'Connecting';
+          connectionColor = '#f59e0b';
+          break;
+        case 'CLOSING':
+          connectionStatus = 'Closing';
+          connectionColor = '#f59e0b';
+          break;
+        case 'CLOSED':
+          connectionStatus = 'Disconnected';
+          connectionColor = '#6b7280';
+          break;
+        default:
+          connectionStatus = status.status === 'paused' ? 'Paused' : 'Disconnected';
+          connectionColor = status.status === 'paused' ? '#8b5cf6' : '#6b7280';
+      }
+    } else {
+      // Fall back to database status
+      connectionStatus = status.status === 'active' ? 'Live' : status.status === 'paused' ? 'Paused' : status.status === 'starting' ? 'Connecting' : 'Disconnected';
+      connectionColor = status.status === 'active' ? '#10b981' : status.status === 'paused' ? '#8b5cf6' : status.status === 'starting' ? '#f59e0b' : '#6b7280';
+    }
+
+    // Real-time runtime calculation with state to trigger updates
+    const [currentTime, setCurrentTime] = useState(new Date());
+    
+    useEffect(() => {
+      if (!isWebSocketLive || !status.metadata.created_at) return;
+      
+      // Update every second when session is active
+      const interval = setInterval(() => {
+        setCurrentTime(new Date());
+      }, 1000);
+      
+      return () => clearInterval(interval);
+    }, [isWebSocketLive, status.metadata.created_at]);
+
+    // Calculate runtime (how long session has been running)
+    const calculateRuntime = () => {
+      if (!status.metadata.created_at) return null;
+      
+      const created = new Date(status.metadata.created_at);
+      const now = currentTime;
+      const diffMs = now.getTime() - created.getTime();
+      
+      if (diffMs < 0) return null; // Invalid date
+      
+      const seconds = Math.floor(diffMs / 1000);
+      const minutes = Math.floor(seconds / 60);
+      const hours = Math.floor(minutes / 60);
+      const days = Math.floor(hours / 24);
+      
+      if (days > 0) {
+        return `${days}d ${hours % 24}h`;
+      } else if (hours > 0) {
+        return `${hours}h ${minutes % 60}m`;
+      } else if (minutes > 0) {
+        return `${minutes}m ${seconds % 60}s`;
+      } else {
+        return `${seconds}s`;
+      }
+    };
+
+    const runtime = calculateRuntime();
+
     return (
       <div style={{
         padding: '20px',
@@ -452,12 +614,122 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
           </div>
         </div>
 
-        {/* Session Info */}
+        {/* Connection Status & Runtime */}
         <div style={{
           marginBottom: '16px',
           paddingBottom: '16px',
           borderBottom: '1px solid #e2e8f0',
         }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            marginBottom: '8px',
+          }}>
+            <div style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              background: connectionColor,
+              animation: isWebSocketLive ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none',
+            }} />
+            <span style={{
+              fontSize: '12px',
+              fontWeight: '600',
+              color: connectionColor,
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+            }}>
+              WebSocket: {connectionStatus}
+              {actualWebSocketState && (
+                <span style={{
+                  fontSize: '10px',
+                  fontWeight: '400',
+                  marginLeft: '6px',
+                  opacity: 0.7,
+                  textTransform: 'none',
+                }}>
+                  ({actualWebSocketState})
+                </span>
+              )}
+            </span>
+          </div>
+          
+          {/* Ping-Pong Health Status */}
+          {status.websocket_state && status.websocket_state === 'OPEN' && (
+            <div style={{
+              marginBottom: '8px',
+              padding: '8px 12px',
+              background: status.ping_pong?.missedPongs === 0 ? '#f0fdf4' : status.ping_pong?.missedPongs === 1 ? '#fffbeb' : '#fef2f2',
+              borderRadius: '6px',
+              border: `1px solid ${status.ping_pong?.missedPongs === 0 ? '#bbf7d0' : status.ping_pong?.missedPongs === 1 ? '#fde68a' : '#fecaca'}`,
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '4px',
+              }}>
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: '600',
+                  color: status.ping_pong?.missedPongs === 0 ? '#166534' : status.ping_pong?.missedPongs === 1 ? '#92400e' : '#991b1b',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                }}>
+                  Connection Health
+                </span>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}>
+                  {status.ping_pong?.missedPongs === 0 && (
+                    <span style={{ fontSize: '12px' }}>✓ Healthy</span>
+                  )}
+                  {status.ping_pong?.missedPongs === 1 && (
+                    <span style={{ fontSize: '12px', color: '#d97706' }}>⚠ 1 Missed</span>
+                  )}
+                  {status.ping_pong && status.ping_pong.missedPongs >= 2 && (
+                    <span style={{ fontSize: '12px', color: '#dc2626' }}>⚠⚠ {status.ping_pong.missedPongs} Missed</span>
+                  )}
+                </div>
+              </div>
+              {status.ping_pong?.enabled && (
+                <div style={{
+                  fontSize: '10px',
+                  color: '#64748b',
+                  display: 'flex',
+                  gap: '12px',
+                  flexWrap: 'wrap',
+                }}>
+                  {status.ping_pong.lastPongReceived && (
+                    <span>
+                      Last pong: {new Date(status.ping_pong.lastPongReceived).toLocaleTimeString()}
+                    </span>
+                  )}
+                  <span>
+                    Ping interval: {Math.round((status.ping_pong.pingIntervalMs || 0) / 1000)}s
+                  </span>
+                  {status.ping_pong.missedPongs > 0 && (
+                    <span style={{ color: '#dc2626', fontWeight: '600' }}>
+                      {status.ping_pong.missedPongs}/{status.ping_pong.maxMissedPongs} missed
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+          
+          {runtime && (
+            <div style={{
+              fontSize: '12px',
+              color: '#64748b',
+              marginBottom: '4px',
+            }}>
+              Runtime: {runtime}
+            </div>
+          )}
           <div style={{
             fontSize: '12px',
             color: '#64748b',
@@ -945,7 +1217,11 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
             }}>
               {/* Refresh button - always visible */}
               <button
-                onClick={() => reconnect()}
+                onClick={() => {
+                  // Refresh session check first, then reconnect SSE if needed
+                  checkForActiveSessions();
+                  reconnect();
+                }}
                 style={{
                   padding: '8px 16px',
                   border: '1px solid #e2e8f0',
@@ -972,7 +1248,8 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
               {agent?.status === 'context_complete' && 
                !cardsStatus && 
                !factsStatus && 
-               !sessionsLoading && (
+               !sessionsLoading && 
+               !checkingSessions && (
                 <button
                   onClick={handleCreateSessions}
                   disabled={isStartingSessions}
@@ -1003,16 +1280,17 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
                 </button>
               )}
               
-              {/* Testing state buttons - visible when agent is testing */}
-              {agent?.status === 'testing' && (
-                <>
-                  {/* Start Sessions button - visible when sessions are generated but not active */}
-                  {/* Show button when: both sessions exist and are 'generated', OR at least one exists and is 'generated' (allow for async updates) */}
-                  {((cardsStatus?.status === 'generated' && factsStatus?.status === 'generated') ||
-                    (cardsStatus?.status === 'generated' && !factsStatus) ||
-                    (!cardsStatus && factsStatus?.status === 'generated') ||
-                    // Also show if we're in testing state but haven't received status yet (sessions might be loading)
-                    (!cardsStatus && !factsStatus && sessionsLoading)) && (
+              {/* Start/Resume Sessions button - visible when sessions are generated or paused */}
+              {/* Show button when: sessions are 'generated' (new) or 'paused' (resume) */}
+              {/* Works for both 'testing' and 'running' agent status */}
+              {((cardsStatus?.status === 'generated' && factsStatus?.status === 'generated') ||
+                (cardsStatus?.status === 'generated' && !factsStatus) ||
+                (!cardsStatus && factsStatus?.status === 'generated') ||
+                (cardsStatus?.status === 'paused' && factsStatus?.status === 'paused') ||
+                (cardsStatus?.status === 'paused' && !factsStatus) ||
+                (!cardsStatus && factsStatus?.status === 'paused') ||
+                // Also show if we're in testing/running state but haven't received status yet (sessions might be loading)
+                (!cardsStatus && !factsStatus && (agent?.status === 'testing' || agent?.status === 'running') && sessionsLoading)) && (
                     <button
                       onClick={handleStartSessions}
                       disabled={isStartingSessions}
@@ -1037,44 +1315,55 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
                           e.currentTarget.style.background = '#3b82f6';
                         }
                       }}
-                      title="Start generated sessions"
+                      title={(cardsStatus?.status === 'paused' || factsStatus?.status === 'paused') 
+                        ? 'Resume paused sessions' 
+                        : 'Start generated sessions'}
                     >
-                      {isStartingSessions ? 'Starting...' : 'Start Sessions'}
+                      {isStartingSessions 
+                        ? (cardsStatus?.status === 'paused' || factsStatus?.status === 'paused' 
+                            ? 'Resuming...' 
+                            : 'Starting...')
+                        : (cardsStatus?.status === 'paused' || factsStatus?.status === 'paused' 
+                            ? 'Resume Sessions' 
+                            : 'Start Sessions')}
                     </button>
-                  )}
-                  
-                  {/* Pause Sessions button - visible when sessions are active */}
-                  {(cardsStatus?.status === 'active' || factsStatus?.status === 'active') && (
-                    <button
-                      onClick={handlePauseSessions}
-                      disabled={isPausing}
-                      style={{
-                        padding: '8px 16px',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '6px',
-                        fontSize: '14px',
-                        fontWeight: '500',
-                        color: isPausing ? '#9ca3af' : '#374151',
-                        background: isPausing ? '#f3f4f6' : '#ffffff',
-                        cursor: isPausing ? 'not-allowed' : 'pointer',
-                        transition: 'all 0.2s',
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!isPausing) {
-                          e.currentTarget.style.background = '#f8fafc';
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isPausing) {
-                          e.currentTarget.style.background = '#ffffff';
-                        }
-                      }}
-                      title="Pause active sessions (preserves state for resume)"
-                    >
-                      {isPausing ? 'Pausing...' : 'Pause Sessions'}
-                    </button>
-                  )}
-                  
+              )}
+              
+              {/* Pause Sessions button - visible when sessions are active */}
+              {(cardsStatus?.status === 'active' || factsStatus?.status === 'active') && (
+                <button
+                  onClick={handlePauseSessions}
+                  disabled={isPausing}
+                  style={{
+                    padding: '8px 16px',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    color: isPausing ? '#9ca3af' : '#374151',
+                    background: isPausing ? '#f3f4f6' : '#ffffff',
+                    cursor: isPausing ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isPausing) {
+                      e.currentTarget.style.background = '#f8fafc';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isPausing) {
+                      e.currentTarget.style.background = '#ffffff';
+                    }
+                  }}
+                  title="Pause active sessions (preserves state for resume)"
+                >
+                  {isPausing ? 'Pausing...' : 'Pause Sessions'}
+                </button>
+              )}
+              
+              {/* Testing state buttons - visible when agent is testing */}
+              {agent?.status === 'testing' && (
+                <>
                   {/* Test Transcript button - always visible in testing state */}
                   <button
                     onClick={() => setIsTestTranscriptModalOpen(true)}
@@ -1165,7 +1454,7 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
             </div>
           )}
 
-          {sessionsLoading && !cardsStatus && !factsStatus && (
+          {(sessionsLoading || checkingSessions) && !cardsStatus && !factsStatus && initialSessions.length === 0 && (
             <div style={{
               padding: '24px',
               textAlign: 'center',
@@ -1176,7 +1465,7 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
             </div>
           )}
 
-          {!sessionsLoading && !cardsStatus && !factsStatus && !sessionsError && (
+          {!sessionsLoading && !checkingSessions && !cardsStatus && !factsStatus && !sessionsError && initialSessions.length === 0 && (
             <div style={{
               padding: '24px',
               textAlign: 'center',
@@ -1205,27 +1494,27 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
             </div>
           )}
 
-          {(cardsStatus || factsStatus) && (
+          {(cardsStatus || factsStatus || initialSessions.length > 0) && (
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
               gap: '16px',
             }}>
-              {/* Cards Agent Session */}
-              {cardsStatus && (
+              {/* Cards Agent Session - prefer SSE data, fallback to initial sessions */}
+              {(cardsStatus || initialSessions.find(s => s.agent_type === 'cards')) && (
                 <SessionStatusCard
-                  key={`cards-${cardsStatus.session_id}-${cardsStatus.status}-${cardsStatus.metadata?.updated_at || Date.now()}`}
+                  key={`cards-${cardsStatus?.session_id || initialSessions.find(s => s.agent_type === 'cards')?.session_id}-${cardsStatus?.status || initialSessions.find(s => s.agent_type === 'cards')?.status}-${cardsStatus?.metadata?.updated_at || initialSessions.find(s => s.agent_type === 'cards')?.metadata?.updated_at || Date.now()}`}
                   title="Cards Agent"
-                  status={cardsStatus}
+                  status={cardsStatus || initialSessions.find(s => s.agent_type === 'cards') || null}
                 />
               )}
               
-              {/* Facts Agent Session */}
-              {factsStatus && (
+              {/* Facts Agent Session - prefer SSE data, fallback to initial sessions */}
+              {(factsStatus || initialSessions.find(s => s.agent_type === 'facts')) && (
                 <SessionStatusCard
-                  key={`facts-${factsStatus.session_id}-${factsStatus.status}-${factsStatus.metadata?.updated_at || Date.now()}`}
+                  key={`facts-${factsStatus?.session_id || initialSessions.find(s => s.agent_type === 'facts')?.session_id}-${factsStatus?.status || initialSessions.find(s => s.agent_type === 'facts')?.status}-${factsStatus?.metadata?.updated_at || initialSessions.find(s => s.agent_type === 'facts')?.metadata?.updated_at || Date.now()}`}
                   title="Facts Agent"
-                  status={factsStatus}
+                  status={factsStatus || initialSessions.find(s => s.agent_type === 'facts') || null}
                 />
               )}
             </div>

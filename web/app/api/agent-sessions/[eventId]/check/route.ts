@@ -5,11 +5,16 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 /**
- * Check if agent sessions exist and are in starting/active states
+ * Check if agent sessions exist and their status
  * 
  * GET /api/agent-sessions/[eventId]/check
  * 
- * Returns: { ok: boolean, hasActiveSessions: boolean }
+ * Returns: { 
+ *   ok: boolean, 
+ *   hasSessions: boolean,  // True if any sessions exist (for display)
+ *   hasActiveSessions: boolean,  // True only if sessions are starting/active (for SSE connection)
+ *   sessions: [...],  // All sessions with their data
+ * }
  */
 export async function GET(
   req: NextRequest,
@@ -21,12 +26,13 @@ export async function GET(
       auth: { persistSession: false },
     });
 
-    // Check for sessions with status 'starting' or 'active'
+    // Fetch all sessions (any status) for display purposes
+    // SSE connection will only be established when sessions are starting/active
     const { data: sessions, error: sessionsError } = await supabase
       .from('agent_sessions')
-      .select('id, agent_type, status')
+      .select('id, agent_type, status, provider_session_id, created_at, updated_at, closed_at, model')
       .eq('event_id', eventId)
-      .in('status', ['starting', 'active']);
+      .order('created_at', { ascending: true });
 
     if (sessionsError) {
       console.error('[api/agent-sessions/check] Error fetching sessions:', sessionsError);
@@ -36,12 +42,29 @@ export async function GET(
       );
     }
 
-    const hasActiveSessions = sessions && sessions.length > 0;
+    const hasSessions = sessions && sessions.length > 0;
+    // Only consider sessions as "active" if they're in starting/active status (for SSE connection)
+    // SSE should only connect when sessions are actively processing content, not when paused
+    const activeSessions = sessions?.filter(s => s.status === 'starting' || s.status === 'active') || [];
+    const hasActiveSessions = activeSessions.length > 0;
 
     return NextResponse.json({
       ok: true,
-      hasActiveSessions,
+      hasSessions, // True if any sessions exist (for display)
+      hasActiveSessions, // True only if sessions are starting/active (for SSE connection - only when actively processing)
       sessionCount: sessions?.length || 0,
+      activeSessionCount: activeSessions.length,
+      sessions: sessions?.map(s => ({
+        agent_type: s.agent_type,
+        session_id: s.provider_session_id || s.id,
+        status: s.status,
+        metadata: {
+          created_at: s.created_at,
+          updated_at: s.updated_at,
+          closed_at: s.closed_at,
+          model: s.model || undefined,
+        },
+      })) || [],
     });
   } catch (error: any) {
     console.error('[api/agent-sessions/check] Error:', error);

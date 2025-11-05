@@ -11,18 +11,27 @@ export async function getEvents(filters?: {
   try {
     const supabase = await createServerClient();
     
-    // Get current user session
+    // Get current user session - try both getSession and getUser for better reliability
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
     
-    if (sessionError || !session?.user) {
+    // Log for debugging
+    if (sessionError || userError || !session?.user || !user) {
+      console.error('[Event Actions] Auth check failed:', {
+        hasSession: !!session,
+        hasUser: !!user,
+        sessionError: sessionError?.message,
+        userError: userError?.message,
+      });
       return { data: null, error: 'Not authenticated' };
     }
 
-    // Build query
+    // Build query - use user.id from getUser() as it's more reliable
+    const userId = user.id || session.user.id;
     let query = supabase
       .from('events')
       .select('*')
-      .eq('owner_uid', session.user.id)
+      .eq('owner_uid', userId)
       .order('created_at', { ascending: false });
 
     // Apply search filter
@@ -60,19 +69,27 @@ export async function getEventById(eventId: string): Promise<{ data: EventWithSt
   try {
     const supabase = await createServerClient();
     
-    // Get current user session
+    // Get current user session - try both getSession and getUser for better reliability
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
     
-    if (sessionError || !session?.user) {
+    if (sessionError || userError || !session?.user || !user) {
+      console.error('[Event Actions] Auth check failed for getEventById:', {
+        hasSession: !!session,
+        hasUser: !!user,
+        sessionError: sessionError?.message,
+        userError: userError?.message,
+      });
       return { data: null, error: 'Not authenticated' };
     }
 
-    // Fetch event
+    // Fetch event - use user.id from getUser() as it's more reliable
+    const userId = user.id || session.user.id;
     const { data, error } = await supabase
       .from('events')
       .select('*')
       .eq('id', eventId)
-      .eq('owner_uid', session.user.id)
+      .eq('owner_uid', userId)
       .single();
 
     if (error) {
@@ -105,19 +122,27 @@ export async function updateEvent(
   try {
     const supabase = await createServerClient();
     
-    // Get current user session
+    // Get current user session - try both getSession and getUser for better reliability
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
     
-    if (sessionError || !session?.user) {
+    if (sessionError || userError || !session?.user || !user) {
+      console.error('[Event Actions] Auth check failed for updateEvent:', {
+        hasSession: !!session,
+        hasUser: !!user,
+        sessionError: sessionError?.message,
+        userError: userError?.message,
+      });
       return { data: null, error: 'Not authenticated' };
     }
 
-    // Verify user owns the event
+    // Verify user owns the event - use user.id from getUser() as it's more reliable
+    const userId = user.id || session.user.id;
     const { data: eventCheck, error: eventError } = await supabase
       .from('events')
       .select('id')
       .eq('id', eventId)
-      .eq('owner_uid', session.user.id)
+      .eq('owner_uid', userId)
       .single();
 
     if (eventError || !eventCheck) {

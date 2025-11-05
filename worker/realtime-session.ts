@@ -57,6 +57,15 @@ export class RealtimeSession {
   private supabase?: any;
   private onRetrieve?: (query: string, topK: number) => Promise<Array<{ id: string; chunk: string; similarity: number }>>;
   private embedText?: (text: string) => Promise<number[]>;
+  
+  // Ping-pong heartbeat tracking
+  private pingInterval?: NodeJS.Timeout;
+  private pongTimeout?: NodeJS.Timeout;
+  private missedPongs: number = 0;
+  private lastPongReceived?: Date;
+  private readonly PING_INTERVAL_MS = parseInt(process.env.REALTIME_PING_INTERVAL_MS || '25000', 10); // Default 25 seconds
+  private readonly PONG_TIMEOUT_MS = parseInt(process.env.REALTIME_PONG_TIMEOUT_MS || '10000', 10); // Default 10 seconds
+  private readonly MAX_MISSED_PONGS = parseInt(process.env.REALTIME_MAX_MISSED_PONGS || '3', 10); // Reconnect after 3 missed pongs
 
   constructor(openai: OpenAI, config: RealtimeSessionConfig) {
     this.openai = openai;
@@ -225,6 +234,19 @@ export class RealtimeSession {
         this.session.url.toString().split('/').pop() ||
         `session_${this.config.eventId}_${this.config.agentType}_${Date.now()}`;
 
+      // Store connection timestamp on underlying socket if accessible
+      try {
+        const underlyingSocket = (this.session as any).socket || (this.session as any).ws;
+        if (underlyingSocket) {
+          (underlyingSocket as any).__connectedAt = new Date().toISOString();
+        }
+      } catch (error) {
+        // Ignore if we can't access underlying socket
+      }
+
+      // Start ping-pong heartbeat
+      this.startPingPong();
+
       // Notify active status
       this.onStatusChange?.('active', sessionId);
 
@@ -314,6 +336,22 @@ export class RealtimeSession {
       console.log(`[realtime] ${message}`);
       this.onLog?.('log', message);
     });
+
+    // Handle pong responses (WebSocket ping-pong)
+    // Note: OpenAI SDK may handle ping/pong at the WebSocket level, but we'll track it
+    // Check if the underlying socket supports ping/pong events
+    try {
+      const underlyingSocket = (this.session as any).socket || (this.session as any).ws;
+      if (underlyingSocket) {
+        // Standard WebSocket 'pong' event (fires when pong frame is received)
+        underlyingSocket.on('pong', () => {
+          this.handlePong();
+        });
+      }
+    } catch (error) {
+      // If we can't access underlying socket, ping-pong may still work at SDK level
+      console.warn(`[realtime] Could not attach pong handler: ${error}`);
+    }
 
     // Handle function call arguments completion
     // When agent calls a tool, we receive the arguments and need to execute the tool
@@ -677,11 +715,179 @@ export class RealtimeSession {
   /**
    * Get session status
    */
-  getStatus(): { isActive: boolean; queueLength: number } {
+  getStatus(): { 
+    isActive: boolean; 
+    queueLength: number; 
+    websocketState?: string;
+    connectionUrl?: string;
+    sessionId?: string;
+    connectedAt?: string;
+  } {
+    let websocketState: string | undefined;
+    let connectionUrl: string | undefined;
+    let sessionId: string | undefined;
+    let connectedAt: string | undefined;
+    
+    // Check actual WebSocket connection state if available
+    if (this.session) {
+      try {
+        // Get connection URL from session
+        if (this.session.url) {
+          connectionUrl = this.session.url.toString();
+          // Extract session ID from URL if available
+          const urlParts = connectionUrl.split('/');
+          sessionId = urlParts[urlParts.length - 1] || undefined;
+        }
+        
+        // OpenAIRealtimeWebSocket wraps the underlying WebSocket
+        // Access the underlying socket if available
+        const underlyingSocket = (this.session as any).socket || (this.session as any).ws;
+        if (underlyingSocket) {
+          // Standard WebSocket readyState values:
+          // 0 = CONNECTING, 1 = OPEN, 2 = CLOSING, 3 = CLOSED
+          const readyState = underlyingSocket.readyState;
+          if (readyState === 0) websocketState = 'CONNECTING';
+          else if (readyState === 1) websocketState = 'OPEN';
+          else if (readyState === 2) websocketState = 'CLOSING';
+          else if (readyState === 3) websocketState = 'CLOSED';
+          
+          // Get connection timestamp if available
+          if (readyState === 1 && (underlyingSocket as any).__connectedAt) {
+            connectedAt = (underlyingSocket as any).__connectedAt;
+          }
+        }
+      } catch (error) {
+        // If we can't access the underlying socket, fall back to isActive
+        websocketState = this.isActive ? 'OPEN' : 'CLOSED';
+      }
+    } else {
+      websocketState = 'CLOSED';
+    }
+    
     return {
       isActive: this.isActive,
       queueLength: this.messageQueue.length,
+      websocketState,
+      connectionUrl,
+      sessionId,
+      connectedAt,
+      pingPong: {
+        enabled: this.pingInterval !== undefined,
+        missedPongs: this.missedPongs,
+        lastPongReceived: this.lastPongReceived?.toISOString(),
+        pingIntervalMs: this.PING_INTERVAL_MS,
+        pongTimeoutMs: this.PONG_TIMEOUT_MS,
+        maxMissedPongs: this.MAX_MISSED_PONGS,
+      },
     };
+  }
+
+  /**
+   * Start ping-pong heartbeat to keep connection alive and detect disconnections
+   */
+  private startPingPong(): void {
+    // Clear any existing ping interval
+    this.stopPingPong();
+    
+    this.missedPongs = 0;
+    this.lastPongReceived = new Date();
+
+    // Send ping at regular intervals
+    this.pingInterval = setInterval(() => {
+      this.sendPing();
+    }, this.PING_INTERVAL_MS);
+
+    console.log(`[realtime] Ping-pong heartbeat started (interval: ${this.PING_INTERVAL_MS}ms, timeout: ${this.PONG_TIMEOUT_MS}ms) for ${this.config.agentType}`);
+  }
+
+  /**
+   * Stop ping-pong heartbeat
+   */
+  private stopPingPong(): void {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = undefined;
+    }
+    if (this.pongTimeout) {
+      clearTimeout(this.pongTimeout);
+      this.pongTimeout = undefined;
+    }
+  }
+
+  /**
+   * Send ping frame to check connection health
+   */
+  private sendPing(): void {
+    if (!this.isActive || !this.session) {
+      return;
+    }
+
+    try {
+      // Get underlying WebSocket to send ping frame
+      const underlyingSocket = (this.session as any).socket || (this.session as any).ws;
+      if (underlyingSocket && underlyingSocket.readyState === 1) { // OPEN
+        // Send WebSocket ping frame (not application message)
+        underlyingSocket.ping();
+        
+        // Set timeout to wait for pong
+        this.pongTimeout = setTimeout(() => {
+          this.handlePongTimeout();
+        }, this.PONG_TIMEOUT_MS);
+      } else {
+        // Socket not available or not open - connection may be dead
+        console.warn(`[realtime] Cannot send ping - socket not available (${this.config.agentType})`);
+        this.handlePongTimeout();
+      }
+    } catch (error: any) {
+      console.error(`[realtime] Error sending ping: ${error.message}`);
+      this.handlePongTimeout();
+    }
+  }
+
+  /**
+   * Handle pong response (connection is alive)
+   */
+  private handlePong(): void {
+    if (this.pongTimeout) {
+      clearTimeout(this.pongTimeout);
+      this.pongTimeout = undefined;
+    }
+    
+    this.lastPongReceived = new Date();
+    this.missedPongs = 0; // Reset missed pongs counter
+    
+    // Connection is healthy
+  }
+
+  /**
+   * Handle pong timeout (no response received)
+   */
+  private handlePongTimeout(): void {
+    this.missedPongs++;
+    
+    console.warn(
+      `[realtime] Pong timeout (${this.config.agentType}) - missed: ${this.missedPongs}/${this.MAX_MISSED_PONGS}`
+    );
+    this.onLog?.('warn', `Ping-pong timeout - missed ${this.missedPongs}/${this.MAX_MISSED_PONGS} pongs`);
+
+    if (this.missedPongs >= this.MAX_MISSED_PONGS) {
+      // Too many missed pongs - connection is likely dead
+      console.error(
+        `[realtime] Connection dead - ${this.missedPongs} missed pongs (${this.config.agentType})`
+      );
+      this.onLog?.('error', `Connection dead - ${this.missedPongs} missed pongs`);
+      
+      // Mark as inactive and trigger error status
+      this.isActive = false;
+      this.onStatusChange?.('error');
+      this.updateDatabaseStatus('error');
+      
+      // Stop ping-pong
+      this.stopPingPong();
+      
+      // Emit error event for orchestrator to handle reconnection
+      this.emit('error', new Error(`Connection dead - ${this.missedPongs} missed pongs`));
+    }
   }
 
   /**
@@ -693,6 +899,9 @@ export class RealtimeSession {
     }
 
     try {
+      // Stop ping-pong heartbeat
+      this.stopPingPong();
+
       // Close WebSocket
       if (this.session) {
         this.session.close({

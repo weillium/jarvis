@@ -49,6 +49,15 @@ export interface AgentSessionStatus {
   agent_type: 'cards' | 'facts';
   session_id: string;
   status: 'generated' | 'starting' | 'active' | 'paused' | 'closed' | 'error';
+  websocket_state?: 'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED'; // Actual WebSocket readyState
+  ping_pong?: {
+    enabled: boolean;
+    missedPongs: number;
+    lastPongReceived?: string;
+    pingIntervalMs: number;
+    pongTimeoutMs: number;
+    maxMissedPongs: number;
+  };
   runtime: {
     event_id: string;
     agent_id: string;
@@ -250,8 +259,19 @@ export class Orchestrator {
 
     // Get session status from session state
     let status: 'starting' | 'active' | 'closed' | 'error' = 'starting';
+    let websocketState: string | undefined;
+    let pingPong: {
+      enabled: boolean;
+      missedPongs: number;
+      lastPongReceived?: string;
+      pingIntervalMs: number;
+      pongTimeoutMs: number;
+      maxMissedPongs: number;
+    } | undefined;
     if (session) {
       const sessionStatus = session.getStatus();
+      websocketState = sessionStatus.websocketState;
+      pingPong = sessionStatus.pingPong;
       if (sessionStatus.isActive) {
         status = 'active';
       } else if (sessionId) {
@@ -308,6 +328,8 @@ export class Orchestrator {
       agent_type: agentType,
       session_id: sessionId || 'pending',
       status,
+      websocket_state: websocketState, // Actual WebSocket readyState
+      ping_pong: pingPong, // Ping-pong health status
       runtime: {
         event_id: runtime.eventId,
         agent_id: runtime.agentId,

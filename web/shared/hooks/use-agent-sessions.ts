@@ -6,6 +6,15 @@ export interface AgentSessionStatus {
   agent_type: 'cards' | 'facts';
   session_id: string;
   status: 'generated' | 'starting' | 'active' | 'paused' | 'closed' | 'error';
+  websocket_state?: 'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED'; // Actual WebSocket readyState
+  ping_pong?: {
+    enabled: boolean;
+    missedPongs: number;
+    lastPongReceived?: string;
+    pingIntervalMs: number;
+    pongTimeoutMs: number;
+    maxMissedPongs: number;
+  };
   runtime?: {
     event_id: string;
     agent_id: string;
@@ -138,6 +147,8 @@ export function useAgentSessions(
                 agent_type: 'cards',
                 session_id: status.session_id || 'unknown',
                 status: status.status,
+                websocket_state: status.websocket_state,
+                ping_pong: status.ping_pong,
                 metadata: status.metadata || {
                   created_at: new Date().toISOString(),
                   updated_at: new Date().toISOString(),
@@ -147,7 +158,7 @@ export function useAgentSessions(
                 token_metrics: status.token_metrics,
                 recent_logs: status.recent_logs,
               };
-              console.log('[useAgentSessions] Setting cards status:', updated.status, updated.session_id);
+              console.log('[useAgentSessions] Setting cards status:', updated.status, updated.session_id, 'WebSocket:', updated.websocket_state, 'Ping-Pong:', updated.ping_pong?.missedPongs || 0, 'missed');
               setCards(updated);
               setIsLoading(false);
               setError(null);
@@ -156,6 +167,8 @@ export function useAgentSessions(
                 agent_type: 'facts',
                 session_id: status.session_id || 'unknown',
                 status: status.status,
+                websocket_state: status.websocket_state,
+                ping_pong: status.ping_pong,
                 metadata: status.metadata || {
                   created_at: new Date().toISOString(),
                   updated_at: new Date().toISOString(),
@@ -165,7 +178,7 @@ export function useAgentSessions(
                 token_metrics: status.token_metrics,
                 recent_logs: status.recent_logs,
               };
-              console.log('[useAgentSessions] Setting facts status:', updated.status, updated.session_id);
+              console.log('[useAgentSessions] Setting facts status:', updated.status, updated.session_id, 'WebSocket:', updated.websocket_state, 'Ping-Pong:', updated.ping_pong?.missedPongs || 0, 'missed');
               setFacts(updated);
               setIsLoading(false);
               setError(null);
@@ -223,27 +236,40 @@ export function useAgentSessions(
     // Reset state completely
     setCards(null);
     setFacts(null);
-    setIsLoading(true);
     setError(null);
     
+    // Check if we should connect before attempting
+    if (shouldConnect && !shouldConnect()) {
+      console.log('[useAgentSessions] Reconnect skipped - shouldConnect returned false');
+      setIsLoading(false);
+      return;
+    }
+    
+    setIsLoading(true);
+    
     // Force a complete reconnection after a brief delay
-    setTimeout(() => {
+    reconnectTimeoutRef.current = setTimeout(() => {
       console.log('[useAgentSessions] Reconnecting...');
       connect();
     }, 200);
-  }, [connect]);
+  }, [connect, shouldConnect]);
 
   useEffect(() => {
     // Only connect if shouldConnect allows it (or if shouldConnect is not provided)
     if (!shouldConnect || shouldConnect()) {
       connect();
     } else {
-      // If we shouldn't connect, close any existing connection and set loading to false
+      // If we shouldn't connect, close any existing connection and clear SSE state
+      // The component should use initialSessions or polling instead
       if (eventSourceRef.current) {
         console.log('[useAgentSessions] Closing connection - shouldConnect returned false');
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
+      // Clear SSE state when connection closes (sessions are paused/inactive)
+      // Component will use initialSessions or polling for status
+      setCards(null);
+      setFacts(null);
       setIsLoading(false);
     }
 

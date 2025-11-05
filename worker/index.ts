@@ -4,6 +4,8 @@ import OpenAI from 'openai';
 import { Orchestrator, OrchestratorConfig } from './orchestrator';
 import { generateContextBlueprint } from './blueprint-generator';
 import { executeContextGeneration, regenerateResearchStage, regenerateGlossaryStage, regenerateChunksStage } from './context-generation-orchestrator';
+import http from 'http';
+import { URL } from 'url';
 
 /** ---------- env ---------- **/
 function need(name: string) {
@@ -323,12 +325,14 @@ async function tickPauseResume() {
   }
 }
 
-/** ---------- start generated sessions loop (polling for generated sessions that need activation) ---------- **/
-// This handles the new testing workflow: when sessions are created with 'generated' status,
-// and then the start API is called, sessions are updated to 'starting' and this loop activates them
+/** ---------- start generated sessions loop (polling for generated/paused sessions that need activation) ---------- **/
+// This handles:
+// 1. Testing workflow: when sessions are created with 'generated' status, and then the start API is called
+// 2. Resume workflow: when sessions are paused and then the start API is called to resume them
+// Sessions are updated to 'starting' and this loop activates/resumes them
 async function tickStartGeneratedSessions() {
-  // Find sessions with 'starting' status that need to be activated
-  // These are sessions that were generated and then the start API was called
+  // Find sessions with 'starting' status that need to be activated or resumed
+  // These are sessions that were 'generated' or 'paused' and then the start API was called
   const { data: startingSessions, error: sessionsError } = await supabase
     .from('agent_sessions')
     .select('event_id, agent_id')
@@ -389,6 +393,131 @@ async function tickStartGeneratedSessions() {
   }
 }
 
+/** ---------- HTTP server for direct worker queries ---------- **/
+function createWorkerServer() {
+  const WORKER_PORT = parseInt(process.env.WORKER_PORT || '3001', 10);
+  
+  const server = http.createServer(async (req, res) => {
+    // CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Content-Type', 'application/json');
+
+    // Handle OPTIONS
+    if (req.method === 'OPTIONS') {
+      res.writeHead(200);
+      res.end();
+      return;
+    }
+
+    try {
+      const url = new URL(req.url || '/', `http://${req.headers.host}`);
+      const pathname = url.pathname;
+
+      // Health check endpoint
+      if (pathname === '/health' && req.method === 'GET') {
+        res.writeHead(200);
+        res.end(JSON.stringify({ ok: true, status: 'healthy' }));
+        return;
+      }
+
+      // WebSocket state endpoint: GET /websocket-state?event_id=<eventId>
+      if (pathname === '/websocket-state' && req.method === 'GET') {
+        const eventId = url.searchParams.get('event_id');
+        
+        if (!eventId) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ ok: false, error: 'Missing event_id parameter' }));
+          return;
+        }
+
+        // Get runtime from orchestrator
+        const runtime = orchestrator.getRuntime(eventId);
+        
+        if (!runtime) {
+          res.writeHead(200);
+          res.end(JSON.stringify({
+            ok: true,
+            event_id: eventId,
+            runtime_exists: false,
+            sessions: [],
+          }));
+          return;
+        }
+
+        // Get WebSocket state from both sessions
+        const sessions = [];
+        
+        if (runtime.cardsSession) {
+          const cardsStatus = runtime.cardsSession.getStatus();
+          sessions.push({
+            agent_type: 'cards',
+            websocket_state: cardsStatus.websocketState || (cardsStatus.isActive ? 'OPEN' : 'CLOSED'),
+            is_active: cardsStatus.isActive,
+            queue_length: cardsStatus.queueLength,
+            session_id: cardsStatus.sessionId || runtime.cardsSessionId,
+            connection_url: cardsStatus.connectionUrl || 'Not available',
+            connected_at: cardsStatus.connectedAt || null,
+            connection_info: {
+              provider: 'OpenAI Realtime API',
+              endpoint: cardsStatus.connectionUrl ? new URL(cardsStatus.connectionUrl).origin : 'Unknown',
+              path: cardsStatus.connectionUrl ? new URL(cardsStatus.connectionUrl).pathname : 'Unknown',
+            },
+            ping_pong: cardsStatus.pingPong,
+          });
+        }
+
+        if (runtime.factsSession) {
+          const factsStatus = runtime.factsSession.getStatus();
+          sessions.push({
+            agent_type: 'facts',
+            websocket_state: factsStatus.websocketState || (factsStatus.isActive ? 'OPEN' : 'CLOSED'),
+            is_active: factsStatus.isActive,
+            queue_length: factsStatus.queueLength,
+            session_id: factsStatus.sessionId || runtime.factsSessionId,
+            connection_url: factsStatus.connectionUrl || 'Not available',
+            connected_at: factsStatus.connectedAt || null,
+            connection_info: {
+              provider: 'OpenAI Realtime API',
+              endpoint: factsStatus.connectionUrl ? new URL(factsStatus.connectionUrl).origin : 'Unknown',
+              path: factsStatus.connectionUrl ? new URL(factsStatus.connectionUrl).pathname : 'Unknown',
+            },
+            ping_pong: factsStatus.pingPong,
+          });
+        }
+
+        res.writeHead(200);
+        res.end(JSON.stringify({
+          ok: true,
+          event_id: eventId,
+          runtime_exists: true,
+          runtime_status: runtime.status,
+          sessions,
+        }));
+        return;
+      }
+
+      // 404 for unknown routes
+      res.writeHead(404);
+      res.end(JSON.stringify({ ok: false, error: 'Not found' }));
+    } catch (error: any) {
+      log('[worker-server] Error:', error.message);
+      res.writeHead(500);
+      res.end(JSON.stringify({ ok: false, error: error.message || 'Internal server error' }));
+    }
+  });
+
+  server.listen(WORKER_PORT, () => {
+    log(`[worker-server] HTTP server listening on port ${WORKER_PORT}`);
+    log(`[worker-server] Endpoints:`);
+    log(`[worker-server]   GET /health - Health check`);
+    log(`[worker-server]   GET /websocket-state?event_id=<eventId> - Get WebSocket connection state`);
+  });
+
+  return server;
+}
+
 /** ---------- main ---------- **/
 async function main() {
   log('Worker/Orchestrator starting...');
@@ -396,6 +525,9 @@ async function main() {
   try {
     // Initialize orchestrator (subscribes to Realtime, resumes events)
     await orchestrator.initialize();
+    
+    // Start HTTP server for direct worker queries
+    const workerServer = createWorkerServer();
     
     // Start polling loops for blueprint generation, context generation, pause/resume, and run
     // Note: These are fallbacks for agents that need blueprint/execution or events that need to start
@@ -408,24 +540,30 @@ async function main() {
     // tickRun is disabled - manual session management via API
     
     log('Worker/Orchestrator running...');
+    
+    // Graceful shutdown for HTTP server
+    process.on('SIGTERM', async () => {
+      log('[shutdown] SIGTERM received');
+      workerServer.close(() => {
+        log('[worker-server] HTTP server closed');
+      });
+      await orchestrator.shutdown();
+      process.exit(0);
+    });
+
+    process.on('SIGINT', async () => {
+      log('[shutdown] SIGINT received');
+      workerServer.close(() => {
+        log('[worker-server] HTTP server closed');
+      });
+      await orchestrator.shutdown();
+      process.exit(0);
+    });
   } catch (e: any) {
     log('[fatal]', e?.message || e);
     process.exit(1);
   }
 }
-
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  log('[shutdown] SIGTERM received');
-  await orchestrator.shutdown();
-  process.exit(0);
-});
-
-process.on('SIGINT', async () => {
-  log('[shutdown] SIGINT received');
-  await orchestrator.shutdown();
-  process.exit(0);
-});
 
 main().catch(e => {
   log('[fatal]', e?.message || e);

@@ -88,6 +88,11 @@ export function useAuth() {
     // This causes a deadlock bug in supabase-js. Always defer async operations with setTimeout.
     let isFirstAuthStateChange = true;
     let authStateChangeReceived = false;
+    
+    // Log when subscription is created
+    console.log('[useAuth] Setting up onAuthStateChange subscription...');
+    const subscriptionStartTime = Date.now();
+    
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
@@ -96,19 +101,32 @@ export function useAuth() {
       isFirstAuthStateChange = false;
       authStateChangeReceived = true;
       
+      const elapsedFromSubscription = Date.now() - subscriptionStartTime;
+      const elapsedFromEffect = Date.now() - startTime;
+      
+      console.log('[useAuth] Auth state change received:', { 
+        event, 
+        hasSession: !!session,
+        isFirst,
+        elapsedFromSubscription,
+        elapsedFromEffect,
+      });
+      
       // CRITICAL: Keep callback synchronous - defer all async operations
       // Calling async Supabase methods directly here causes a deadlock bug
+      // BUT: For the first event, we need to process it immediately to avoid delay
+      // We'll still defer async operations like getUser() but set state synchronously
       setTimeout(() => {
         const elapsed = Date.now() - startTime;
         
-        console.log('[useAuth] Auth state change:', { 
+        console.log('[useAuth] Processing auth state change:', { 
           event, 
           hasSession: !!session, 
           isFirst,
           elapsed 
         });
         
-        // If we already initialized from getSession(), only handle subsequent changes
+        // If we already initialized, only handle subsequent changes
         if (isInitialized && !isFirst) {
           // Handle subsequent auth changes
           if (event === 'SIGNED_OUT' || !session || !session.user) {
@@ -162,31 +180,57 @@ export function useAuth() {
         }
       }, 0);
     });
-
-    // REMOVED: getSession() call - it was causing deadlocks and hanging
-    // Relying solely on onAuthStateChange + localStorage fallback
     
-    // If we found a localStorage session, use it immediately as a fallback
-    // This helps with React Strict Mode where onAuthStateChange might not fire for all instances
-    // But still wait briefly for onAuthStateChange which is more authoritative
+    // Log subscription setup completion
+    console.log('[useAuth] onAuthStateChange subscription created, waiting for initial event...');
+
+    // According to Supabase docs, onAuthStateChange should fire immediately when subscribed,
+    // but in practice it may not always fire synchronously. We'll use a short timeout to detect
+    // if it's going to fire, and if not, fall back to localStorage which we know has the session.
+    
+    // Also try getSession() with a timeout as a backup - this is safe because:
+    // 1. We only call it if onAuthStateChange hasn't fired yet
+    // 2. We use Promise.race with a timeout to prevent hanging
+    // 3. We only use it if localStorage has a session (indicating we should have one)
+    if (localStorageSession && localStorageSession.user) {
+      // Try getSession() with a 100ms timeout to avoid hanging
+      Promise.race([
+        supabase.auth.getSession(),
+        new Promise<{ data: { session: null }, error: null }>((resolve) => 
+          setTimeout(() => resolve({ data: { session: null }, error: null }), 100)
+        ),
+      ]).then((result) => {
+        // Only use getSession() result if onAuthStateChange hasn't fired yet
+        if (!isInitialized && !authStateChangeReceived) {
+          const { data: { session } } = result;
+          if (session && session.user) {
+            console.log('[useAuth] getSession() returned session (onAuthStateChange backup)');
+            finalizeAuth(session, session.user, 'getSession-backup');
+          }
+        }
+      }).catch((err) => {
+        // Ignore errors - we have other fallbacks
+        console.debug('[useAuth] getSession() backup failed (non-critical):', err);
+      });
+    }
+    
+    // Use a very short timeout to check if onAuthStateChange fires immediately
+    // If it doesn't fire within 50ms, it's likely not going to fire synchronously
+    // In that case, use localStorage as a fallback (we already synced cookies from it)
+    const immediateCheckTimeout = setTimeout(() => {
+      if (!isInitialized && !authStateChangeReceived && localStorageSession && localStorageSession.user) {
+        console.log('[useAuth] onAuthStateChange did not fire immediately, using localStorage fallback');
+        finalizeAuth(localStorageSession, localStorageSession.user, 'localStorage-immediate-fallback');
+      }
+    }, 50); // Short timeout to detect if onAuthStateChange fires synchronously
+    
+    // Longer timeout as final fallback
     const localStorageCheckTimeout = setTimeout(() => {
       if (!isInitialized && !authStateChangeReceived && localStorageSession && localStorageSession.user) {
-        console.log('[useAuth] Using localStorage session (onAuthStateChange did not fire within 200ms)');
+        console.warn('[useAuth] onAuthStateChange did not fire within 500ms, using localStorage fallback');
         finalizeAuth(localStorageSession, localStorageSession.user, 'localStorage-fallback');
       }
-    }, 200);
-    
-    // Also try localStorage immediately if onAuthStateChange seems to be taking too long
-    // This is a race - whichever fires first will initialize, the other will be ignored
-    if (localStorageSession && localStorageSession.user) {
-      // Defer slightly to give onAuthStateChange a chance to fire first
-      setTimeout(() => {
-        if (!isInitialized && !authStateChangeReceived) {
-          console.log('[useAuth] Using localStorage session immediately (onAuthStateChange not yet received)');
-          finalizeAuth(localStorageSession, localStorageSession.user, 'localStorage-immediate');
-        }
-      }, 50);
-    }
+    }, 500);
 
     // Final fallback timeout - if nothing works after 2 seconds, assume no session
     // Reduced from 5s since we have localStorage fallback that fires earlier
@@ -211,6 +255,7 @@ export function useAuth() {
     }, 2000);
 
     return () => {
+      clearTimeout(immediateCheckTimeout);
       clearTimeout(localStorageCheckTimeout);
       clearTimeout(fallbackTimeout);
       subscription.unsubscribe();

@@ -14,12 +14,14 @@ export async function POST(
       auth: { persistSession: false },
     });
 
-    // Get the agent for this event (must be in testing status with generated sessions)
+    // Get the agent for this event (must be in testing or running status)
+    // Testing: for new sessions or testing workflow
+    // Running: for resuming paused sessions
     const { data: agents, error: agentError } = await supabase
       .from('agents')
       .select('id, status')
       .eq('event_id', eventId)
-      .eq('status', 'testing')
+      .in('status', ['testing', 'running'])
       .limit(1);
 
     if (agentError) {
@@ -33,7 +35,7 @@ export async function POST(
       return NextResponse.json(
         {
           ok: false,
-          error: 'No agent found with testing status for this event. Create sessions first.',
+          error: 'No agent found with testing or running status for this event. Create sessions first.',
         },
         { status: 404 }
       );
@@ -41,13 +43,13 @@ export async function POST(
 
     const agentId = agents[0].id;
 
-    // Check for generated sessions
-    const { data: generatedSessions, error: sessionsError } = await supabase
+    // Check for sessions that can be started: 'generated' (new sessions) or 'paused' (resume)
+    const { data: sessionsToStart, error: sessionsError } = await supabase
       .from('agent_sessions')
       .select('id, agent_type, status')
       .eq('event_id', eventId)
       .eq('agent_id', agentId)
-      .eq('status', 'generated');
+      .in('status', ['generated', 'paused']);
 
     if (sessionsError) {
       return NextResponse.json(
@@ -56,23 +58,27 @@ export async function POST(
       );
     }
 
-    if (!generatedSessions || generatedSessions.length === 0) {
+    if (!sessionsToStart || sessionsToStart.length === 0) {
       return NextResponse.json(
         {
           ok: false,
-          error: 'No generated sessions found. Create sessions first.',
+          error: 'No generated or paused sessions found. Create sessions first.',
         },
         { status: 404 }
       );
     }
 
-    // Update sessions from 'generated' to 'starting' so worker can activate them
+    const generatedCount = sessionsToStart.filter(s => s.status === 'generated').length;
+    const pausedCount = sessionsToStart.filter(s => s.status === 'paused').length;
+
+    // Update sessions to 'starting' so worker can activate/resume them
+    // This handles both 'generated' (new sessions) and 'paused' (resuming sessions)
     const { error: updateError } = await supabase
       .from('agent_sessions')
       .update({ status: 'starting' })
       .eq('event_id', eventId)
       .eq('agent_id', agentId)
-      .eq('status', 'generated');
+      .in('status', ['generated', 'paused']);
 
     if (updateError) {
       return NextResponse.json(
@@ -81,15 +87,21 @@ export async function POST(
       );
     }
 
-    // Note: Worker will pick up sessions with 'starting' status and activate them
-    // The worker's startEvent will handle the actual session creation and connection
+    // Note: Worker will pick up sessions with 'starting' status and activate/resume them
+    // The worker's startEvent will handle:
+    // - New sessions: create connections from 'generated' → 'starting' → 'active'
+    // - Paused sessions: resume connections from 'paused' → 'starting' → 'active'
 
     return NextResponse.json({
       ok: true,
-      message: 'Sessions will be started by worker. Status updated to starting.',
+      message: pausedCount > 0 
+        ? `Sessions will be resumed by worker. ${pausedCount} paused session(s) updated to starting.`
+        : `Sessions will be started by worker. ${generatedCount} generated session(s) updated to starting.`,
       eventId,
       agentId,
-      sessionsUpdated: generatedSessions.length,
+      sessionsUpdated: sessionsToStart.length,
+      generatedCount,
+      pausedCount,
     });
   } catch (error: any) {
     console.error('Error starting agent sessions:', error);

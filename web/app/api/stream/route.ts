@@ -212,13 +212,14 @@ export async function GET(req: NextRequest) {
             // pushed by worker via separate mechanism in Step 7
             try {
               // Create a fresh payload object to ensure React detects the change
+              // Use the actual updated_at from the database to ensure React detects status changes
               const statusPayload = {
                 agent_type: session.agent_type,
                 session_id: session.provider_session_id || session.id,
                 status: session.status,
                 metadata: {
                   created_at: session.created_at,
-                  updated_at: session.updated_at || new Date().toISOString(),
+                  updated_at: session.updated_at || session.created_at || new Date().toISOString(),
                   closed_at: session.closed_at,
                   model: session.model || undefined,
                 },

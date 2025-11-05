@@ -246,6 +246,23 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
                         statusData?.blueprint?.status === 'approved' ||
                         statusData?.blueprint?.status === 'completed';
 
+  // Show loading state when statusData is null (initial load)
+  if (statusData === null) {
+    return (
+      <div style={{
+        background: embedded ? 'transparent' : '#ffffff',
+        border: embedded ? 'none' : '1px solid #e2e8f0',
+        borderRadius: embedded ? '0' : '12px',
+        padding: embedded ? '16px' : '24px',
+        marginBottom: embedded ? '0' : '24px',
+        textAlign: 'center',
+        color: '#64748b',
+      }}>
+        Loading context generation status...
+      </div>
+    );
+  }
+
   return (
     <div style={{
       background: embedded ? 'transparent' : '#ffffff',
@@ -364,16 +381,8 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
         </div>
       )}
 
-      {/* Progress component */}
-      {statusData && (statusData.agent?.status === 'blueprint_generating' ||
-                      statusData.agent?.status === 'blueprint_approved' ||
-                      statusData.agent?.status === 'researching' ||
-                      statusData.agent?.status === 'regenerating_research' ||
-                      statusData.agent?.status === 'building_glossary' ||
-                      statusData.agent?.status === 'regenerating_glossary' ||
-                      statusData.agent?.status === 'building_chunks' ||
-                      statusData.agent?.status === 'regenerating_chunks' ||
-                      statusData.agent?.status === 'context_complete') && (
+      {/* Progress component - always show when agent exists */}
+      {statusData && statusData.agent && (
         <div style={{ marginBottom: '20px' }}>
           <ContextGenerationProgress
             status={statusData.agent.status}
@@ -384,7 +393,9 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
       )}
 
       {/* Stage Regeneration Controls - Modular Regeneration */}
-      {(statusData?.agent?.status === 'context_complete' || 
+      {/* Always show when embedded, otherwise show for specific statuses */}
+      {((embedded && statusData?.agent) || 
+       (statusData?.agent?.status === 'context_complete' || 
         statusData?.agent?.status === 'error' ||
         statusData?.agent?.status === 'blueprint_approved' ||
         statusData?.agent?.status === 'researching' ||
@@ -392,7 +403,7 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
         statusData?.agent?.status === 'building_chunks' ||
         statusData?.agent?.status === 'regenerating_research' ||
         statusData?.agent?.status === 'regenerating_glossary' ||
-        statusData?.agent?.status === 'regenerating_chunks') && (
+        statusData?.agent?.status === 'regenerating_chunks')) && (
         <div style={{
           marginBottom: '20px',
           ...(embedded ? {} : {
@@ -711,9 +722,13 @@ function getStatusColor(status: string): string {
       return '#f59e0b'; // amber
     case 'context_complete':
       return '#10b981'; // green
+    case 'testing':
+      return '#f59e0b'; // amber (intermediate state)
     case 'ready':
     case 'running':
       return '#10b981'; // green
+    case 'ended':
+      return '#64748b'; // gray (terminal state)
     case 'error':
       return '#ef4444'; // red
     default:
@@ -745,10 +760,14 @@ function getStatusLabel(status: string): string {
       return 'Regenerating Chunks';
     case 'context_complete':
       return 'Complete';
+    case 'testing':
+      return 'Testing';
     case 'ready':
       return 'Ready';
     case 'running':
       return 'Running';
+    case 'ended':
+      return 'Ended';
     case 'error':
       return 'Error';
     default:

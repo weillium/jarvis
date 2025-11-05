@@ -21,35 +21,12 @@ export async function POST(
       auth: { persistSession: false },
     });
 
-    // Get the agent for this event
-    const { data: agents, error: agentError } = await supabase
-      .from('agents')
-      .select('id, status')
-      .eq('event_id', eventId)
-      .eq('status', 'running')
-      .limit(1);
-
-    if (agentError) {
-      return NextResponse.json(
-        { ok: false, error: `Failed to fetch agent: ${agentError.message}` },
-        { status: 500 }
-      );
-    }
-
-    if (!agents || agents.length === 0) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: 'No running agent found for this event',
-        },
-        { status: 404 }
-      );
-    }
-
-    // Check if sessions are active
+    // Check if sessions are active (this is the primary check)
+    // We check sessions first because they're the actual source of truth
+    // Agent status can be 'testing' when sessions are active, not necessarily 'running'
     const { data: sessions, error: sessionsError } = await supabase
       .from('agent_sessions')
-      .select('id, agent_type, status')
+      .select('id, agent_type, status, agent_id')
       .eq('event_id', eventId)
       .in('status', ['starting', 'active']);
 
@@ -70,14 +47,9 @@ export async function POST(
       );
     }
 
-    // Note: Actual pause happens in the worker via orchestrator.pauseEvent()
-    // This endpoint signals the worker to pause. The worker will handle the actual pause.
-    // For now, we'll update the status directly (worker should handle this via API call)
-    // Actually, we should call the worker or have the worker poll for pause requests
-    // For simplicity, let's update status to paused directly (worker will respect this)
-    
-    // Better approach: Store pause request, worker will check and pause
-    // For MVP, we'll update status directly and worker will handle it on next tick
+    // Update session status to 'paused' - this affects agent_sessions directly, NOT the agent status
+    // The worker will detect the status change and close WebSocket connections on next tick
+    // Agent status remains unchanged (e.g., stays as 'testing' or 'running')
     const { error: updateError } = await supabase
       .from('agent_sessions')
       .update({ status: 'paused' })

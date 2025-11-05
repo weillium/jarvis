@@ -80,14 +80,13 @@ export async function POST(
       }
     }
 
-    // Step 2: Get model from agent for new sessions
-    const { data: agentWithModel } = await supabase
-      .from('agents')
-      .select('model')
-      .eq('id', agentId)
-      .single();
+    // Step 2: Agent sessions MUST use the Realtime API model, not the agent's model
+    // The agent's model is for text generation (e.g., gpt-4o-mini), but sessions need Realtime API
+    // Use environment variable or default to the correct Realtime API model
+    // This matches the worker's REALTIME_MODEL configuration
+    const model = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-10-01';
     
-    const model = agentWithModel?.model || 'gpt-4o-realtime-preview-2024-10-01';
+    console.log(`[api/agent-sessions/confirm-ready] Using Realtime model: ${model} for event ${eventId}`);
 
     // Step 3: Create new sessions with 'generated' status
     const { data: newSessions, error: createError } = await supabase
