@@ -112,7 +112,7 @@ export class RealtimeSession {
       hasOnRetrieve: !!this.onRetrieve,
       hasEmbedText: !!this.embedText,
     });
-    this.onLog?.('log', 'Connection attempt started', { event_id: this.config.eventId });
+    this.onLog?.('log', 'Connection attempt started');
 
     const model = this.config.model || 'gpt-4o-realtime-preview-2024-10-01';
     const policy = getPolicy(this.config.agentType);
@@ -302,7 +302,7 @@ export class RealtimeSession {
               readyState: (this.session as any)?.socket?.readyState,
               eventId: this.config.eventId,
             });
-            this.onLog?.('error', `Session update failed: ${retryError.message}`, { event_id: this.config.eventId });
+            this.onLog?.('error', `Session update failed: ${retryError.message}`);
             // The session might still work, so we continue
           }
         } else {
@@ -363,7 +363,7 @@ export class RealtimeSession {
       };
       
       console.error(`[realtime] [${this.config.agentType}] Connection failed`, errorContext);
-      this.onLog?.('error', `Connection failed: ${error.message}`, { event_id: this.config.eventId });
+      this.onLog?.('error', `Connection failed: ${error.message}`);
 
       // Notify error status
       this.onStatusChange?.('error');
@@ -452,20 +452,6 @@ export class RealtimeSession {
       console.log(`[realtime] ${message}`);
       this.onLog?.('log', message);
     });
-
-    // Phase 5: Event handler registration confirmation
-    console.log(`[realtime] [${this.config.agentType}] Event handlers registered`, {
-      handlersRegistered: [
-        'session.created',
-        'response.function_call_arguments.done',
-        'response.output_text.done',
-        'response.done',
-        'error',
-        'event',
-      ],
-      eventId: this.config.eventId,
-    });
-    this.onLog?.('log', 'Event handlers registered');
 
     // Handle pong responses (WebSocket ping-pong)
     // Note: OpenAI SDK may handle ping/pong at the WebSocket level, but we'll track it
@@ -700,6 +686,20 @@ export class RealtimeSession {
         console.log(`[realtime] ${message}`);
       }
     });
+
+    // Phase 5: Event handler registration confirmation (after all handlers are registered)
+    console.log(`[realtime] [${this.config.agentType}] Event handlers registered`, {
+      handlersRegistered: [
+        'session.created',
+        'response.function_call_arguments.done',
+        'response.output_text.done',
+        'response.done',
+        'error',
+        'event',
+      ],
+      eventId: this.config.eventId,
+    });
+    this.onLog?.('log', 'Event handlers registered');
   }
 
   /**
@@ -726,6 +726,15 @@ export class RealtimeSession {
   async sendMessage(message: string, context?: any): Promise<void> {
     if (!this.isActive || !this.session) {
       throw new Error('Session not connected');
+    }
+
+    // Phase 8: Message queue status logging
+    if (this.messageQueue.length > 0) {
+      console.warn(`[realtime] [${this.config.agentType}] Sending message with queue backlog`, {
+        queueLength: this.messageQueue.length,
+        eventId: this.config.eventId,
+      });
+      this.onLog?.('warn', `Message queue backlog: ${this.messageQueue.length} items`);
     }
 
     // Format message based on agent type
@@ -774,6 +783,12 @@ export class RealtimeSession {
     if (!this.isActive || !this.session) {
       return;
     }
+
+    // Phase 8: Message queue processing logging
+    console.log(`[realtime] [${this.config.agentType}] Processing message queue`, {
+      queueLength: this.messageQueue.length,
+      eventId: this.config.eventId,
+    });
 
     while (this.messageQueue.length > 0) {
       const message = this.messageQueue.shift();
@@ -916,6 +931,26 @@ export class RealtimeSession {
   }
 
   /**
+   * Phase 7: Log WebSocket state transitions for debugging
+   */
+  private logWebSocketState(operation: string, context?: Record<string, any>): void {
+    try {
+      const underlyingSocket = (this.session as any)?.socket || (this.session as any)?.ws;
+      const readyState = underlyingSocket?.readyState;
+      const readyStateNames = ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'];
+      
+      console.log(`[realtime] [${this.config.agentType}] WebSocket state: ${operation}`, {
+        readyState: readyState !== undefined ? `${readyState} (${readyStateNames[readyState]})` : 'unknown',
+        isActive: this.isActive,
+        eventId: this.config.eventId,
+        ...context,
+      });
+    } catch (error) {
+      // Ignore if we can't access state
+    }
+  }
+
+  /**
    * Start ping-pong heartbeat to keep connection alive and detect disconnections
    */
   private startPingPong(): void {
@@ -955,6 +990,21 @@ export class RealtimeSession {
       return;
     }
 
+    // Phase 6: Ping-pong health monitoring
+    this.pingStartTime = Date.now();
+    
+    // Only log every 5th ping to avoid log spam (sample ~20% of pings)
+    const shouldLog = this.missedPongs === 0 && Math.random() < 0.2;
+    if (shouldLog) {
+      console.log(`[realtime] [${this.config.agentType}] Sending ping`, {
+        missedPongs: this.missedPongs,
+        lastPongReceived: this.lastPongReceived?.toISOString(),
+        eventId: this.config.eventId,
+        timestamp: new Date().toISOString(),
+      });
+      this.onLog?.('log', `Ping sent (health check)`);
+    }
+
     try {
       // Get underlying WebSocket to send ping frame
       const underlyingSocket = (this.session as any).socket || (this.session as any).ws;
@@ -975,7 +1025,11 @@ export class RealtimeSession {
           return;
         }
         // Socket not available or not open - connection may be dead
-        console.warn(`[realtime] Cannot send ping - socket not available (${this.config.agentType})`);
+        console.warn(`[realtime] [${this.config.agentType}] Cannot send ping - socket not available`, {
+          readyState: underlyingSocket?.readyState,
+          hasSocket: !!underlyingSocket,
+          eventId: this.config.eventId,
+        });
         this.handlePongTimeout();
       }
     } catch (error: any) {
@@ -999,10 +1053,20 @@ export class RealtimeSession {
       this.pongTimeout = undefined;
     }
     
+    // Phase 6: Ping-pong health monitoring - calculate latency
+    const pongLatency = this.pingStartTime ? Date.now() - this.pingStartTime : undefined;
     this.lastPongReceived = new Date();
     this.missedPongs = 0; // Reset missed pongs counter
     
-    // Connection is healthy
+    // Log pong reception (sample ~20% to avoid log spam)
+    if (pongLatency !== undefined && Math.random() < 0.2) {
+      console.log(`[realtime] [${this.config.agentType}] Pong received`, {
+        latency: `${pongLatency}ms`,
+        missedPongsReset: true,
+        eventId: this.config.eventId,
+      });
+      this.onLog?.('log', `Pong received (latency: ${pongLatency}ms)`);
+    }
   }
 
   /**
@@ -1047,6 +1111,9 @@ export class RealtimeSession {
     try {
       // Stop ping-pong heartbeat
       this.stopPingPong();
+
+      // Log WebSocket state before pausing
+      this.logWebSocketState('Before pausing');
 
       // Close WebSocket
       if (this.session) {
@@ -1097,6 +1164,9 @@ export class RealtimeSession {
     }
 
     try {
+      // Log WebSocket state before closing
+      this.logWebSocketState('Before closing');
+
       // Close WebSocket if it exists
       if (this.session) {
         this.session.close({
