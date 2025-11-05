@@ -2,7 +2,6 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type OpenAI from 'openai';
 import { RuntimeManager } from './runtime-manager';
 import { EventProcessor } from './event-processor';
-import { SessionFactory } from '../sessions/session-factory';
 import { SessionManager } from '../sessions/session-manager';
 import { SupabaseService } from '../services/supabase-service';
 import { OpenAIService } from '../services/openai-service';
@@ -12,11 +11,7 @@ import { MetricsCollector } from '../monitoring/metrics-collector';
 import { StatusUpdater } from '../monitoring/status-updater';
 import { CheckpointManager } from '../monitoring/checkpoint-manager';
 import { GlossaryManager } from '../context/glossary-manager';
-import { ContextBuilder } from '../context/context-builder';
 import { VectorSearchService } from '../context/vector-search';
-import { CardsProcessor } from '../processing/cards-processor';
-import { FactsProcessor } from '../processing/facts-processor';
-import { TranscriptProcessor } from '../processing/transcript-processor';
 import type { AgentSessionStatus, AgentType, EventRuntime } from '../types';
 
 export interface OrchestratorConfig {
@@ -35,81 +30,43 @@ export class Orchestrator {
   private readonly config: OrchestratorConfig;
   private readonly supabaseService: SupabaseService;
   private readonly openaiService: OpenAIService;
-  private readonly sseService: SSEService;
   private readonly logger: Logger;
   private readonly metrics: MetricsCollector;
   private readonly checkpointManager: CheckpointManager;
   private readonly glossaryManager: GlossaryManager;
-  private readonly contextBuilder: ContextBuilder;
   private readonly vectorSearch: VectorSearchService;
-  private readonly sessionFactory: SessionFactory;
   private readonly sessionManager: SessionManager;
-  private readonly cardsProcessor: CardsProcessor;
-  private readonly factsProcessor: FactsProcessor;
-  private readonly transcriptProcessor: TranscriptProcessor;
   private readonly runtimeManager: RuntimeManager;
   private readonly eventProcessor: EventProcessor;
   private readonly statusUpdater: StatusUpdater;
   private realtimeSubscription?: { unsubscribe: () => Promise<void> };
 
-  constructor(config: OrchestratorConfig) {
+  constructor(
+    config: OrchestratorConfig,
+    supabaseService: SupabaseService,
+    openaiService: OpenAIService,
+    logger: Logger,
+    metrics: MetricsCollector,
+    checkpointManager: CheckpointManager,
+    glossaryManager: GlossaryManager,
+    vectorSearch: VectorSearchService,
+    sessionManager: SessionManager,
+    runtimeManager: RuntimeManager,
+    eventProcessor: EventProcessor,
+    statusUpdater: StatusUpdater
+  ) {
     this.config = config;
-    this.supabaseService = config.supabaseService ?? new SupabaseService(config.supabase);
-    this.openaiService =
-      config.openaiService ?? new OpenAIService(config.openai, config.embedModel, config.genModel);
-    this.sseService = config.sseService ?? new SSEService(config.sseEndpoint);
-    this.logger = new Logger();
-    this.metrics = new MetricsCollector();
-    this.checkpointManager = new CheckpointManager(this.supabaseService);
-    this.glossaryManager = new GlossaryManager(this.supabaseService);
-    this.contextBuilder = new ContextBuilder(this.glossaryManager);
-    this.vectorSearch = new VectorSearchService(this.supabaseService, this.openaiService);
-    this.sessionFactory = new SessionFactory(
-      this.openaiService.getClient(),
-      this.openaiService,
-      this.vectorSearch,
-      this.config.realtimeModel
-    );
-    this.sessionManager = new SessionManager(this.sessionFactory, this.supabaseService, this.logger);
-    this.cardsProcessor = new CardsProcessor(
-      this.contextBuilder,
-      this.supabaseService,
-      this.openaiService,
-      this.logger,
-      this.metrics,
-      this.checkpointManager,
-      (card, transcriptText) => this.determineCardType(card, transcriptText)
-    );
-    this.factsProcessor = new FactsProcessor(
-      this.contextBuilder,
-      this.supabaseService,
-      this.openaiService,
-      this.logger,
-      this.metrics,
-      this.checkpointManager
-    );
-    this.transcriptProcessor = new TranscriptProcessor(this.supabaseService);
-    this.runtimeManager = new RuntimeManager(
-      this.supabaseService,
-      this.glossaryManager,
-      this.checkpointManager,
-      this.metrics,
-      this.logger
-    );
-    this.eventProcessor = new EventProcessor(
-      this.cardsProcessor,
-      this.factsProcessor,
-      this.transcriptProcessor,
-      this.supabaseService,
-      (card, transcriptText) => this.determineCardType(card, transcriptText)
-    );
-    this.statusUpdater = new StatusUpdater(
-      this.supabaseService,
-      this.sseService,
-      this.logger,
-      this.metrics,
-      this.config.realtimeModel
-    );
+    this.supabaseService = supabaseService;
+    this.openaiService = openaiService;
+    this.logger = logger;
+    this.metrics = metrics;
+    this.checkpointManager = checkpointManager;
+    this.glossaryManager = glossaryManager;
+    this.vectorSearch = vectorSearch;
+    this.sessionManager = sessionManager;
+    this.runtimeManager = runtimeManager;
+    this.eventProcessor = eventProcessor;
+    this.statusUpdater = statusUpdater;
   }
 
   async initialize(): Promise<void> {
@@ -589,54 +546,4 @@ export class Orchestrator {
     console.log(`[context] ========================================\n`);
   }
 
-  private determineCardType(card: any, transcriptText: string): 'text' | 'text_visual' | 'visual' {
-    if (card.image_url) {
-      return card.body ? 'text_visual' : 'visual';
-    }
-
-    const lowerText = transcriptText.toLowerCase();
-    const visualKeywords = [
-      'photo',
-      'image',
-      'picture',
-      'diagram',
-      'chart',
-      'graph',
-      'map',
-      'illustration',
-      'visual',
-      'showing',
-      'depicts',
-      'looks like',
-      'appearance',
-      'shape',
-      'structure',
-      'location',
-      'geography',
-    ];
-    const hasVisualKeyword = visualKeywords.some((keyword) => lowerText.includes(keyword));
-
-    const definitionKeywords = [
-      'is',
-      'are',
-      'means',
-      'refers to',
-      'definition',
-      'explain',
-      'describe',
-      'what is',
-      'who is',
-      'where is',
-      'what are',
-    ];
-    const isDefinition = definitionKeywords.some((keyword) => lowerText.includes(keyword));
-
-    if (isDefinition && hasVisualKeyword) {
-      return 'text_visual';
-    }
-    if (hasVisualKeyword && !card.body) {
-      return 'visual';
-    }
-    return 'text';
-  }
 }

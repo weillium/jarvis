@@ -1,14 +1,29 @@
 import 'dotenv/config';
-import { createClient } from '@supabase/supabase-js';
-import OpenAI from 'openai';
+import http from 'http';
+import { URL } from 'url';
 import { Orchestrator, OrchestratorConfig } from './core/orchestrator';
+import { SupabaseService } from './services/supabase-service';
+import { OpenAIService } from './services/openai-service';
+import { SSEService } from './services/sse-service';
+import { Logger } from './monitoring/logger';
+import { MetricsCollector } from './monitoring/metrics-collector';
+import { StatusUpdater } from './monitoring/status-updater';
+import { CheckpointManager } from './monitoring/checkpoint-manager';
+import { GlossaryManager } from './context/glossary-manager';
+import { VectorSearchService } from './context/vector-search';
+import { ContextBuilder } from './context/context-builder';
+import { CardsProcessor } from './processing/cards-processor';
+import { FactsProcessor } from './processing/facts-processor';
+import { TranscriptProcessor } from './processing/transcript-processor';
+import { SessionFactory } from './sessions/session-factory';
+import { SessionManager } from './sessions/session-manager';
+import { RuntimeManager } from './core/runtime-manager';
+import { EventProcessor } from './core/event-processor';
 import { BlueprintPoller } from './polling/blueprint-poller';
 import { ContextPoller } from './polling/context-poller';
 import { RegenerationPoller } from './polling/regeneration-poller';
 import { PauseResumePoller } from './polling/pause-resume-poller';
 import { SessionStartupPoller } from './polling/session-startup-poller';
-import http from 'http';
-import { URL } from 'url';
 
 /** ---------- env ---------- **/
 function need(name: string) {
@@ -27,15 +42,137 @@ const EXA_API_KEY   = process.env.EXA_API_KEY; // Optional - fallback to stub if
 const SSE_ENDPOINT_RAW = process.env.SSE_ENDPOINT || 'http://localhost:3000';
 const SSE_ENDPOINT = SSE_ENDPOINT_RAW.trim().replace(/[`'"]/g, ''); // Base URL for SSE push endpoint
 
-const supabase = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
-const openai   = new OpenAI({ apiKey: OPENAI_KEY });
+/** ---------- services ---------- **/
+const supabaseService = new SupabaseService(SUPABASE_URL, SERVICE_ROLE);
+const supabaseClient = supabaseService.getClient();
+const openaiService = new OpenAIService(OPENAI_KEY, EMBED_MODEL, GEN_MODEL);
+const openai = openaiService.getClient();
+const sseService = new SSEService(SSE_ENDPOINT);
 
 /** ---------- helpers ---------- **/
 function log(...a: any[]) { console.log(new Date().toISOString(), ...a); }
 
-/** ---------- orchestrator ---------- **/
+/** ---------- monitoring ---------- **/
+const logger = new Logger();
+const metricsCollector = new MetricsCollector();
+const checkpointManager = new CheckpointManager(supabaseService);
+const statusUpdater = new StatusUpdater(
+  supabaseService,
+  sseService,
+  logger,
+  metricsCollector,
+  REALTIME_MODEL
+);
+
+/** ---------- context ---------- **/
+const glossaryManager = new GlossaryManager(supabaseService);
+const vectorSearchService = new VectorSearchService(supabaseService, openaiService);
+const contextBuilder = new ContextBuilder(glossaryManager);
+
+/** ---------- processing ---------- **/
+const determineCardType = (
+  card: any,
+  transcriptText: string
+): 'text' | 'text_visual' | 'visual' => {
+  if (card.image_url) {
+    return card.body ? 'text_visual' : 'visual';
+  }
+
+  const lowerText = transcriptText.toLowerCase();
+  const visualKeywords = [
+    'photo',
+    'image',
+    'picture',
+    'diagram',
+    'chart',
+    'graph',
+    'map',
+    'illustration',
+    'visual',
+    'showing',
+    'depicts',
+    'looks like',
+    'appearance',
+    'shape',
+    'structure',
+    'location',
+    'geography',
+  ];
+  const hasVisualKeyword = visualKeywords.some((keyword) => lowerText.includes(keyword));
+
+  const definitionKeywords = [
+    'is',
+    'are',
+    'means',
+    'refers to',
+    'definition',
+    'explain',
+    'describe',
+    'what is',
+    'who is',
+    'where is',
+    'what are',
+  ];
+  const isDefinition = definitionKeywords.some((keyword) => lowerText.includes(keyword));
+
+  if (isDefinition && hasVisualKeyword) {
+    return 'text_visual';
+  }
+  if (hasVisualKeyword && !card.body) {
+    return 'visual';
+  }
+  return 'text';
+};
+
+const cardsProcessor = new CardsProcessor(
+  contextBuilder,
+  supabaseService,
+  openaiService,
+  logger,
+  metricsCollector,
+  checkpointManager,
+  determineCardType
+);
+
+const factsProcessor = new FactsProcessor(
+  contextBuilder,
+  supabaseService,
+  openaiService,
+  logger,
+  metricsCollector,
+  checkpointManager
+);
+
+const transcriptProcessor = new TranscriptProcessor(supabaseService);
+
+/** ---------- sessions ---------- **/
+const sessionFactory = new SessionFactory(
+  openai,
+  openaiService,
+  vectorSearchService,
+  REALTIME_MODEL
+);
+const sessionManager = new SessionManager(sessionFactory, supabaseService, logger);
+
+/** ---------- core ---------- **/
+const runtimeManager = new RuntimeManager(
+  supabaseService,
+  glossaryManager,
+  checkpointManager,
+  metricsCollector,
+  logger
+);
+
+const eventProcessor = new EventProcessor(
+  cardsProcessor,
+  factsProcessor,
+  transcriptProcessor,
+  supabaseService,
+  determineCardType
+);
+
 const orchestratorConfig: OrchestratorConfig = {
-  supabase: supabase as any as ReturnType<typeof createClient>,
+  supabase: supabaseClient,
   openai,
   embedModel: EMBED_MODEL,
   genModel: GEN_MODEL,
@@ -43,14 +180,27 @@ const orchestratorConfig: OrchestratorConfig = {
   sseEndpoint: SSE_ENDPOINT,
 };
 
-const orchestrator = new Orchestrator(orchestratorConfig);
+const orchestrator = new Orchestrator(
+  orchestratorConfig,
+  supabaseService,
+  openaiService,
+  logger,
+  metricsCollector,
+  checkpointManager,
+  glossaryManager,
+  vectorSearchService,
+  sessionManager,
+  runtimeManager,
+  eventProcessor,
+  statusUpdater
+);
 
 // Track agents currently being processed to prevent duplicate processing across pollers
 const processingAgents = new Set<string>();
 
 /** ---------- poller instances ---------- **/
 const blueprintPoller = new BlueprintPoller(
-  supabase,
+  supabaseClient,
   openai,
   GEN_MODEL,
   processingAgents,
@@ -58,7 +208,7 @@ const blueprintPoller = new BlueprintPoller(
 );
 
 const contextPoller = new ContextPoller(
-  supabase,
+  supabaseClient,
   openai,
   EMBED_MODEL,
   GEN_MODEL,
@@ -68,7 +218,7 @@ const contextPoller = new ContextPoller(
 );
 
 const regenerationPoller = new RegenerationPoller(
-  supabase,
+  supabaseClient,
   openai,
   EMBED_MODEL,
   GEN_MODEL,
@@ -77,8 +227,8 @@ const regenerationPoller = new RegenerationPoller(
   log
 );
 
-const pauseResumePoller = new PauseResumePoller(supabase, orchestrator, log);
-const sessionStartupPoller = new SessionStartupPoller(supabase, orchestrator, log);
+const pauseResumePoller = new PauseResumePoller(supabaseClient, orchestrator, log);
+const sessionStartupPoller = new SessionStartupPoller(supabaseClient, orchestrator, log);
 
 /** ---------- HTTP server for direct worker queries ---------- **/
 function createWorkerServer() {
