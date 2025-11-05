@@ -6,10 +6,13 @@
 import { RingBuffer } from './ring-buffer';
 import { FactsStore } from './facts-store';
 import { RealtimeSession, AgentType } from './realtime-session';
-import type { RealtimeSessionStatus } from './realtime-session';
 import { SupabaseService } from './services/supabase-service';
 import { OpenAIService } from './services/openai-service';
 import { SSEService } from './services/sse-service';
+import { Logger } from './monitoring/logger';
+import { MetricsCollector } from './monitoring/metrics-collector';
+import { StatusUpdater } from './monitoring/status-updater';
+import { CheckpointManager } from './monitoring/checkpoint-manager';
 import { getPolicy } from './policies';
 import {
   createCardGenerationUserPrompt,
@@ -20,11 +23,9 @@ import type {
   AgentSessionStatus,
   EventRuntime,
   GlossaryEntry,
-  LogEntry,
   OrchestratorConfig,
   TranscriptChunk,
   Fact,
-  SessionStatus,
 } from './types';
 export type { OrchestratorConfig } from './types';
 
@@ -35,12 +36,26 @@ export class Orchestrator {
   private supabaseService: SupabaseService;
   private openaiService: OpenAIService;
   private sseService: SSEService;
+  private logger: Logger;
+  private metrics: MetricsCollector;
+  private statusUpdater: StatusUpdater;
+  private checkpointManager: CheckpointManager;
 
   constructor(config: OrchestratorConfig) {
     this.config = config;
     this.supabaseService = config.supabaseService ?? new SupabaseService(config.supabase);
     this.openaiService = config.openaiService ?? new OpenAIService(config.openai, config.embedModel, config.genModel);
     this.sseService = config.sseService ?? new SSEService(config.sseEndpoint);
+    this.logger = new Logger();
+    this.metrics = new MetricsCollector();
+    this.statusUpdater = new StatusUpdater(
+      this.supabaseService,
+      this.sseService,
+      this.logger,
+      this.metrics,
+      this.config.realtimeModel
+    );
+    this.checkpointManager = new CheckpointManager(this.supabaseService);
   }
 
   /**
@@ -58,247 +73,6 @@ export class Orchestrator {
 
     // Resume existing events (read checkpoints and rebuild state)
     await this.resumeExistingEvents();
-  }
-
-  /**
-   * Capture log entry for an agent session
-   */
-  private captureLog(
-    runtime: EventRuntime,
-    agentType: 'cards' | 'facts',
-    level: 'log' | 'warn' | 'error',
-    message: string,
-    context?: { seq?: number; event_id?: string }
-  ): void {
-    if (!runtime.logBuffers) {
-      runtime.logBuffers = {
-        cards: [],
-        facts: [],
-      };
-    }
-
-    const buffer = runtime.logBuffers[agentType];
-    const entry: LogEntry = {
-      level,
-      message,
-      timestamp: new Date().toISOString(),
-      context: {
-        ...context,
-        agent_type: agentType,
-        event_id: runtime.eventId,
-      },
-    };
-
-    buffer.push(entry);
-    
-    // Keep last 100 entries per agent
-    if (buffer.length > 100) {
-      buffer.shift();
-    }
-
-    // Also output to console for immediate visibility
-    if (level === 'error') {
-      console.error(`[${agentType}] ${message}`);
-    } else if (level === 'warn') {
-      console.warn(`[${agentType}] ${message}`);
-    } else {
-      console.log(`[${agentType}] ${message}`);
-    }
-  }
-
-  /**
-   * Get comprehensive session status data for an agent
-   */
-  private getSessionStatusData(
-    runtime: EventRuntime,
-    agentType: 'cards' | 'facts'
-  ): AgentSessionStatus {
-    const session = agentType === 'cards' 
-      ? runtime.cardsSession 
-      : runtime.factsSession;
-    const sessionId = agentType === 'cards'
-      ? runtime.cardsSessionId
-      : runtime.factsSessionId;
-    
-    const metrics = runtime.contextMetrics?.[agentType] || {
-      total: 0,
-      count: 0,
-      max: 0,
-      warnings: 0,
-      criticals: 0,
-    };
-
-    // Get session status from session state
-    let status: 'starting' | 'active' | 'closed' | 'error' = 'starting';
-    let websocketState: RealtimeSessionStatus['websocketState'];
-    let pingPong: RealtimeSessionStatus['pingPong'];
-    if (session) {
-      const sessionStatus = session.getStatus();
-      websocketState = sessionStatus.websocketState;
-      pingPong = sessionStatus.pingPong;
-      if (sessionStatus.isActive) {
-        status = 'active';
-      } else if (sessionId) {
-        // Session exists but not active - could be closed or error
-        // We'll check database in updateSessionStatus for accurate status
-        status = 'closed';
-      }
-    }
-
-    // Extract last request info from most recent log entry
-    const logs = runtime.logBuffers?.[agentType] || [];
-    const lastRequestLog = logs
-      .filter(log => log.message.includes('tokens'))
-      .slice(-1)[0];
-    
-    let lastRequest: {
-      tokens: number;
-      percentage: number;
-      breakdown: Record<string, number>;
-      timestamp: string;
-    } | undefined;
-
-    if (lastRequestLog) {
-      // Try to extract token info from log message
-      // Format: "[context] Cards Agent (seq X): Y/2048 tokens (Z%) - breakdown"
-      const tokenMatch = lastRequestLog.message.match(/(\d+)\/2048 tokens \((\d+(?:\.\d+)?)%\)/);
-      if (tokenMatch) {
-        const tokens = parseInt(tokenMatch[1], 10);
-        const percentage = parseFloat(tokenMatch[2]);
-        
-        // Extract breakdown if available
-        const breakdown: Record<string, number> = {};
-        const breakdownMatch = lastRequestLog.message.match(/breakdown:\s*(.+)/);
-        if (breakdownMatch) {
-          // Simple parsing - could be enhanced
-          breakdownMatch[1].split(',').forEach(part => {
-            const kv = part.trim().split(':');
-            if (kv.length === 2) {
-              breakdown[kv[0].trim()] = parseFloat(kv[1].trim());
-            }
-          });
-        }
-
-        lastRequest = {
-          tokens,
-          percentage,
-          breakdown,
-          timestamp: lastRequestLog.timestamp,
-        };
-      }
-    }
-
-    return {
-      agent_type: agentType,
-      session_id: sessionId || 'pending',
-      status,
-      websocket_state: websocketState, // Actual WebSocket readyState
-      ping_pong: pingPong, // Ping-pong health status
-      runtime: {
-        event_id: runtime.eventId,
-        agent_id: runtime.agentId,
-        runtime_status: runtime.status,
-        cards_last_seq: runtime.cardsLastSeq,
-        facts_last_seq: runtime.factsLastSeq,
-        facts_last_update: new Date(runtime.factsLastUpdate).toISOString(),
-        ring_buffer_stats: runtime.ringBuffer.getStats(),
-        facts_store_stats: runtime.factsStore.getStats(),
-      },
-      token_metrics: {
-        total_tokens: metrics.total,
-        request_count: metrics.count,
-        max_tokens: metrics.max,
-        avg_tokens: metrics.count > 0 ? Math.round(metrics.total / metrics.count) : 0,
-        warnings: metrics.warnings,
-        criticals: metrics.criticals,
-        last_request: lastRequest,
-      },
-      recent_logs: logs.slice(-50), // Last 50 entries
-      metadata: {
-        created_at: runtime.createdAt.toISOString(),
-        updated_at: runtime.updatedAt.toISOString(),
-        closed_at: null, // Will be populated from agent_sessions
-        model: this.config.realtimeModel,
-      },
-    };
-  }
-
-  /**
-   * Update session status in database and prepare for SSE streaming
-   */
-  private async updateSessionStatus(runtime: EventRuntime): Promise<void> {
-    // Get current session records from database
-    const sessions = await this.supabaseService.getAgentSessionsByEvent(runtime.eventId);
-
-    if (sessions.length === 0) {
-      return;
-    }
-
-    // Aggregate status for each agent
-    const cardsStatus = this.getSessionStatusData(runtime, 'cards');
-    const factsStatus = this.getSessionStatusData(runtime, 'facts');
-
-    // Merge with database session info
-    const cardsSession = sessions.find(s => s.agent_type === 'cards');
-    const factsSession = sessions.find(s => s.agent_type === 'facts');
-
-    if (cardsSession) {
-      if (cardsSession.status) {
-        cardsStatus.status = cardsSession.status as SessionStatus;
-      }
-      if (cardsSession.provider_session_id) {
-        cardsStatus.session_id = cardsSession.provider_session_id;
-      }
-      if (cardsSession.created_at) {
-        cardsStatus.metadata.created_at = cardsSession.created_at;
-      }
-      if (cardsSession.updated_at) {
-        cardsStatus.metadata.updated_at = cardsSession.updated_at;
-      }
-      if (cardsSession.closed_at !== undefined) {
-        cardsStatus.metadata.closed_at = cardsSession.closed_at ?? null;
-      }
-    }
-
-    if (factsSession) {
-      if (factsSession.status) {
-        factsStatus.status = factsSession.status as SessionStatus;
-      }
-      if (factsSession.provider_session_id) {
-        factsStatus.session_id = factsSession.provider_session_id;
-      }
-      if (factsSession.created_at) {
-        factsStatus.metadata.created_at = factsSession.created_at;
-      }
-      if (factsSession.updated_at) {
-        factsStatus.metadata.updated_at = factsSession.updated_at;
-      }
-      if (factsSession.closed_at !== undefined) {
-        factsStatus.metadata.closed_at = factsSession.closed_at ?? null;
-      }
-    }
-
-    // Update runtime metadata
-    runtime.updatedAt = new Date();
-
-    // Push comprehensive status updates to SSE stream (Step 7)
-    await this.pushSessionStatus(runtime, cardsStatus, factsStatus);
-  }
-
-  /**
-   * Push session status updates to SSE stream
-   */
-  private async pushSessionStatus(
-    runtime: EventRuntime,
-    cardsStatus: AgentSessionStatus,
-    factsStatus: AgentSessionStatus
-  ): Promise<void> {
-    if (!this.config.sseEndpoint) {
-      return;
-    }
-
-    await this.sseService.pushSessionStatus(runtime.eventId, cardsStatus);
-    await this.sseService.pushSessionStatus(runtime.eventId, factsStatus);
   }
 
   /**
@@ -320,9 +94,10 @@ export class Orchestrator {
       return { cards: null, facts: null };
     }
 
+    const statuses = this.statusUpdater.getRuntimeStatusSnapshot(runtime);
     return {
-      cards: this.getSessionStatusData(runtime, 'cards'),
-      facts: this.getSessionStatusData(runtime, 'facts'),
+      cards: statuses.cards,
+      facts: statuses.facts,
     };
   }
 
@@ -404,7 +179,7 @@ export class Orchestrator {
     chunk: TranscriptChunk
   ): Promise<void> {
     if (!runtime.cardsSession || !runtime.cardsSessionId) {
-      this.captureLog(runtime, 'cards', 'warn', `No session for event ${runtime.eventId}`);
+      this.logger.log(runtime.eventId, 'cards', 'warn', `No session for event ${runtime.eventId}`);
       return;
     }
 
@@ -451,21 +226,15 @@ export class Orchestrator {
       
       const logMessage = `${logPrefix} Cards Agent (seq ${chunk.seq}): ${tokenBreakdown.total}/2048 tokens (${budgetStatus.percentage}%) - ${breakdownStr}`;
       
-      this.captureLog(runtime, 'cards', logLevel, logMessage, { seq: chunk.seq });
+      this.logger.log(runtime.eventId, 'cards', logLevel, logMessage, { seq: chunk.seq });
       
-      // Track metrics for periodic summary
-      if (!runtime.contextMetrics) {
-        runtime.contextMetrics = {
-          cards: { total: 0, count: 0, max: 0, warnings: 0, criticals: 0 },
-          facts: { total: 0, count: 0, max: 0, warnings: 0, criticals: 0 },
-        };
-      }
-      
-      runtime.contextMetrics.cards.total += tokenBreakdown.total;
-      runtime.contextMetrics.cards.count++;
-      runtime.contextMetrics.cards.max = Math.max(runtime.contextMetrics.cards.max, tokenBreakdown.total);
-      if (budgetStatus.warning) runtime.contextMetrics.cards.warnings++;
-      if (budgetStatus.critical) runtime.contextMetrics.cards.criticals++;
+      this.metrics.recordTokens(
+        runtime.eventId,
+        'cards',
+        tokenBreakdown.total,
+        budgetStatus.warning,
+        budgetStatus.critical
+      );
 
       // Send to Realtime session
       await runtime.cardsSession.sendMessage(chunk.text, {
@@ -485,7 +254,7 @@ export class Orchestrator {
       // Update checkpoint
       await this.persistCheckpoint(runtime.eventId, 'cards', runtime.cardsLastSeq);
     } catch (error: any) {
-      this.captureLog(runtime, 'cards', 'error', `Error processing chunk: ${error.message}`, { seq: chunk.seq });
+      this.logger.log(runtime.eventId, 'cards', 'error', `Error processing chunk: ${error.message}`, { seq: chunk.seq });
     }
   }
 
@@ -559,9 +328,9 @@ export class Orchestrator {
         payload: card,
       });
 
-      this.captureLog(runtime, 'cards', 'log', `Generated card for seq ${chunk.seq} (event: ${runtime.eventId}, type: ${card.card_type})`, { seq: chunk.seq });
+      this.logger.log(runtime.eventId, 'cards', 'log', `Generated card for seq ${chunk.seq} (event: ${runtime.eventId}, type: ${card.card_type})`, { seq: chunk.seq });
     } catch (error: any) {
-      this.captureLog(runtime, 'cards', 'error', `Error generating card: ${error.message}`, { seq: chunk.seq });
+      this.logger.log(runtime.eventId, 'cards', 'error', `Error generating card: ${error.message}`, { seq: chunk.seq });
     }
   }
 
@@ -626,7 +395,7 @@ export class Orchestrator {
    */
   private async processFactsAgent(runtime: EventRuntime): Promise<void> {
     if (!runtime.factsSession || !runtime.factsSessionId) {
-      this.captureLog(runtime, 'facts', 'warn', `No session for event ${runtime.eventId}`);
+      this.logger.log(runtime.eventId, 'facts', 'warn', `No session for event ${runtime.eventId}`);
       return;
     }
 
@@ -673,21 +442,15 @@ export class Orchestrator {
       
       const logMessage = `${logPrefix} Facts Agent (seq ${runtime.factsLastSeq}): ${tokenBreakdown.total}/2048 tokens (${budgetStatus.percentage}%) - ${breakdownStr}`;
       
-      this.captureLog(runtime, 'facts', logLevel, logMessage, { seq: runtime.factsLastSeq });
+      this.logger.log(runtime.eventId, 'facts', logLevel, logMessage, { seq: runtime.factsLastSeq });
       
-      // Track metrics for periodic summary
-      if (!runtime.contextMetrics) {
-        runtime.contextMetrics = {
-          cards: { total: 0, count: 0, max: 0, warnings: 0, criticals: 0 },
-          facts: { total: 0, count: 0, max: 0, warnings: 0, criticals: 0 },
-        };
-      }
-      
-      runtime.contextMetrics.facts.total += tokenBreakdown.total;
-      runtime.contextMetrics.facts.count++;
-      runtime.contextMetrics.facts.max = Math.max(runtime.contextMetrics.facts.max, tokenBreakdown.total);
-      if (budgetStatus.warning) runtime.contextMetrics.facts.warnings++;
-      if (budgetStatus.critical) runtime.contextMetrics.facts.criticals++;
+      this.metrics.recordTokens(
+        runtime.eventId,
+        'facts',
+        tokenBreakdown.total,
+        budgetStatus.warning,
+        budgetStatus.critical
+      );
 
       // Send to Realtime session
       await runtime.factsSession.sendMessage(recentText, {
@@ -708,7 +471,7 @@ export class Orchestrator {
       await this.persistCheckpoint(runtime.eventId, 'facts', runtime.factsLastSeq);
       runtime.factsLastUpdate = Date.now();
     } catch (error: any) {
-      this.captureLog(runtime, 'facts', 'error', `Error processing: ${error.message}`, { seq: runtime.factsLastSeq });
+      this.logger.log(runtime.eventId, 'facts', 'error', `Error processing: ${error.message}`, { seq: runtime.factsLastSeq });
     }
   }
 
@@ -800,9 +563,9 @@ export class Orchestrator {
         });
       }
 
-      this.captureLog(runtime, 'facts', 'log', `Updated ${newFacts.length} facts (event: ${runtime.eventId})`, { seq: runtime.factsLastSeq });
+      this.logger.log(runtime.eventId, 'facts', 'log', `Updated ${newFacts.length} facts (event: ${runtime.eventId})`, { seq: runtime.factsLastSeq });
     } catch (error: any) {
-      this.captureLog(runtime, 'facts', 'error', `Error generating facts: ${error.message}`, { seq: runtime.factsLastSeq });
+      this.logger.log(runtime.eventId, 'facts', 'error', `Error generating facts: ${error.message}`, { seq: runtime.factsLastSeq });
     }
   }
 
@@ -865,7 +628,7 @@ export class Orchestrator {
             await this.handleSessionStatusChange(eventId, agentId, 'cards', status, sessionId);
           },
           onLog: (level, message, context) => {
-            this.captureLog(runtime, 'cards', level, message, context);
+            this.logger.log(runtime.eventId, 'cards', level, message, context);
           },
           supabase: this.supabaseService.getClient(),
           onRetrieve: async (query: string, topK: number) => {
@@ -884,7 +647,7 @@ export class Orchestrator {
             await this.handleSessionStatusChange(eventId, agentId, 'facts', status, sessionId);
           },
           onLog: (level, message, context) => {
-            this.captureLog(runtime, 'facts', level, message, context);
+            this.logger.log(runtime.eventId, 'facts', level, message, context);
           },
           supabase: this.supabaseService.getClient(),
           onRetrieve: async (query: string, topK: number) => {
@@ -903,6 +666,7 @@ export class Orchestrator {
         await this.supabaseService.updateAgentStatus(agentId, 'running');
 
         console.log(`[orchestrator] Event ${eventId} resumed successfully`);
+        await this.statusUpdater.updateAndPushStatus(runtime);
         return;
       } catch (error: any) {
         console.error(`[orchestrator] Failed to resume sessions: ${error.message}`);
@@ -942,7 +706,7 @@ export class Orchestrator {
         await this.handleSessionStatusChange(eventId, agentId, 'cards', status, sessionId);
       },
       onLog: (level, message, context) => {
-        this.captureLog(runtime, 'cards', level, message, context);
+        this.logger.log(runtime.eventId, 'cards', level, message, context);
       },
       supabase: this.supabaseService.getClient(),
       onRetrieve: async (query: string, topK: number) => {
@@ -961,7 +725,7 @@ export class Orchestrator {
         await this.handleSessionStatusChange(eventId, agentId, 'facts', status, sessionId);
       },
       onLog: (level, message, context) => {
-        this.captureLog(runtime, 'facts', level, message, context);
+        this.logger.log(runtime.eventId, 'facts', level, message, context);
       },
       supabase: this.supabaseService.getClient(),
       onRetrieve: async (query: string, topK: number) => {
@@ -1038,6 +802,7 @@ export class Orchestrator {
     }
 
     console.log(`[orchestrator] Event ${eventId} started`);
+    await this.statusUpdater.updateAndPushStatus(runtime);
   }
 
   /**
@@ -1158,6 +923,7 @@ export class Orchestrator {
       runtime.status = 'running';
       
       console.log(`[orchestrator] Sessions started successfully for testing (event: ${eventId})`);
+      await this.statusUpdater.updateAndPushStatus(runtime);
     } catch (error: any) {
       console.error(`[orchestrator] Failed to connect sessions: ${error.message}`);
       // Update status to error
@@ -1240,7 +1006,7 @@ export class Orchestrator {
           await this.handleSessionStatusChange(eventId, agentId, 'cards', status, sessionId);
         },
         onLog: (level, message, context) => {
-          this.captureLog(runtime, 'cards', level, message, context);
+          this.logger.log(runtime.eventId, 'cards', level, message, context);
         },
         supabase: this.supabaseService.getClient(),
         onRetrieve: async (query: string, topK: number) => {
@@ -1259,7 +1025,7 @@ export class Orchestrator {
           await this.handleSessionStatusChange(eventId, agentId, 'facts', status, sessionId);
         },
         onLog: (level, message, context) => {
-          this.captureLog(runtime, 'facts', level, message, context);
+          this.logger.log(runtime.eventId, 'facts', level, message, context);
         },
         supabase: this.supabaseService.getClient(),
         onRetrieve: async (query: string, topK: number) => {
@@ -1287,6 +1053,7 @@ export class Orchestrator {
       await this.supabaseService.updateAgentStatus(agentId, 'running');
 
       console.log(`[orchestrator] Event ${eventId} resumed successfully`);
+      await this.statusUpdater.updateAndPushStatus(runtime);
     } catch (error: any) {
       console.error(`[orchestrator] Error resuming event ${eventId}: ${error.message}`);
       throw error;
@@ -1412,13 +1179,14 @@ export class Orchestrator {
     agentId: string
   ): Promise<EventRuntime> {
     // Read checkpoints
-    const checkpoints = await this.supabaseService.getCheckpoints(eventId);
-
-    const cardsCheckpoint = checkpoints.find((c) => c.agent_type === 'cards');
-    const factsCheckpoint = checkpoints.find((c) => c.agent_type === 'facts');
+    const checkpointValues = await this.checkpointManager.loadCheckpoints(eventId);
 
     // Load glossary for event
     const glossaryCache = await this.loadGlossary(eventId);
+
+    this.metrics.clear(eventId);
+    this.logger.clearLogs(eventId, 'cards');
+    this.logger.clearLogs(eventId, 'facts');
 
     const runtime: EventRuntime = {
       eventId,
@@ -1427,17 +1195,9 @@ export class Orchestrator {
       ringBuffer: new RingBuffer(1000, 5 * 60 * 1000), // 5 minutes
       factsStore: new FactsStore(50), // Capped at 50 items with LRU eviction
       glossaryCache,
-      cardsLastSeq: cardsCheckpoint?.last_seq_processed || 0,
-      factsLastSeq: factsCheckpoint?.last_seq_processed || 0,
+      cardsLastSeq: checkpointValues.cards,
+      factsLastSeq: checkpointValues.facts,
       factsLastUpdate: Date.now(),
-      contextMetrics: {
-        cards: { total: 0, count: 0, max: 0, warnings: 0, criticals: 0 },
-        facts: { total: 0, count: 0, max: 0, warnings: 0, criticals: 0 },
-      },
-      logBuffers: {
-        cards: [],
-        facts: [],
-      },
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -1526,7 +1286,7 @@ export class Orchestrator {
     const runtime = this.runtimes.get(eventId);
     if (!runtime) return;
 
-    await this.supabaseService.upsertCheckpoint(eventId, runtime.agentId, agentType, lastSeq);
+    await this.checkpointManager.saveCheckpoint(eventId, runtime.agentId, agentType, lastSeq);
   }
 
 
@@ -1572,7 +1332,7 @@ export class Orchestrator {
     const runtime = this.runtimes.get(eventId);
     if (runtime) {
       try {
-        await this.updateSessionStatus(runtime);
+        await this.statusUpdater.updateAndPushStatus(runtime);
       } catch (error: any) {
         console.error(`[orchestrator] Error updating session status after change: ${error.message}`);
       }
@@ -1731,7 +1491,7 @@ export class Orchestrator {
     
     runtime.statusUpdateTimer = setInterval(async () => {
       try {
-        await this.updateSessionStatus(runtime);
+        await this.statusUpdater.updateAndPushStatus(runtime);
       } catch (error: any) {
         console.error(`[orchestrator] Error updating session status: ${error.message}`);
       }
@@ -1752,11 +1512,8 @@ export class Orchestrator {
    * Log context usage summary
    */
   private logContextSummary(runtime: EventRuntime): void {
-    if (!runtime.contextMetrics) {
-      return;
-    }
-
-    const { cards, facts } = runtime.contextMetrics;
+    const cards = this.metrics.getMetrics(runtime.eventId, 'cards');
+    const facts = this.metrics.getMetrics(runtime.eventId, 'facts');
     const ringStats = runtime.ringBuffer.getStats();
     const factsStats = runtime.factsStore.getStats();
 
@@ -1807,6 +1564,10 @@ export class Orchestrator {
       if (runtime.factsSession) {
         await runtime.factsSession.close();
       }
+
+      this.logger.clearLogs(eventId, 'cards');
+      this.logger.clearLogs(eventId, 'facts');
+      this.metrics.clear(eventId);
     }
 
     // Unsubscribe from Realtime
