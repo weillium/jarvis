@@ -1,6 +1,6 @@
 import { EventRuntime, TranscriptChunk } from '../types';
-import { RingBuffer } from '../ring-buffer';
-import { FactsStore } from '../facts-store';
+import { RingBuffer } from '../state/ring-buffer';
+import { FactsStore } from '../state/facts-store';
 import { SupabaseService } from '../services/supabase-service';
 import { GlossaryManager } from '../context/glossary-manager';
 import { CheckpointManager } from '../monitoring/checkpoint-manager';

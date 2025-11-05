@@ -1,5 +1,5 @@
-import type { RingBuffer, TranscriptChunk } from '../ring-buffer';
-import type { FactsStore, Fact } from '../facts-store';
+import type { RingBuffer, TranscriptChunk } from '../state/ring-buffer';
+import type { FactsStore, Fact } from '../state/facts-store';
 import type { RealtimeSession } from '../sessions/realtime-session';
 
 export type EventRuntimeStatus =

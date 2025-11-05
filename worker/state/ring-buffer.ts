@@ -4,7 +4,7 @@
  * Enforces token budget limits to prevent prompt bloat
  */
 
-import { countTokens, countTokensArray } from './utils/token-counter';
+import { countTokens, countTokensArray } from '../utils/token-counter';
 
 export interface TranscriptChunk {
   seq: number;
@@ -170,4 +170,3 @@ export class RingBuffer {
     this.buffer = [];
   }
 }
-
