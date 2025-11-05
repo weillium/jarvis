@@ -33,12 +33,13 @@ export async function POST(
       auth: { persistSession: false },
     });
 
-    // Verify event exists and agent is in testing status
+    // Verify event exists and agent is in active status with testing stage
     const { data: agents, error: agentError } = await supabase
       .from('agents')
-      .select('id, status')
+      .select('id, status, stage')
       .eq('event_id', eventId)
-      .eq('status', 'testing')
+      .eq('status', 'active')
+      .eq('stage', 'testing')
       .limit(1);
 
     if (agentError) {
@@ -52,7 +53,7 @@ export async function POST(
       return NextResponse.json(
         {
           ok: false,
-          error: 'No agent found with testing status for this event',
+          error: 'No agent found with testing stage for this event',
         },
         { status: 404 }
       );

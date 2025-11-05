@@ -45,7 +45,7 @@ export async function POST(
     // Try to find existing agent, or we could create one if needed
     const { data: existingAgents, error: agentError } = await (supabase
       .from('agents') as any)
-      .select('id, event_id, status')
+      .select('id, event_id, status, stage')
       .eq('event_id', eventId)
       .limit(1);
 
@@ -63,13 +63,16 @@ export async function POST(
       // Agent exists, check if we can start blueprint generation
       const agent = existingAgents[0];
       
-      // Only allow starting if agent is in a valid state
-      const validStates = ['idle', 'blueprint_ready', 'error'];
-      if (!validStates.includes(agent.status)) {
+      // Only allow starting if agent is in a valid state (idle with no stage, or idle with blueprint stage, or error)
+      const isValidState = 
+        (agent.status === 'idle' && (agent.stage === null || agent.stage === 'blueprint')) ||
+        agent.status === 'error';
+      
+      if (!isValidState) {
         return NextResponse.json(
           { 
             ok: false, 
-            error: `Cannot start blueprint generation. Agent status is '${agent.status}'. Valid states: ${validStates.join(', ')}` 
+            error: `Cannot start blueprint generation. Agent status is '${agent.status}' with stage '${agent.stage}'. Valid states: idle (no stage or blueprint stage) or error` 
           },
           { status: 400 }
         );
@@ -77,10 +80,10 @@ export async function POST(
 
       agentId = agent.id;
 
-      // Update agent status to 'blueprint_generating'
+      // Update agent status to 'idle' with 'blueprint' stage
       const { error: updateError } = await (supabase
         .from('agents') as any)
-        .update({ status: 'blueprint_generating' })
+        .update({ status: 'idle', stage: 'blueprint' })
         .eq('id', agentId);
 
       if (updateError) {
@@ -106,7 +109,8 @@ export async function POST(
       ok: true,
       agent_id: agentId,
       event_id: eventId,
-      status: 'blueprint_generating',
+      status: 'idle',
+      stage: 'blueprint',
       message: 'Context generation started. Blueprint will be generated shortly.',
     });
   } catch (error: any) {

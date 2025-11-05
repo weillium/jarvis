@@ -155,7 +155,7 @@ export async function updateEvent(
       updateData.title = updates.title.trim();
     }
     if (updates.topic !== undefined) {
-      updateData.topic = updates.topic === '' ? null : updates.topic.trim();
+      updateData.topic = updates.topic === null || updates.topic === '' ? null : updates.topic.trim();
     }
     if (updates.start_time !== undefined) {
       updateData.start_time = updates.start_time;

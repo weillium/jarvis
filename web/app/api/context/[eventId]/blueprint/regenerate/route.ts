@@ -44,7 +44,7 @@ export async function POST(
     // Find agent for this event
     const { data: agents, error: agentError } = await (supabase
       .from('agents') as any)
-      .select('id, status')
+      .select('id, status, stage')
       .eq('event_id', eventId)
       .limit(1);
 
@@ -66,12 +66,13 @@ export async function POST(
     const agentId = agents[0].id;
 
     // Verify agent is in a state that allows regeneration
-    // Allow regeneration if status is 'blueprint_ready' or 'blueprint_generating'
-    if (!['blueprint_ready', 'blueprint_generating'].includes(agents[0].status)) {
+    // Allow regeneration if status is 'idle' with 'blueprint' stage
+    const agent = agents[0];
+    if (!(agent.status === 'idle' && agent.stage === 'blueprint')) {
       return NextResponse.json(
         { 
           ok: false, 
-          error: `Cannot regenerate blueprint. Agent status is '${agents[0].status}'. Can only regenerate when status is 'blueprint_ready' or 'blueprint_generating'.` 
+          error: `Cannot regenerate blueprint. Agent status is '${agent.status}' with stage '${agent.stage}'. Can only regenerate when status is 'idle' with stage 'blueprint'.` 
         },
         { status: 400 }
       );
@@ -88,10 +89,10 @@ export async function POST(
       // Continue anyway - might not have blueprints
     }
 
-    // Set agent status back to 'blueprint_generating' to trigger new generation
+    // Set agent status back to 'idle' with 'blueprint' stage to trigger new generation
     const { error: updateError } = await (supabase
       .from('agents') as any)
-      .update({ status: 'blueprint_generating' })
+      .update({ status: 'idle', stage: 'blueprint' })
       .eq('id', agentId);
 
     if (updateError) {
@@ -106,7 +107,8 @@ export async function POST(
       ok: true,
       agent_id: agentId,
       event_id: eventId,
-      status: 'blueprint_generating',
+      status: 'idle',
+      stage: 'blueprint',
       message: 'Blueprint regeneration started. A new blueprint will be generated shortly.',
     });
   } catch (error: any) {

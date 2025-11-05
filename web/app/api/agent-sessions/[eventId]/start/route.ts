@@ -14,14 +14,15 @@ export async function POST(
       auth: { persistSession: false },
     });
 
-    // Get the agent for this event (must be in testing or running status)
+    // Get the agent for this event (must be in active status with testing or running stage)
     // Testing: for new sessions or testing workflow
     // Running: for resuming paused sessions
     const { data: agents, error: agentError } = await supabase
       .from('agents')
-      .select('id, status')
+      .select('id, status, stage')
       .eq('event_id', eventId)
-      .in('status', ['testing', 'running'])
+      .eq('status', 'active')
+      .in('stage', ['testing', 'running'])
       .limit(1);
 
     if (agentError) {

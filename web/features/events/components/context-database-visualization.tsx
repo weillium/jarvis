@@ -31,11 +31,12 @@ interface ContextStats {
 
 interface ContextDatabaseVisualizationProps {
   eventId: string;
-  agentStatus: string | null;
+  agentStatus?: string | null; // Deprecated: use agentStatus and agentStage instead
+  agentStage?: string | null; // Deprecated: use agentStatus and agentStage instead
   embedded?: boolean; // If true, removes outer wrapper styling for embedding
 }
 
-export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = false }: ContextDatabaseVisualizationProps) {
+export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage, embedded = false }: ContextDatabaseVisualizationProps) {
   const [contextItems, setContextItems] = useState<ContextItem[]>([]);
   const [stats, setStats] = useState<ContextStats | null>(null);
   const [isExpanded, setIsExpanded] = useState(embedded); // Auto-expand when embedded
@@ -250,9 +251,13 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
     }
   };
 
-  const isPrepping = agentStatus === 'prepping';
-  const isReady = agentStatus === 'context_complete'; // Legacy 'ready' status replaced with 'context_complete'
-  const isRunning = agentStatus === 'running';
+  // Use status + stage if available, otherwise fall back to old agentStatus string
+  // For new schema: status='idle' + stage='prepping' means prepping
+  //                  status='idle' + stage='context_complete' means ready
+  //                  status='active' + stage='running' means running
+  const isPrepping = (agentStatus === 'idle' && agentStage === 'prepping') || agentStatus === 'prepping';
+  const isReady = (agentStatus === 'idle' && agentStage === 'context_complete') || agentStatus === 'context_complete';
+  const isRunning = (agentStatus === 'active' && agentStage === 'running') || agentStatus === 'running';
 
   // Filter context items
   const filteredItems = contextItems.filter((item) => {

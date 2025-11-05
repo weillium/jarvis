@@ -23,12 +23,13 @@ export async function POST(
       auth: { persistSession: false },
     });
 
-    // Get the agent for this event (must be in testing status)
+    // Get the agent for this event (must be in active status with testing stage)
     const { data: agents, error: agentError } = await supabase
       .from('agents')
-      .select('id, status')
+      .select('id, status, stage')
       .eq('event_id', eventId)
-      .eq('status', 'testing')
+      .eq('status', 'active')
+      .eq('stage', 'testing')
       .limit(1);
 
     if (agentError) {
@@ -42,7 +43,7 @@ export async function POST(
       return NextResponse.json(
         {
           ok: false,
-          error: 'No agent found with testing status for this event',
+          error: 'No agent found with testing stage for this event',
         },
         { status: 404 }
       );
@@ -118,10 +119,10 @@ export async function POST(
       );
     }
 
-    // Step 4: Update agent status to 'ready' (not 'running')
+    // Step 4: Update agent status to 'active' with 'running' stage (ready for production)
     const { error: updateError } = await supabase
       .from('agents')
-      .update({ status: 'ready' })
+      .update({ status: 'active', stage: 'running' })
       .eq('id', agentId);
 
     if (updateError) {

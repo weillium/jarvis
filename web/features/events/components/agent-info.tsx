@@ -620,7 +620,7 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
             <div style={{
               marginTop: '16px',
             }}>
-              <ContextDatabaseVisualization eventId={eventId} agentStatus={agent.status} embedded={true} />
+              <ContextDatabaseVisualization eventId={eventId} agentStatus={agent.status} agentStage={agent.stage} embedded={true} />
             </div>
           )}
         </div>

@@ -328,7 +328,7 @@ export function AgentPlaceholder({ agent, eventId }: AgentPlaceholderProps) {
               </div>
             ) : contextItems.length === 0 ? (
               <div style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
-                No context items found. Context will be generated when agent status is 'prepping'.
+                No context items found. Context will be generated when agent is in prepping stage.
               </div>
             ) : (
               <div style={{ padding: '8px' }}>

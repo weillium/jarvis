@@ -21,12 +21,13 @@ export async function POST(
       auth: { persistSession: false },
     });
 
-    // Get the agent for this event (must be context_complete)
+    // Get the agent for this event (must be context_complete stage)
     const { data: agents, error: agentError } = await supabase
       .from('agents')
-      .select('id, status')
+      .select('id, status, stage')
       .eq('event_id', eventId)
-      .eq('status', 'context_complete')
+      .eq('status', 'idle')
+      .eq('stage', 'context_complete')
       .limit(1);
 
     if (agentError) {
@@ -38,10 +39,10 @@ export async function POST(
 
     if (!agents || agents.length === 0) {
       return NextResponse.json(
-        {
-          ok: false,
-          error: 'No agent with context_complete status found for this event',
-        },
+      {
+        ok: false,
+        error: 'No agent with context_complete stage found for this event',
+      },
         { status: 404 }
       );
     }
@@ -116,10 +117,10 @@ export async function POST(
       );
     }
 
-    // Update agent status to 'testing'
+    // Update agent status to 'active' with 'testing' stage
     const { error: updateError } = await supabase
       .from('agents')
-      .update({ status: 'testing' })
+      .update({ status: 'active', stage: 'testing' })
       .eq('id', agentId);
 
     if (updateError) {

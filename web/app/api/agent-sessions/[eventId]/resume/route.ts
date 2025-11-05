@@ -21,13 +21,31 @@ export async function POST(
       auth: { persistSession: false },
     });
 
-    // Get the agent for this event
-    const { data: agents, error: agentError } = await supabase
+    // Get the agent for this event (can be running or context_complete)
+    // Try active + running first, then idle + context_complete
+    let { data: agents, error: agentError } = await supabase
       .from('agents')
-      .select('id, status')
+      .select('id, status, stage')
       .eq('event_id', eventId)
-      .in('status', ['running', 'context_complete'])
+      .eq('status', 'active')
+      .eq('stage', 'running')
       .limit(1);
+    
+    if (!agents || agents.length === 0) {
+      const { data: agents2, error: error2 } = await supabase
+        .from('agents')
+        .select('id, status, stage')
+        .eq('event_id', eventId)
+        .eq('status', 'idle')
+        .eq('stage', 'context_complete')
+        .limit(1);
+      
+      if (error2) {
+        agentError = error2;
+      } else {
+        agents = agents2;
+      }
+    }
 
     if (agentError) {
       return NextResponse.json(
@@ -72,11 +90,11 @@ export async function POST(
       );
     }
 
-    // Update agent status to running (worker will resume sessions)
+    // Update agent status to active with running stage (worker will resume sessions)
     // Keep sessions as 'paused' - worker's tickPauseResume will detect them and call resumeEvent()
     const { error: agentUpdateError } = await supabase
       .from('agents')
-      .update({ status: 'running' })
+      .update({ status: 'active', stage: 'running' })
       .eq('id', agentId);
 
     if (agentUpdateError) {
