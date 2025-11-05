@@ -1,28 +1,30 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { EventWithStatus } from '@/shared/types/event';
 import { format, parseISO } from 'date-fns';
 import { EditEventModal } from './edit-event-modal';
 import { useEventDocsQuery } from '@/shared/hooks/use-event-docs-query';
+import { useEventQuery } from '@/shared/hooks/use-event-query';
 import { DocumentListItem } from './document-list-item';
 
 interface EventDetailProps {
-  event: EventWithStatus;
+  eventId: string;
+  event?: EventWithStatus; // Optional: only used as fallback for initial render
   onEventUpdate?: (updatedEvent: EventWithStatus) => void;
 }
 
-export function EventDetail({ event, onEventUpdate }: EventDetailProps) {
+export function EventDetail({ eventId, event, onEventUpdate }: EventDetailProps) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [currentEvent, setCurrentEvent] = useState(event);
+  
+  // Fetch event data using React Query - this will automatically refetch when invalidated
+  const { data: eventData, isLoading: eventLoading } = useEventQuery(eventId);
+  
+  // Use fetched data if available, otherwise fall back to prop (for initial render)
+  const currentEvent = eventData || event;
   
   // Fetch event documents
-  const { data: docs, isLoading: docsLoading } = useEventDocsQuery(event.id);
-
-  // Update local state when event prop changes
-  useEffect(() => {
-    setCurrentEvent(event);
-  }, [event]);
+  const { data: docs, isLoading: docsLoading } = useEventDocsQuery(eventId);
   const formatDateTime = (dateString: string | null): string => {
     if (!dateString) return 'Not scheduled';
     try {
@@ -69,11 +71,7 @@ export function EventDetail({ event, onEventUpdate }: EventDetailProps) {
 
   return (
     <div style={{
-      background: '#ffffff',
-      border: '1px solid #e2e8f0',
-      borderRadius: '12px',
       padding: '32px',
-      marginBottom: '24px',
     }}>
       <div style={{
         display: 'flex',
@@ -297,7 +295,8 @@ export function EventDetail({ event, onEventUpdate }: EventDetailProps) {
         onClose={() => setIsEditModalOpen(false)}
         event={currentEvent}
         onSuccess={(updatedEvent) => {
-          setCurrentEvent(updatedEvent);
+          // The mutation already invalidates the query, so React Query will automatically refetch
+          // We just need to trigger the callback if provided
           if (onEventUpdate) {
             onEventUpdate(updatedEvent);
           }

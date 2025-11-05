@@ -16,6 +16,7 @@ import { DocumentListItem } from './document-list-item';
 import { supabase } from '@/shared/lib/supabase/client';
 import { withTimeout } from '@/shared/utils/promise-timeout';
 import { validateFiles, MAX_FILE_SIZE } from '@/shared/utils/file-validation';
+import { getFilenameFromPath, getFileExtension, getFileType } from '@/shared/utils/file-utils';
 
 // Extend dayjs with plugins
 dayjs.extend(utc);
@@ -65,6 +66,10 @@ async function uploadFile(file: File, eventId: string): Promise<void> {
     throw new Error(errorMsg);
   }
 
+  // Determine file type from extension
+  const fileExtension = getFileExtension(originalFileName);
+  const fileType = getFileType(fileExtension);
+
   // Create database record with timeout
   const insertPromise = supabase
     .from('event_docs')
@@ -73,6 +78,7 @@ async function uploadFile(file: File, eventId: string): Promise<void> {
         event_id: eventId,
         path: filePath,
         name: originalFileName,
+        file_type: fileType,
       },
     ]);
   
@@ -119,6 +125,7 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
   const [error, setError] = useState<string | null>(null);
   const [newFiles, setNewFiles] = useState<File[]>([]);
   const [removingDocs, setRemovingDocs] = useState<Set<string>>(new Set());
+  const [pendingDocNameChanges, setPendingDocNameChanges] = useState<Map<string, string>>(new Map());
 
   // Mutation hooks
   const updateEventMutation = useUpdateEventMutation(event.id);
@@ -142,6 +149,7 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
     setError(null);
     setNewFiles([]);
     setRemovingDocs(new Set());
+    setPendingDocNameChanges(new Map());
   }, [event]);
 
   const handleRemoveDoc = async (docId: string) => {
@@ -160,8 +168,14 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
     }
   };
 
-  const handleUpdateDocName = async (docId: string, newName: string) => {
-    await updateDocNameMutation.mutateAsync({ docId, name: newName });
+  // Track document name changes (will be saved on form submit)
+  const handleDocNameChange = (docId: string, newName: string) => {
+    setPendingDocNameChanges(prev => {
+      const next = new Map(prev);
+      // Store the raw value (will be trimmed on save)
+      next.set(docId, newName);
+      return next;
+    });
   };
 
   if (!isOpen) return null;
@@ -223,12 +237,6 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
       updateData.end_time = null;
     }
 
-    // Only update if there are changes
-    if (Object.keys(updateData).length === 0) {
-      onClose();
-      return;
-    }
-
     // Upload new files if any
     if (newFiles.length > 0) {
       // Validate files before uploading
@@ -253,12 +261,46 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
       }
     }
 
+    // Update document names if there are changes
+    if (pendingDocNameChanges.size > 0 && existingDocs) {
+      try {
+        // Only update documents where the name actually changed
+        const changesToSave: Array<[string, string]> = [];
+        
+        for (const [docId, newName] of pendingDocNameChanges.entries()) {
+          const doc = existingDocs.find(d => d.id === docId);
+          if (!doc) continue;
+          
+          const currentName = doc.name || getFilenameFromPath(doc.path);
+          const trimmedNewName = newName.trim();
+          const trimmedCurrentName = currentName.trim();
+          
+          // Only save if the trimmed names are different
+          if (trimmedNewName !== trimmedCurrentName && trimmedNewName.length > 0) {
+            changesToSave.push([docId, trimmedNewName]);
+          }
+        }
+
+        if (changesToSave.length > 0) {
+          const docNamePromises = changesToSave.map(([docId, name]) =>
+            updateDocNameMutation.mutateAsync({ docId, name })
+          );
+          await Promise.all(docNamePromises);
+        }
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to update document names';
+        setError(errorMessage);
+        return;
+      }
+    }
+
     // Update event data if there are changes
     if (Object.keys(updateData).length > 0) {
       updateEventMutation.mutate(updateData, {
         onSuccess: (updatedEvent) => {
           // Reset form and close modal
           setNewFiles([]);
+          setPendingDocNameChanges(new Map());
           onClose();
           
           // Trigger success callback if provided
@@ -271,12 +313,13 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
           setError(errorMessage);
         },
       });
-    } else if (newFiles.length > 0) {
-      // If only files were uploaded (no event data changes), just close
+    } else if (newFiles.length > 0 || pendingDocNameChanges.size > 0) {
+      // If only files were uploaded or document names changed, just close
       setNewFiles([]);
+      setPendingDocNameChanges(new Map());
       onClose();
       if (onSuccess) {
-        onSuccess(event); // Pass current event since no changes were made
+        onSuccess(event); // Pass current event since no event data changes were made
       }
     } else {
       // No changes at all
@@ -291,6 +334,8 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
       setStartDate(event.start_time ? dayjs(event.start_time) : null);
       setEndDate(event.end_time ? dayjs(event.end_time) : null);
       setError(null);
+      setNewFiles([]);
+      setPendingDocNameChanges(new Map());
       onClose();
     }
   };
@@ -555,9 +600,9 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
                       key={doc.id}
                       doc={doc}
                       onRemove={() => handleRemoveDoc(doc.id)}
-                      onUpdateName={handleUpdateDocName}
+                      onUpdateName={handleDocNameChange}
                       isRemoving={removingDocs.has(doc.id)}
-                      isUpdating={updateDocNameMutation.isPending}
+                      isUpdating={false}
                     />
                   ))}
                 </div>

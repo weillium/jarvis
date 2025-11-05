@@ -3,11 +3,13 @@
 import { useState, useEffect } from 'react';
 import type { EventDoc } from '@/shared/types/event-doc';
 import { getFileExtension, getFileType, getFilenameFromPath } from '@/shared/utils/file-utils';
+import { supabase } from '@/shared/lib/supabase/client';
 
 interface DocumentListItemProps {
   doc: EventDoc;
   onRemove?: () => void;
-  onUpdateName?: (docId: string, newName: string) => Promise<void>;
+  onUpdateName?: (docId: string, newName: string) => void; // Sync function to track changes
+  onDownload?: () => void;
   isRemoving?: boolean;
   isUpdating?: boolean;
 }
@@ -97,46 +99,55 @@ function RemoveIcon() {
   );
 }
 
-export function DocumentListItem({ doc, onRemove, onUpdateName, isRemoving = false, isUpdating = false }: DocumentListItemProps) {
+function DownloadIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '14px', height: '14px' }}>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  );
+}
+
+export function DocumentListItem({ doc, onRemove, onUpdateName, onDownload, isRemoving = false, isUpdating = false }: DocumentListItemProps) {
   const [showConfirm, setShowConfirm] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   
   // Use custom name if available, otherwise extract from path
   const displayName = doc.name || getFilenameFromPath(doc.path);
   const [editedName, setEditedName] = useState(displayName);
-  const [isSaving, setIsSaving] = useState(false);
 
   // Sync editedName when doc changes
   useEffect(() => {
     setEditedName(displayName);
   }, [displayName]);
 
+  // Use stored file_type if available, otherwise derive from extension
+  const fileType = doc.file_type || getFileType(getFileExtension(displayName));
   const extension = getFileExtension(displayName);
-  const fileType = getFileType(extension);
 
-  // Auto-save on blur
-  const handleNameBlur = async () => {
-    if (!onUpdateName || editedName.trim() === displayName || !editedName.trim()) {
-      return;
-    }
+  // Format file type for display (PDF is all caps, others are title case)
+  const fileTypeDisplay = fileType === 'pdf' 
+    ? 'PDF' 
+    : fileType.charAt(0).toUpperCase() + fileType.slice(1).toLowerCase();
 
-    setIsSaving(true);
-    try {
-      await onUpdateName(doc.id, editedName.trim());
-    } catch (err) {
-      console.error('Failed to update document name:', err);
-      // Reset to original name on error
-      setEditedName(displayName);
-    } finally {
-      setIsSaving(false);
+  // Handle name input change
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newName = e.target.value;
+    setEditedName(newName);
+    // Track changes in parent component
+    if (onUpdateName) {
+      onUpdateName(doc.id, newName);
     }
   };
 
-  // Handle Enter key to save
+  // Handle Escape key to reset
   const handleNameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.currentTarget.blur();
-    } else if (e.key === 'Escape') {
+    if (e.key === 'Escape') {
       setEditedName(displayName);
+      if (onUpdateName) {
+        onUpdateName(doc.id, displayName);
+      }
       e.currentTarget.blur();
     }
   };
@@ -144,12 +155,43 @@ export function DocumentListItem({ doc, onRemove, onUpdateName, isRemoving = fal
   const handleRemoveClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (showConfirm) {
-      onRemove();
+      onRemove?.();
       setShowConfirm(false);
     } else {
       setShowConfirm(true);
       // Auto-hide confirmation after 3 seconds
       setTimeout(() => setShowConfirm(false), 3000);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (onDownload) {
+      onDownload();
+      return;
+    }
+
+    setIsDownloading(true);
+    try {
+      // Create signed URL for download (valid for 1 hour)
+      const { data, error } = await supabase.storage
+        .from('event-docs')
+        .createSignedUrl(doc.path, 3600);
+
+      if (error) {
+        throw new Error(error.message || 'Failed to generate download URL');
+      }
+
+      if (data?.signedUrl) {
+        // Open in new tab/window
+        window.open(data.signedUrl, '_blank');
+      } else {
+        throw new Error('No download URL generated');
+      }
+    } catch (err) {
+      console.error('Download error:', err);
+      // Could show error to user, but for now just log
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -173,10 +215,9 @@ export function DocumentListItem({ doc, onRemove, onUpdateName, isRemoving = fal
           <input
             type="text"
             value={editedName}
-            onChange={(e) => setEditedName(e.target.value)}
-            onBlur={handleNameBlur}
+            onChange={handleNameChange}
             onKeyDown={handleNameKeyDown}
-            disabled={isSaving || isRemoving || isUpdating}
+            disabled={isRemoving || isUpdating}
             style={{
               width: '100%',
               padding: '4px 8px',
@@ -185,7 +226,7 @@ export function DocumentListItem({ doc, onRemove, onUpdateName, isRemoving = fal
               fontSize: '14px',
               fontWeight: '500',
               color: '#0f172a',
-              background: isSaving || isRemoving || isUpdating ? '#f8fafc' : '#ffffff',
+              background: isRemoving || isUpdating ? '#f8fafc' : '#ffffff',
               boxSizing: 'border-box',
             }}
             title={editedName}
@@ -212,54 +253,97 @@ export function DocumentListItem({ doc, onRemove, onUpdateName, isRemoving = fal
             marginTop: '4px',
           }}
         >
-          {extension ? extension.toUpperCase() : 'FILE'} • {new Date(doc.created_at).toLocaleDateString()}
+          {fileTypeDisplay} • {new Date(doc.created_at).toLocaleDateString()}
         </div>
       </div>
 
-      {onRemove && (
-        <button
-          type="button"
-          onClick={handleRemoveClick}
-          disabled={isRemoving || isSaving}
-          style={{
-            padding: '6px',
-            background: showConfirm ? '#dc2626' : 'transparent',
-            color: showConfirm ? '#ffffff' : '#dc2626',
-            border: showConfirm ? 'none' : '1px solid #dc2626',
-            borderRadius: '4px',
-            cursor: isRemoving ? 'not-allowed' : 'pointer',
-            transition: 'all 0.2s',
-            flexShrink: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            opacity: isRemoving ? 0.6 : 1,
-          }}
-        onMouseEnter={(e) => {
-          if (!isRemoving && !showConfirm) {
-            e.currentTarget.style.background = '#fee2e2';
-            e.currentTarget.style.color = '#991b1b';
-            e.currentTarget.style.borderColor = '#dc2626';
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (!isRemoving && !showConfirm) {
-            e.currentTarget.style.background = 'transparent';
-            e.currentTarget.style.color = '#dc2626';
-            e.currentTarget.style.borderColor = '#dc2626';
-          }
-        }}
-        title={isRemoving ? 'Removing...' : showConfirm ? 'Click to confirm removal' : 'Remove document'}
-      >
-        {isRemoving ? (
-          <span style={{ fontSize: '12px' }}>Removing...</span>
-        ) : showConfirm ? (
-          <span style={{ fontSize: '12px' }}>Confirm?</span>
-        ) : (
-          <RemoveIcon />
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        {(onDownload !== undefined || (!onRemove && !onUpdateName)) && (
+          <button
+            type="button"
+            onClick={handleDownload}
+            disabled={isDownloading || isRemoving}
+            style={{
+              padding: '6px',
+              background: 'transparent',
+              color: '#0f172a',
+              border: '1px solid #0f172a',
+              borderRadius: '4px',
+              cursor: isDownloading ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s',
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: isDownloading ? 0.6 : 1,
+            }}
+            onMouseEnter={(e) => {
+              if (!isDownloading) {
+                e.currentTarget.style.background = '#f8fafc';
+                e.currentTarget.style.borderColor = '#475569';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isDownloading) {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.borderColor = '#0f172a';
+              }
+            }}
+            title={isDownloading ? 'Downloading...' : 'Download document'}
+          >
+            {isDownloading ? (
+              <span style={{ fontSize: '12px' }}>...</span>
+            ) : (
+              <DownloadIcon />
+            )}
+          </button>
         )}
-        </button>
-      )}
+
+        {onRemove && (
+          <button
+            type="button"
+            onClick={handleRemoveClick}
+            disabled={isRemoving}
+            style={{
+              padding: '6px',
+              background: showConfirm ? '#dc2626' : 'transparent',
+              color: showConfirm ? '#ffffff' : '#dc2626',
+              border: showConfirm ? 'none' : '1px solid #dc2626',
+              borderRadius: '4px',
+              cursor: isRemoving ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s',
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: isRemoving ? 0.6 : 1,
+            }}
+            onMouseEnter={(e) => {
+              if (!isRemoving && !showConfirm) {
+                e.currentTarget.style.background = '#fee2e2';
+                e.currentTarget.style.color = '#991b1b';
+                e.currentTarget.style.borderColor = '#dc2626';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isRemoving && !showConfirm) {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = '#dc2626';
+                e.currentTarget.style.borderColor = '#dc2626';
+              }
+            }}
+            title={isRemoving ? 'Removing...' : showConfirm ? 'Click to confirm removal' : 'Remove document'}
+          >
+            {isRemoving ? (
+              <span style={{ fontSize: '12px' }}>Removing...</span>
+            ) : showConfirm ? (
+              <span style={{ fontSize: '12px' }}>Confirm?</span>
+            ) : (
+              <RemoveIcon />
+            )}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

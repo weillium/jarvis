@@ -13,6 +13,7 @@ import { FileUpload } from '@/shared/ui/file-upload';
 import { useCreateEventMutation } from '@/shared/hooks/use-mutations';
 import { withTimeout } from '@/shared/utils/promise-timeout';
 import { validateFiles, MAX_FILE_SIZE } from '@/shared/utils/file-validation';
+import { getFileExtension, getFileType } from '@/shared/utils/file-utils';
 
 // Extend dayjs with plugins
 dayjs.extend(utc);
@@ -89,6 +90,10 @@ async function uploadFile(
     throw new Error(errorMsg);
   }
 
+  // Determine file type from extension
+  const fileExtension = getFileExtension(originalFileName);
+  const fileType = getFileType(fileExtension);
+
   // Create database record with timeout
   const insertPromise = supabase
     .from('event_docs')
@@ -97,6 +102,7 @@ async function uploadFile(
         event_id: eventId,
         path: filePath,
         name: originalFileName,
+        file_type: fileType,
       },
     ]);
   

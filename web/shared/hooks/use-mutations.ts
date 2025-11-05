@@ -406,14 +406,22 @@ export function useUpdateEventDocNameMutation(eventId: string) {
 
   return useMutation({
     mutationFn: async ({ docId, name }: { docId: string; name: string }) => {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('event_docs')
-        .update({ name })
-        .eq('id', docId);
+        .update({ name: name.trim() })
+        .eq('id', docId)
+        .select()
+        .single();
 
       if (error) {
         throw new Error(`Failed to update document name: ${error.message}`);
       }
+
+      if (!data) {
+        throw new Error(`Document with ID ${docId} not found or could not be updated`);
+      }
+
+      return data;
     },
     onSuccess: () => {
       // Invalidate event docs query

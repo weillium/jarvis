@@ -39,8 +39,8 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
   const agentStage = agentData?.agent?.stage ?? null;
   const blueprintStatus = blueprint?.status ?? null;
   
-  // Can approve when agent status is blueprint_ready AND blueprint status is ready
-  const canApprove = agentStatus === 'blueprint_ready' && blueprintStatus === 'ready' && !blueprint?.approved_at;
+  // Can approve when agent status is idle, stage is blueprint, AND blueprint status is ready
+  const canApprove = agentStatus === 'idle' && agentStage === 'blueprint' && blueprintStatus === 'ready' && !blueprint?.approved_at;
   
   // Regeneration status tracking (derived from agent stage)
   const isRegeneratingResearch = agentStage === 'regenerating_research';
@@ -196,7 +196,7 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
     {
       id: 'event',
       label: 'Event Details',
-      content: <EventDetail event={event} />,
+      content: <EventDetail eventId={eventId} event={event} />,
     },
     {
       id: 'agent',
