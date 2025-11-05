@@ -22,8 +22,9 @@ export class ContextPoller implements Poller {
   async tick(): Promise<void> {
     const { data: approvedAgents, error } = await this.supabase
       .from('agents')
-      .select('id,event_id,status')
-      .eq('status', 'blueprint_approved')
+      .select('id,event_id,status,stage')
+      .eq('status', 'idle')
+      .eq('stage', 'blueprint')
       .limit(20);
 
     if (error) {

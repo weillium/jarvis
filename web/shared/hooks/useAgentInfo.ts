@@ -20,6 +20,7 @@ export interface AgentInfo {
   id: string;
   event_id: string;
   status: Agent['status'];
+  stage: string | null;
   model: string;
   created_at: string;
   updated_at: string;

@@ -40,12 +40,13 @@ export async function GET(
 
     const supabase = getSupabaseClient();
 
-    // Fetch active research results
+    // Fetch research results (from current generation cycle)
+    // Note: After Phase 3, we filter by generation_cycle_id instead of is_active
+    // For now, get all results (we'll filter by cycle in later updates)
     const { data: results, error } = await (supabase
       .from('research_results') as any)
       .select('*')
       .eq('event_id', eventId)
-      .eq('is_active', true)
       .order('created_at', { ascending: false });
 
     if (error) {

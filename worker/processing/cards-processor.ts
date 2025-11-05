@@ -132,12 +132,6 @@ export class CardsProcessor {
         payload: card,
       });
 
-      await this.supabase.insertCard({
-        event_id: runtime.eventId,
-        kind: card.kind || 'Context',
-        payload: card,
-      });
-
       this.logger.log(
         runtime.eventId,
         'cards',

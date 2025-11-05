@@ -70,19 +70,19 @@ export async function GET(
     const agent = agents[0];
     const agentId = agent.id;
 
-    // Fetch context statistics in parallel (only active items)
+    // Fetch context statistics in parallel (from current generation cycle)
+    // Note: After Phase 3, we filter by generation_cycle_id instead of is_active
+    // For now, get all items (we'll filter by cycle in later updates)
     const [chunksResult, glossaryResult, blueprintResult] = await Promise.all([
-      // Get active chunk count
+      // Get chunk count
       (supabase.from('context_items') as any)
         .select('*', { count: 'exact', head: true })
-        .eq('event_id', eventId)
-        .eq('is_active', true),
+        .eq('event_id', eventId),
       
-      // Get active glossary term count
+      // Get glossary term count
       (supabase.from('glossary_terms') as any)
         .select('*', { count: 'exact', head: true })
-        .eq('event_id', eventId)
-        .eq('is_active', true),
+        .eq('event_id', eventId),
       
       // Get latest blueprint
       (supabase.from('context_blueprints') as any)
@@ -106,6 +106,7 @@ export async function GET(
         id: agent.id,
         event_id: agent.event_id,
         status: agent.status,
+        stage: agent.stage || null,
         model: agent.model,
         created_at: agent.created_at,
         updated_at: agent.updated_at,

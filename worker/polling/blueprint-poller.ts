@@ -20,8 +20,9 @@ export class BlueprintPoller implements Poller {
   async tick(): Promise<void> {
     const { data: blueprintAgents, error } = await this.supabase
       .from('agents')
-      .select('id,event_id,status')
-      .eq('status', 'blueprint_generating')
+      .select('id,event_id,status,stage')
+      .eq('status', 'idle')
+      .eq('stage', 'blueprint')
       .limit(20);
 
     if (error) {

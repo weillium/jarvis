@@ -46,7 +46,7 @@ export async function GET(
     // Fetch agent
     const { data: agents, error: agentError } = await (supabase
       .from('agents') as any)
-      .select('id, status, created_at')
+      .select('id, status, stage, created_at')
       .eq('event_id', eventId)
       .limit(1);
 
@@ -85,22 +85,23 @@ export async function GET(
     }
 
     // Determine overall status and progress
-    let stage: string = agent.status;
+    let stage: string = agent.stage || agent.status;
     let progress: { current: number; total: number; percentage: number } | null = null;
 
-    // Calculate progress based on status
-    if (agent.status === 'researching') {
+    // Calculate progress based on stage
+    if (agent.stage === 'researching' || (agent.status === 'idle' && agent.stage === 'researching')) {
       stage = 'researching';
       // Progress would need to come from actual research results
       // For now, just indicate stage
-    } else if (agent.status === 'building_glossary') {
+    } else if (agent.stage === 'building_glossary' || (agent.status === 'idle' && agent.stage === 'building_glossary')) {
       stage = 'building_glossary';
-      // Get active glossary term count
+      // Get glossary term count (from current generation cycle if available)
+      // Note: After Phase 3, we filter by generation_cycle_id instead of is_active
+      // For now, get all terms (we'll filter by cycle in later updates)
       const { count: glossaryCount } = await (supabase
         .from('glossary_terms') as any)
         .select('*', { count: 'exact', head: true })
-        .eq('event_id', eventId)
-        .eq('is_active', true);
+        .eq('event_id', eventId);
       
       // Estimate total based on blueprint (if available)
       // glossary_plan is JSONB, so it's already an object
@@ -112,14 +113,15 @@ export async function GET(
         total: estimatedTerms,
         percentage: Math.round(((glossaryCount || 0) / estimatedTerms) * 100),
       };
-    } else if (agent.status === 'building_chunks') {
+    } else if (agent.stage === 'building_chunks' || (agent.status === 'idle' && agent.stage === 'building_chunks')) {
       stage = 'building_chunks';
-      // Get active chunk count
+      // Get chunk count (from current generation cycle if available)
+      // Note: After Phase 3, we filter by generation_cycle_id instead of is_active
+      // For now, get all chunks (we'll filter by cycle in later updates)
       const { count: chunkCount } = await (supabase
         .from('context_items') as any)
         .select('*', { count: 'exact', head: true })
-        .eq('event_id', eventId)
-        .eq('is_active', true);
+        .eq('event_id', eventId);
       
       const targetChunks = blueprint?.target_chunk_count || 1000;
       progress = {
@@ -134,6 +136,7 @@ export async function GET(
       agent: {
         id: agent.id,
         status: agent.status,
+        stage: agent.stage || null,
         created_at: agent.created_at,
       },
       blueprint: blueprint ? {

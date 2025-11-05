@@ -17,7 +17,7 @@ interface ContextItem {
   component_type: string | null;
   version: number | null;
   generation_cycle_id: string | null;
-  is_active: boolean | null;
+  // is_active removed in Phase 3 - use generation_cycle_id instead
 }
 
 interface ContextStats {
@@ -138,7 +138,8 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
           console.log('[context-db] New context item inserted:', payload.new);
           const newItem = payload.new as ContextItem;
           // Only add if it's active
-          if (newItem.is_active !== false) {
+          // After Phase 3, all items are active (no soft deletes)
+          if (true) {
             setContextItems((prev) => {
               // Avoid duplicates
               if (prev.some((item) => item.id === newItem.id)) {
@@ -165,11 +166,10 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, embedded = 
         (payload) => {
           console.log('[context-db] Context item updated:', payload.new);
           const updatedItem = payload.new as ContextItem;
-          // If item was invalidated (is_active = false), remove it from the list
-          if (updatedItem.is_active === false) {
-            setContextItems((prev) => prev.filter((item) => item.id !== updatedItem.id));
-          } else if (updatedItem.is_active !== false) {
-            // If item was reactivated or updated, add/update it
+          // After Phase 3, items are hard deleted (not soft deleted), so just update
+          // If item exists, it's active (no soft delete check needed)
+          if (true) {
+            // Item was updated, add/update it
             setContextItems((prev) => {
               const existingIndex = prev.findIndex((item) => item.id === updatedItem.id);
               if (existingIndex >= 0) {

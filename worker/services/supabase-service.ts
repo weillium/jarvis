@@ -8,6 +8,7 @@ interface CheckpointRecord {
 
 interface AgentStatusRecord {
   status: string;
+  stage: string | null;
 }
 
 interface AgentRecord {
@@ -147,7 +148,7 @@ export class SupabaseService {
   async getAgentStatus(agentId: string): Promise<AgentStatusRecord | null> {
     const { data, error } = await this.client
       .from('agents')
-      .select('status')
+      .select('status, stage')
       .eq('id', agentId)
       .single();
 
@@ -155,10 +156,15 @@ export class SupabaseService {
     return data as AgentStatusRecord;
   }
 
-  async updateAgentStatus(agentId: string, status: string): Promise<void> {
+  async updateAgentStatus(agentId: string, status: string, stage?: string | null): Promise<void> {
+    const updateData: any = { status };
+    if (stage !== undefined) {
+      updateData.stage = stage;
+    }
+    
     const { error } = await this.client
       .from('agents')
-      .update({ status })
+      .update(updateData)
       .eq('id', agentId);
 
     if (error) throw error;
@@ -292,13 +298,17 @@ export class SupabaseService {
     if (error) throw error;
   }
 
-  async getGlossaryTerms(eventId: string): Promise<GlossaryRecord[]> {
-    const { data, error } = await this.client
+  async getGlossaryTerms(eventId: string, generationCycleId?: string): Promise<GlossaryRecord[]> {
+    let query = this.client
       .from('glossary_terms')
       .select('*')
-      .eq('event_id', eventId)
-      .eq('is_active', true)
-      .order('confidence_score', { ascending: false });
+      .eq('event_id', eventId);
+    
+    if (generationCycleId) {
+      query = query.eq('generation_cycle_id', generationCycleId);
+    }
+    
+    const { data, error } = await query.order('confidence_score', { ascending: false });
 
     if (error) throw error;
     return (data as GlossaryRecord[]) || [];

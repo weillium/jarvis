@@ -484,8 +484,6 @@ async function processCompletedResearchTask(
         content: chunkText,
         quality_score: metadata.quality_score,
         metadata: metadata,
-        is_active: true,
-        version: 1,
       });
 
     if (error) {
@@ -658,8 +656,6 @@ async function executeResearchPlan(
                 content: chunkText,
                 quality_score: metadata.quality_score,
                 metadata: metadata,
-                is_active: true,
-                version: 1,
               });
 
             if (error) {
@@ -1075,8 +1071,6 @@ async function executeExaSearch(
             source_url: result.url,
             quality_score: metadata.quality_score,
             metadata: metadata,
-            is_active: true,
-            version: 1,
           });
 
         if (error) {
@@ -1232,8 +1226,6 @@ async function executeWikipediaSearch(
               source_url: metadata.url,
               quality_score: metadata.quality_score,
               metadata: metadata,
-              is_active: true,
-              version: 1,
             });
           
           if (error) {
@@ -1432,22 +1424,7 @@ export async function regenerateResearchStage(
     throw new Error(`Blueprint must be approved to regenerate research. Current status: ${blueprintRecord.status}`);
   }
 
-  // Soft delete existing research results
-  const { error: softDeleteError } = await (supabase
-    .from('research_results') as any)
-    .update({
-      is_active: false,
-      deleted_at: new Date().toISOString(),
-    })
-    .eq('event_id', eventId)
-    .eq('blueprint_id', blueprintId)
-    .eq('is_active', true);
-
-  if (softDeleteError) {
-    console.warn(`[context-gen] Warning: Failed to soft delete existing research: ${softDeleteError.message}`);
-  }
-
-  // Create generation cycle
+  // Create generation cycle first (we'll use it to filter what to delete)
   const researchCycleId = await createGenerationCycle(
     supabase,
     eventId,
@@ -1472,30 +1449,36 @@ export async function regenerateResearchStage(
 
   console.log(`[context-gen] Research regeneration completed: ${researchResults.chunks.length} chunks found`);
 
-  // Mark downstream components (glossary, chunks) as needing regeneration
-  // Soft delete glossary and chunks that depend on the old research
-  const { error: glossaryDeleteError } = await (supabase
-    .from('glossary_terms') as any)
-    .update({
-      is_active: false,
-      deleted_at: new Date().toISOString(),
-    })
+  // Hard delete existing research results from previous cycles (since we're regenerating)
+  const { error: researchDeleteError } = await (supabase
+    .from('research_results') as any)
+    .delete()
     .eq('event_id', eventId)
-    .eq('is_active', true);
+    .eq('blueprint_id', blueprintId)
+    .neq('generation_cycle_id', researchCycleId);
 
-  if (glossaryDeleteError) {
-    console.warn(`[context-gen] Warning: Failed to soft delete glossary after research regeneration: ${glossaryDeleteError.message}`);
+  if (researchDeleteError) {
+    console.warn(`[context-gen] Warning: Failed to delete existing research: ${researchDeleteError.message}`);
   }
 
-  // Soft delete non-research chunks (preserve any research chunks)
+  // Mark downstream components (glossary, chunks) as needing regeneration
+  // Hard delete glossary and chunks from previous cycles (preserve research chunks from any cycle)
+  const { error: glossaryDeleteError } = await (supabase
+    .from('glossary_terms') as any)
+    .delete()
+    .eq('event_id', eventId)
+    .neq('generation_cycle_id', researchCycleId);
+
+  if (glossaryDeleteError) {
+    console.warn(`[context-gen] Warning: Failed to delete glossary after research regeneration: ${glossaryDeleteError.message}`);
+  }
+
+  // Hard delete non-research chunks from previous cycles (preserve research chunks from any cycle)
   const { error: chunksDeleteError } = await (supabase
     .from('context_items') as any)
-    .update({
-      is_active: false,
-      deleted_at: new Date().toISOString(),
-    })
+    .delete()
     .eq('event_id', eventId)
-    .eq('is_active', true)
+    .neq('generation_cycle_id', researchCycleId)
     .neq('component_type', 'research');
 
   if (chunksDeleteError) {

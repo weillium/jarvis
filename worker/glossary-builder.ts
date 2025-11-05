@@ -101,8 +101,7 @@ export async function buildGlossary(
       .from('research_results') as any)
       .select('content, metadata, query, api')
       .eq('event_id', eventId)
-      .eq('blueprint_id', blueprintId)
-      .eq('is_active', true);
+      .eq('blueprint_id', blueprintId);
 
     if (researchError) {
       console.warn(`[glossary] Warning: Failed to fetch research results: ${researchError.message}`);
@@ -119,18 +118,17 @@ export async function buildGlossary(
     research = researchResults;
   }
 
-  // Soft delete existing glossary terms (mark as inactive)
-  const { error: softDeleteError } = await (supabase
-    .from('glossary_terms') as any)
-    .update({
-      is_active: false,
-      deleted_at: new Date().toISOString(),
-    })
-    .eq('event_id', eventId)
-    .eq('is_active', true);
-
-  if (softDeleteError) {
-    console.warn(`[glossary] Warning: Failed to soft delete existing terms: ${softDeleteError.message}`);
+  // Hard delete existing glossary terms from previous generation cycles
+  if (generationCycleId) {
+    const { error: deleteError } = await (supabase
+      .from('glossary_terms') as any)
+      .delete()
+      .eq('event_id', eventId)
+      .neq('generation_cycle_id', generationCycleId);
+    
+    if (deleteError) {
+      console.warn(`[glossary] Warning: Failed to delete old glossary terms: ${deleteError.message}`);
+    }
   }
 
   // Extract context from research results
@@ -183,8 +181,6 @@ export async function buildGlossary(
               confidence_score: def.confidence_score || 0.8,
               source: def.source || 'llm_generation',
               source_url: def.source_url || null,
-              is_active: true,
-              version: 1,
             });
 
           if (error) {

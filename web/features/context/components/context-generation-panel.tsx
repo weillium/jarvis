@@ -16,6 +16,7 @@ interface StatusData {
   agent: {
     id: string;
     status: string;
+    stage: string | null;
     created_at: string;
   } | null;
   blueprint: {
@@ -236,11 +237,11 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
     }
   };
 
-  const canStart = statusData?.agent?.status === 'idle' || 
-                   statusData?.agent?.status === 'prepping' || // Legacy status support
-                   statusData?.agent?.status === 'blueprint_ready' ||
+  const canStart = (statusData?.agent?.status === 'idle' && (!statusData?.agent?.stage || statusData?.agent?.stage === 'prepping')) || 
+                   (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'blueprint') ||
                    (statusData?.agent?.status === 'error' && !statusData?.blueprint);
-  const canApprove = statusData?.agent?.status === 'blueprint_ready' && 
+  const canApprove = statusData?.agent?.status === 'idle' && 
+                     statusData?.agent?.stage === 'blueprint' && 
                      statusData?.blueprint?.status === 'ready';
   const showBlueprint = statusData?.blueprint?.status === 'ready' || 
                         statusData?.blueprint?.status === 'approved' ||
@@ -291,14 +292,14 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
             <span style={{
               display: 'inline-block',
               padding: '6px 12px',
-              background: getStatusColor(statusData.agent.status),
+              background: getStatusColor(statusData.agent.status, statusData.agent.stage),
               color: '#ffffff',
               borderRadius: '6px',
               fontSize: '12px',
               fontWeight: '500',
               textTransform: 'uppercase',
             }}>
-              {getStatusLabel(statusData.agent.status)}
+              {getStatusLabel(statusData.agent.status, statusData.agent.stage)}
             </span>
           )}
         </div>
@@ -344,7 +345,7 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
             onClick={handleStart}
             disabled={starting}
             style={{
-              background: starting ? '#94a3b8' : (statusData?.agent?.status === 'blueprint_ready' ? '#8b5cf6' : '#3b82f6'),
+              background: starting ? '#94a3b8' : (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'blueprint' ? '#8b5cf6' : '#3b82f6'),
               color: '#ffffff',
               border: 'none',
               borderRadius: '8px',
@@ -357,7 +358,7 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
           >
             {starting 
               ? 'Starting...' 
-              : (statusData?.agent?.status === 'blueprint_ready' ? 'Regenerate Blueprint' : 'Start Context Generation')}
+              : (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'blueprint' ? 'Regenerate Blueprint' : 'Start Context Generation')}
           </button>
           {canApprove && (
             <button
@@ -395,15 +396,14 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
       {/* Stage Regeneration Controls - Modular Regeneration */}
       {/* Always show when embedded, otherwise show for specific statuses */}
       {((embedded && statusData?.agent) || 
-       (statusData?.agent?.status === 'context_complete' || 
-        statusData?.agent?.status === 'error' ||
-        statusData?.agent?.status === 'blueprint_approved' ||
-        statusData?.agent?.status === 'researching' ||
-        statusData?.agent?.status === 'building_glossary' ||
-        statusData?.agent?.status === 'building_chunks' ||
-        statusData?.agent?.status === 'regenerating_research' ||
-        statusData?.agent?.status === 'regenerating_glossary' ||
-        statusData?.agent?.status === 'regenerating_chunks')) && (
+       ((statusData?.agent?.status === 'idle' && (statusData?.agent?.stage === 'context_complete' ||
+        statusData?.agent?.stage === 'researching' ||
+        statusData?.agent?.stage === 'building_glossary' ||
+        statusData?.agent?.stage === 'building_chunks' ||
+        statusData?.agent?.stage === 'regenerating_research' ||
+        statusData?.agent?.stage === 'regenerating_glossary' ||
+        statusData?.agent?.stage === 'regenerating_chunks')) ||
+        statusData?.agent?.status === 'error')) && (
         <div style={{
           marginBottom: '20px',
           ...(embedded ? {} : {
@@ -443,10 +443,10 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
             </button>
             <button
               onClick={() => handleRegenerateStage('research')}
-              disabled={!!regeneratingStage || statusData?.agent?.status === 'regenerating_research' || !statusData?.blueprint}
+              disabled={!!regeneratingStage || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research') || !statusData?.blueprint}
               style={{
                 padding: '10px 16px',
-                background: (regeneratingStage === 'research' || statusData?.agent?.status === 'regenerating_research' || !statusData?.blueprint) 
+                background: (regeneratingStage === 'research' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research') || !statusData?.blueprint) 
                   ? '#94a3b8' 
                   : '#3b82f6',
                 color: '#ffffff',
@@ -454,23 +454,23 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
                 borderRadius: '6px',
                 fontSize: '12px',
                 fontWeight: '500',
-                cursor: (regeneratingStage || statusData?.agent?.status === 'regenerating_research' || !statusData?.blueprint) 
+                cursor: (regeneratingStage || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research') || !statusData?.blueprint) 
                   ? 'not-allowed' 
                   : 'pointer',
                 transition: 'background 0.2s',
                 opacity: !statusData?.blueprint ? 0.6 : 1,
               }}
             >
-              {(regeneratingStage === 'research' || statusData?.agent?.status === 'regenerating_research') 
+              {(regeneratingStage === 'research' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research')) 
                 ? 'Regenerating...' 
                 : 'Regenerate Research'}
             </button>
             <button
               onClick={() => handleRegenerateStage('glossary')}
-              disabled={!!regeneratingStage || statusData?.agent?.status === 'regenerating_glossary' || !statusData?.blueprint}
+              disabled={!!regeneratingStage || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary') || !statusData?.blueprint}
               style={{
                 padding: '10px 16px',
-                background: (regeneratingStage === 'glossary' || statusData?.agent?.status === 'regenerating_glossary' || !statusData?.blueprint) 
+                background: (regeneratingStage === 'glossary' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary') || !statusData?.blueprint) 
                   ? '#94a3b8' 
                   : '#3b82f6',
                 color: '#ffffff',
@@ -478,23 +478,23 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
                 borderRadius: '6px',
                 fontSize: '12px',
                 fontWeight: '500',
-                cursor: (regeneratingStage || statusData?.agent?.status === 'regenerating_glossary' || !statusData?.blueprint) 
+                cursor: (regeneratingStage || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary') || !statusData?.blueprint) 
                   ? 'not-allowed' 
                   : 'pointer',
                 transition: 'background 0.2s',
                 opacity: !statusData?.blueprint ? 0.6 : 1,
               }}
             >
-              {(regeneratingStage === 'glossary' || statusData?.agent?.status === 'regenerating_glossary') 
+              {(regeneratingStage === 'glossary' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary')) 
                 ? 'Regenerating...' 
                 : 'Regenerate Glossary'}
             </button>
             <button
               onClick={() => handleRegenerateStage('chunks')}
-              disabled={!!regeneratingStage || statusData?.agent?.status === 'regenerating_chunks' || !statusData?.blueprint}
+              disabled={!!regeneratingStage || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks') || !statusData?.blueprint}
               style={{
                 padding: '10px 16px',
-                background: (regeneratingStage === 'chunks' || statusData?.agent?.status === 'regenerating_chunks' || !statusData?.blueprint) 
+                background: (regeneratingStage === 'chunks' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks') || !statusData?.blueprint) 
                   ? '#94a3b8' 
                   : '#3b82f6',
                 color: '#ffffff',
@@ -502,14 +502,14 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
                 borderRadius: '6px',
                 fontSize: '12px',
                 fontWeight: '500',
-                cursor: (regeneratingStage || statusData?.agent?.status === 'regenerating_chunks' || !statusData?.blueprint) 
+                cursor: (regeneratingStage || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks') || !statusData?.blueprint) 
                   ? 'not-allowed' 
                   : 'pointer',
                 transition: 'background 0.2s',
                 opacity: !statusData?.blueprint ? 0.6 : 1,
               }}
             >
-              {(regeneratingStage === 'chunks' || statusData?.agent?.status === 'regenerating_chunks') 
+              {(regeneratingStage === 'chunks' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks')) 
                 ? 'Regenerating...' 
                 : 'Regenerate Chunks'}
             </button>
@@ -704,73 +704,54 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
   );
 }
 
-function getStatusColor(status: string): string {
-  switch (status) {
-    case 'idle':
-      return '#64748b'; // gray
-    case 'blueprint_generating':
-      return '#3b82f6'; // blue
-    case 'blueprint_ready':
-      return '#10b981'; // green
-    case 'blueprint_approved':
-    case 'researching':
-    case 'regenerating_research':
-    case 'building_glossary':
-    case 'regenerating_glossary':
-    case 'building_chunks':
-    case 'regenerating_chunks':
-      return '#f59e0b'; // amber
-    case 'context_complete':
-      return '#10b981'; // green
-    case 'testing':
-      return '#f59e0b'; // amber (intermediate state)
-    case 'ready':
-    case 'running':
-      return '#10b981'; // green
-    case 'ended':
-      return '#64748b'; // gray (terminal state)
-    case 'error':
-      return '#ef4444'; // red
-    default:
-      return '#64748b'; // gray
+function getStatusColor(status: string, stage?: string | null): string {
+  if (status === 'error') return '#ef4444'; // red
+  if (status === 'ended') return '#64748b'; // gray
+  if (status === 'paused') return '#f59e0b'; // amber
+  if (status === 'active') {
+    return stage === 'running' ? '#3b82f6' : stage === 'testing' ? '#8b5cf6' : '#3b82f6'; // blue/purple
   }
+  if (status === 'idle') {
+    switch (stage) {
+      case 'blueprint': return '#8b5cf6'; // purple
+      case 'researching': return '#f59e0b'; // amber
+      case 'building_glossary': return '#f59e0b'; // amber
+      case 'building_chunks': return '#f59e0b'; // amber
+      case 'regenerating_research': return '#f59e0b'; // amber
+      case 'regenerating_glossary': return '#f59e0b'; // amber
+      case 'regenerating_chunks': return '#f59e0b'; // amber
+      case 'context_complete': return '#10b981'; // green
+      case 'testing': return '#8b5cf6'; // purple
+      case 'ready': return '#10b981'; // green
+      case 'prepping': return '#f59e0b'; // amber
+      default: return '#64748b'; // gray
+    }
+  }
+  return '#6b7280';
 }
 
-function getStatusLabel(status: string): string {
-  switch (status) {
-    case 'idle':
-      return 'Idle';
-    case 'blueprint_generating':
-      return 'Generating Blueprint';
-    case 'blueprint_ready':
-      return 'Blueprint Ready';
-    case 'blueprint_approved':
-      return 'Blueprint Approved';
-    case 'researching':
-      return 'Researching';
-    case 'regenerating_research':
-      return 'Regenerating Research';
-    case 'building_glossary':
-      return 'Building Glossary';
-    case 'regenerating_glossary':
-      return 'Regenerating Glossary';
-    case 'building_chunks':
-      return 'Building Chunks';
-    case 'regenerating_chunks':
-      return 'Regenerating Chunks';
-    case 'context_complete':
-      return 'Complete';
-    case 'testing':
-      return 'Testing';
-    case 'ready':
-      return 'Ready';
-    case 'running':
-      return 'Running';
-    case 'ended':
-      return 'Ended';
-    case 'error':
-      return 'Error';
-    default:
-      return status;
+function getStatusLabel(status: string, stage?: string | null): string {
+  if (status === 'error') return 'Error';
+  if (status === 'ended') return 'Ended';
+  if (status === 'paused') return 'Paused';
+  if (status === 'active') {
+    return stage === 'running' ? 'Running' : stage === 'testing' ? 'Testing' : 'Active';
   }
+  if (status === 'idle') {
+    switch (stage) {
+      case 'blueprint': return 'Blueprint';
+      case 'researching': return 'Researching';
+      case 'building_glossary': return 'Building Glossary';
+      case 'building_chunks': return 'Building Chunks';
+      case 'regenerating_research': return 'Regenerating Research';
+      case 'regenerating_glossary': return 'Regenerating Glossary';
+      case 'regenerating_chunks': return 'Regenerating Chunks';
+      case 'context_complete': return 'Context Complete';
+      case 'testing': return 'Testing';
+      case 'ready': return 'Ready';
+      case 'prepping': return 'Prepping';
+      default: return 'Idle';
+    }
+  }
+  return 'Unknown';
 }

@@ -18,75 +18,60 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
   const [isGlossaryExpanded, setIsGlossaryExpanded] = useState(false);
   const [isResearchExpanded, setIsResearchExpanded] = useState(false);
 
-  const getStatusColor = (status: AgentInfoType['status'] | null): string => {
+  const getStatusColor = (status: AgentInfoType['status'] | null, stage?: string | null): string => {
     if (!status) return '#6b7280';
     
-    switch (status) {
-      // New context generation statuses
-      case 'idle':
-        return '#64748b'; // gray
-      case 'blueprint_generating':
-        return '#3b82f6'; // blue
-      case 'blueprint_ready':
-        return '#10b981'; // green
-      case 'blueprint_approved':
-      case 'researching':
-      case 'building_glossary':
-      case 'building_chunks':
-        return '#f59e0b'; // amber
-      case 'context_complete':
-        return '#10b981'; // green
-      // Legacy statuses
-      case 'prepping':
-        return '#f59e0b'; // amber
-      case 'ready':
-        return '#10b981'; // green
-      case 'running':
-        return '#3b82f6'; // blue
-      case 'ended':
-        return '#6b7280'; // gray
-      case 'error':
-        return '#ef4444'; // red
-      default:
-        return '#6b7280';
+    if (status === 'error') return '#ef4444'; // red
+    if (status === 'ended') return '#6b7280'; // gray
+    if (status === 'paused') return '#f59e0b'; // amber
+    if (status === 'active') {
+      return stage === 'running' ? '#3b82f6' : stage === 'testing' ? '#8b5cf6' : '#3b82f6'; // blue/purple
     }
+    if (status === 'idle') {
+      switch (stage) {
+        case 'blueprint': return '#8b5cf6'; // purple
+        case 'researching': return '#f59e0b'; // amber
+        case 'building_glossary': return '#f59e0b'; // amber
+        case 'building_chunks': return '#f59e0b'; // amber
+        case 'regenerating_research': return '#f59e0b'; // amber
+        case 'regenerating_glossary': return '#f59e0b'; // amber
+        case 'regenerating_chunks': return '#f59e0b'; // amber
+        case 'context_complete': return '#10b981'; // green
+        case 'testing': return '#8b5cf6'; // purple
+        case 'ready': return '#10b981'; // green
+        case 'prepping': return '#f59e0b'; // amber
+        default: return '#64748b'; // gray
+      }
+    }
+    return '#6b7280';
   };
 
-  const getStatusLabel = (status: AgentInfoType['status'] | null): string => {
+  const getStatusLabel = (status: AgentInfoType['status'] | null, stage?: string | null): string => {
     if (!status) return 'Unknown';
     
-    switch (status) {
-      // New context generation statuses
-      case 'idle':
-        return 'Idle';
-      case 'blueprint_generating':
-        return 'Generating Blueprint';
-      case 'blueprint_ready':
-        return 'Blueprint Ready';
-      case 'blueprint_approved':
-        return 'Blueprint Approved';
-      case 'researching':
-        return 'Researching';
-      case 'building_glossary':
-        return 'Building Glossary';
-      case 'building_chunks':
-        return 'Building Chunks';
-      case 'context_complete':
-        return 'Context Complete';
-      // Legacy statuses
-      case 'prepping':
-        return 'Prepping';
-      case 'ready':
-        return 'Ready';
-      case 'running':
-        return 'Running';
-      case 'ended':
-        return 'Ended';
-      case 'error':
-        return 'Error';
-      default:
-        return status;
+    if (status === 'error') return 'Error';
+    if (status === 'ended') return 'Ended';
+    if (status === 'paused') return 'Paused';
+    if (status === 'active') {
+      return stage === 'running' ? 'Running' : stage === 'testing' ? 'Testing' : 'Active';
     }
+    if (status === 'idle') {
+      switch (stage) {
+        case 'blueprint': return 'Blueprint';
+        case 'researching': return 'Researching';
+        case 'building_glossary': return 'Building Glossary';
+        case 'building_chunks': return 'Building Chunks';
+        case 'regenerating_research': return 'Regenerating Research';
+        case 'regenerating_glossary': return 'Regenerating Glossary';
+        case 'regenerating_chunks': return 'Regenerating Chunks';
+        case 'context_complete': return 'Context Complete';
+        case 'testing': return 'Testing';
+        case 'ready': return 'Ready';
+        case 'prepping': return 'Prepping';
+        default: return 'Idle';
+      }
+    }
+    return 'Unknown';
   };
 
   // Loading state
@@ -240,8 +225,12 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
     return new Date(dateString).toLocaleString();
   };
 
-  const statusColor = getStatusColor(agent.status);
-  const statusLabel = getStatusLabel(agent.status);
+  if (!agent) {
+    return null;
+  }
+
+  const statusColor = getStatusColor(agent.status, agent.stage);
+  const statusLabel = getStatusLabel(agent.status, agent.stage);
 
   return (
     <div style={{
@@ -592,7 +581,7 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
         borderTop: '1px solid #e2e8f0',
         marginBottom: '24px',
       }}>
-        <ContextGenerationPanel eventId={eventId} agentStatus={agent.status} embedded={true} />
+        <ContextGenerationPanel eventId={eventId} embedded={true} />
       </div>
 
       {/* Context Database Section - Collapsible */}
@@ -638,7 +627,7 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
       )}
 
       {/* Glossary Section - Collapsible, only show when context is complete */}
-      {agent.status === 'context_complete' && contextStats && contextStats.glossaryTermCount > 0 && (
+      {agent.status === 'idle' && agent.stage === 'context_complete' && contextStats && contextStats.glossaryTermCount > 0 && (
         <div style={{
           paddingTop: '24px',
           borderTop: '1px solid #e2e8f0',

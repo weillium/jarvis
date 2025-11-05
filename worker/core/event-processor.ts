@@ -116,11 +116,7 @@ export class EventProcessor {
         payload: card,
       });
 
-      await this.supabase.insertCard({
-        event_id: runtime.eventId,
-        kind: card.kind || 'Context',
-        payload: card,
-      });
+      // Cards are now inserted via insertAgentOutput only (no need for separate insertCard)
 
       console.log(
         `[cards] Card received from Realtime API (seq: ${card.source_seq || runtime.cardsLastSeq}, type: ${card.card_type})`

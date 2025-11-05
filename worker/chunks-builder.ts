@@ -81,8 +81,7 @@ export async function buildContextChunks(
       .from('research_results') as any)
       .select('content, metadata, query, api')
       .eq('event_id', eventId)
-      .eq('blueprint_id', blueprintId)
-      .eq('is_active', true);
+      .eq('blueprint_id', blueprintId);
 
     if (researchError) {
       console.warn(`[chunks] Warning: Failed to fetch research results: ${researchError.message}`);
@@ -99,20 +98,19 @@ export async function buildContextChunks(
     research = researchResults;
   }
 
-  // Soft delete existing non-research chunks (preserve research chunks)
-  // Delete chunks that are not research type
-  const { error: softDeleteError } = await (supabase
-    .from('context_items') as any)
-    .update({
-      is_active: false,
-      deleted_at: new Date().toISOString(),
-    })
-    .eq('event_id', eventId)
-    .eq('is_active', true)
-    .neq('component_type', 'research');
-
-  if (softDeleteError) {
-    console.warn(`[chunks] Warning: Failed to soft delete existing chunks: ${softDeleteError.message}`);
+  // Hard delete existing non-research chunks from previous generation cycles (preserve research chunks)
+  // Delete chunks that are not research type and belong to previous cycles
+  if (generationCycleId) {
+    const { error: deleteError } = await (supabase
+      .from('context_items') as any)
+      .delete()
+      .eq('event_id', eventId)
+      .neq('generation_cycle_id', generationCycleId)
+      .neq('component_type', 'research');
+    
+    if (deleteError) {
+      console.warn(`[chunks] Warning: Failed to delete old chunks: ${deleteError.message}`);
+    }
   }
 
   // Update generation cycle to processing
@@ -308,8 +306,6 @@ export async function buildContextChunks(
               quality_score: chunk.quality_score || 0.8,
               metadata: chunk.metadata || {},
               component_type: componentType,
-              is_active: true,
-              version: 1,
             });
 
           if (error) {

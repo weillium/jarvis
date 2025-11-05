@@ -46,12 +46,13 @@ export async function GET(
 
     const supabase = getSupabaseClient();
 
-    // Build query - only fetch active terms with version info
+    // Build query - fetch terms from current generation cycle
+    // Note: After Phase 3, we filter by generation_cycle_id instead of is_active
+    // For now, get all terms (we'll filter by cycle in later updates)
     let query = (supabase
       .from('glossary_terms') as any)
-      .select('id, term, definition, acronym_for, category, usage_examples, related_terms, confidence_score, source, source_url, created_at, version, generation_cycle_id')
+      .select('id, term, definition, acronym_for, category, usage_examples, related_terms, confidence_score, source, source_url, created_at, generation_cycle_id')
       .eq('event_id', eventId)
-      .eq('is_active', true)
       .order('confidence_score', { ascending: false, nullsFirst: false })
       .order('term', { ascending: true });
 

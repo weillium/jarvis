@@ -166,71 +166,60 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
     }
   };
 
-  const getStatusColor = (status: string | null): string => {
+  const getStatusColor = (status: string | null, stage?: string | null): string => {
     if (!status) return '#6b7280';
     
-    switch (status) {
-      case 'idle':
-        return '#64748b';
-      case 'blueprint_generating':
-        return '#3b82f6';
-      case 'blueprint_ready':
-        return '#10b981';
-      case 'blueprint_approved':
-      case 'researching':
-      case 'building_glossary':
-      case 'building_chunks':
-        return '#f59e0b';
-      case 'context_complete':
-        return '#10b981';
-      case 'prepping':
-        return '#f59e0b';
-      case 'ready':
-        return '#10b981';
-      case 'running':
-        return '#3b82f6';
-      case 'ended':
-        return '#6b7280';
-      case 'error':
-        return '#ef4444';
-      default:
-        return '#6b7280';
+    if (status === 'error') return '#ef4444'; // red
+    if (status === 'ended') return '#6b7280'; // gray
+    if (status === 'paused') return '#f59e0b'; // amber
+    if (status === 'active') {
+      return stage === 'running' ? '#3b82f6' : stage === 'testing' ? '#8b5cf6' : '#3b82f6'; // blue/purple
     }
+    if (status === 'idle') {
+      switch (stage) {
+        case 'blueprint': return '#8b5cf6'; // purple
+        case 'researching': return '#f59e0b'; // amber
+        case 'building_glossary': return '#f59e0b'; // amber
+        case 'building_chunks': return '#f59e0b'; // amber
+        case 'regenerating_research': return '#f59e0b'; // amber
+        case 'regenerating_glossary': return '#f59e0b'; // amber
+        case 'regenerating_chunks': return '#f59e0b'; // amber
+        case 'context_complete': return '#10b981'; // green
+        case 'testing': return '#8b5cf6'; // purple
+        case 'ready': return '#10b981'; // green
+        case 'prepping': return '#f59e0b'; // amber
+        default: return '#64748b'; // gray
+      }
+    }
+    return '#6b7280';
   };
 
-  const getStatusLabel = (status: string | null): string => {
+  const getStatusLabel = (status: string | null, stage?: string | null): string => {
     if (!status) return 'Unknown';
     
-    switch (status) {
-      case 'idle':
-        return 'Idle';
-      case 'blueprint_generating':
-        return 'Generating Blueprint';
-      case 'blueprint_ready':
-        return 'Blueprint Ready';
-      case 'blueprint_approved':
-        return 'Blueprint Approved';
-      case 'researching':
-        return 'Researching';
-      case 'building_glossary':
-        return 'Building Glossary';
-      case 'building_chunks':
-        return 'Building Chunks';
-      case 'context_complete':
-        return 'Context Complete';
-      case 'prepping':
-        return 'Prepping';
-      case 'ready':
-        return 'Ready';
-      case 'running':
-        return 'Running';
-      case 'ended':
-        return 'Ended';
-      case 'error':
-        return 'Error';
-      default:
-        return status;
+    if (status === 'error') return 'Error';
+    if (status === 'ended') return 'Ended';
+    if (status === 'paused') return 'Paused';
+    if (status === 'active') {
+      return stage === 'running' ? 'Running' : stage === 'testing' ? 'Testing' : 'Active';
     }
+    if (status === 'idle') {
+      switch (stage) {
+        case 'blueprint': return 'Blueprint';
+        case 'researching': return 'Researching';
+        case 'building_glossary': return 'Building Glossary';
+        case 'building_chunks': return 'Building Chunks';
+        case 'regenerating_research': return 'Regenerating Research';
+        case 'regenerating_glossary': return 'Regenerating Glossary';
+        case 'regenerating_chunks': return 'Regenerating Chunks';
+        case 'context_complete': return 'Context Complete';
+        case 'testing': return 'Testing';
+        case 'ready': return 'Ready';
+        case 'prepping': return 'Prepping';
+        default: return 'Idle';
+      }
+    }
+    return 'Unknown';
   };
 
   const formatDate = (dateString: string | null) => {
@@ -985,8 +974,8 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
     );
   }
 
-  const statusColor = getStatusColor(agent.status);
-  const statusLabel = getStatusLabel(agent.status);
+  const statusColor = getStatusColor(agent.status, agent.stage);
+  const statusLabel = getStatusLabel(agent.status, agent.stage);
 
   return (
     <div>
@@ -1245,7 +1234,7 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
               </button>
               
               {/* Create Sessions button - visible when agent is context_complete AND no sessions exist */}
-              {agent?.status === 'context_complete' && 
+              {agent?.status === 'idle' && agent?.stage === 'context_complete' && 
                !cardsStatus && 
                !factsStatus && 
                !sessionsLoading && 
@@ -1290,7 +1279,7 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
                 (cardsStatus?.status === 'paused' && !factsStatus) ||
                 (!cardsStatus && factsStatus?.status === 'paused') ||
                 // Also show if we're in testing/running state but haven't received status yet (sessions might be loading)
-                (!cardsStatus && !factsStatus && (agent?.status === 'testing' || agent?.status === 'running') && sessionsLoading)) && (
+                (!cardsStatus && !factsStatus && ((agent?.status === 'active' && agent?.stage === 'testing') || (agent?.status === 'active' && agent?.stage === 'running')) && sessionsLoading)) && (
                     <button
                       onClick={handleStartSessions}
                       disabled={isStartingSessions}
@@ -1362,7 +1351,7 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
               )}
               
               {/* Testing state buttons - visible when agent is testing */}
-              {agent?.status === 'testing' && (
+              {agent?.status === 'active' && agent?.stage === 'testing' && (
                 <>
                   {/* Test Transcript button - always visible in testing state */}
                   <button
@@ -1485,9 +1474,9 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
                 color: '#94a3b8',
                 marginBottom: '16px',
               }}>
-                {agent?.status === 'ready' || agent?.status === 'context_complete'
+                {(agent?.status === 'idle' && (agent?.stage === 'ready' || agent?.stage === 'context_complete'))
                   ? 'Use the "Create Sessions" button above to begin.'
-                  : agent?.status === 'running'
+                  : (agent?.status === 'active' && agent?.stage === 'running')
                   ? 'Waiting for sessions to be created...'
                   : 'Agent sessions are only available when the event is running.'}
               </div>
