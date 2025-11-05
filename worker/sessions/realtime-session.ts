@@ -11,11 +11,11 @@ import type {
   ResponseDoneEvent,
   ResponseTextDoneEvent,
 } from 'openai/resources/realtime/realtime';
-import { getPolicy } from './policies';
+import { getPolicy } from '../policies';
 import {
   createRealtimeCardsUserPrompt,
   createRealtimeFactsUserPrompt,
-} from './prompts';
+} from '../prompts';
 
 export type AgentType = 'cards' | 'facts';
 

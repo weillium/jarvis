@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type OpenAI from 'openai';
 import type { RingBuffer, TranscriptChunk } from '../ring-buffer';
 import type { FactsStore, Fact } from '../facts-store';
-import type { RealtimeSession } from '../realtime-session';
+import type { RealtimeSession } from '../sessions/realtime-session';
 import type { SupabaseService } from '../services/supabase-service';
 import type { OpenAIService } from '../services/openai-service';
 import type { SSEService } from '../services/sse-service';

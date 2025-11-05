@@ -5,7 +5,8 @@
 
 import { RingBuffer } from './ring-buffer';
 import { FactsStore } from './facts-store';
-import { RealtimeSession, AgentType } from './realtime-session';
+import { SessionFactory } from './sessions/session-factory';
+import { SessionManager } from './sessions/session-manager';
 import { SupabaseService } from './services/supabase-service';
 import { OpenAIService } from './services/openai-service';
 import { SSEService } from './services/sse-service';
@@ -14,21 +15,18 @@ import { MetricsCollector } from './monitoring/metrics-collector';
 import { StatusUpdater } from './monitoring/status-updater';
 import { CheckpointManager } from './monitoring/checkpoint-manager';
 import { GlossaryManager } from './context/glossary-manager';
-import { ContextBuilder, AgentContext as ContextAgentContext } from './context/context-builder';
+import { ContextBuilder } from './context/context-builder';
 import { VectorSearchService } from './context/vector-search';
-import { getPolicy } from './policies';
-import {
-  createCardGenerationUserPrompt,
-  FACTS_EXTRACTION_SYSTEM_PROMPT,
-  createFactsExtractionUserPrompt,
-} from './prompts';
+import { CardsProcessor } from './processing/cards-processor';
+import { FactsProcessor } from './processing/facts-processor';
+import { TranscriptProcessor } from './processing/transcript-processor';
 import type {
   AgentSessionStatus,
+  AgentType,
   EventRuntime,
   GlossaryEntry,
   OrchestratorConfig,
   TranscriptChunk,
-  Fact,
 } from './types';
 export type { OrchestratorConfig } from './types';
 
@@ -46,6 +44,11 @@ export class Orchestrator {
   private glossaryManager: GlossaryManager;
   private contextBuilder: ContextBuilder;
   private vectorSearch: VectorSearchService;
+  private sessionFactory: SessionFactory;
+  private sessionManager: SessionManager;
+  private cardsProcessor: CardsProcessor;
+  private factsProcessor: FactsProcessor;
+  private transcriptProcessor: TranscriptProcessor;
 
   constructor(config: OrchestratorConfig) {
     this.config = config;
@@ -65,6 +68,31 @@ export class Orchestrator {
     this.glossaryManager = new GlossaryManager(this.supabaseService);
     this.contextBuilder = new ContextBuilder(this.glossaryManager);
     this.vectorSearch = new VectorSearchService(this.supabaseService, this.openaiService);
+    this.sessionFactory = new SessionFactory(
+      this.openaiService.getClient(),
+      this.openaiService,
+      this.vectorSearch,
+      this.config.realtimeModel
+    );
+    this.sessionManager = new SessionManager(this.sessionFactory, this.supabaseService, this.logger);
+    this.cardsProcessor = new CardsProcessor(
+      this.contextBuilder,
+      this.supabaseService,
+      this.openaiService,
+      this.logger,
+      this.metrics,
+      this.checkpointManager,
+      (card, transcriptText) => this.determineCardType(card, transcriptText)
+    );
+    this.factsProcessor = new FactsProcessor(
+      this.contextBuilder,
+      this.supabaseService,
+      this.openaiService,
+      this.logger,
+      this.metrics,
+      this.checkpointManager
+    );
+    this.transcriptProcessor = new TranscriptProcessor(this.supabaseService);
   }
 
   /**
@@ -128,17 +156,8 @@ export class Orchestrator {
       return;
     }
 
-    // Convert to TranscriptChunk
-    const chunk: TranscriptChunk = {
-      seq: transcript.seq || 0,
-      at_ms: transcript.at_ms || Date.now(),
-      speaker: transcript.speaker || undefined,
-      text: transcript.text,
-      final: transcript.final !== false, // Default to true if not specified
-      transcript_id: transcript.id,
-    };
+    const chunk = this.transcriptProcessor.convertToChunk(transcript);
 
-    // Process the chunk
     await this.processTranscriptChunk(runtime, chunk);
   }
 
@@ -149,170 +168,59 @@ export class Orchestrator {
     runtime: EventRuntime,
     chunk: TranscriptChunk
   ): Promise<void> {
-    // Add to ring buffer
     runtime.ringBuffer.add(chunk);
 
-    // Only process finalized chunks
     if (!chunk.final) {
       return;
     }
 
-    // Persist to database (already done via insert, but update seq if needed)
     if (!chunk.seq || chunk.seq === 0) {
-      // Update sequence number if missing
-      if (chunk.transcript_id !== undefined && chunk.transcript_id !== null) {
-        await this.supabaseService.updateTranscriptSeq(
-          chunk.transcript_id,
-          runtime.cardsLastSeq + 1
-        );
-      }
+      await this.transcriptProcessor.ensureSequenceNumber(
+        chunk.transcript_id,
+        runtime.cardsLastSeq + 1
+      );
       chunk.seq = runtime.cardsLastSeq + 1;
     }
 
-    // Update checkpoints
     runtime.cardsLastSeq = Math.max(runtime.cardsLastSeq, chunk.seq);
     runtime.factsLastSeq = Math.max(runtime.factsLastSeq, chunk.seq);
 
-    // Process with Cards Agent (immediate)
-    await this.processCardsAgent(runtime, chunk);
+    await this.cardsProcessor.process(
+      runtime,
+      chunk,
+      runtime.cardsSession,
+      runtime.cardsSessionId
+    );
 
-    // Process with Facts Agent (debounced)
     this.scheduleFactsUpdate(runtime);
   }
 
-  /**
-   * Process transcript with Cards Agent
-   */
-  private async processCardsAgent(
-    runtime: EventRuntime,
-    chunk: TranscriptChunk
-  ): Promise<void> {
-    if (!runtime.cardsSession || !runtime.cardsSessionId) {
-      this.logger.log(runtime.eventId, 'cards', 'warn', `No session for event ${runtime.eventId}`);
-      return;
-    }
-
-    try {
-      // Build full context for Cards agent
-      const cardsContext = this.contextBuilder.buildCardsContext(runtime, chunk.text);
-
-      const { checkBudgetStatus, formatTokenBreakdown } = await import('./utils/token-counter');
-      const tokenBreakdown = this.contextBuilder.getCardsTokenBreakdown(cardsContext, chunk.text);
-      
-      const budgetStatus = checkBudgetStatus(tokenBreakdown.total, 2048);
-      const breakdownStr = formatTokenBreakdown(tokenBreakdown.breakdown);
-      
-      let logLevel: 'log' | 'warn' | 'error' = 'log';
-      let logPrefix = `[context]`;
-      
-      if (budgetStatus.critical) {
-        logLevel = 'error';
-        logPrefix = `[context] ⚠️ CRITICAL`;
-      } else if (budgetStatus.warning) {
-        logLevel = 'warn';
-        logPrefix = `[context] ⚠️ WARNING`;
-      }
-      
-      const logMessage = `${logPrefix} Cards Agent (seq ${chunk.seq}): ${tokenBreakdown.total}/2048 tokens (${budgetStatus.percentage}%) - ${breakdownStr}`;
-      
-      this.logger.log(runtime.eventId, 'cards', logLevel, logMessage, { seq: chunk.seq });
-      
-      this.metrics.recordTokens(
-        runtime.eventId,
-        'cards',
-        tokenBreakdown.total,
-        budgetStatus.warning,
-        budgetStatus.critical
-      );
-
-      // Send to Realtime session
-      await runtime.cardsSession.sendMessage(chunk.text, cardsContext);
-
-      // Note: In real implementation, we'd receive the response via WebSocket
-      // For now, we'll use a fallback to standard API
-      await this.generateCardFallback(runtime, chunk, cardsContext);
-
-      // Update checkpoint
-      await this.persistCheckpoint(runtime.eventId, 'cards', runtime.cardsLastSeq);
-    } catch (error: any) {
-      this.logger.log(runtime.eventId, 'cards', 'error', `Error processing chunk: ${error.message}`, { seq: chunk.seq });
-    }
+  private getSessionCreationOptions(runtime: EventRuntime) {
+    return {
+      cards: {
+        onRetrieve: async (query: string, topK: number) => {
+          return await this.handleRetrieveQuery(runtime, query, topK);
+        },
+        embedText: async (text: string) => {
+          return await this.openaiService.createEmbedding(text);
+        },
+      },
+      facts: {
+        onRetrieve: async (query: string, topK: number) => {
+          return await this.handleRetrieveQuery(runtime, query, topK);
+        },
+      },
+    };
   }
 
-  /**
-   * Fallback: Generate card using standard API (until Realtime API is fully integrated)
-   */
-  private async generateCardFallback(
-    runtime: EventRuntime,
-    chunk: TranscriptChunk,
-    context: ContextAgentContext
-  ): Promise<void> {
-    const policy = getPolicy('cards', 1);
+  private registerSessionHandlers(runtime: EventRuntime): void {
+    runtime.cardsSession?.on('card', async (card: any) => {
+      await this.handleCardResponse(runtime, card);
+    });
 
-    const userPrompt = createCardGenerationUserPrompt(
-      chunk.text,
-      context.bullets,
-      JSON.stringify(context.facts, null, 2),
-      context.glossaryContext
-    );
-
-    try {
-      const response = await this.openaiService.createChatCompletion(
-        [
-          { role: 'system', content: policy },
-          { role: 'user', content: userPrompt },
-        ],
-        {
-          responseFormat: { type: 'json_object' },
-          temperature: 0.7,
-        }
-      );
-
-      const cardJson = response.choices[0]?.message?.content;
-      if (!cardJson) return;
-
-      const card = JSON.parse(cardJson);
-      card.source_seq = chunk.seq;
-      
-      // Validate and normalize card_type
-      if (!card.card_type || !['text', 'text_visual', 'visual'].includes(card.card_type)) {
-        // Auto-determine type based on content
-        card.card_type = this.determineCardType(card, chunk.text);
-      }
-      
-      // Ensure required fields based on type
-      if (card.card_type === 'visual') {
-        if (!card.label) card.label = card.title || 'Image';
-        if (!card.body) card.body = null; // Visual cards don't need body
-      } else if (card.card_type === 'text_visual') {
-        if (!card.body) card.body = card.title || 'Definition';
-      } else {
-        // text type
-        if (!card.body) card.body = card.title || 'Definition';
-        card.image_url = null; // Text cards don't have images
-      }
-
-      // Store in agent_outputs
-      await this.supabaseService.insertAgentOutput({
-        event_id: runtime.eventId,
-        agent_id: runtime.agentId,
-        agent_type: 'cards',
-        for_seq: chunk.seq,
-        type: 'card',
-        payload: card,
-      });
-
-      // Also store in legacy cards table for compatibility
-      await this.supabaseService.insertCard({
-        event_id: runtime.eventId,
-        kind: card.kind || 'Context',
-        payload: card,
-      });
-
-      this.logger.log(runtime.eventId, 'cards', 'log', `Generated card for seq ${chunk.seq} (event: ${runtime.eventId}, type: ${card.card_type})`, { seq: chunk.seq });
-    } catch (error: any) {
-      this.logger.log(runtime.eventId, 'cards', 'error', `Error generating card: ${error.message}`, { seq: chunk.seq });
-    }
+    runtime.factsSession?.on('facts', async (facts: any[]) => {
+      await this.handleFactsResponse(runtime, facts);
+    });
   }
 
   /**
@@ -367,160 +275,8 @@ export class Orchestrator {
     // Schedule update (20-30 seconds debounce)
     const debounceMs = 25000; // 25 seconds
     runtime.factsUpdateTimer = setTimeout(() => {
-      this.processFactsAgent(runtime);
+      void this.factsProcessor.process(runtime, runtime.factsSession, runtime.factsSessionId);
     }, debounceMs);
-  }
-
-  /**
-   * Process with Facts Agent
-   */
-  private async processFactsAgent(runtime: EventRuntime): Promise<void> {
-    if (!runtime.factsSession || !runtime.factsSessionId) {
-      this.logger.log(runtime.eventId, 'facts', 'warn', `No session for event ${runtime.eventId}`);
-      return;
-    }
-
-    try {
-      // Get condensed context (capped at 2048 tokens)
-      const { context: factsContext, recentText } = this.contextBuilder.buildFactsContext(runtime);
-
-      const { checkBudgetStatus, formatTokenBreakdown } = await import('./utils/token-counter');
-      const tokenBreakdown = this.contextBuilder.getFactsTokenBreakdown(factsContext, recentText);
-
-      const budgetStatus = checkBudgetStatus(tokenBreakdown.total, 2048);
-      const breakdownStr = formatTokenBreakdown(tokenBreakdown.breakdown);
-      
-      let logLevel: 'log' | 'warn' | 'error' = 'log';
-      let logPrefix = `[context]`;
-      
-      if (budgetStatus.critical) {
-        logLevel = 'error';
-        logPrefix = `[context] ⚠️ CRITICAL`;
-      } else if (budgetStatus.warning) {
-        logLevel = 'warn';
-        logPrefix = `[context] ⚠️ WARNING`;
-      }
-      
-      const logMessage = `${logPrefix} Facts Agent (seq ${runtime.factsLastSeq}): ${tokenBreakdown.total}/2048 tokens (${budgetStatus.percentage}%) - ${breakdownStr}`;
-      
-      this.logger.log(runtime.eventId, 'facts', logLevel, logMessage, { seq: runtime.factsLastSeq });
-      
-      this.metrics.recordTokens(
-        runtime.eventId,
-        'facts',
-        tokenBreakdown.total,
-        budgetStatus.warning,
-        budgetStatus.critical
-      );
-
-      const currentFacts = runtime.factsStore.getAll();
-      await runtime.factsSession.sendMessage(recentText, {
-        recentText,
-        facts: currentFacts,
-        glossaryContext: factsContext.glossaryContext,
-      });
-
-      await this.generateFactsFallback(runtime, recentText, currentFacts, factsContext.glossaryContext);
-
-      // Update checkpoint
-      await this.persistCheckpoint(runtime.eventId, 'facts', runtime.factsLastSeq);
-      runtime.factsLastUpdate = Date.now();
-    } catch (error: any) {
-      this.logger.log(runtime.eventId, 'facts', 'error', `Error processing: ${error.message}`, { seq: runtime.factsLastSeq });
-    }
-  }
-
-  /**
-   * Fallback: Generate facts using standard API
-   */
-  private async generateFactsFallback(
-    runtime: EventRuntime,
-    recentText: string,
-    currentFacts: Fact[],
-    glossaryContext?: string
-  ): Promise<void> {
-    const policy = FACTS_EXTRACTION_SYSTEM_PROMPT;
-
-    const userPrompt = createFactsExtractionUserPrompt(
-      recentText,
-      JSON.stringify(currentFacts, null, 2),
-      glossaryContext
-    );
-
-    try {
-      // Some models (like o1, o1-preview, o1-mini) don't support temperature parameter
-      const supportsTemperature = !this.config.genModel.startsWith('o1');
-      
-      // Build request options - conditionally include temperature
-      const requestOptions: any = {
-        model: this.config.genModel,
-        messages: [
-          { role: 'system', content: policy },
-          { role: 'user', content: userPrompt },
-        ],
-        response_format: { type: 'json_object' },
-      };
-      
-      // Only add temperature if model supports it
-      if (supportsTemperature) {
-        requestOptions.temperature = 0.5;
-      }
-      
-      const response = await this.openaiService.createChatCompletion(
-        [
-          { role: 'system', content: policy },
-          { role: 'user', content: userPrompt },
-        ],
-        {
-          responseFormat: { type: 'json_object' },
-          temperature: supportsTemperature ? 0.5 : undefined,
-        }
-      );
-
-      const factsJson = response.choices[0]?.message?.content;
-      if (!factsJson) return;
-
-      const parsed = JSON.parse(factsJson);
-      const newFacts = parsed.facts || [];
-
-      // Update facts store and database
-      for (const fact of newFacts) {
-        if (!fact.key || !fact.value) continue;
-
-        const confidence = fact.confidence || 0.7;
-        runtime.factsStore.upsert(
-          fact.key,
-          fact.value,
-          confidence,
-          runtime.factsLastSeq,
-          undefined
-        );
-
-        // Upsert to database
-        await this.supabaseService.upsertFact({
-          event_id: runtime.eventId,
-          fact_key: fact.key,
-          fact_value: fact.value,
-          confidence,
-          last_seen_seq: runtime.factsLastSeq,
-          sources: [],
-        });
-
-        // Store in agent_outputs
-        await this.supabaseService.insertAgentOutput({
-          event_id: runtime.eventId,
-          agent_id: runtime.agentId,
-          agent_type: 'facts',
-          for_seq: runtime.factsLastSeq,
-          type: 'fact_update',
-          payload: fact,
-        });
-      }
-
-      this.logger.log(runtime.eventId, 'facts', 'log', `Updated ${newFacts.length} facts (event: ${runtime.eventId})`, { seq: runtime.factsLastSeq });
-    } catch (error: any) {
-      this.logger.log(runtime.eventId, 'facts', 'error', `Error generating facts: ${error.message}`, { seq: runtime.factsLastSeq });
-    }
   }
 
   /**
@@ -571,50 +327,30 @@ export class Orchestrator {
     const pausedSessions = existingSessions.filter(s => s.status === 'paused');
     if (pausedSessions.length > 0) {
       console.log(`[orchestrator] Event ${eventId} has ${pausedSessions.length} paused session(s), resuming...`);
-      // If runtime exists but sessions are null, recreate them
       if (!runtime.cardsSession || !runtime.factsSession) {
-        // Recreate session objects (they were cleared on pause)
-        runtime.cardsSession = new RealtimeSession(this.openaiService.getClient(), {
-          eventId,
-          agentType: 'cards',
-          model: this.config.realtimeModel,
-          onStatusChange: async (status, sessionId) => {
-            await this.handleSessionStatusChange(eventId, agentId, 'cards', status, sessionId);
+        const sessions = await this.sessionManager.createSessions(
+          runtime,
+          async (agentType, status, sessionId) => {
+            await this.handleSessionStatusChange(eventId, agentId, agentType, status, sessionId);
           },
-          onLog: (level, message, context) => {
-            this.logger.log(runtime.eventId, 'cards', level, message, context);
-          },
-          supabase: this.supabaseService.getClient(),
-          onRetrieve: async (query: string, topK: number) => {
-            return await this.handleRetrieveQuery(runtime, query, topK);
-          },
-          embedText: async (text: string) => {
-            return await this.openaiService.createEmbedding(text);
-          },
-        });
+          this.getSessionCreationOptions(runtime)
+        );
 
-        runtime.factsSession = new RealtimeSession(this.openaiService.getClient(), {
-          eventId,
-          agentType: 'facts',
-          model: this.config.realtimeModel,
-          onStatusChange: async (status, sessionId) => {
-            await this.handleSessionStatusChange(eventId, agentId, 'facts', status, sessionId);
-          },
-          onLog: (level, message, context) => {
-            this.logger.log(runtime.eventId, 'facts', level, message, context);
-          },
-          supabase: this.supabaseService.getClient(),
-          onRetrieve: async (query: string, topK: number) => {
-            return await this.handleRetrieveQuery(runtime, query, topK);
-          },
-        });
+        runtime.cardsSession = sessions.cardsSession;
+        runtime.factsSession = sessions.factsSession;
       }
 
-      // Resume both sessions
       try {
-        runtime.cardsSessionId = await runtime.cardsSession.resume();
-        runtime.factsSessionId = await runtime.factsSession.resume();
-        
+        const { cardsSessionId, factsSessionId } = await this.sessionManager.resumeSessions(
+          runtime.cardsSession,
+          runtime.factsSession
+        );
+
+        runtime.cardsSessionId = cardsSessionId;
+        runtime.factsSessionId = factsSessionId;
+
+        this.registerSessionHandlers(runtime);
+
         // Update runtime status
         runtime.status = 'running';
         await this.supabaseService.updateAgentStatus(agentId, 'running');
@@ -651,44 +387,16 @@ export class Orchestrator {
       }
     }
 
-    // Create Realtime sessions with status callbacks and tool handlers
-    runtime.cardsSession = new RealtimeSession(this.openaiService.getClient(), {
-      eventId,
-      agentType: 'cards',
-      model: this.config.realtimeModel,
-      onStatusChange: async (status, sessionId) => {
-        await this.handleSessionStatusChange(eventId, agentId, 'cards', status, sessionId);
+    const sessions = await this.sessionManager.createSessions(
+      runtime,
+      async (agentType, status, sessionId) => {
+        await this.handleSessionStatusChange(eventId, agentId, agentType, status, sessionId);
       },
-      onLog: (level, message, context) => {
-        this.logger.log(runtime.eventId, 'cards', level, message, context);
-      },
-      supabase: this.supabaseService.getClient(),
-      onRetrieve: async (query: string, topK: number) => {
-        return await this.handleRetrieveQuery(runtime, query, topK);
-      },
-      embedText: async (text: string) => {
-        return await this.openaiService.createEmbedding(text);
-      },
-    });
+      this.getSessionCreationOptions(runtime)
+    );
 
-    runtime.factsSession = new RealtimeSession(this.openaiService.getClient(), {
-      eventId,
-      agentType: 'facts',
-      model: this.config.realtimeModel,
-      onStatusChange: async (status, sessionId) => {
-        await this.handleSessionStatusChange(eventId, agentId, 'facts', status, sessionId);
-      },
-      onLog: (level, message, context) => {
-        this.logger.log(runtime.eventId, 'facts', level, message, context);
-      },
-      supabase: this.supabaseService.getClient(),
-      onRetrieve: async (query: string, topK: number) => {
-        return await this.handleRetrieveQuery(runtime, query, topK);
-      },
-      embedText: async (text: string) => {
-        return await this.openaiService.createEmbedding(text);
-      },
-    });
+    runtime.cardsSession = sessions.cardsSession;
+    runtime.factsSession = sessions.factsSession;
 
     // Update existing sessions from 'generated' or 'starting' to 'starting' if needed
     // If sessions don't exist, create them (shouldn't happen in testing workflow, but handle it)
@@ -726,8 +434,12 @@ export class Orchestrator {
 
     // Connect sessions (will update status to 'active' via callback)
     try {
-      runtime.cardsSessionId = await runtime.cardsSession.connect();
-      runtime.factsSessionId = await runtime.factsSession.connect();
+      const { cardsSessionId, factsSessionId } = await this.sessionManager.connectSessions(
+        runtime.cardsSession,
+        runtime.factsSession
+      );
+      runtime.cardsSessionId = cardsSessionId;
+      runtime.factsSessionId = factsSessionId;
     } catch (error: any) {
       console.error(`[orchestrator] Failed to connect sessions: ${error.message}`);
       // Status will be updated to 'error' via callback
@@ -735,13 +447,7 @@ export class Orchestrator {
     }
 
     // Register event handlers for responses
-    runtime.cardsSession.on('card', async (card: any) => {
-      await this.handleCardResponse(runtime, card);
-    });
-
-    runtime.factsSession.on('facts', async (facts: any[]) => {
-      await this.handleFactsResponse(runtime, facts);
-    });
+    this.registerSessionHandlers(runtime);
 
     // Start periodic context summary logging (every 5 minutes)
     this.startPeriodicSummary(runtime);
@@ -815,16 +521,12 @@ export class Orchestrator {
       console.warn(`[orchestrator] Failed to update session status: ${updateError.message}`);
     }
 
-    // Create minimal session objects with basic callbacks
-    runtime.cardsSession = new RealtimeSession(this.openaiService.getClient(), {
-      eventId,
-      agentType: 'cards',
-      model: this.config.realtimeModel,
-      onStatusChange: async (status, sessionId) => {
-        console.log(`[orchestrator] Cards session status: ${status} (${sessionId || 'no ID'})`);
-        // Minimal status update - just update database
+    const sessions = await this.sessionManager.createSessions(
+      runtime,
+      async (agentType, status, sessionId) => {
+        console.log(`[orchestrator] ${agentType} session status: ${status} (${sessionId || 'no ID'})`);
         if (sessionId) {
-          await this.supabaseService.updateAgentSession(eventId, 'cards', {
+          await this.supabaseService.updateAgentSession(eventId, agentType, {
             status,
             provider_session_id: sessionId,
             model: this.config.realtimeModel,
@@ -832,51 +534,43 @@ export class Orchestrator {
           });
         }
       },
-      onLog: (level, message, context) => {
-        console.log(`[cards-test] ${message}`);
-      },
-      supabase: this.supabaseService.getClient(),
-      // Minimal tool handlers - just return empty for testing
-      onRetrieve: async () => [],
-      embedText: async () => [],
-    });
+      {
+        cards: {
+          onRetrieve: async () => [],
+          embedText: async () => [],
+          onLog: (level, message, context) => {
+            console.log(`[cards-test] ${message}`);
+          },
+        },
+        facts: {
+          onRetrieve: async () => [],
+          onLog: (level, message, context) => {
+            console.log(`[facts-test] ${message}`);
+          },
+        },
+      }
+    );
 
-    runtime.factsSession = new RealtimeSession(this.openaiService.getClient(), {
-      eventId,
-      agentType: 'facts',
-      model: this.config.realtimeModel,
-      onStatusChange: async (status, sessionId) => {
-        console.log(`[orchestrator] Facts session status: ${status} (${sessionId || 'no ID'})`);
-        // Minimal status update - just update database
-        if (sessionId) {
-          await this.supabaseService.updateAgentSession(eventId, 'facts', {
-            status,
-            provider_session_id: sessionId,
-            model: this.config.realtimeModel,
-            updated_at: new Date().toISOString(),
-          });
-        }
-      },
-      onLog: (level, message, context) => {
-        console.log(`[facts-test] ${message}`);
-      },
-      supabase: this.supabaseService.getClient(),
-      // Minimal tool handlers - just return empty for testing
-      onRetrieve: async () => [],
-    });
+    runtime.cardsSession = sessions.cardsSession;
+    runtime.factsSession = sessions.factsSession;
 
     // Connect sessions (this establishes WebSocket connections)
     try {
       console.log(`[orchestrator] Connecting cards session...`);
-      runtime.cardsSessionId = await runtime.cardsSession.connect();
+      const { cardsSessionId, factsSessionId } = await this.sessionManager.connectSessions(
+        runtime.cardsSession,
+        runtime.factsSession
+      );
+      runtime.cardsSessionId = cardsSessionId;
+      runtime.factsSessionId = factsSessionId;
       console.log(`[orchestrator] Cards session connected: ${runtime.cardsSessionId}`);
 
       console.log(`[orchestrator] Connecting facts session...`);
-      runtime.factsSessionId = await runtime.factsSession.connect();
       console.log(`[orchestrator] Facts session connected: ${runtime.factsSessionId}`);
 
       // Update runtime status
       runtime.status = 'running';
+      this.registerSessionHandlers(runtime);
       
       console.log(`[orchestrator] Sessions started successfully for testing (event: ${eventId})`);
       await this.statusUpdater.updateAndPushStatus(runtime);
@@ -911,12 +605,7 @@ export class Orchestrator {
 
     try {
       // Pause both sessions
-      if (runtime.cardsSession) {
-        await runtime.cardsSession.pause();
-      }
-      if (runtime.factsSession) {
-        await runtime.factsSession.pause();
-      }
+      await this.sessionManager.pauseSessions(runtime.cardsSession, runtime.factsSession);
 
       // Note: Runtime state (ring buffer, facts store) is preserved
       // Runtime status stays 'running' but sessions are paused
@@ -954,55 +643,29 @@ export class Orchestrator {
 
     // Recreate session objects if they don't exist
     if (!runtime.cardsSession || !runtime.factsSession) {
-      runtime.cardsSession = new RealtimeSession(this.openaiService.getClient(), {
-        eventId,
-        agentType: 'cards',
-        model: this.config.realtimeModel,
-        onStatusChange: async (status, sessionId) => {
-          await this.handleSessionStatusChange(eventId, agentId, 'cards', status, sessionId);
+      const sessions = await this.sessionManager.createSessions(
+        runtime,
+        async (agentType, status, sessionId) => {
+          await this.handleSessionStatusChange(eventId, agentId, agentType, status, sessionId);
         },
-        onLog: (level, message, context) => {
-          this.logger.log(runtime.eventId, 'cards', level, message, context);
-        },
-        supabase: this.supabaseService.getClient(),
-        onRetrieve: async (query: string, topK: number) => {
-          return await this.handleRetrieveQuery(runtime, query, topK);
-        },
-        embedText: async (text: string) => {
-          return await this.openaiService.createEmbedding(text);
-        },
-      });
+        this.getSessionCreationOptions(runtime)
+      );
 
-      runtime.factsSession = new RealtimeSession(this.openaiService.getClient(), {
-        eventId,
-        agentType: 'facts',
-        model: this.config.realtimeModel,
-        onStatusChange: async (status, sessionId) => {
-          await this.handleSessionStatusChange(eventId, agentId, 'facts', status, sessionId);
-        },
-        onLog: (level, message, context) => {
-          this.logger.log(runtime.eventId, 'facts', level, message, context);
-        },
-        supabase: this.supabaseService.getClient(),
-        onRetrieve: async (query: string, topK: number) => {
-          return await this.handleRetrieveQuery(runtime, query, topK);
-        },
-      });
+      runtime.cardsSession = sessions.cardsSession;
+      runtime.factsSession = sessions.factsSession;
     }
 
     // Resume both sessions
     try {
-      runtime.cardsSessionId = await runtime.cardsSession.resume();
-      runtime.factsSessionId = await runtime.factsSession.resume();
+      const { cardsSessionId, factsSessionId } = await this.sessionManager.resumeSessions(
+        runtime.cardsSession,
+        runtime.factsSession
+      );
+      runtime.cardsSessionId = cardsSessionId;
+      runtime.factsSessionId = factsSessionId;
 
       // Register event handlers
-      runtime.cardsSession.on('card', async (card: any) => {
-        await this.handleCardResponse(runtime, card);
-      });
-
-      runtime.factsSession.on('facts', async (facts: any[]) => {
-        await this.handleFactsResponse(runtime, facts);
-      });
+      this.registerSessionHandlers(runtime);
 
       // Update runtime status
       runtime.status = 'running';
@@ -1394,12 +1057,7 @@ export class Orchestrator {
       await this.persistCheckpoint(eventId, 'facts', runtime.factsLastSeq);
 
       // Close sessions
-      if (runtime.cardsSession) {
-        await runtime.cardsSession.close();
-      }
-      if (runtime.factsSession) {
-        await runtime.factsSession.close();
-      }
+      await this.sessionManager.closeSessions(runtime.cardsSession, runtime.factsSession);
 
       this.logger.clearLogs(eventId, 'cards');
       this.logger.clearLogs(eventId, 'facts');

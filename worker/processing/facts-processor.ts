@@ -1,0 +1,155 @@
+import { EventRuntime, Fact } from '../types';
+import { ContextBuilder } from '../context/context-builder';
+import { SupabaseService } from '../services/supabase-service';
+import { OpenAIService } from '../services/openai-service';
+import { Logger } from '../monitoring/logger';
+import { MetricsCollector } from '../monitoring/metrics-collector';
+import { CheckpointManager } from '../monitoring/checkpoint-manager';
+import { RealtimeSession } from '../sessions/realtime-session';
+import { FACTS_EXTRACTION_SYSTEM_PROMPT, createFactsExtractionUserPrompt } from '../prompts';
+import { checkBudgetStatus, formatTokenBreakdown } from '../utils/token-counter';
+
+export class FactsProcessor {
+  constructor(
+    private contextBuilder: ContextBuilder,
+    private supabase: SupabaseService,
+    private openai: OpenAIService,
+    private logger: Logger,
+    private metrics: MetricsCollector,
+    private checkpointManager: CheckpointManager
+  ) {}
+
+  async process(
+    runtime: EventRuntime,
+    session: RealtimeSession | undefined,
+    sessionId: string | undefined
+  ): Promise<void> {
+    if (!session || !sessionId) {
+      this.logger.log(runtime.eventId, 'facts', 'warn', `No session for event ${runtime.eventId}`);
+      return;
+    }
+
+    try {
+      const { context, recentText } = this.contextBuilder.buildFactsContext(runtime);
+      const tokenBreakdown = this.contextBuilder.getFactsTokenBreakdown(context, recentText);
+      const budgetStatus = checkBudgetStatus(tokenBreakdown.total, 2048);
+      const breakdownStr = formatTokenBreakdown(tokenBreakdown.breakdown);
+
+      let logLevel: 'log' | 'warn' | 'error' = 'log';
+      let logPrefix = `[context]`;
+
+      if (budgetStatus.critical) {
+        logLevel = 'error';
+        logPrefix = `[context] ⚠️ CRITICAL`;
+      } else if (budgetStatus.warning) {
+        logLevel = 'warn';
+        logPrefix = `[context] ⚠️ WARNING`;
+      }
+
+      const logMessage = `${logPrefix} Facts Agent (seq ${runtime.factsLastSeq}): ${tokenBreakdown.total}/2048 tokens (${budgetStatus.percentage}%) - ${breakdownStr}`;
+      this.logger.log(runtime.eventId, 'facts', logLevel, logMessage, { seq: runtime.factsLastSeq });
+
+      this.metrics.recordTokens(
+        runtime.eventId,
+        'facts',
+        tokenBreakdown.total,
+        budgetStatus.warning,
+        budgetStatus.critical
+      );
+
+      const currentFacts = runtime.factsStore.getAll();
+      await session.sendMessage(recentText, {
+        recentText,
+        facts: currentFacts,
+        glossaryContext: context.glossaryContext,
+      });
+
+      await this.generateFactsFallback(runtime, recentText, currentFacts, context.glossaryContext);
+
+      await this.checkpointManager.saveCheckpoint(
+        runtime.eventId,
+        runtime.agentId,
+        'facts',
+        runtime.factsLastSeq
+      );
+      runtime.factsLastUpdate = Date.now();
+    } catch (error: any) {
+      this.logger.log(runtime.eventId, 'facts', 'error', `Error processing: ${error.message}`, { seq: runtime.factsLastSeq });
+    }
+  }
+
+  private async generateFactsFallback(
+    runtime: EventRuntime,
+    recentText: string,
+    currentFacts: Fact[],
+    glossaryContext?: string
+  ): Promise<void> {
+    const policy = FACTS_EXTRACTION_SYSTEM_PROMPT;
+
+    const userPrompt = createFactsExtractionUserPrompt(
+      recentText,
+      JSON.stringify(currentFacts, null, 2),
+      glossaryContext
+    );
+
+    try {
+      const response = await this.openai.createChatCompletion(
+        [
+          { role: 'system', content: policy },
+          { role: 'user', content: userPrompt },
+        ],
+        {
+          responseFormat: { type: 'json_object' },
+          temperature: 0.5,
+        }
+      );
+
+      const factsJson = response.choices[0]?.message?.content;
+      if (!factsJson) return;
+
+      const parsed = JSON.parse(factsJson);
+      const newFacts = parsed.facts || [];
+
+      for (const fact of newFacts) {
+        if (!fact.key || !fact.value) continue;
+
+        const confidence = fact.confidence || 0.7;
+        runtime.factsStore.upsert(
+          fact.key,
+          fact.value,
+          confidence,
+          runtime.factsLastSeq,
+          undefined
+        );
+
+        await this.supabase.upsertFact({
+          event_id: runtime.eventId,
+          fact_key: fact.key,
+          fact_value: fact.value,
+          confidence,
+          last_seen_seq: runtime.factsLastSeq,
+          sources: [],
+        });
+
+        await this.supabase.insertAgentOutput({
+          event_id: runtime.eventId,
+          agent_id: runtime.agentId,
+          agent_type: 'facts',
+          for_seq: runtime.factsLastSeq,
+          type: 'fact_update',
+          payload: fact,
+        });
+      }
+
+      this.logger.log(
+        runtime.eventId,
+        'facts',
+        'log',
+        `Updated ${newFacts.length} facts (event: ${runtime.eventId})`,
+        { seq: runtime.factsLastSeq }
+      );
+    } catch (error: any) {
+      this.logger.log(runtime.eventId, 'facts', 'error', `Error generating facts: ${error.message}`, { seq: runtime.factsLastSeq });
+    }
+  }
+}
