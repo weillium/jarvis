@@ -4,6 +4,15 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAgentQuery } from '@/shared/hooks/use-agent-query';
 import { useContextVersionsQuery } from '@/shared/hooks/use-context-versions-query';
 import { useAgentSessions, AgentSessionStatus } from '@/shared/hooks/use-agent-sessions';
+import {
+  useResetContextMutation,
+  useCreateSessionsMutation,
+  useStartSessionsMutation,
+  usePauseSessionsMutation,
+  useResumeSessionsMutation,
+  useConfirmReadyMutation,
+  useSendTestTranscriptMutation,
+} from '@/shared/hooks/use-mutations';
 import { ContextGenerationPanel } from '@/features/context/components/context-generation-panel';
 import { TestTranscriptModal } from './test-transcript-modal';
 
@@ -104,15 +113,18 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
       setInitialSessions([]);
     }
   }, [cardsStatus, factsStatus]);
-  const [isResetting, setIsResetting] = useState(false);
-  const [resetError, setResetError] = useState<string | null>(null);
+  
   const [expandedLogs, setExpandedLogs] = useState<{ cards: boolean; facts: boolean }>({ cards: false, facts: false });
-  const [isStartingSessions, setIsStartingSessions] = useState(false);
-  const [startSessionsError, setStartSessionsError] = useState<string | null>(null);
-  const [isPausing, setIsPausing] = useState(false);
-  const [isResuming, setIsResuming] = useState(false);
-  const [pauseResumeError, setPauseResumeError] = useState<string | null>(null);
   const [isTestTranscriptModalOpen, setIsTestTranscriptModalOpen] = useState(false);
+
+  // Mutation hooks
+  const resetContextMutation = useResetContextMutation(eventId);
+  const createSessionsMutation = useCreateSessionsMutation(eventId);
+  const startSessionsMutation = useStartSessionsMutation(eventId);
+  const pauseSessionsMutation = usePauseSessionsMutation(eventId);
+  const resumeSessionsMutation = useResumeSessionsMutation(eventId);
+  const confirmReadyMutation = useConfirmReadyMutation(eventId);
+  const sendTestTranscriptMutation = useSendTestTranscriptMutation(eventId);
 
   // Calculate total cost from cycles (from React Query)
   const totalCost = cycles?.reduce((sum: number, cycle: any) => {
@@ -120,33 +132,16 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
     return sum + (cycleCost !== null && cycleCost !== undefined ? parseFloat(cycleCost) : 0);
   }, 0) ?? null;
 
-  const handleReset = async () => {
+  const handleReset = () => {
     if (!confirm('Are you sure you want to invalidate all context components? This will require restarting context building.')) {
       return;
     }
-
-    setIsResetting(true);
-    setResetError(null);
-
-    try {
-      const res = await fetch(`/api/context/${eventId}/reset`, {
-        method: 'POST',
-      });
-      const data = await res.json();
-
-      if (data.ok) {
-        // Refresh agent info
-        await refetch();
-      } else {
-        setResetError(data.error || 'Failed to reset context');
-      }
-    } catch (err: any) {
-      console.error('Failed to reset context:', err);
-      setResetError(err.message || 'Failed to reset context');
-    } finally {
-      setIsResetting(false);
-    }
+    resetContextMutation.mutate();
   };
+
+  // Get mutation states
+  const isResetting = resetContextMutation.isPending;
+  const resetError = resetContextMutation.error ? (resetContextMutation.error instanceof Error ? resetContextMutation.error.message : 'Failed to reset context') : null;
 
   const getStatusColor = (status: string | null, stage?: string | null): string => {
     if (!status) return '#6b7280';
@@ -209,211 +204,122 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
     return new Date(dateString).toLocaleString();
   };
 
-  const handleCreateSessions = async () => {
-    setIsStartingSessions(true);
-    setStartSessionsError(null);
-
-    try {
-      const res = await fetch(`/api/agent-sessions/${eventId}/create`, {
-        method: 'POST',
-      });
-
-      const data = await res.json();
-
-      if (!data.ok) {
-        throw new Error(data.error || 'Failed to create sessions');
-      }
-
-      // Refresh agent info to reflect status change (context_complete -> testing)
-      await refetch();
-      
-      // Immediately check for sessions (they will be in 'closed' state)
-      // This will display them immediately, but SSE won't connect until they advance to active
-      await checkForActiveSessions();
-      
-      console.log('[AgentOverview] Sessions created successfully. Agent status set to testing.');
-    } catch (err: any) {
-      console.error('Failed to create sessions:', err);
-      setStartSessionsError(err.message || 'Failed to create sessions');
-    } finally {
-      setIsStartingSessions(false);
-    }
-  };
-
-  const handleStartSessions = async () => {
-    setIsStartingSessions(true);
-    setStartSessionsError(null);
-
-    try {
-      const res = await fetch(`/api/agent-sessions/${eventId}/start`, {
-        method: 'POST',
-      });
-
-      const data = await res.json();
-
-      if (!data.ok) {
-        throw new Error(data.error || 'Failed to start sessions');
-      }
-
-      // Refresh agent info
-      await refetch();
-      
-      // Check for sessions - they should now be in 'active' state
-      // This will trigger SSE connection since they're now active
-      setTimeout(() => {
-        checkForActiveSessions();
-      }, 1000);
-      
-      // Sessions will be activated by worker
-      console.log('[AgentOverview] Sessions will be started by worker...');
-    } catch (err: any) {
-      console.error('Failed to start sessions:', err);
-      setStartSessionsError(err.message || 'Failed to start sessions');
-    } finally {
-      setIsStartingSessions(false);
-    }
-  };
-
-  const handleConfirmReady = async () => {
-    setIsResuming(true); // Reuse loading state
-    setPauseResumeError(null);
-
-    try {
-      const res = await fetch(`/api/agent-sessions/${eventId}/confirm-ready`, {
-        method: 'POST',
-      });
-
-      const data = await res.json();
-
-      if (!data.ok) {
-        throw new Error(data.error || 'Failed to confirm ready');
-      }
-
-      // Refresh agent info (testing -> ready)
-      await refetch();
-      
-      console.log('[AgentOverview] Agent confirmed ready. Sessions regenerated.');
-    } catch (err: any) {
-      console.error('Failed to confirm ready:', err);
-      setPauseResumeError(err.message || 'Failed to confirm ready');
-    } finally {
-      setIsResuming(false);
-    }
-  };
-
-  const handleSendTestTranscript = async (text: string, speaker: string) => {
-    const res = await fetch(`/api/agent-sessions/${eventId}/test-transcript`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, speaker }),
+  const handleCreateSessions = () => {
+    createSessionsMutation.mutate(undefined, {
+      onSuccess: async () => {
+        // Immediately check for sessions (they will be in 'closed' state)
+        // This will display them immediately, but SSE won't connect until they advance to active
+        await checkForActiveSessions();
+        console.log('[AgentOverview] Sessions created successfully. Agent status set to testing.');
+      },
     });
-
-    const data = await res.json();
-
-    if (!data.ok) {
-      throw new Error(data.error || 'Failed to send test transcript');
-    }
-
-    console.log('[AgentOverview] Test transcript sent successfully');
   };
 
-  const handlePauseSessions = async () => {
-    setIsPausing(true);
-    setPauseResumeError(null);
+  const handleStartSessions = () => {
+    startSessionsMutation.mutate(undefined, {
+      onSuccess: () => {
+        // Check for sessions - they should now be in 'active' state
+        // This will trigger SSE connection since they're now active
+        setTimeout(() => {
+          checkForActiveSessions();
+        }, 1000);
+        console.log('[AgentOverview] Sessions will be started by worker...');
+      },
+    });
+  };
 
-    try {
-      const res = await fetch(`/api/agent-sessions/${eventId}/pause`, {
-        method: 'POST',
+  const handleConfirmReady = () => {
+    confirmReadyMutation.mutate(undefined, {
+      onSuccess: () => {
+        console.log('[AgentOverview] Agent confirmed ready. Sessions regenerated.');
+      },
+    });
+  };
+
+  const handleSendTestTranscript = (text: string, speaker: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      sendTestTranscriptMutation.mutate({ text, speaker }, {
+        onSuccess: () => {
+          console.log('[AgentOverview] Test transcript sent successfully');
+          resolve();
+        },
+        onError: (err) => {
+          reject(err);
+        },
       });
-
-      const data = await res.json();
-
-      if (!data.ok) {
-        throw new Error(data.error || 'Failed to pause sessions');
-      }
-
-      // Refresh agent info to reflect status change
-      await refetch();
-      
-      // Update session status directly from API - don't rely on SSE for status changes
-      // Fetch updated sessions and update local state immediately
-      const sessionRes = await fetch(`/api/agent-sessions/${eventId}/check`);
-      const sessionData = await sessionRes.json();
-      
-      if (sessionData.ok && sessionData.sessions) {
-        const updatedSessions: AgentSessionStatus[] = sessionData.sessions.map((s: any) => ({
-          agent_type: s.agent_type,
-          session_id: s.session_id || 'pending',
-          status: s.status,
-          metadata: s.metadata || {
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            closed_at: null,
-          },
-        }));
-        setInitialSessions(updatedSessions);
-      }
-      
-      // Update hasActiveSessions (SSE will disconnect since sessions are now paused)
-      await checkForActiveSessions();
-      
-      console.log('[AgentOverview] Sessions paused');
-    } catch (err: any) {
-      console.error('Failed to pause sessions:', err);
-      setPauseResumeError(err.message || 'Failed to pause sessions');
-    } finally {
-      setIsPausing(false);
-    }
+    });
   };
 
-  const handleResumeSessions = async () => {
-    setIsResuming(true);
-    setPauseResumeError(null);
-
-    try {
-      const res = await fetch(`/api/agent-sessions/${eventId}/resume`, {
-        method: 'POST',
-      });
-
-      const data = await res.json();
-
-      if (!data.ok) {
-        throw new Error(data.error || 'Failed to resume sessions');
-      }
-
-      // Refresh agent info to reflect status change
-      await refetch();
-      
-      // Update session status directly from API - don't rely on SSE for status changes
-      // Fetch updated sessions and update local state immediately
-      const sessionRes = await fetch(`/api/agent-sessions/${eventId}/check`);
-      const sessionData = await sessionRes.json();
-      
-      if (sessionData.ok && sessionData.sessions) {
-        const updatedSessions: AgentSessionStatus[] = sessionData.sessions.map((s: any) => ({
-          agent_type: s.agent_type,
-          session_id: s.session_id || 'pending',
-          status: s.status,
-          metadata: s.metadata || {
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            closed_at: null,
-          },
-        }));
-        setInitialSessions(updatedSessions);
-      }
-      
-      // Update hasActiveSessions (SSE will reconnect when sessions become active)
-      await checkForActiveSessions();
-      
-      console.log('[AgentOverview] Sessions will be resumed by worker');
-    } catch (err: any) {
-      console.error('Failed to resume sessions:', err);
-      setPauseResumeError(err.message || 'Failed to resume sessions');
-    } finally {
-      setIsResuming(false);
-    }
+  const handlePauseSessions = () => {
+    pauseSessionsMutation.mutate(undefined, {
+      onSuccess: async () => {
+        // Update session status directly from API - don't rely on SSE for status changes
+        // Fetch updated sessions and update local state immediately
+        const sessionRes = await fetch(`/api/agent-sessions/${eventId}/check`);
+        const sessionData = await sessionRes.json();
+        
+        if (sessionData.ok && sessionData.sessions) {
+          const updatedSessions: AgentSessionStatus[] = sessionData.sessions.map((s: any) => ({
+            agent_type: s.agent_type,
+            session_id: s.session_id || 'pending',
+            status: s.status,
+            metadata: s.metadata || {
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              closed_at: null,
+            },
+          }));
+          setInitialSessions(updatedSessions);
+        }
+        
+        // Update hasActiveSessions (SSE will disconnect since sessions are now paused)
+        await checkForActiveSessions();
+        
+        console.log('[AgentOverview] Sessions paused');
+      },
+    });
   };
+
+  const handleResumeSessions = () => {
+    resumeSessionsMutation.mutate(undefined, {
+      onSuccess: async () => {
+        // Update session status directly from API - don't rely on SSE for status changes
+        // Fetch updated sessions and update local state immediately
+        const sessionRes = await fetch(`/api/agent-sessions/${eventId}/check`);
+        const sessionData = await sessionRes.json();
+        
+        if (sessionData.ok && sessionData.sessions) {
+          const updatedSessions: AgentSessionStatus[] = sessionData.sessions.map((s: any) => ({
+            agent_type: s.agent_type,
+            session_id: s.session_id || 'pending',
+            status: s.status,
+            metadata: s.metadata || {
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              closed_at: null,
+            },
+          }));
+          setInitialSessions(updatedSessions);
+        }
+        
+        // Update hasActiveSessions (SSE will reconnect when sessions become active)
+        await checkForActiveSessions();
+        
+        console.log('[AgentOverview] Sessions will be resumed by worker');
+      },
+    });
+  };
+
+  // Get mutation states
+  const isStartingSessions = createSessionsMutation.isPending || startSessionsMutation.isPending;
+  const startSessionsError = createSessionsMutation.error || startSessionsMutation.error
+    ? (createSessionsMutation.error instanceof Error ? createSessionsMutation.error.message : startSessionsMutation.error instanceof Error ? startSessionsMutation.error.message : 'Failed to start sessions')
+    : null;
+  const isPausing = pauseSessionsMutation.isPending;
+  const isResuming = resumeSessionsMutation.isPending || confirmReadyMutation.isPending;
+  const pauseResumeError = pauseSessionsMutation.error || resumeSessionsMutation.error || confirmReadyMutation.error
+    ? (pauseSessionsMutation.error instanceof Error ? pauseSessionsMutation.error.message : resumeSessionsMutation.error instanceof Error ? resumeSessionsMutation.error.message : confirmReadyMutation.error instanceof Error ? confirmReadyMutation.error.message : 'Failed to perform operation')
+    : null;
 
   const getSessionStatusColor = (status: string, created_at?: string): string => {
     switch (status) {

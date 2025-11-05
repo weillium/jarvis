@@ -13,9 +13,9 @@ import { VersionHistory } from '@/features/context/components/version-history';
 import { RegenerateButton } from '@/features/context/components/regenerate-button';
 import { LiveCards } from '@/features/cards/components/live-cards';
 import { LiveFacts } from '@/features/facts/components/live-facts';
-import { useState } from 'react';
 import { useAgentQuery } from '@/shared/hooks/use-agent-query';
 import { useBlueprintQuery } from '@/shared/hooks/use-blueprint-query';
+import { useApproveBlueprintMutation, useResetContextMutation } from '@/shared/hooks/use-mutations';
 
 interface LiveEventTabsProps {
   event: EventWithStatus;
@@ -23,13 +23,13 @@ interface LiveEventTabsProps {
 }
 
 export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
-  const [approving, setApproving] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
-  const [resetError, setResetError] = useState<string | null>(null);
-  
   // Use React Query hooks for agent and blueprint data
-  const { data: agentData, refetch: refetchAgent } = useAgentQuery(eventId);
-  const { data: blueprint, refetch: refetchBlueprint } = useBlueprintQuery(eventId);
+  const { data: agentData } = useAgentQuery(eventId);
+  const { data: blueprint } = useBlueprintQuery(eventId);
+  
+  // Mutation hooks
+  const approveBlueprintMutation = useApproveBlueprintMutation(eventId);
+  const resetContextMutation = useResetContextMutation(eventId);
   
   // Get agent info for context generation panel
   const agentInfo = agentData?.agent ?? null;
@@ -47,56 +47,25 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
   const isRegeneratingGlossary = agentStage === 'regenerating_glossary';
   const isRegeneratingChunks = agentStage === 'regenerating_chunks';
 
-  const handleApproveBlueprint = async () => {
-    setApproving(true);
-    try {
-      const res = await fetch(`/api/context/${eventId}/blueprint`, {
-        method: 'POST',
-      });
-      const data = await res.json();
-      if (data.ok) {
-        // Refetch queries to get updated data
-        await Promise.all([refetchAgent(), refetchBlueprint()]);
-      }
-    } catch (err) {
-      console.error('Failed to approve blueprint:', err);
-    } finally {
-      setApproving(false);
-    }
+  const handleApproveBlueprint = () => {
+    approveBlueprintMutation.mutate();
   };
 
   const handleRegenerateBlueprint = () => {
     // BlueprintDisplay handles its own regenerate logic
   };
 
-  const handleReset = async () => {
+  const handleReset = () => {
     if (!confirm('Are you sure you want to invalidate all context components? This will require restarting context building.')) {
       return;
     }
-
-    setIsResetting(true);
-    setResetError(null);
-
-    try {
-      const res = await fetch(`/api/context/${eventId}/reset`, {
-        method: 'POST',
-      });
-      const data = await res.json();
-
-      if (data.ok) {
-        // Refetch queries to get updated data
-        await refetchAgent();
-      } else {
-        setResetError(data.error || 'Failed to reset context');
-      }
-    } catch (err) {
-      console.error('Failed to reset context:', err);
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      setResetError(errorMessage || 'Failed to reset context');
-    } finally {
-      setIsResetting(false);
-    }
+    resetContextMutation.mutate();
   };
+
+  // Get mutation states
+  const approving = approveBlueprintMutation.isPending;
+  const isResetting = resetContextMutation.isPending;
+  const resetError = resetContextMutation.error ? (resetContextMutation.error instanceof Error ? resetContextMutation.error.message : 'Failed to reset context') : null;
 
   // Agent Information subtabs
   const agentSubtabs = [
@@ -150,7 +119,7 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
             {canApprove && (
               <button
                 onClick={handleApproveBlueprint}
-                disabled={approving}
+                disabled={approving || approveBlueprintMutation.isError}
                 style={{
                   padding: '10px 16px',
                   background: approving ? '#94a3b8' : '#10b981',
@@ -172,7 +141,7 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
             eventId={eventId}
             onApprove={handleApproveBlueprint}
             approving={approving}
-            canApprove={false}
+            canApprove={canApprove}
             onRegenerate={handleRegenerateBlueprint}
             embedded={true}
           />

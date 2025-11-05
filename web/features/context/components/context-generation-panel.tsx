@@ -3,6 +3,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ContextGenerationProgress } from './context-generation-progress';
 import { BlueprintDisplay } from './blueprint-display';
+import {
+  useStartContextGenerationMutation,
+  useRegenerateStageMutation,
+  useRegenerateBlueprintMutation,
+  useApproveBlueprintMutation,
+} from '@/shared/hooks/use-mutations';
 
 interface ContextGenerationPanelProps {
   eventId: string;
@@ -39,8 +45,6 @@ interface StatusData {
 
 export function ContextGenerationPanel({ eventId, embedded = false, onClearContext, isClearing = false }: ContextGenerationPanelProps) {
   const [statusData, setStatusData] = useState<StatusData | null>(null);
-  const [starting, setStarting] = useState(false);
-  const [approving, setApproving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPromptPreview, setShowPromptPreview] = useState(false);
   const [promptPreview, setPromptPreview] = useState<{
@@ -53,10 +57,25 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
       documentCount: number;
     };
   } | null>(null);
-  const [isRegenerating, setIsRegenerating] = useState(false);
   const [isRegenerateFlow, setIsRegenerateFlow] = useState(false);
-  const [regeneratingStage, setRegeneratingStage] = useState<string | null>(null);
-  const [regenerationError, setRegenerationError] = useState<string | null>(null);
+
+  // Mutation hooks
+  const startContextGenerationMutation = useStartContextGenerationMutation(eventId);
+  const regenerateStageMutation = useRegenerateStageMutation(eventId);
+  const regenerateBlueprintMutation = useRegenerateBlueprintMutation(eventId);
+  const approveBlueprintMutation = useApproveBlueprintMutation(eventId);
+
+  // Track which stage is currently regenerating
+  const [currentRegeneratingStage, setCurrentRegeneratingStage] = useState<string | null>(null);
+
+  // Get mutation states
+  const starting = startContextGenerationMutation.isPending;
+  const approving = approveBlueprintMutation.isPending;
+  const isRegenerating = regenerateBlueprintMutation.isPending;
+  const regeneratingStage = regenerateStageMutation.isPending ? currentRegeneratingStage : null;
+  const regenerationError = regenerateStageMutation.error || regenerateBlueprintMutation.error
+    ? (regenerateStageMutation.error instanceof Error ? regenerateStageMutation.error.message : regenerateBlueprintMutation.error instanceof Error ? regenerateBlueprintMutation.error.message : 'Failed to regenerate')
+    : null;
 
   // Fetch status
   const fetchStatus = useCallback(async () => {
@@ -119,30 +138,18 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
   };
 
   // Actually start context generation (called after user confirms in modal)
-  const actuallyStartGeneration = async () => {
-    setStarting(true);
-    setError(null);
+  const actuallyStartGeneration = () => {
     setShowPromptPreview(false);
-
-    try {
-      const res = await fetch(`/api/context/${eventId}/start`, {
-        method: 'POST',
-      });
-      const data = await res.json();
-
-      if (data.ok) {
+    startContextGenerationMutation.mutate(undefined, {
+      onSuccess: () => {
         // Immediately fetch updated status
-        await fetchStatus();
-      } else {
-        setError(data.error || 'Failed to start context generation');
-      }
-    } catch (err) {
-      console.error('Failed to start context generation:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to start context generation';
-      setError(errorMessage);
-    } finally {
-      setStarting(false);
-    }
+        fetchStatus();
+      },
+      onError: (err) => {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to start context generation';
+        setError(errorMessage);
+      },
+    });
   };
 
   // Start context generation (shows prompt preview first)
@@ -158,83 +165,51 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
   };
 
   // Handle stage regeneration (research, glossary, chunks)
-  const handleRegenerateStage = async (stage: 'research' | 'glossary' | 'chunks') => {
-    setRegeneratingStage(stage);
-    setRegenerationError(null);
-
-    try {
-      const res = await fetch(`/api/context/${eventId}/regenerate?stage=${stage}`, {
-        method: 'POST',
-      });
-      const data = await res.json();
-
-      if (data.ok) {
+  const handleRegenerateStage = (stage: 'research' | 'glossary' | 'chunks') => {
+    setCurrentRegeneratingStage(stage);
+    regenerateStageMutation.mutate(stage, {
+      onSuccess: () => {
         // Immediately fetch updated status to show progress
-        await fetchStatus();
-      } else {
-        setRegenerationError(data.error || `Failed to regenerate ${stage}`);
-      }
-    } catch (err) {
-      console.error(`Failed to regenerate ${stage}:`, err);
-      const errorMessage = err instanceof Error ? err.message : `Failed to regenerate ${stage}`;
-      setRegenerationError(errorMessage);
-    } finally {
-      setRegeneratingStage(null);
-    }
+        fetchStatus();
+      },
+      onError: (err) => {
+        const errorMessage = err instanceof Error ? err.message : `Failed to regenerate ${stage}`;
+        setError(errorMessage);
+      },
+      onSettled: () => {
+        setCurrentRegeneratingStage(null);
+      },
+    });
   };
 
   // Actually regenerate blueprint (called after user confirms in modal)
-  const actuallyRegenerate = async () => {
-    setIsRegenerating(true);
-    setError(null);
+  const actuallyRegenerate = () => {
     setShowPromptPreview(false);
     setIsRegenerateFlow(false);
-
-    try {
-      const res = await fetch(`/api/context/${eventId}/blueprint/regenerate`, {
-        method: 'POST',
-      });
-      const data = await res.json();
-
-      if (data.ok) {
+    regenerateBlueprintMutation.mutate(undefined, {
+      onSuccess: () => {
         // Immediately fetch updated status
-        await fetchStatus();
-      } else {
-        setError(data.error || 'Failed to regenerate blueprint');
-      }
-    } catch (err) {
-      console.error('Failed to regenerate blueprint:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to regenerate blueprint';
-      setError(errorMessage);
-    } finally {
-      setIsRegenerating(false);
-    }
+        fetchStatus();
+      },
+      onError: (err) => {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to regenerate blueprint';
+        setError(errorMessage);
+      },
+    });
   };
 
   // Approve blueprint
-  const handleApprove = async () => {
-    setApproving(true);
-    setError(null);
-
-    try {
-      const res = await fetch(`/api/context/${eventId}/blueprint`, {
-        method: 'POST',
-      });
-      const data = await res.json();
-
-      if (data.ok) {
+  const handleApprove = () => {
+    approveBlueprintMutation.mutate(undefined, {
+      onSuccess: () => {
         // Immediately fetch updated status
-        await fetchStatus();
-      } else {
-        setError(data.error || 'Failed to approve blueprint');
-      }
-    } catch (err) {
-      console.error('Failed to approve blueprint:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to approve blueprint';
-      setError(errorMessage);
-    } finally {
-      setApproving(false);
-    }
+        fetchStatus();
+      },
+      onError: (err) => {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to approve blueprint';
+        setError(errorMessage);
+      },
+    });
   };
 
   const canStart = (statusData?.agent?.status === 'idle' && (!statusData?.agent?.stage || statusData?.agent?.stage === 'prepping')) || 

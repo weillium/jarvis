@@ -9,6 +9,7 @@ import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import { EventWithStatus } from '@/shared/types/event';
 import { MarkdownEditor } from '@/shared/ui/markdown-editor';
+import { useUpdateEventMutation } from '@/shared/hooks/use-mutations';
 
 // Extend dayjs with plugins
 dayjs.extend(utc);
@@ -31,8 +32,11 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
     event.end_time ? dayjs(event.end_time) : null
   );
   const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Mutation hook
+  const updateEventMutation = useUpdateEventMutation(event.id);
+  const loading = updateEventMutation.isPending;
 
   // Get list of common timezones
   const timezones = Intl.supportedValuesOf('timeZone').sort();
@@ -48,97 +52,85 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
 
   if (!isOpen) return null;
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    setLoading(true);
 
-    try {
-      // Validate dates if provided
-      if (startDate && endDate) {
-        if (endDate.isBefore(startDate) || endDate.isSame(startDate)) {
-          throw new Error('End time must be after start time');
-        }
-        
-        const diffHours = endDate.diff(startDate, 'hour', true);
-        if (diffHours > 12) {
-          throw new Error('End time must be within 12 hours of start time');
-        }
-      }
-
-      // Prepare update data
-      const updateData: {
-        title?: string;
-        topic?: string | null;
-        start_time?: string | null;
-        end_time?: string | null;
-      } = {};
-
-      if (title.trim() !== event.title) {
-        updateData.title = title.trim();
-      }
-
-      if (topic.trim() !== (event.topic || '')) {
-        updateData.topic = topic.trim() || null;
-      }
-
-      // Convert dates to UTC timestamps
-      if (startDate) {
-        const dateString = startDate.format('YYYY-MM-DD HH:mm:ss');
-        const dateInTimezone = dayjs.tz(dateString, timezone);
-        const isoString = dateInTimezone.utc().toISOString();
-        if (isoString !== event.start_time) {
-          updateData.start_time = isoString;
-        }
-      } else if (event.start_time) {
-        updateData.start_time = null;
-      }
-
-      if (endDate) {
-        const dateString = endDate.format('YYYY-MM-DD HH:mm:ss');
-        const dateInTimezone = dayjs.tz(dateString, timezone);
-        const isoString = dateInTimezone.utc().toISOString();
-        if (isoString !== event.end_time) {
-          updateData.end_time = isoString;
-        }
-      } else if (event.end_time) {
-        updateData.end_time = null;
-      }
-
-      // Only update if there are changes
-      if (Object.keys(updateData).length === 0) {
-        onClose();
+    // Validate dates if provided
+    if (startDate && endDate) {
+      if (endDate.isBefore(startDate) || endDate.isSame(startDate)) {
+        setError('End time must be after start time');
         return;
       }
-
-      // Call API to update event
-      const res = await fetch(`/api/events/${event.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updateData),
-      });
-
-      const result = await res.json();
-
-      if (!res.ok) {
-        throw new Error(result.error || 'Failed to update event');
-      }
-
-      // Reset form and close modal
-      onClose();
       
-      // Trigger success callback if provided
-      if (onSuccess && result.data) {
-        onSuccess(result.data);
+      const diffHours = endDate.diff(startDate, 'hour', true);
+      if (diffHours > 12) {
+        setError('End time must be within 12 hours of start time');
+        return;
       }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to update event';
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
     }
+
+    // Prepare update data
+    const updateData: {
+      title?: string;
+      topic?: string | null;
+      start_time?: string | null;
+      end_time?: string | null;
+    } = {};
+
+    if (title.trim() !== event.title) {
+      updateData.title = title.trim();
+    }
+
+    if (topic.trim() !== (event.topic || '')) {
+      updateData.topic = topic.trim() || null;
+    }
+
+    // Convert dates to UTC timestamps
+    if (startDate) {
+      const dateString = startDate.format('YYYY-MM-DD HH:mm:ss');
+      const dateInTimezone = dayjs.tz(dateString, timezone);
+      const isoString = dateInTimezone.utc().toISOString();
+      if (isoString !== event.start_time) {
+        updateData.start_time = isoString;
+      }
+    } else if (event.start_time) {
+      updateData.start_time = null;
+    }
+
+    if (endDate) {
+      const dateString = endDate.format('YYYY-MM-DD HH:mm:ss');
+      const dateInTimezone = dayjs.tz(dateString, timezone);
+      const isoString = dateInTimezone.utc().toISOString();
+      if (isoString !== event.end_time) {
+        updateData.end_time = isoString;
+      }
+    } else if (event.end_time) {
+      updateData.end_time = null;
+    }
+
+    // Only update if there are changes
+    if (Object.keys(updateData).length === 0) {
+      onClose();
+      return;
+    }
+
+    // Use mutation to update event
+    updateEventMutation.mutate(updateData, {
+      onSuccess: (updatedEvent) => {
+        // Reset form and close modal
+        onClose();
+        
+        // Trigger success callback if provided
+        if (onSuccess && updatedEvent) {
+          onSuccess(updatedEvent);
+        }
+      },
+      onError: (err) => {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to update event';
+        setError(errorMessage);
+      },
+    });
   };
 
   const handleClose = () => {

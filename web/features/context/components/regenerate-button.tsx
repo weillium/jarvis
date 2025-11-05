@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useStartOrRegenerateMutation } from '@/shared/hooks/use-mutations';
 
 interface RegenerateButtonProps {
   eventId: string;
@@ -10,13 +11,15 @@ interface RegenerateButtonProps {
 }
 
 export function RegenerateButton({ eventId, stage, onComplete, isRegenerating: externalIsRegenerating }: RegenerateButtonProps) {
-  const [isRegenerating, setIsRegenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasBlueprint, setHasBlueprint] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Use external regeneration status if provided, otherwise use internal state
-  const isCurrentlyRegenerating = externalIsRegenerating !== undefined ? externalIsRegenerating : isRegenerating;
+  // Mutation hook
+  const startOrRegenerateMutation = useStartOrRegenerateMutation(eventId);
+
+  // Use external regeneration status if provided, otherwise use mutation state
+  const isCurrentlyRegenerating = externalIsRegenerating !== undefined ? externalIsRegenerating : startOrRegenerateMutation.isPending;
 
   // Check if blueprint exists
   useEffect(() => {
@@ -41,51 +44,37 @@ export function RegenerateButton({ eventId, stage, onComplete, isRegenerating: e
     return () => clearInterval(interval);
   }, [eventId]);
 
-  const handleStartOrRegenerate = async () => {
-    setIsRegenerating(true);
+  const handleStartOrRegenerate = () => {
     setError(null);
+    
+    if (hasBlueprint === null) {
+      setError('Loading blueprint status...');
+      return;
+    }
 
-    try {
-      let endpoint = '';
-      if (stage === 'blueprint') {
-        // If no blueprint, start generation; otherwise regenerate
-        endpoint = hasBlueprint 
-          ? `/api/context/${eventId}/blueprint/regenerate`
-          : `/api/context/${eventId}/start`;
-      } else {
-        endpoint = `/api/context/${eventId}/regenerate?stage=${stage}`;
-      }
-
-      const res = await fetch(endpoint, {
-        method: 'POST',
-      });
-      const data = await res.json();
-
-      if (data.ok) {
+    startOrRegenerateMutation.mutate({ stage, hasBlueprint }, {
+      onSuccess: () => {
         if (onComplete) {
           onComplete();
         }
         // Refresh blueprint status after starting
         if (stage === 'blueprint' && !hasBlueprint) {
           setTimeout(() => {
-            const checkRes = fetch(`/api/context/${eventId}/status`);
-            checkRes.then(r => r.json()).then(d => {
-              if (d.ok && d.blueprint) {
-                setHasBlueprint(true);
-              }
-            });
+            fetch(`/api/context/${eventId}/status`)
+              .then(r => r.json())
+              .then(d => {
+                if (d.ok && d.blueprint) {
+                  setHasBlueprint(true);
+                }
+              });
           }, 1000);
         }
-      } else {
-        setError(data.error || `Failed to ${hasBlueprint ? 'regenerate' : 'start'} ${stage}`);
-      }
-    } catch (err) {
-      console.error(`Failed to ${hasBlueprint ? 'regenerate' : 'start'} ${stage}:`, err);
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      setError(errorMessage || `Failed to ${hasBlueprint ? 'regenerate' : 'start'} ${stage}`);
-    } finally {
-      setIsRegenerating(false);
-    }
+      },
+      onError: (err) => {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        setError(errorMessage || `Failed to ${hasBlueprint ? 'regenerate' : 'start'} ${stage}`);
+      },
+    });
   };
 
   const getButtonColor = () => {
