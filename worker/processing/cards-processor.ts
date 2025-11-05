@@ -68,7 +68,6 @@ export class CardsProcessor {
 
       await this.checkpointManager.saveCheckpoint(
         runtime.eventId,
-        runtime.agentId,
         'cards',
         runtime.cardsLastSeq
       );

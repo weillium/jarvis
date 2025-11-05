@@ -17,10 +17,9 @@ export class CheckpointManager {
 
   async saveCheckpoint(
     eventId: string,
-    agentId: string,
     agentType: AgentType,
     lastSeq: number
   ): Promise<void> {
-    await this.supabase.upsertCheckpoint(eventId, agentId, agentType, lastSeq);
+    await this.supabase.upsertCheckpoint(eventId, agentType, lastSeq);
   }
 }

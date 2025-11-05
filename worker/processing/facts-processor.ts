@@ -68,7 +68,6 @@ export class FactsProcessor {
 
       await this.checkpointManager.saveCheckpoint(
         runtime.eventId,
-        runtime.agentId,
         'facts',
         runtime.factsLastSeq
       );

@@ -126,7 +126,6 @@ export class SupabaseService {
 
   async upsertCheckpoint(
     eventId: string,
-    agentId: string,
     agentType: AgentType,
     lastSeq: number
   ): Promise<void> {
@@ -135,7 +134,6 @@ export class SupabaseService {
       .upsert(
         {
           event_id: eventId,
-          agent_id: agentId,
           agent_type: agentType,
           last_seq_processed: lastSeq,
         },

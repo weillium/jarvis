@@ -396,8 +396,8 @@ export class Orchestrator {
         clearInterval(runtime.statusUpdateTimer);
       }
 
-      await this.checkpointManager.saveCheckpoint(runtime.eventId, runtime.agentId, 'cards', runtime.cardsLastSeq);
-      await this.checkpointManager.saveCheckpoint(runtime.eventId, runtime.agentId, 'facts', runtime.factsLastSeq);
+      await this.checkpointManager.saveCheckpoint(runtime.eventId, 'cards', runtime.cardsLastSeq);
+      await this.checkpointManager.saveCheckpoint(runtime.eventId, 'facts', runtime.factsLastSeq);
 
       this.eventProcessor.cleanup(runtime.eventId, runtime);
       await this.sessionManager.closeSessions(runtime.cardsSession, runtime.factsSession);
