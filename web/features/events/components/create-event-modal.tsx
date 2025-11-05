@@ -54,6 +54,7 @@ async function uploadFile(
   file: File,
   eventId: string
 ): Promise<void> {
+  const originalFileName = file.name;
   const fileExt = file.name.split('.').pop() || 'file';
   const fileName = `${eventId}/${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
   const filePath = fileName;
@@ -95,6 +96,7 @@ async function uploadFile(
       {
         event_id: eventId,
         path: filePath,
+        name: originalFileName,
       },
     ]);
   

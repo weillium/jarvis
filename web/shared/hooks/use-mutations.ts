@@ -394,3 +394,76 @@ export function useUpdateEventMutation(eventId: string) {
   });
 }
 
+// ============================================================================
+// Event Document Mutations
+// ============================================================================
+
+/**
+ * Update event document name mutation
+ */
+export function useUpdateEventDocNameMutation(eventId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ docId, name }: { docId: string; name: string }) => {
+      const { error } = await supabase
+        .from('event_docs')
+        .update({ name })
+        .eq('id', docId);
+
+      if (error) {
+        throw new Error(`Failed to update document name: ${error.message}`);
+      }
+    },
+    onSuccess: () => {
+      // Invalidate event docs query
+      queryClient.invalidateQueries({ queryKey: ['event-docs', eventId] });
+    },
+  });
+}
+
+/**
+ * Delete event document mutation
+ */
+export function useDeleteEventDocMutation(eventId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (docId: string) => {
+      // Get doc path first
+      const { data: doc, error: fetchError } = await supabase
+        .from('event_docs')
+        .select('path')
+        .eq('id', docId)
+        .single();
+
+      if (fetchError || !doc) {
+        throw new Error('Document not found');
+      }
+
+      // Delete from storage
+      const { error: storageError } = await supabase.storage
+        .from('event-docs')
+        .remove([doc.path]);
+
+      if (storageError) {
+        throw new Error(`Failed to delete file from storage: ${storageError.message}`);
+      }
+
+      // Delete from database
+      const { error: dbError } = await supabase
+        .from('event_docs')
+        .delete()
+        .eq('id', docId);
+
+      if (dbError) {
+        throw new Error(`Failed to delete document record: ${dbError.message}`);
+      }
+    },
+    onSuccess: () => {
+      // Invalidate event docs query
+      queryClient.invalidateQueries({ queryKey: ['event-docs', eventId] });
+    },
+  });
+}
+

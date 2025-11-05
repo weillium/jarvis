@@ -9,7 +9,13 @@ import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import { EventWithStatus } from '@/shared/types/event';
 import { MarkdownEditor } from '@/shared/ui/markdown-editor';
-import { useUpdateEventMutation } from '@/shared/hooks/use-mutations';
+import { FileUpload } from '@/shared/ui/file-upload';
+import { useUpdateEventMutation, useDeleteEventDocMutation, useUpdateEventDocNameMutation } from '@/shared/hooks/use-mutations';
+import { useEventDocsQuery } from '@/shared/hooks/use-event-docs-query';
+import { DocumentListItem } from './document-list-item';
+import { supabase } from '@/shared/lib/supabase/client';
+import { withTimeout } from '@/shared/utils/promise-timeout';
+import { validateFiles, MAX_FILE_SIZE } from '@/shared/utils/file-validation';
 
 // Extend dayjs with plugins
 dayjs.extend(utc);
@@ -20,6 +26,84 @@ interface EditEventModalProps {
   onClose: () => void;
   event: EventWithStatus;
   onSuccess?: (updatedEvent: EventWithStatus) => void;
+}
+
+// Helper to upload a single file (reused from create-event-modal)
+async function uploadFile(file: File, eventId: string): Promise<void> {
+  const originalFileName = file.name;
+  const fileExt = file.name.split('.').pop() || 'file';
+  const fileName = `${eventId}/${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+  const filePath = fileName;
+
+  // Upload to storage with timeout
+  const uploadResult = await withTimeout(
+    supabase.storage
+      .from('event-docs')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false,
+      }),
+    60000,
+    `Upload timeout for ${file.name}. This may be due to large file size or slow network connection.`
+  );
+
+  const { error: uploadError, data } = uploadResult;
+
+  if (uploadError) {
+    let errorMsg = `Failed to upload ${file.name}`;
+    
+    if (uploadError.message?.includes('bucket') || uploadError.message?.includes('not found')) {
+      errorMsg += ': Storage bucket "event-docs" does not exist. Please create the bucket in Supabase Dashboard or contact support.';
+    } else if (uploadError.message?.includes('permission') || uploadError.message?.includes('policy')) {
+      errorMsg += ': Permission denied. Please verify you own this event and try again.';
+    } else if (uploadError.message?.includes('size') || uploadError.message?.includes('limit')) {
+      errorMsg += `: File size exceeds limit (${MAX_FILE_SIZE / 1024 / 1024}MB). Please upload a smaller file.`;
+    } else {
+      errorMsg += `: ${uploadError.message}`;
+    }
+    
+    throw new Error(errorMsg);
+  }
+
+  // Create database record with timeout
+  const insertPromise = supabase
+    .from('event_docs')
+    .insert([
+      {
+        event_id: eventId,
+        path: filePath,
+        name: originalFileName,
+      },
+    ]);
+  
+  const insertResult = await withTimeout(
+    Promise.resolve(insertPromise),
+    10000,
+    `Database insert timeout for ${file.name}. The file was uploaded but the record could not be created.`
+  ) as { error: { message: string } | null };
+
+  const { error: docError } = insertResult;
+
+  if (docError) {
+    // Clean up uploaded file
+    if (data?.path) {
+      try {
+        await supabase.storage.from('event-docs').remove([data.path]);
+      } catch (cleanupError) {
+        console.error('Failed to cleanup uploaded file after DB insert failure:', cleanupError);
+      }
+    }
+    
+    let errorMsg = `Failed to create document record for ${file.name}`;
+    
+    if (docError.message?.includes('permission') || docError.message?.includes('policy')) {
+      errorMsg += ': Permission denied. Please verify you own this event.';
+    } else {
+      errorMsg += `: ${docError.message}`;
+    }
+    
+    throw new Error(errorMsg);
+  }
 }
 
 export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventModalProps) {
@@ -33,10 +117,18 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
   );
   const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [error, setError] = useState<string | null>(null);
+  const [newFiles, setNewFiles] = useState<File[]>([]);
+  const [removingDocs, setRemovingDocs] = useState<Set<string>>(new Set());
 
-  // Mutation hook
+  // Mutation hooks
   const updateEventMutation = useUpdateEventMutation(event.id);
-  const loading = updateEventMutation.isPending;
+  const deleteDocMutation = useDeleteEventDocMutation(event.id);
+  const updateDocNameMutation = useUpdateEventDocNameMutation(event.id);
+  
+  // Fetch existing documents
+  const { data: existingDocs } = useEventDocsQuery(event.id);
+  
+  const loading = updateEventMutation.isPending || deleteDocMutation.isPending || updateDocNameMutation.isPending;
 
   // Get list of common timezones
   const timezones = Intl.supportedValuesOf('timeZone').sort();
@@ -48,11 +140,33 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
     setStartDate(event.start_time ? dayjs(event.start_time) : null);
     setEndDate(event.end_time ? dayjs(event.end_time) : null);
     setError(null);
+    setNewFiles([]);
+    setRemovingDocs(new Set());
   }, [event]);
+
+  const handleRemoveDoc = async (docId: string) => {
+    setRemovingDocs(prev => new Set(prev).add(docId));
+    try {
+      await deleteDocMutation.mutateAsync(docId);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to remove document';
+      setError(errorMessage);
+    } finally {
+      setRemovingDocs(prev => {
+        const next = new Set(prev);
+        next.delete(docId);
+        return next;
+      });
+    }
+  };
+
+  const handleUpdateDocName = async (docId: string, newName: string) => {
+    await updateDocNameMutation.mutateAsync({ docId, name: newName });
+  };
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -115,22 +229,59 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
       return;
     }
 
-    // Use mutation to update event
-    updateEventMutation.mutate(updateData, {
-      onSuccess: (updatedEvent) => {
-        // Reset form and close modal
-        onClose();
-        
-        // Trigger success callback if provided
-        if (onSuccess && updatedEvent) {
-          onSuccess(updatedEvent);
-        }
-      },
-      onError: (err) => {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to update event';
+    // Upload new files if any
+    if (newFiles.length > 0) {
+      // Validate files before uploading
+      const fileErrors = validateFiles(newFiles);
+      if (fileErrors.length > 0) {
+        setError(fileErrors.join('\n'));
+        return;
+      }
+
+      try {
+        // Upload all new files
+        const uploadPromises = newFiles.map(file => uploadFile(file, event.id));
+        await withTimeout(
+          Promise.all(uploadPromises),
+          300000, // 5 minutes total for all files
+          'Total file upload time exceeded 5 minutes. This may be due to too many large files or slow network connection.'
+        );
+      } catch (uploadErr) {
+        const errorMessage = uploadErr instanceof Error ? uploadErr.message : 'Failed to upload files';
         setError(errorMessage);
-      },
-    });
+        return;
+      }
+    }
+
+    // Update event data if there are changes
+    if (Object.keys(updateData).length > 0) {
+      updateEventMutation.mutate(updateData, {
+        onSuccess: (updatedEvent) => {
+          // Reset form and close modal
+          setNewFiles([]);
+          onClose();
+          
+          // Trigger success callback if provided
+          if (onSuccess && updatedEvent) {
+            onSuccess(updatedEvent);
+          }
+        },
+        onError: (err) => {
+          const errorMessage = err instanceof Error ? err.message : 'Failed to update event';
+          setError(errorMessage);
+        },
+      });
+    } else if (newFiles.length > 0) {
+      // If only files were uploaded (no event data changes), just close
+      setNewFiles([]);
+      onClose();
+      if (onSuccess) {
+        onSuccess(event); // Pass current event since no changes were made
+      }
+    } else {
+      // No changes at all
+      onClose();
+    }
   };
 
   const handleClose = () => {
@@ -380,6 +531,58 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
                 label="Topic"
                 instructions="Briefly describe the event. You can use markdown formatting for rich text."
                 height={180}
+                disabled={loading}
+              />
+            </div>
+
+            {/* Event Documents Section */}
+            <div style={{ marginBottom: '24px', width: '100%', boxSizing: 'border-box' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '14px',
+                fontWeight: '500',
+                color: '#374151',
+                marginBottom: '8px',
+              }}>
+                Event Documents
+              </label>
+              
+              {/* Existing Documents List */}
+              {existingDocs && existingDocs.length > 0 && (
+                <div style={{
+                  marginBottom: '16px',
+                  padding: '12px',
+                  background: '#f8fafc',
+                  borderRadius: '6px',
+                  border: '1px solid #e2e8f0',
+                }}>
+                  <div style={{
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    color: '#374151',
+                    marginBottom: '8px',
+                  }}>
+                    Current Documents ({existingDocs.length})
+                  </div>
+                  {existingDocs.map((doc) => (
+                    <DocumentListItem
+                      key={doc.id}
+                      doc={doc}
+                      onRemove={() => handleRemoveDoc(doc.id)}
+                      onUpdateName={handleUpdateDocName}
+                      isRemoving={removingDocs.has(doc.id)}
+                      isUpdating={updateDocNameMutation.isPending}
+                    />
+                  ))}
+                </div>
+              )}
+              
+              {/* File Upload Component */}
+              <FileUpload
+                files={newFiles}
+                onFilesChange={setNewFiles}
+                label={existingDocs && existingDocs.length > 0 ? "Add More Documents" : "Upload Documents"}
+                instructions={`Upload additional documents. Maximum file size: ${MAX_FILE_SIZE / 1024 / 1024}MB.`}
                 disabled={loading}
               />
             </div>

@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { EventWithStatus } from '@/shared/types/event';
 import { format, parseISO } from 'date-fns';
 import { EditEventModal } from './edit-event-modal';
+import { useEventDocsQuery } from '@/shared/hooks/use-event-docs-query';
+import { DocumentCard } from './document-card';
 
 interface EventDetailProps {
   event: EventWithStatus;
@@ -13,6 +15,9 @@ interface EventDetailProps {
 export function EventDetail({ event, onEventUpdate }: EventDetailProps) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [currentEvent, setCurrentEvent] = useState(event);
+  
+  // Fetch event documents
+  const { data: docs, isLoading: docsLoading } = useEventDocsQuery(event.id);
 
   // Update local state when event prop changes
   useEffect(() => {
@@ -162,6 +167,46 @@ export function EventDetail({ event, onEventUpdate }: EventDetailProps) {
           </div>
         </div>
       )}
+
+      {/* Event Documents Section */}
+      <div style={{
+        marginBottom: '24px',
+        padding: '16px',
+        background: '#f8fafc',
+        borderRadius: '8px',
+        border: '1px solid #e2e8f0',
+      }}>
+        <h3 style={{
+          fontSize: '14px',
+          fontWeight: '600',
+          color: '#374151',
+          margin: '0 0 12px 0',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+        }}>
+          Documents {docs && `(${docs.length})`}
+        </h3>
+        
+        {docsLoading ? (
+          <p style={{ fontSize: '14px', color: '#64748b', margin: 0 }}>
+            Loading documents...
+          </p>
+        ) : !docs || docs.length === 0 ? (
+          <p style={{ fontSize: '14px', color: '#64748b', margin: 0 }}>
+            No documents attached
+          </p>
+        ) : (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+            gap: '12px',
+          }}>
+            {docs.map((doc) => (
+              <DocumentCard key={doc.id} doc={doc} eventId={event.id} />
+            ))}
+          </div>
+        )}
+      </div>
 
       <div style={{
         display: 'grid',
