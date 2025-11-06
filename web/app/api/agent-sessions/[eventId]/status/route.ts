@@ -32,10 +32,10 @@ export async function POST(
       );
     }
 
-    // Validate status payload
+    // Validate enrichment payload
     if (!status || !status.agent_type) {
       return new Response(
-        JSON.stringify({ ok: false, error: 'Invalid status payload: missing agent_type' }),
+        JSON.stringify({ ok: false, error: 'Invalid enrichment payload: missing agent_type' }),
         {
           status: 400,
           headers: { 'Content-Type': 'application/json' },
@@ -43,7 +43,8 @@ export async function POST(
       );
     }
 
-    // Push status to all active SSE connections for this event
+    // Push enrichment data to all active SSE connections for this event
+    // This should only contain enrichment fields (websocket_state, ping_pong, logs, metrics)
     connectionManager.pushStatus(eventId, status);
 
     return new Response(

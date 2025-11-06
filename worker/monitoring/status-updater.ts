@@ -16,8 +16,38 @@ export class StatusUpdater {
   async updateAndPushStatus(runtime: EventRuntime): Promise<void> {
     const statuses = await this.buildStatuses(runtime, true);
     runtime.updatedAt = new Date();
-    await this.sse.pushSessionStatus(runtime.eventId, statuses.cards);
-    await this.sse.pushSessionStatus(runtime.eventId, statuses.facts);
+    
+    // Extract only enrichment fields (websocket_state, ping_pong, logs, real-time metrics)
+    // Database fields (status, metadata, session_id) are handled by React Query
+    const cardsEnrichment = this.extractEnrichment(statuses.cards);
+    const factsEnrichment = this.extractEnrichment(statuses.facts);
+    
+    await this.sse.pushSessionStatus(runtime.eventId, cardsEnrichment);
+    await this.sse.pushSessionStatus(runtime.eventId, factsEnrichment);
+  }
+
+  /**
+   * Extract only enrichment fields from full status
+   * Removes database fields (status, metadata, session_id) that should come from React Query
+   */
+  private extractEnrichment(status: AgentSessionStatus): {
+    agent_type: 'cards' | 'facts';
+    websocket_state?: 'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED';
+    ping_pong?: AgentSessionStatus['ping_pong'];
+    recent_logs?: AgentSessionStatus['recent_logs'];
+    token_metrics?: AgentSessionStatus['token_metrics'];
+    runtime_stats?: AgentSessionStatus['runtime'];
+  } {
+    return {
+      agent_type: status.agent_type,
+      websocket_state: status.websocket_state,
+      ping_pong: status.ping_pong,
+      recent_logs: status.recent_logs,
+      // Only include metrics if session is active (real-time data)
+      // Closed sessions will have metrics stored in DB
+      token_metrics: status.status === 'active' ? status.token_metrics : undefined,
+      runtime_stats: status.status === 'active' ? status.runtime : undefined,
+    };
   }
 
   getRuntimeStatusSnapshot(
@@ -27,6 +57,49 @@ export class StatusUpdater {
       cards: this.buildSessionStatus(runtime, 'cards'),
       facts: this.buildSessionStatus(runtime, 'facts'),
     };
+  }
+
+  /**
+   * Record aggregate metrics to database when session closes
+   * Stores final token metrics and runtime stats for historical tracking
+   */
+  async recordMetricsOnSessionClose(
+    runtime: EventRuntime,
+    agentType: 'cards' | 'facts'
+  ): Promise<void> {
+    const metrics = this.metrics.getMetrics(runtime.eventId, agentType);
+    const logs = this.logger.getLogs(runtime.eventId, agentType);
+
+    const tokenMetrics = {
+      total_tokens: metrics.total,
+      request_count: metrics.count,
+      max_tokens: metrics.max,
+      avg_tokens: metrics.count > 0 ? Math.round(metrics.total / metrics.count) : 0,
+      warnings: metrics.warnings,
+      criticals: metrics.criticals,
+      last_request: this.extractLastRequest(logs),
+    };
+
+    const runtimeStats = {
+      cards_last_seq: runtime.cardsLastSeq,
+      facts_last_seq: runtime.factsLastSeq,
+      facts_last_update: new Date(runtime.factsLastUpdate).toISOString(),
+      ring_buffer_stats: runtime.ringBuffer.getStats(),
+      facts_store_stats: runtime.factsStore.getStats(),
+    };
+
+    try {
+      await this.supabase.updateAgentSessionMetrics(
+        runtime.eventId,
+        agentType,
+        tokenMetrics,
+        runtimeStats
+      );
+      console.log(`[StatusUpdater] Recorded metrics for ${agentType} session (event: ${runtime.eventId})`);
+    } catch (error) {
+      console.error(`[StatusUpdater] Failed to record metrics for ${agentType} session:`, error);
+      // Don't throw - metrics recording failure shouldn't break session closure
+    }
   }
 
   private async buildStatuses(

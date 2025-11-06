@@ -61,9 +61,11 @@ class ConnectionManager {
   }
 
   /**
-   * Push status update to all connections for an event
+   * Push enrichment update to all connections for an event
+   * Only sends enrichment data (websocket_state, ping_pong, logs, metrics)
+   * Database state (status, metadata) comes from React Query
    */
-  pushStatus(eventId: string, status: any): void {
+  pushStatus(eventId: string, enrichment: any): void {
     const eventConnections = this.connections.get(eventId);
     if (!eventConnections || eventConnections.controllers.size === 0) {
       console.log(`[connection-manager] No active connections for event ${eventId}`);
@@ -71,11 +73,12 @@ class ConnectionManager {
     }
 
     const encoder = new TextEncoder();
+    // Use new enrichment message type
     const message = `data: ${JSON.stringify({
-      type: 'agent_session_status',
+      type: 'agent_session_enrichment',
       event_id: eventId,
       timestamp: new Date().toISOString(),
-      payload: status,
+      payload: enrichment,
     })}\n\n`;
 
     const data = encoder.encode(message);
@@ -100,7 +103,7 @@ class ConnectionManager {
     eventConnections.lastActivity = Date.now();
 
     if (pushedCount > 0) {
-      console.log(`[connection-manager] Pushed status to ${pushedCount} connection(s) for event ${eventId}`);
+      console.log(`[connection-manager] Pushed enrichment to ${pushedCount} connection(s) for event ${eventId}`);
     }
   }
 

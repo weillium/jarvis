@@ -7,11 +7,50 @@ export interface AgentSessionMetadata {
   model?: string;
 }
 
+export interface TokenMetrics {
+  total_tokens: number;
+  request_count: number;
+  max_tokens: number;
+  avg_tokens: number;
+  warnings: number;
+  criticals: number;
+  last_request?: {
+    tokens: number;
+    percentage: number;
+    breakdown: Record<string, number>;
+    timestamp: string;
+  };
+}
+
+export interface RuntimeStats {
+  cards_last_seq: number;
+  facts_last_seq: number;
+  facts_last_update: string;
+  ring_buffer_stats: {
+    total: number;
+    finalized: number;
+    oldest: number | null;
+    newest: number | null;
+  };
+  facts_store_stats: {
+    total: number;
+    maxItems: number;
+    capacityUsed: string;
+    highConfidence: number;
+    mediumConfidence: number;
+    lowConfidence: number;
+    evictions: number;
+  };
+}
+
 export interface AgentSession {
   agent_type: 'cards' | 'facts';
   session_id: string;
   status: 'active' | 'paused' | 'closed' | 'error';
   metadata: AgentSessionMetadata;
+  token_metrics?: TokenMetrics;
+  runtime_stats?: RuntimeStats;
+  metrics_recorded_at?: string;
 }
 
 export interface AgentSessionsResponse {

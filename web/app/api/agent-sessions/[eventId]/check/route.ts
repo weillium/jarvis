@@ -30,7 +30,7 @@ export async function GET(
     // SSE connection will only be established when sessions are starting/active
     const { data: sessions, error: sessionsError } = await supabase
       .from('agent_sessions')
-      .select('id, agent_type, status, provider_session_id, created_at, updated_at, closed_at, model')
+      .select('id, agent_type, status, provider_session_id, created_at, updated_at, closed_at, model, token_metrics, runtime_stats, metrics_recorded_at')
       .eq('event_id', eventId)
       .order('created_at', { ascending: true });
 
@@ -64,6 +64,9 @@ export async function GET(
           closed_at: s.closed_at,
           model: s.model || undefined,
         },
+        token_metrics: s.token_metrics || undefined,
+        runtime_stats: s.runtime_stats || undefined,
+        metrics_recorded_at: s.metrics_recorded_at || undefined,
       })) || [],
     });
   } catch (error: any) {

@@ -101,51 +101,9 @@ export async function GET(req: NextRequest) {
         )
       );
 
-      // Send initial session statuses (if any exist)
-      try {
-        const { data: sessions } = await supabase
-          .from('agent_sessions')
-          .select('*')
-          .eq('event_id', eventId)
-          .order('created_at', { ascending: true });
-
-        if (sessions && sessions.length > 0) {
-          console.log(`[api/stream] Sending initial ${sessions.length} session(s) for event ${eventId}`);
-          // Send immediately without delay for better responsiveness
-          for (const session of sessions) {
-            try {
-              controller.enqueue(
-                encoder.encode(
-                  formatSSE({
-                    type: 'agent_session_status',
-                    event_id: eventId,
-                    timestamp: new Date().toISOString(),
-                    payload: {
-                      agent_type: session.agent_type,
-                      session_id: session.provider_session_id || session.id,
-                      status: session.status, // Can be 'active', 'paused', 'closed', 'error'
-                      metadata: {
-                        created_at: session.created_at,
-                        updated_at: session.updated_at,
-                        closed_at: session.closed_at,
-                        model: session.model || undefined,
-                      },
-                    },
-                  })
-                )
-              );
-              console.log(`[api/stream] Sent initial session ${session.agent_type}: ${session.status}`);
-            } catch (error) {
-              console.error(`[api/stream] Error sending initial session ${session.agent_type}: ${error}`);
-            }
-          }
-        } else {
-          console.log(`[api/stream] No existing sessions for event ${eventId}`);
-        }
-      } catch (error: any) {
-        console.error(`[api/stream] Error fetching initial sessions: ${error.message}`);
-        // Don't fail the connection if initial fetch fails
-      }
+      // Initial session data is provided by React Query, not SSE
+      // SSE only streams real-time enrichment data (connection health, logs, metrics)
+      console.log(`[api/stream] SSE connection established for event ${eventId} - waiting for enrichment data from worker`);
 
       // Subscribe to agent_outputs table for cards
       const cardsChannel = supabase
@@ -205,70 +163,8 @@ export async function GET(req: NextRequest) {
         )
         .subscribe();
 
-      // Subscribe to agent_sessions table for status updates
-      const sessionsChannel = supabase
-        .channel(`agent_sessions_${eventId}_${Date.now()}`) // Add timestamp to prevent channel conflicts
-        .on(
-          'postgres_changes',
-          {
-            event: '*', // INSERT, UPDATE, DELETE
-            schema: 'public',
-            table: 'agent_sessions',
-            filter: `event_id=eq.${eventId}`,
-          },
-          async (payload: any) => {
-            const session = payload.new || payload.old;
-            
-            // Only process if we have a valid session
-            if (!session || !session.agent_type) {
-              console.warn(`[api/stream] Invalid session payload:`, payload);
-              return;
-            }
-            
-            console.log(`[api/stream] Session ${payload.eventType} for ${session.agent_type}: ${session.status} (event: ${eventId})`);
-            
-            // Stream basic status update
-            // Note: Comprehensive status (with token metrics, logs, etc.) will be
-            // pushed by worker via separate mechanism in Step 7
-            try {
-              // Create a fresh payload object to ensure React detects the change
-              // Use the actual updated_at from the database to ensure React detects status changes
-              const statusPayload = {
-                agent_type: session.agent_type,
-                session_id: session.provider_session_id || session.id,
-                status: session.status,
-                metadata: {
-                  created_at: session.created_at,
-                  updated_at: session.updated_at || session.created_at || new Date().toISOString(),
-                  closed_at: session.closed_at,
-                  model: session.model || undefined,
-                },
-              };
-              
-              const message = formatSSE({
-                type: 'agent_session_status',
-                event_id: eventId,
-                timestamp: new Date().toISOString(),
-                payload: statusPayload,
-              });
-              
-              controller.enqueue(encoder.encode(message));
-              
-              console.log(`[api/stream] Successfully sent ${session.agent_type} status update: ${session.status} to SSE stream`);
-            } catch (error) {
-              console.error(`[api/stream] Error sending session status: ${error}`);
-            }
-          }
-        )
-        .subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-            console.log(`[api/stream] agent_sessions channel subscribed successfully for event ${eventId}`);
-          } else if (status === 'CHANNEL_ERROR') {
-            console.error(`[api/stream] agent_sessions channel subscription error for event ${eventId}`);
-          } else {
-            console.log(`[api/stream] agent_sessions channel subscription status: ${status} for event ${eventId}`);
-          }
-        });
+      // Session status updates are handled by React Query polling
+      // SSE only streams enrichment data from worker (websocket_state, ping_pong, logs, real-time metrics)
 
       // Send periodic heartbeat to keep connection alive
       const heartbeatInterval = setInterval(() => {
@@ -300,7 +196,6 @@ export async function GET(req: NextRequest) {
         // Clean up Supabase channels
         supabase.removeChannel(cardsChannel);
         supabase.removeChannel(factsChannel);
-        supabase.removeChannel(sessionsChannel);
         
         // Close controller
         controller.close();

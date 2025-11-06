@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useAgentQuery } from '@/shared/hooks/use-agent-query';
 import { useContextVersionsQuery } from '@/shared/hooks/use-context-versions-query';
-import { useAgentSessions, AgentSessionStatus } from '@/shared/hooks/use-agent-sessions';
+import { useAgentSessionEnrichment, AgentSessionSSEEnrichment } from '@/shared/hooks/use-agent-sessions';
+import type { TokenMetrics, RuntimeStats } from '@/shared/hooks/use-agent-sessions-query';
 import { useAgentSessionsQuery } from '@/shared/hooks/use-agent-sessions-query';
 import {
   useCreateSessionsMutation,
@@ -61,23 +62,89 @@ const formatDate = (dateString: string | null): string => {
 };
 
 // SessionStatusCard component - moved outside to fix hooks issue
+interface AgentSessionDisplay {
+  agent_type: 'cards' | 'facts';
+  session_id: string;
+  status: 'active' | 'paused' | 'closed' | 'error';
+  metadata: {
+    created_at: string;
+    updated_at: string;
+    closed_at: string | null;
+    model?: string;
+  };
+  token_metrics?: {
+    total_tokens: number;
+    request_count: number;
+    max_tokens: number;
+    avg_tokens: number;
+    warnings: number;
+    criticals: number;
+    last_request?: {
+      tokens: number;
+      percentage: number;
+      breakdown: Record<string, number>;
+      timestamp: string;
+    };
+  };
+  runtime_stats?: {
+    cards_last_seq: number;
+    facts_last_seq: number;
+    facts_last_update: string;
+    ring_buffer_stats: {
+      total: number;
+      finalized: number;
+      oldest: number | null;
+      newest: number | null;
+    };
+    facts_store_stats: {
+      total: number;
+      maxItems: number;
+      capacityUsed: string;
+      highConfidence: number;
+      mediumConfidence: number;
+      lowConfidence: number;
+      evictions: number;
+    };
+  };
+  metrics_recorded_at?: string;
+  websocket_state?: 'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED';
+  ping_pong?: {
+    enabled: boolean;
+    missedPongs: number;
+    lastPongReceived?: string;
+    pingIntervalMs: number;
+    pongTimeoutMs: number;
+    maxMissedPongs: number;
+  };
+  recent_logs?: Array<{
+    level: 'log' | 'warn' | 'error';
+    message: string;
+    timestamp: string;
+    context?: {
+      seq?: number;
+      agent_type?: 'cards' | 'facts';
+      event_id?: string;
+    };
+  }>;
+}
+
 interface SessionStatusCardProps {
   title: string;
-  status: AgentSessionStatus | null;
+  session: AgentSessionDisplay;
   expandedLogs: { cards: boolean; facts: boolean };
   setExpandedLogs: React.Dispatch<React.SetStateAction<{ cards: boolean; facts: boolean }>>;
 }
 
-function SessionStatusCard({ title, status, expandedLogs, setExpandedLogs }: SessionStatusCardProps) {
+function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: SessionStatusCardProps) {
   // Real-time runtime calculation with state to trigger updates - hooks must be before early return
   const [currentTime, setCurrentTime] = useState(new Date());
   
   // Determine WebSocket connection status - calculate before early return
-  const actualWebSocketState = status?.websocket_state;
-  const isWebSocketLive = status ? (actualWebSocketState === 'OPEN' || (actualWebSocketState === undefined && status.status === 'active')) : false;
+  const actualWebSocketState = session.websocket_state;
+  const isWebSocketLive = actualWebSocketState === 'OPEN' || (actualWebSocketState === undefined && session.status === 'active');
   
   useEffect(() => {
-    if (!isWebSocketLive || !status?.metadata.created_at) return;
+    if (!isWebSocketLive || !session.metadata.created_at) return;
     
     // Update every second when session is active
     const interval = setInterval(() => {
@@ -85,13 +152,12 @@ function SessionStatusCard({ title, status, expandedLogs, setExpandedLogs }: Ses
     }, 1000);
     
     return () => clearInterval(interval);
-  }, [isWebSocketLive, status?.metadata.created_at]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isWebSocketLive]);
 
-  if (!status) return null;
-
-  const statusColor = getSessionStatusColor(status.status);
-  const statusLabel = getSessionStatusLabel(status.status);
-  const agentType = status.agent_type;
+  const statusColor = getSessionStatusColor(session.status);
+  const statusLabel = getSessionStatusLabel(session.status);
+  const agentType = session.agent_type;
   const isExpanded = expandedLogs[agentType];
   
   // Determine connection status label
@@ -99,7 +165,7 @@ function SessionStatusCard({ title, status, expandedLogs, setExpandedLogs }: Ses
   let connectionColor: string;
   
   if (actualWebSocketState) {
-    // Use actual WebSocket readyState
+    // Use actual WebSocket readyState (from SSE)
     switch (actualWebSocketState) {
       case 'OPEN':
         connectionStatus = 'Live';
@@ -118,23 +184,23 @@ function SessionStatusCard({ title, status, expandedLogs, setExpandedLogs }: Ses
         connectionColor = '#6b7280';
         break;
       default:
-        connectionStatus = status.status === 'paused' ? 'Paused' : 'Disconnected';
-        connectionColor = status.status === 'paused' ? '#8b5cf6' : '#6b7280';
+        connectionStatus = session.status === 'paused' ? 'Paused' : 'Disconnected';
+        connectionColor = session.status === 'paused' ? '#8b5cf6' : '#6b7280';
     }
   } else {
     // Fall back to database status
     // Check if closed session is new (created in last minute)
-    const isNewClosed = status.status === 'closed' && status.metadata?.created_at && 
-      (new Date().getTime() - new Date(status.metadata.created_at).getTime()) < 60000;
-    connectionStatus = status.status === 'active' ? 'Live' : status.status === 'paused' ? 'Paused' : isNewClosed ? 'Ready' : 'Disconnected';
-    connectionColor = status.status === 'active' ? '#10b981' : status.status === 'paused' ? '#8b5cf6' : isNewClosed ? '#64748b' : '#6b7280';
+    const isNewClosed = session.status === 'closed' && session.metadata?.created_at && 
+      (new Date().getTime() - new Date(session.metadata.created_at).getTime()) < 60000;
+    connectionStatus = session.status === 'active' ? 'Live' : session.status === 'paused' ? 'Paused' : isNewClosed ? 'Ready' : 'Disconnected';
+    connectionColor = session.status === 'active' ? '#10b981' : session.status === 'paused' ? '#8b5cf6' : isNewClosed ? '#64748b' : '#6b7280';
   }
 
   // Calculate runtime (how long session has been running)
   const calculateRuntime = () => {
-    if (!status.metadata.created_at) return null;
+    if (!session.metadata.created_at) return null;
     
-    const created = new Date(status.metadata.created_at);
+    const created = new Date(session.metadata.created_at);
     const now = currentTime;
     const diffMs = now.getTime() - created.getTime();
     
@@ -244,13 +310,13 @@ function SessionStatusCard({ title, status, expandedLogs, setExpandedLogs }: Ses
         </div>
         
         {/* Ping-Pong Health Status */}
-        {status.websocket_state && status.websocket_state === 'OPEN' && (
+        {session.websocket_state && session.websocket_state === 'OPEN' && (
           <div style={{
             marginBottom: '8px',
             padding: '8px 12px',
-            background: status.ping_pong?.missedPongs === 0 ? '#f0fdf4' : status.ping_pong?.missedPongs === 1 ? '#fffbeb' : '#fef2f2',
+            background: session.ping_pong?.missedPongs === 0 ? '#f0fdf4' : session.ping_pong?.missedPongs === 1 ? '#fffbeb' : '#fef2f2',
             borderRadius: '6px',
-            border: `1px solid ${status.ping_pong?.missedPongs === 0 ? '#bbf7d0' : status.ping_pong?.missedPongs === 1 ? '#fde68a' : '#fecaca'}`,
+            border: `1px solid ${session.ping_pong?.missedPongs === 0 ? '#bbf7d0' : session.ping_pong?.missedPongs === 1 ? '#fde68a' : '#fecaca'}`,
           }}>
             <div style={{
               display: 'flex',
@@ -261,7 +327,7 @@ function SessionStatusCard({ title, status, expandedLogs, setExpandedLogs }: Ses
               <span style={{
                 fontSize: '11px',
                 fontWeight: '600',
-                color: status.ping_pong?.missedPongs === 0 ? '#166534' : status.ping_pong?.missedPongs === 1 ? '#92400e' : '#991b1b',
+                color: session.ping_pong?.missedPongs === 0 ? '#166534' : session.ping_pong?.missedPongs === 1 ? '#92400e' : '#991b1b',
                 textTransform: 'uppercase',
                 letterSpacing: '0.5px',
               }}>
@@ -272,18 +338,18 @@ function SessionStatusCard({ title, status, expandedLogs, setExpandedLogs }: Ses
                 alignItems: 'center',
                 gap: '4px',
               }}>
-                {status.ping_pong?.missedPongs === 0 && (
+                {session.ping_pong?.missedPongs === 0 && (
                   <span style={{ fontSize: '12px' }}>✓ Healthy</span>
                 )}
-                {status.ping_pong?.missedPongs === 1 && (
+                {session.ping_pong?.missedPongs === 1 && (
                   <span style={{ fontSize: '12px', color: '#d97706' }}>⚠ 1 Missed</span>
                 )}
-                {status.ping_pong && status.ping_pong.missedPongs >= 2 && (
-                  <span style={{ fontSize: '12px', color: '#dc2626' }}>⚠⚠ {status.ping_pong.missedPongs} Missed</span>
+                {session.ping_pong && session.ping_pong.missedPongs >= 2 && (
+                  <span style={{ fontSize: '12px', color: '#dc2626' }}>⚠⚠ {session.ping_pong.missedPongs} Missed</span>
                 )}
               </div>
             </div>
-            {status.ping_pong?.enabled && (
+            {session.ping_pong?.enabled && (
               <div style={{
                 fontSize: '10px',
                 color: '#64748b',
@@ -291,17 +357,17 @@ function SessionStatusCard({ title, status, expandedLogs, setExpandedLogs }: Ses
                 gap: '12px',
                 flexWrap: 'wrap',
               }}>
-                {status.ping_pong.lastPongReceived && (
+                {session.ping_pong.lastPongReceived && (
                   <span>
-                    Last pong: {new Date(status.ping_pong.lastPongReceived).toLocaleTimeString()}
+                    Last pong: {new Date(session.ping_pong.lastPongReceived).toLocaleTimeString()}
                   </span>
                 )}
                 <span>
-                  Ping interval: {Math.round((status.ping_pong.pingIntervalMs || 0) / 1000)}s
+                  Ping interval: {Math.round((session.ping_pong.pingIntervalMs || 0) / 1000)}s
                 </span>
-                {status.ping_pong.missedPongs > 0 && (
+                {session.ping_pong.missedPongs > 0 && (
                   <span style={{ color: '#dc2626', fontWeight: '600' }}>
-                    {status.ping_pong.missedPongs}/{status.ping_pong.maxMissedPongs} missed
+                    {session.ping_pong.missedPongs}/{session.ping_pong.maxMissedPongs} missed
                   </span>
                 )}
               </div>
@@ -324,25 +390,34 @@ function SessionStatusCard({ title, status, expandedLogs, setExpandedLogs }: Ses
           fontFamily: 'monospace',
           marginBottom: '4px',
         }}>
-          {status.session_id === 'pending' || (status.status === 'closed' && status.metadata?.created_at && 
-            (new Date().getTime() - new Date(status.metadata.created_at).getTime()) < 60000) ? (
+          {session.session_id === 'pending' || (session.status === 'closed' && session.metadata?.created_at && 
+            (new Date().getTime() - new Date(session.metadata.created_at).getTime()) < 60000) ? (
               <span style={{ fontStyle: 'italic', color: '#94a3b8' }}>
                 Pending activation
               </span>
           ) : (
-            <>Session: {status.session_id.substring(0, 20)}...</>
+            <>Session: {session.session_id.substring(0, 20)}...</>
           )}
         </div>
         <div style={{
           fontSize: '12px',
           color: '#64748b',
         }}>
-          Model: {status.metadata.model || 'N/A'}
+          Model: {session.metadata.model || 'N/A'}
         </div>
+        {session.metrics_recorded_at && (
+          <div style={{
+            fontSize: '11px',
+            color: '#94a3b8',
+            fontStyle: 'italic',
+          }}>
+            Metrics recorded at: {new Date(session.metrics_recorded_at).toLocaleString()}
+          </div>
+        )}
       </div>
 
       {/* Token Metrics */}
-      {status.token_metrics && (
+      {session.token_metrics && (
         <div style={{
           marginBottom: '16px',
           paddingBottom: '16px',
@@ -366,43 +441,43 @@ function SessionStatusCard({ title, status, expandedLogs, setExpandedLogs }: Ses
             <div>
               <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>Total</div>
               <div style={{ fontSize: '16px', fontWeight: '600', color: '#0f172a' }}>
-                {status.token_metrics.total_tokens.toLocaleString()}
+                {session.token_metrics.total_tokens.toLocaleString()}
               </div>
             </div>
             <div>
               <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>Avg</div>
               <div style={{ fontSize: '16px', fontWeight: '600', color: '#0f172a' }}>
-                {status.token_metrics.avg_tokens.toLocaleString()}
+                {session.token_metrics.avg_tokens.toLocaleString()}
               </div>
             </div>
             <div>
               <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>Max</div>
               <div style={{ fontSize: '16px', fontWeight: '600', color: '#0f172a' }}>
-                {status.token_metrics.max_tokens.toLocaleString()}
+                {session.token_metrics.max_tokens.toLocaleString()}
               </div>
             </div>
             <div>
               <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>Requests</div>
               <div style={{ fontSize: '16px', fontWeight: '600', color: '#0f172a' }}>
-                {status.token_metrics.request_count}
+                {session.token_metrics.request_count}
               </div>
             </div>
           </div>
-          {(status.token_metrics.warnings > 0 || status.token_metrics.criticals > 0) && (
+          {(session.token_metrics.warnings > 0 || session.token_metrics.criticals > 0) && (
             <div style={{
               marginTop: '12px',
               padding: '8px 12px',
-              background: status.token_metrics.criticals > 0 ? '#fef2f2' : '#fffbeb',
+              background: session.token_metrics.criticals > 0 ? '#fef2f2' : '#fffbeb',
               borderRadius: '6px',
-              border: `1px solid ${status.token_metrics.criticals > 0 ? '#fecaca' : '#fde68a'}`,
+              border: `1px solid ${session.token_metrics.criticals > 0 ? '#fecaca' : '#fde68a'}`,
             }}>
               <div style={{
                 fontSize: '12px',
-                color: status.token_metrics.criticals > 0 ? '#dc2626' : '#d97706',
+                color: session.token_metrics.criticals > 0 ? '#dc2626' : '#d97706',
               }}>
-                {status.token_metrics.criticals > 0 && `⚠️ ${status.token_metrics.criticals} critical threshold breaches`}
-                {status.token_metrics.criticals > 0 && status.token_metrics.warnings > 0 && ' • '}
-                {status.token_metrics.warnings > 0 && `⚠️ ${status.token_metrics.warnings} warnings`}
+                {session.token_metrics.criticals > 0 && `⚠️ ${session.token_metrics.criticals} critical threshold breaches`}
+                {session.token_metrics.criticals > 0 && session.token_metrics.warnings > 0 && ' • '}
+                {session.token_metrics.warnings > 0 && `⚠️ ${session.token_metrics.warnings} warnings`}
               </div>
             </div>
           )}
@@ -410,7 +485,7 @@ function SessionStatusCard({ title, status, expandedLogs, setExpandedLogs }: Ses
       )}
 
       {/* Runtime Stats */}
-      {status.runtime && (
+      {session.runtime_stats && (
         <div style={{
           marginBottom: '16px',
           paddingBottom: '16px',
@@ -431,20 +506,20 @@ function SessionStatusCard({ title, status, expandedLogs, setExpandedLogs }: Ses
             color: '#64748b',
             lineHeight: '1.6',
           }}>
-            <div>Cards Last Seq: {status.runtime.cards_last_seq}</div>
-            <div>Facts Last Seq: {status.runtime.facts_last_seq}</div>
-            {status.runtime.ring_buffer_stats && (
-              <div>Ring Buffer: {status.runtime.ring_buffer_stats.finalized || 0} chunks</div>
+            <div>Cards Last Seq: {session.runtime_stats.cards_last_seq}</div>
+            <div>Facts Last Seq: {session.runtime_stats.facts_last_seq}</div>
+            {session.runtime_stats.ring_buffer_stats && (
+              <div>Ring Buffer: {session.runtime_stats.ring_buffer_stats.finalized || 0} chunks</div>
             )}
-            {status.runtime.facts_store_stats && (
-              <div>Facts Store: {status.runtime.facts_store_stats.capacityUsed || 0} items</div>
+            {session.runtime_stats.facts_store_stats && (
+              <div>Facts Store: {session.runtime_stats.facts_store_stats.capacityUsed || 'N/A'} items</div>
             )}
           </div>
         </div>
       )}
 
       {/* Recent Logs */}
-      {status.recent_logs && status.recent_logs.length > 0 && (
+      {session.recent_logs && session.recent_logs.length > 0 && (
         <div>
           <button
             onClick={() => setExpandedLogs(prev => ({ ...prev, [agentType]: !prev[agentType] }))}
@@ -463,7 +538,7 @@ function SessionStatusCard({ title, status, expandedLogs, setExpandedLogs }: Ses
               alignItems: 'center',
             }}
           >
-            <span>Recent Logs ({status.recent_logs.length})</span>
+            <span>Recent Logs ({session.recent_logs.length})</span>
             <span>{isExpanded ? '▼' : '▶'}</span>
           </button>
           {isExpanded && (
@@ -476,7 +551,7 @@ function SessionStatusCard({ title, status, expandedLogs, setExpandedLogs }: Ses
               borderRadius: '6px',
               border: '1px solid #e2e8f0',
             }}>
-              {status.recent_logs.slice(-20).reverse().map((log, idx) => (
+              {session.recent_logs.slice(-20).reverse().map((log, idx) => (
                 <div
                   key={idx}
                   style={{
@@ -522,10 +597,10 @@ function SessionStatusCard({ title, status, expandedLogs, setExpandedLogs }: Ses
         fontSize: '11px',
         color: '#94a3b8',
       }}>
-        <div>Created: {formatDate(status.metadata.created_at)}</div>
-        <div>Updated: {formatDate(status.metadata.updated_at)}</div>
-        {status.metadata.closed_at && (
-          <div>Closed: {formatDate(status.metadata.closed_at)}</div>
+        <div>Created: {formatDate(session.metadata.created_at)}</div>
+        <div>Updated: {formatDate(session.metadata.updated_at)}</div>
+        {session.metadata.closed_at && (
+          <div>Closed: {formatDate(session.metadata.closed_at)}</div>
         )}
       </div>
     </div>
@@ -542,27 +617,55 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
   const blueprint = agentData?.blueprint;
   
   // Derive state from React Query sessions data
-  const hasActiveSessions = sessionsData?.hasActiveSessions || false;
   const checkingSessions = sessionsQueryLoading;
   
-  // Map React Query sessions to AgentSessionStatus format
-  const initialSessions: AgentSessionStatus[] = sessionsData?.sessions.map((s) => ({
-    agent_type: s.agent_type,
-    session_id: s.session_id || 'pending',
-    status: s.status,
-    metadata: s.metadata || {
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      closed_at: null,
-    },
-  })) || [];
+  // Get session agent types that exist (for SSE connection)
+  const existingAgentTypes = sessionsData?.sessions.map(s => s.agent_type) || [];
   
-  // Only connect to SSE when sessions actually exist and are active
-  const shouldConnectToSessions = useCallback(() => {
-    return hasActiveSessions;
-  }, [hasActiveSessions]);
+  // SSE - only for enrichment (connection health, real-time metrics)
+  const { enrichment, isLoading: enrichmentLoading, error: enrichmentError, reconnect } = useAgentSessionEnrichment(
+    eventId,
+    existingAgentTypes
+  );
   
-  const { cards: cardsStatus, facts: factsStatus, isLoading: sessionsLoading, error: sessionsError, reconnect } = useAgentSessions(eventId, shouldConnectToSessions);
+  // Combine DB state with SSE enrichment
+  interface AgentSessionDisplay {
+    agent_type: 'cards' | 'facts';
+    session_id: string;
+    status: 'active' | 'paused' | 'closed' | 'error';
+    metadata: {
+      created_at: string;
+      updated_at: string;
+      closed_at: string | null;
+      model?: string;
+    };
+    token_metrics?: TokenMetrics;
+    runtime_stats?: RuntimeStats;
+    metrics_recorded_at?: string;
+    websocket_state?: 'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED';
+    ping_pong?: AgentSessionSSEEnrichment['ping_pong'];
+    recent_logs?: AgentSessionSSEEnrichment['recent_logs'];
+  }
+  
+  // Merge DB state with SSE enrichment
+  const displaySessions: AgentSessionDisplay[] = (sessionsData?.sessions || []).map(dbSession => {
+    const sseData = enrichment.get(dbSession.agent_type);
+    
+    // For metrics: use DB if available (session closed), otherwise use SSE (session active)
+    const tokenMetrics = dbSession.token_metrics || sseData?.token_metrics;
+    const runtimeStats = dbSession.runtime_stats || sseData?.runtime_stats;
+    
+    return {
+      ...dbSession, // DB fields (status, metadata, session_id)
+      token_metrics: tokenMetrics,
+      runtime_stats: runtimeStats,
+      metrics_recorded_at: dbSession.metrics_recorded_at, // DB only
+      // SSE enrichment
+      websocket_state: sseData?.websocket_state,
+      ping_pong: sseData?.ping_pong,
+      recent_logs: sseData?.recent_logs,
+    };
+  });
   
   const [expandedLogs, setExpandedLogs] = useState<{ cards: boolean; facts: boolean }>({ cards: false, facts: false });
   const [isTestTranscriptModalOpen, setIsTestTranscriptModalOpen] = useState(false);
@@ -1013,12 +1116,12 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
                 Refresh
               </button>
               
-              {/* Create Sessions button - visible when agent is context_complete AND no sessions exist */}
+              {/* Create Sessions button - visible when agent is context_complete AND no sessions exist in database */}
+              {/* Only depends on database state, not SSE visualization state */}
               {agent?.status === 'idle' && agent?.stage === 'context_complete' && 
-               !cardsStatus && 
-               !factsStatus && 
-               !sessionsLoading && 
-               !checkingSessions && (
+               !checkingSessions && 
+               sessionsData && 
+               !sessionsData.hasSessions && (
                 <button
                   onClick={handleCreateSessions}
                   disabled={isStartingSessions}
@@ -1050,22 +1153,34 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
               )}
               
               {/* Start/Resume Sessions button - visible when sessions are new (closed) or paused */}
-              {/* Show button when: sessions are 'closed' (new, created in last minute) or 'paused' (resume) */}
-              {/* Works for both 'testing' and 'running' agent status */}
+              {/* Show button based on database session status, not SSE visualization status */}
               {(() => {
-                const isNewClosed = (s: typeof cardsStatus) => 
-                  s?.status === 'closed' && s?.metadata?.created_at && 
-                  (new Date().getTime() - new Date(s.metadata.created_at).getTime()) < 60000;
+                // Only show button if we have database data (not still loading)
+                if (checkingSessions || !sessionsData) {
+                  return false;
+                }
+                
+                // Check database session status (from displaySessions - DB source)
+                const cardsSession = displaySessions.find(s => s.agent_type === 'cards');
+                const factsSession = displaySessions.find(s => s.agent_type === 'facts');
+                
+                // Helper to check if session is newly closed (created in last minute)
+                const isNewClosed = (session: typeof cardsSession) => 
+                  session?.status === 'closed' && session?.metadata?.created_at && 
+                  (new Date().getTime() - new Date(session.metadata.created_at).getTime()) < 60000;
+                
+                // Check if sessions are paused
+                const isPaused = (cardsSession?.status === 'paused') || (factsSession?.status === 'paused');
+                
+                // Show if sessions are paused (resume) or newly closed (start)
+                return isPaused || isNewClosed(cardsSession) || isNewClosed(factsSession);
+              })() && (() => {
+                // Get session status from database for button labels
+                const cardsSession = displaySessions.find(s => s.agent_type === 'cards');
+                const factsSession = displaySessions.find(s => s.agent_type === 'facts');
+                const isPaused = (cardsSession?.status === 'paused') || (factsSession?.status === 'paused');
+                
                 return (
-                  (isNewClosed(cardsStatus) && (isNewClosed(factsStatus) || !factsStatus)) ||
-                  (!cardsStatus && isNewClosed(factsStatus)) ||
-                  (cardsStatus?.status === 'paused' && factsStatus?.status === 'paused') ||
-                  (cardsStatus?.status === 'paused' && !factsStatus) ||
-                  (!cardsStatus && factsStatus?.status === 'paused') ||
-                  // Also show if we're in testing/running state but haven't received status yet (sessions might be loading)
-                  (!cardsStatus && !factsStatus && ((agent?.status === 'active' && agent?.stage === 'testing') || (agent?.status === 'active' && agent?.stage === 'running')) && sessionsLoading)
-                );
-              })() && (
                     <button
                       onClick={handleStartSessions}
                       disabled={isStartingSessions}
@@ -1090,22 +1205,31 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
                           e.currentTarget.style.background = '#3b82f6';
                         }
                       }}
-                      title={(cardsStatus?.status === 'paused' || factsStatus?.status === 'paused') 
+                      title={isPaused 
                         ? 'Resume paused sessions' 
                         : 'Start sessions'}
                     >
                       {isStartingSessions 
-                        ? (cardsStatus?.status === 'paused' || factsStatus?.status === 'paused' 
+                        ? (isPaused 
                             ? 'Resuming...' 
                             : 'Starting...')
-                        : (cardsStatus?.status === 'paused' || factsStatus?.status === 'paused' 
+                        : (isPaused 
                             ? 'Resume Sessions' 
                             : 'Start Sessions')}
                     </button>
-              )}
+                );
+              })()}
               
-              {/* Pause Sessions button - visible when sessions are active */}
-              {(cardsStatus?.status === 'active' || factsStatus?.status === 'active') && (
+              {/* Pause Sessions button - visible when sessions are active (based on database state) */}
+              {(() => {
+                // Check database session status, not SSE visualization
+                if (checkingSessions || !sessionsData) {
+                  return false;
+                }
+                const cardsSession = displaySessions.find(s => s.agent_type === 'cards');
+                const factsSession = displaySessions.find(s => s.agent_type === 'facts');
+                return (cardsSession?.status === 'active' || factsSession?.status === 'active');
+              })() && (
                 <button
                   onClick={handlePauseSessions}
                   disabled={isPausing}
@@ -1212,7 +1336,7 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
             </div>
           )}
           
-          {sessionsError && (
+          {enrichmentError && (
             <div style={{
               padding: '12px',
               background: '#fef2f2',
@@ -1224,12 +1348,12 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
                 fontSize: '12px',
                 color: '#dc2626',
               }}>
-                Error connecting to session stream: {sessionsError.message}
+                Error connecting to enrichment stream: {enrichmentError.message}
               </div>
             </div>
           )}
 
-          {(sessionsLoading || checkingSessions) && !cardsStatus && !factsStatus && initialSessions.length === 0 && (
+          {(enrichmentLoading || checkingSessions) && displaySessions.length === 0 && (
             <div style={{
               padding: '24px',
               textAlign: 'center',
@@ -1240,7 +1364,7 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
             </div>
           )}
 
-          {!sessionsLoading && !checkingSessions && !cardsStatus && !factsStatus && !sessionsError && initialSessions.length === 0 && (
+          {!enrichmentLoading && !checkingSessions && displaySessions.length === 0 && !enrichmentError && (
             <div style={{
               padding: '24px',
               textAlign: 'center',
@@ -1269,33 +1393,21 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
             </div>
           )}
 
-          {(cardsStatus || factsStatus || initialSessions.length > 0) && (
+          {displaySessions.length > 0 && (
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
               gap: '16px',
             }}>
-              {/* Cards Agent Session - prefer SSE data, fallback to initial sessions */}
-              {(cardsStatus || initialSessions.find(s => s.agent_type === 'cards')) && (
+              {displaySessions.map(session => (
                 <SessionStatusCard
-                  key={`cards-${cardsStatus?.session_id || initialSessions.find(s => s.agent_type === 'cards')?.session_id || 'none'}-${cardsStatus?.status || initialSessions.find(s => s.agent_type === 'cards')?.status || 'none'}`}
-                  title="Cards Agent"
-                  status={cardsStatus || initialSessions.find(s => s.agent_type === 'cards') || null}
+                  key={`${session.agent_type}-${session.session_id}-${session.status}`}
+                  title={session.agent_type === 'cards' ? 'Cards Agent' : 'Facts Agent'}
+                  session={session}
                   expandedLogs={expandedLogs}
                   setExpandedLogs={setExpandedLogs}
                 />
-              )}
-              
-              {/* Facts Agent Session - prefer SSE data, fallback to initial sessions */}
-              {(factsStatus || initialSessions.find(s => s.agent_type === 'facts')) && (
-                <SessionStatusCard
-                  key={`facts-${factsStatus?.session_id || initialSessions.find(s => s.agent_type === 'facts')?.session_id || 'none'}-${factsStatus?.status || initialSessions.find(s => s.agent_type === 'facts')?.status || 'none'}`}
-                  title="Facts Agent"
-                  status={factsStatus || initialSessions.find(s => s.agent_type === 'facts') || null}
-                  expandedLogs={expandedLogs}
-                  setExpandedLogs={setExpandedLogs}
-                />
-              )}
+              ))}
             </div>
           )}
         </div>

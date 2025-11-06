@@ -334,6 +334,10 @@ export class Orchestrator {
     }
 
     try {
+      // Record metrics before pausing (session is effectively closing)
+      await this.statusUpdater.recordMetricsOnSessionClose(runtime, 'cards');
+      await this.statusUpdater.recordMetricsOnSessionClose(runtime, 'facts');
+      
       await this.sessionManager.pauseSessions(runtime.cardsSession, runtime.factsSession);
       console.log(`[orchestrator] Event ${eventId} paused`);
     } catch (error: any) {
@@ -398,6 +402,10 @@ export class Orchestrator {
 
       await this.checkpointManager.saveCheckpoint(runtime.eventId, 'cards', runtime.cardsLastSeq);
       await this.checkpointManager.saveCheckpoint(runtime.eventId, 'facts', runtime.factsLastSeq);
+
+      // Record metrics before closing sessions
+      await this.statusUpdater.recordMetricsOnSessionClose(runtime, 'cards');
+      await this.statusUpdater.recordMetricsOnSessionClose(runtime, 'facts');
 
       this.eventProcessor.cleanup(runtime.eventId, runtime);
       await this.sessionManager.closeSessions(runtime.cardsSession, runtime.factsSession);

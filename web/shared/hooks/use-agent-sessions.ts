@@ -1,12 +1,15 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
+import type { TokenMetrics, RuntimeStats } from './use-agent-sessions-query';
 
-export interface AgentSessionStatus {
+/**
+ * SSE Enrichment Data (Real-time connection health only)
+ * This is the data streamed via SSE from the worker
+ */
+export interface AgentSessionSSEEnrichment {
   agent_type: 'cards' | 'facts';
-  session_id: string;
-  status: 'active' | 'paused' | 'closed' | 'error';
-  websocket_state?: 'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED'; // Actual WebSocket readyState
+  websocket_state?: 'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED';
   ping_pong?: {
     enabled: boolean;
     missedPongs: number;
@@ -14,30 +17,6 @@ export interface AgentSessionStatus {
     pingIntervalMs: number;
     pongTimeoutMs: number;
     maxMissedPongs: number;
-  };
-  runtime?: {
-    event_id: string;
-    agent_id: string;
-    runtime_status: string;
-    cards_last_seq: number;
-    facts_last_seq: number;
-    facts_last_update: string;
-    ring_buffer_stats: any;
-    facts_store_stats: any;
-  };
-  token_metrics?: {
-    total_tokens: number;
-    request_count: number;
-    max_tokens: number;
-    avg_tokens: number;
-    warnings: number;
-    criticals: number;
-    last_request?: {
-      tokens: number;
-      percentage: number;
-      breakdown: Record<string, number>;
-      timestamp: string;
-    };
   };
   recent_logs?: Array<{
     level: 'log' | 'warn' | 'error';
@@ -49,6 +28,33 @@ export interface AgentSessionStatus {
       event_id?: string;
     };
   }>;
+  // Real-time metrics (only during active sessions)
+  token_metrics?: TokenMetrics;
+  runtime_stats?: RuntimeStats;
+}
+
+/**
+ * Legacy type for backward compatibility
+ * @deprecated Use AgentSessionSSEEnrichment for new code
+ */
+export interface AgentSessionStatus {
+  agent_type: 'cards' | 'facts';
+  session_id: string;
+  status: 'active' | 'paused' | 'closed' | 'error';
+  websocket_state?: 'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED';
+  ping_pong?: AgentSessionSSEEnrichment['ping_pong'];
+  runtime?: {
+    event_id: string;
+    agent_id: string;
+    runtime_status: string;
+    cards_last_seq: number;
+    facts_last_seq: number;
+    facts_last_update: string;
+    ring_buffer_stats: any;
+    facts_store_stats: any;
+  };
+  token_metrics?: TokenMetrics;
+  recent_logs?: AgentSessionSSEEnrichment['recent_logs'];
   metadata: {
     created_at: string;
     updated_at: string;
@@ -57,6 +63,17 @@ export interface AgentSessionStatus {
   };
 }
 
+export interface UseAgentSessionEnrichmentReturn {
+  enrichment: Map<'cards' | 'facts', AgentSessionSSEEnrichment>;
+  isLoading: boolean;
+  error: Error | null;
+  reconnect: () => void;
+}
+
+/**
+ * Legacy return type for backward compatibility
+ * @deprecated Use UseAgentSessionEnrichmentReturn for new code
+ */
 export interface UseAgentSessionsReturn {
   cards: AgentSessionStatus | null;
   facts: AgentSessionStatus | null;
@@ -303,6 +320,213 @@ export function useAgentSessions(
   return {
     cards,
     facts,
+    isLoading,
+    error,
+    reconnect,
+  };
+}
+
+/**
+ * Hook for managing agent session enrichment via SSE stream (enrichment-only)
+ * Only receives real-time connection health data (websocket_state, ping_pong, logs, metrics)
+ * Database state (status, metadata, session_id) should come from React Query
+ * 
+ * @param eventId - Event ID to connect to
+ * @param sessionAgentTypes - Array of agent types that exist (only connect if sessions exist)
+ */
+export function useAgentSessionEnrichment(
+  eventId: string | null,
+  sessionAgentTypes: ('cards' | 'facts')[]
+): UseAgentSessionEnrichmentReturn {
+  const [enrichment, setEnrichment] = useState<Map<'cards' | 'facts', AgentSessionSSEEnrichment>>(new Map());
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const shouldConnect = sessionAgentTypes.length > 0;
+
+  const connect = useCallback(() => {
+    if (!eventId || !shouldConnect) {
+      setIsLoading(false);
+      return;
+    }
+
+    // Close existing connection
+    if (eventSourceRef.current) {
+      console.log('[useAgentSessionEnrichment] Closing existing connection');
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    console.log('[useAgentSessionEnrichment] Connecting to SSE stream for event:', eventId);
+
+    try {
+      const streamUrl = `/api/stream?event_id=${eventId}&_t=${Date.now()}`;
+      const eventSource = new EventSource(streamUrl);
+      eventSourceRef.current = eventSource;
+
+      eventSource.onopen = () => {
+        console.log('[useAgentSessionEnrichment] SSE connection opened');
+        setIsLoading(false);
+        setError(null);
+      };
+
+      eventSource.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+
+          // Handle heartbeat silently
+          if (message.type === 'heartbeat') {
+            return;
+          }
+
+          // Handle connected message
+          if (message.type === 'connected') {
+            setIsLoading(false);
+            setError(null);
+            console.log('[useAgentSessionEnrichment] Connected to SSE stream');
+            return;
+          }
+
+          // Handle agent_session_enrichment messages (new enrichment-only format)
+          if (message.type === 'agent_session_enrichment') {
+            const enrichmentData = message.payload as AgentSessionSSEEnrichment;
+            console.log('[useAgentSessionEnrichment] Received enrichment update:', enrichmentData.agent_type);
+            
+            setEnrichment(prev => {
+              const updated = new Map(prev);
+              updated.set(enrichmentData.agent_type, enrichmentData);
+              return updated;
+            });
+            
+            setIsLoading(false);
+            setError(null);
+            return;
+          }
+
+          // Handle legacy agent_session_status messages (for backward compatibility during transition)
+          // Extract only enrichment fields, ignore DB fields
+          if (message.type === 'agent_session_status') {
+            const status = message.payload as any;
+            if (!status || !status.agent_type) return;
+
+            const enrichmentData: AgentSessionSSEEnrichment = {
+              agent_type: status.agent_type,
+              websocket_state: status.websocket_state,
+              ping_pong: status.ping_pong,
+              recent_logs: status.recent_logs,
+              // Only include metrics if session is active (real-time data)
+              token_metrics: status.status === 'active' ? status.token_metrics : undefined,
+              runtime_stats: status.status === 'active' ? status.runtime_stats : undefined,
+            };
+
+            console.log('[useAgentSessionEnrichment] Extracted enrichment from legacy message:', enrichmentData.agent_type);
+            
+            setEnrichment(prev => {
+              const updated = new Map(prev);
+              updated.set(enrichmentData.agent_type, enrichmentData);
+              return updated;
+            });
+            
+            setIsLoading(false);
+            setError(null);
+          }
+        } catch (err) {
+          console.error('[useAgentSessionEnrichment] Error parsing message:', err, event.data);
+        }
+      };
+
+      eventSource.onerror = (err) => {
+        console.warn('[useAgentSessionEnrichment] SSE connection error, readyState:', eventSource.readyState);
+        
+        if (eventSource.readyState === EventSource.CLOSED) {
+          setIsLoading(false);
+          setError(new Error('SSE connection closed'));
+          
+          reconnectTimeoutRef.current = setTimeout(() => {
+            console.log('[useAgentSessionEnrichment] Attempting to reconnect...');
+            connect();
+          }, 3000);
+        } else if (eventSource.readyState === EventSource.CONNECTING) {
+          console.log('[useAgentSessionEnrichment] Still connecting...');
+        }
+      };
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Failed to create SSE connection');
+      setError(error);
+      setIsLoading(false);
+    }
+  }, [eventId, shouldConnect]);
+
+  const reconnect = useCallback(() => {
+    console.log('[useAgentSessionEnrichment] Manual reconnect triggered');
+    
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    
+    setEnrichment(new Map());
+    setError(null);
+    
+    if (!shouldConnect) {
+      setIsLoading(false);
+      return;
+    }
+    
+    setIsLoading(true);
+    
+    reconnectTimeoutRef.current = setTimeout(() => {
+      connect();
+    }, 200);
+  }, [connect, shouldConnect]);
+
+  useEffect(() => {
+    if (shouldConnect) {
+      connect();
+    } else {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      setEnrichment(new Map());
+      setError(null);
+      setIsLoading(false);
+    }
+
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+    };
+  }, [connect, shouldConnect]);
+
+  useEffect(() => {
+    setEnrichment(new Map());
+    if (!shouldConnect) {
+      setIsLoading(false);
+    } else {
+      setIsLoading(true);
+    }
+    setError(null);
+  }, [eventId, shouldConnect]);
+
+  return {
+    enrichment,
     isLoading,
     error,
     reconnect,

@@ -270,6 +270,27 @@ export class SupabaseService {
     if (error) throw error;
   }
 
+  async updateAgentSessionMetrics(
+    eventId: string,
+    agentType: AgentType,
+    tokenMetrics: Record<string, any>,
+    runtimeStats: Record<string, any>
+  ): Promise<void> {
+    const { error } = await this.client
+      .from('agent_sessions')
+      .update({
+        token_metrics: tokenMetrics,
+        runtime_stats: runtimeStats,
+        metrics_recorded_at: new Date().toISOString(),
+      })
+      .eq('event_id', eventId)
+      .eq('agent_type', agentType);
+
+    if (error) {
+      throw new Error(`Failed to update session metrics: ${error.message}`);
+    }
+  }
+
   async getTranscriptsForReplay(
     eventId: string,
     sinceSeq: number,
