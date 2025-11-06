@@ -1,4 +1,7 @@
+'use client';
+
 import { useQuery } from '@tanstack/react-query';
+import { useVisibilityRefetchInterval } from '@/shared/hooks/use-visibility-refetch-interval';
 import type { Agent } from '@/shared/types/agent';
 
 export interface AgentInfo {
@@ -41,6 +44,8 @@ export interface AgentData {
  * @returns Agent data, loading state, error, and refetch function
  */
 export function useAgentQuery(eventId: string | null) {
+  const refetchInterval = useVisibilityRefetchInterval(3000);
+
   return useQuery<AgentData>({
     queryKey: ['agent', eventId],
     queryFn: async () => {
@@ -62,7 +67,10 @@ export function useAgentQuery(eventId: string | null) {
       };
     },
     enabled: !!eventId,
-    refetchInterval: 3000, // Poll every 3 seconds (same as current behavior)
+    refetchInterval,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    gcTime: 1000 * 60, // 1 minute to allow faster cleanup once inactive
   });
 }
 

@@ -1,4 +1,7 @@
+'use client';
+
 import { useQuery } from '@tanstack/react-query';
+import { useVisibilityRefetchInterval } from '@/shared/hooks/use-visibility-refetch-interval';
 
 export interface ContextStatusData {
   ok: boolean;
@@ -35,6 +38,8 @@ export interface ContextStatusData {
  * @returns Context status data, loading state, error, and refetch function
  */
 export function useContextStatusQuery(eventId: string | null) {
+  const refetchInterval = useVisibilityRefetchInterval(3000);
+
   return useQuery<ContextStatusData>({
     queryKey: ['context-status', eventId],
     queryFn: async () => {
@@ -53,7 +58,10 @@ export function useContextStatusQuery(eventId: string | null) {
     },
     enabled: !!eventId,
     staleTime: 1000 * 5, // 5 seconds
-    refetchInterval: 3000, // Poll every 3 seconds (for active generation progress)
+    refetchInterval,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    gcTime: 1000 * 60,
   });
 }
 

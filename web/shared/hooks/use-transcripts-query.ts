@@ -1,4 +1,7 @@
+'use client';
+
 import { useQuery } from '@tanstack/react-query';
+import { useVisibilityRefetchInterval } from '@/shared/hooks/use-visibility-refetch-interval';
 
 export interface Transcript {
   id: number;
@@ -22,6 +25,8 @@ export interface TranscriptsResponse {
  * Polls every 3 seconds to get real-time updates
  */
 export function useTranscriptsQuery(eventId: string | null) {
+  const refetchInterval = useVisibilityRefetchInterval(3000);
+
   return useQuery<TranscriptsResponse>({
     queryKey: ['transcripts', eventId],
     queryFn: async () => {
@@ -46,7 +51,10 @@ export function useTranscriptsQuery(eventId: string | null) {
     },
     enabled: !!eventId,
     staleTime: 1000, // Consider data stale after 1 second
-    refetchInterval: 3000, // Poll every 3 seconds
+    refetchInterval,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    gcTime: 1000 * 60, // Drop cached transcripts quickly once inactive
     retry: 1,
     retryDelay: 1000,
   });

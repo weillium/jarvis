@@ -1,4 +1,7 @@
+'use client';
+
 import { useQuery } from '@tanstack/react-query';
+import { useVisibilityRefetchInterval } from '@/shared/hooks/use-visibility-refetch-interval';
 
 export interface BlueprintFull {
   id: string;
@@ -32,6 +35,8 @@ export interface BlueprintFullResponse {
  * @returns Full blueprint data, loading state, error, and refetch function
  */
 export function useBlueprintFullQuery(eventId: string | null) {
+  const refetchInterval = useVisibilityRefetchInterval(3000);
+
   return useQuery<BlueprintFull | null>({
     queryKey: ['blueprint-full', eventId],
     queryFn: async () => {
@@ -50,7 +55,10 @@ export function useBlueprintFullQuery(eventId: string | null) {
     },
     enabled: !!eventId,
     staleTime: 1000 * 30, // 30 seconds
-    refetchInterval: 3000, // Poll every 3 seconds (to auto-populate when generated)
+    refetchInterval,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    gcTime: 1000 * 120, // Allow 2 minutes of cache for blueprint payloads
   });
 }
 

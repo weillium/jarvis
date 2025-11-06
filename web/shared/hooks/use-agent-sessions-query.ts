@@ -1,4 +1,7 @@
+'use client';
+
 import { useQuery } from '@tanstack/react-query';
+import { useVisibilityRefetchInterval } from '@/shared/hooks/use-visibility-refetch-interval';
 
 export interface AgentSessionMetadata {
   created_at: string;
@@ -73,6 +76,8 @@ export interface AgentSessionsResponse {
  * @returns Session status data, loading state, error, and refetch function
  */
 export function useAgentSessionsQuery(eventId: string | null) {
+  const refetchInterval = useVisibilityRefetchInterval(5000);
+
   return useQuery<AgentSessionsResponse>({
     queryKey: ['agent-sessions', eventId],
     queryFn: async () => {
@@ -118,7 +123,10 @@ export function useAgentSessionsQuery(eventId: string | null) {
     },
     enabled: !!eventId,
     staleTime: 1000 * 10, // 10 seconds
-    refetchInterval: 5000, // Poll every 5 seconds (to detect session status changes)
+    refetchInterval,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    gcTime: 1000 * 60,
     retry: 1, // Only retry once on failure (don't retry indefinitely)
     retryDelay: 1000, // Wait 1 second before retry
   });
