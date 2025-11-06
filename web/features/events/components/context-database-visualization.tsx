@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/shared/lib/supabase/client';
+import { useContextDatabaseQuery } from '@/shared/hooks/use-context-database-query';
 
 interface ContextItem {
   id: string;
@@ -37,15 +39,18 @@ interface ContextDatabaseVisualizationProps {
 }
 
 export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage, embedded = false }: ContextDatabaseVisualizationProps) {
-  const [contextItems, setContextItems] = useState<ContextItem[]>([]);
+  const queryClient = useQueryClient();
+  const { data: contextItems = [], isLoading, error, refetch, isFetching } = useContextDatabaseQuery(eventId);
   const [stats, setStats] = useState<ContextStats | null>(null);
   const [isExpanded, setIsExpanded] = useState(embedded); // Auto-expand when embedded
-  const [loading, setLoading] = useState(true);
   const [isRealTime, setIsRealTime] = useState(false);
   const [filterByRank, setFilterByRank] = useState<string | null>(null);
   const [filterByResearchSource, setFilterByResearchSource] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = () => {
+    refetch();
+  };
 
   // Calculate statistics
   useEffect(() => {
@@ -105,28 +110,7 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
     });
   }, [contextItems]);
 
-  // Initial fetch
-  const fetchContextItems = async () => {
-    if (!eventId) return;
-    setRefreshing(true);
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/context/${eventId}`);
-      const result = await res.json();
-      if (result.data) {
-        setContextItems(result.data);
-      }
-    } catch (error) {
-      console.error('Failed to fetch context items:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchContextItems();
-  }, [eventId]);
+  // React Query handles initial fetch automatically
 
   // Real-time subscription for context_items
   useEffect(() => {
@@ -147,23 +131,8 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
         },
         (payload) => {
           console.log('[context-db] New context item inserted:', payload.new);
-          const newItem = payload.new as ContextItem;
-          // Only add if it's active
-          // After Phase 3, all items are active (no soft deletes)
-          if (true) {
-            setContextItems((prev) => {
-              // Avoid duplicates
-              if (prev.some((item) => item.id === newItem.id)) {
-                return prev;
-              }
-              return [...prev, newItem].sort((a, b) => {
-                // Sort by enrichment_timestamp from metadata descending
-                const aTime = a.metadata?.enrichment_timestamp || '';
-                const bTime = b.metadata?.enrichment_timestamp || '';
-                return bTime.localeCompare(aTime);
-              });
-            });
-          }
+          // Invalidate React Query cache to trigger refetch
+          queryClient.invalidateQueries({ queryKey: ['context-database', eventId] });
         }
       )
       .on(
@@ -176,32 +145,8 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
         },
         (payload) => {
           console.log('[context-db] Context item updated:', payload.new);
-          const updatedItem = payload.new as ContextItem;
-          // After Phase 3, items are hard deleted (not soft deleted), so just update
-          // If item exists, it's active (no soft delete check needed)
-          if (true) {
-            // Item was updated, add/update it
-            setContextItems((prev) => {
-              const existingIndex = prev.findIndex((item) => item.id === updatedItem.id);
-              if (existingIndex >= 0) {
-                // Update existing item
-                const updated = [...prev];
-                updated[existingIndex] = updatedItem;
-                return updated.sort((a, b) => {
-                  const aTime = a.metadata?.enrichment_timestamp || '';
-                  const bTime = b.metadata?.enrichment_timestamp || '';
-                  return bTime.localeCompare(aTime);
-                });
-              } else {
-                // Add new item
-                return [...prev, updatedItem].sort((a, b) => {
-                  const aTime = a.metadata?.enrichment_timestamp || '';
-                  const bTime = b.metadata?.enrichment_timestamp || '';
-                  return bTime.localeCompare(aTime);
-                });
-              }
-            });
-          }
+          // Invalidate React Query cache to trigger refetch
+          queryClient.invalidateQueries({ queryKey: ['context-database', eventId] });
         }
       )
       .subscribe((status) => {
@@ -313,7 +258,7 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
               color: '#64748b',
           }}>
             <span>
-              {loading ? 'Loading...' : `${stats?.total || 0} / 1,000 chunks`}
+              {isLoading ? 'Loading...' : `${stats?.total || 0} / 1,000 chunks`}
             </span>
             {isRealTime && (
               <span style={{
@@ -530,8 +475,8 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
             }}
           />
           <button
-            onClick={fetchContextItems}
-            disabled={refreshing}
+            onClick={handleRefresh}
+            disabled={isFetching}
             style={{
               padding: '8px 16px',
               border: '1px solid #e2e8f0',
@@ -540,14 +485,14 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
               fontWeight: '500',
               background: '#ffffff',
               color: '#374151',
-              cursor: refreshing ? 'not-allowed' : 'pointer',
-              opacity: refreshing ? 0.6 : 1,
+              cursor: isFetching ? 'not-allowed' : 'pointer',
+              opacity: isFetching ? 0.6 : 1,
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
             }}
           >
-            {refreshing ? '↻' : '↻'} {refreshing ? 'Refreshing...' : 'Refresh'}
+            ↻ {isFetching ? 'Refreshing...' : 'Refresh'}
           </button>
           <select
             value={filterByRank || ''}
@@ -617,9 +562,13 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
           borderRadius: '8px',
           background: '#f8fafc',
         }}>
-          {loading ? (
+          {isLoading ? (
             <div style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
               Loading context items...
+            </div>
+          ) : error ? (
+            <div style={{ padding: '24px', textAlign: 'center', color: '#ef4444' }}>
+              Error loading context items: {error instanceof Error ? error.message : 'Unknown error'}
             </div>
           ) : filteredItems.length === 0 ? (
             <div style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>

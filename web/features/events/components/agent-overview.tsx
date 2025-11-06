@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAgentQuery } from '@/shared/hooks/use-agent-query';
 import { useContextVersionsQuery } from '@/shared/hooks/use-context-versions-query';
 import { useAgentSessions, AgentSessionStatus } from '@/shared/hooks/use-agent-sessions';
+import { useAgentSessionsQuery } from '@/shared/hooks/use-agent-sessions-query';
 import {
   useResetContextMutation,
   useCreateSessionsMutation,
@@ -21,84 +23,30 @@ interface AgentOverviewProps {
 }
 
 export function AgentOverview({ eventId }: AgentOverviewProps) {
+  const queryClient = useQueryClient();
   const { data: agentData, isLoading, error, refetch } = useAgentQuery(eventId);
   const { data: cycles } = useContextVersionsQuery(eventId);
+  const { data: sessionsData, isLoading: sessionsQueryLoading, refetch: refetchSessions } = useAgentSessionsQuery(eventId);
   
   const agent = agentData?.agent;
   const contextStats = agentData?.contextStats;
   const blueprint = agentData?.blueprint;
-  const [hasActiveSessions, setHasActiveSessions] = useState(false);
-  const [checkingSessions, setCheckingSessions] = useState(true);
-  const checkingRef = useRef(false);
-  const [initialSessions, setInitialSessions] = useState<AgentSessionStatus[]>([]);
   
-  // Check if sessions exist and determine if SSE should connect (only for active)
-  const checkForActiveSessions = useCallback(async () => {
-    if (!eventId) {
-      setCheckingSessions(false);
-      checkingRef.current = false;
-      return;
-    }
-    
-    // Prevent concurrent checks
-    if (checkingRef.current) {
-      return;
-    }
-    
-    checkingRef.current = true;
-    setCheckingSessions(true);
-    
-    try {
-      const res = await fetch(`/api/agent-sessions/${eventId}/check`);
-      const data = await res.json();
-      
-      if (data.ok) {
-        // Store initial sessions data for immediate display (any status)
-        if (data.sessions && data.sessions.length > 0) {
-          const sessions: AgentSessionStatus[] = data.sessions.map((s: any) => ({
-            agent_type: s.agent_type,
-            session_id: s.session_id || 'pending',
-            status: s.status,
-            metadata: s.metadata || {
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-              closed_at: null,
-            },
-          }));
-          setInitialSessions(sessions);
-        } else {
-          setInitialSessions([]);
-        }
-        
-        // Only set hasActiveSessions to true if sessions are active (for SSE connection)
-        setHasActiveSessions(data.hasActiveSessions || false);
-      } else {
-        setHasActiveSessions(false);
-        setInitialSessions([]);
-      }
-    } catch (err) {
-      console.error('[AgentOverview] Failed to check for active sessions:', err);
-      setHasActiveSessions(false);
-      setInitialSessions([]);
-    } finally {
-      setCheckingSessions(false);
-      checkingRef.current = false;
-    }
-  }, [eventId]);
+  // Derive state from React Query sessions data
+  const hasActiveSessions = sessionsData?.hasActiveSessions || false;
+  const checkingSessions = sessionsQueryLoading;
   
-  useEffect(() => {
-    checkForActiveSessions();
-    
-    // Poll periodically to check for sessions
-    // - Every 5 seconds if not connected (to detect when sessions advance to active)
-    // - Every 30 seconds if connected (to detect if connection dropped and sessions are still active)
-    const pollInterval = hasActiveSessions ? 30000 : 5000;
-    const interval = setInterval(() => {
-      checkForActiveSessions();
-    }, pollInterval);
-    
-    return () => clearInterval(interval);
-  }, [checkForActiveSessions, hasActiveSessions]);
+  // Map React Query sessions to AgentSessionStatus format
+  const initialSessions: AgentSessionStatus[] = sessionsData?.sessions.map((s) => ({
+    agent_type: s.agent_type,
+    session_id: s.session_id || 'pending',
+    status: s.status,
+    metadata: s.metadata || {
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      closed_at: null,
+    },
+  })) || [];
   
   // Only connect to SSE when sessions actually exist and are active
   const shouldConnectToSessions = useCallback(() => {
@@ -220,9 +168,9 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
   const handleCreateSessions = () => {
     createSessionsMutation.mutate(undefined, {
       onSuccess: async () => {
-        // Immediately check for sessions (they will be in 'closed' state)
+        // Immediately refetch sessions (they will be in 'closed' state)
         // This will display them immediately, but SSE won't connect until they advance to active
-        await checkForActiveSessions();
+        await refetchSessions();
         console.log('[AgentOverview] Sessions created successfully. Agent status set to testing.');
       },
     });
@@ -234,7 +182,7 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
         // Check for sessions - they should now be in 'active' state
         // This will trigger SSE connection since they're now active
         setTimeout(() => {
-          checkForActiveSessions();
+          refetchSessions();
         }, 1000);
         console.log('[AgentOverview] Sessions will be started by worker...');
       },
@@ -266,28 +214,8 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
   const handlePauseSessions = () => {
     pauseSessionsMutation.mutate(undefined, {
       onSuccess: async () => {
-        // Update session status directly from API - don't rely on SSE for status changes
-        // Fetch updated sessions and update local state immediately
-        const sessionRes = await fetch(`/api/agent-sessions/${eventId}/check`);
-        const sessionData = await sessionRes.json();
-        
-        if (sessionData.ok && sessionData.sessions) {
-          const updatedSessions: AgentSessionStatus[] = sessionData.sessions.map((s: any) => ({
-            agent_type: s.agent_type,
-            session_id: s.session_id || 'pending',
-            status: s.status,
-            metadata: s.metadata || {
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-              closed_at: null,
-            },
-          }));
-          setInitialSessions(updatedSessions);
-        }
-        
-        // Update hasActiveSessions (SSE will disconnect since sessions are now paused)
-        await checkForActiveSessions();
-        
+        // Refetch sessions to get updated status (SSE will disconnect since sessions are now paused)
+        await refetchSessions();
         console.log('[AgentOverview] Sessions paused');
       },
     });
@@ -296,28 +224,8 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
   const handleResumeSessions = () => {
     resumeSessionsMutation.mutate(undefined, {
       onSuccess: async () => {
-        // Update session status directly from API - don't rely on SSE for status changes
-        // Fetch updated sessions and update local state immediately
-        const sessionRes = await fetch(`/api/agent-sessions/${eventId}/check`);
-        const sessionData = await sessionRes.json();
-        
-        if (sessionData.ok && sessionData.sessions) {
-          const updatedSessions: AgentSessionStatus[] = sessionData.sessions.map((s: any) => ({
-            agent_type: s.agent_type,
-            session_id: s.session_id || 'pending',
-            status: s.status,
-            metadata: s.metadata || {
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-              closed_at: null,
-            },
-          }));
-          setInitialSessions(updatedSessions);
-        }
-        
-        // Update hasActiveSessions (SSE will reconnect when sessions become active)
-        await checkForActiveSessions();
-        
+        // Refetch sessions to get updated status (SSE will reconnect when sessions become active)
+        await refetchSessions();
         console.log('[AgentOverview] Sessions will be resumed by worker');
       },
     });
@@ -1102,7 +1010,7 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
               <button
                 onClick={() => {
                   // Refresh session check first, then reconnect SSE if needed
-                  checkForActiveSessions();
+                  refetchSessions();
                   reconnect();
                 }}
                 style={{

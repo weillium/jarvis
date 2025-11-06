@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useBlueprintFullQuery } from '@/shared/hooks/use-blueprint-full-query';
 
 interface BlueprintDisplayProps {
   eventId: string;
@@ -8,51 +9,13 @@ interface BlueprintDisplayProps {
   embedded?: boolean; // If true, removes expand button and regenerate button
 }
 
-interface Blueprint {
-  id: string;
-  status: string;
-  blueprint: any;
-  important_details: string[] | null;
-  inferred_topics: string[] | null;
-  key_terms: string[] | null;
-  research_plan: any;
-  glossary_plan: any;
-  chunks_plan: any;
-  target_chunk_count: number | null;
-  quality_tier: string | null;
-  estimated_cost: number | null;
-  created_at: string;
-}
-
 export function BlueprintDisplay({
   eventId,
   onRegenerate,
   embedded = false,
 }: BlueprintDisplayProps) {
-  const [blueprint, setBlueprint] = useState<Blueprint | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: blueprint, isLoading, error } = useBlueprintFullQuery(eventId);
   const [expanded, setExpanded] = useState(embedded); // Auto-expand when embedded
-
-  useEffect(() => {
-    async function fetchBlueprint() {
-      try {
-        const res = await fetch(`/api/context/${eventId}/blueprint`);
-        const data = await res.json();
-        if (data.ok && data.blueprint) {
-          setBlueprint(data.blueprint);
-        }
-      } catch (err) {
-        console.error('Failed to fetch blueprint:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchBlueprint();
-    // Poll for blueprint updates (every 3 seconds) to auto-populate when generated
-    const interval = setInterval(fetchBlueprint, 3000);
-    return () => clearInterval(interval);
-  }, [eventId]);
 
   // Handle regenerate blueprint - just trigger the parent's callback to show prompt preview modal
   const handleRegenerate = () => {
@@ -61,7 +24,7 @@ export function BlueprintDisplay({
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div style={{
         padding: '16px',
@@ -69,6 +32,18 @@ export function BlueprintDisplay({
         color: '#64748b',
       }}>
         Loading blueprint...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{
+        padding: '16px',
+        textAlign: 'center',
+        color: '#ef4444',
+      }}>
+        Error loading blueprint: {error instanceof Error ? error.message : 'Unknown error'}
       </div>
     );
   }

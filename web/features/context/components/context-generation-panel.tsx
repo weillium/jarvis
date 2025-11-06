@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { ContextGenerationProgress } from './context-generation-progress';
 import { BlueprintDisplay } from './blueprint-display';
 import {
@@ -8,6 +8,7 @@ import {
   useRegenerateStageMutation,
   useApproveBlueprintMutation,
 } from '@/shared/hooks/use-mutations';
+import { useContextStatusQuery } from '@/shared/hooks/use-context-status-query';
 
 interface ContextGenerationPanelProps {
   eventId: string;
@@ -16,37 +17,10 @@ interface ContextGenerationPanelProps {
   isClearing?: boolean;
 }
 
-interface StatusData {
-  ok: boolean;
-  agent: {
-    id: string;
-    status: string;
-    stage: string | null;
-    created_at: string;
-  } | null;
-  blueprint: {
-    id: string;
-    status: string;
-    created_at: string;
-    approved_at: string | null;
-    target_chunk_count: number | null;
-    estimated_cost: number | null;
-  } | null;
-  stage: string;
-  progress: {
-    current: number;
-    total: number;
-    percentage: number;
-  } | null;
-  hasResearch?: boolean;
-  hasGlossary?: boolean;
-  hasChunks?: boolean;
-}
-
 export function ContextGenerationPanel({ eventId, embedded = false, onClearContext, isClearing = false }: ContextGenerationPanelProps) {
-  const [statusData, setStatusData] = useState<StatusData | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { data: statusData, error: statusError, refetch: refetchStatus } = useContextStatusQuery(eventId);
   const [showPromptPreview, setShowPromptPreview] = useState(false);
+  const [promptPreviewError, setPromptPreviewError] = useState<string | null>(null);
   const [promptPreview, setPromptPreview] = useState<{
     system: string;
     user: string;
@@ -72,7 +46,12 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
   
   // Consolidated error handling
   const getErrorMessage = (): string | null => {
-    if (error) return error;
+    if (promptPreviewError) {
+      return promptPreviewError;
+    }
+    if (statusError) {
+      return statusError instanceof Error ? statusError.message : 'Failed to fetch status';
+    }
     if (regenerateStageMutation.error) {
       return regenerateStageMutation.error instanceof Error ? regenerateStageMutation.error.message : 'Failed to regenerate stage';
     }
@@ -87,47 +66,6 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
   
   const consolidatedError = getErrorMessage();
 
-  // Fetch status
-  const fetchStatus = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/context/${eventId}/status`);
-      const data = await res.json();
-      if (data.ok) {
-        setStatusData(data);
-        setError(null);
-      } else {
-        setError(data.error || 'Failed to fetch status');
-      }
-    } catch (err) {
-      console.error('Failed to fetch status:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch status';
-      setError(errorMessage);
-    }
-  }, [eventId]);
-
-  // Initial fetch
-  useEffect(() => {
-    if (!eventId) return;
-    // Defer to avoid cascading renders
-    const timeoutId = setTimeout(() => {
-      void fetchStatus();
-    }, 0);
-    return () => clearTimeout(timeoutId);
-  }, [eventId, fetchStatus]);
-
-  // Poll for status updates (every 3 seconds)
-  useEffect(() => {
-    if (!eventId) return;
-
-    const interval = setInterval(() => {
-      fetchStatus();
-    }, 3000);
-
-    return () => {
-      clearInterval(interval);
-    };
-  }, [eventId, fetchStatus]);
-
   // Fetch prompt preview and show modal
   const fetchPromptPreview = async () => {
     try {
@@ -140,14 +78,14 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
           event: data.event,
         });
         setShowPromptPreview(true);
-        setError(null);
+        setPromptPreviewError(null);
       } else {
-        setError(data.error || 'Failed to fetch prompt preview');
+        setPromptPreviewError(data.error || 'Failed to fetch prompt preview');
       }
     } catch (err) {
       console.error('Failed to fetch prompt preview:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch prompt preview';
-      setError(errorMessage);
+      setPromptPreviewError(errorMessage);
     }
   };
 
@@ -155,11 +93,11 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
   // The endpoint now handles both start and regenerate cases automatically
   const actuallyStartOrRegenerate = () => {
     setShowPromptPreview(false);
-    setError(null); // Clear any previous errors
+    setPromptPreviewError(null); // Clear any previous errors
     startContextGenerationMutation.mutate(undefined, {
       onSuccess: () => {
-        // Immediately fetch updated status
-        fetchStatus();
+        // React Query will automatically refetch status
+        refetchStatus();
       },
       onError: () => {
         // Error is handled by consolidated error display
@@ -175,11 +113,11 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
   // Handle stage regeneration (research, glossary, chunks)
   const handleRegenerateStage = (stage: 'research' | 'glossary' | 'chunks') => {
     setCurrentRegeneratingStage(stage);
-    setError(null); // Clear any previous errors
+    setPromptPreviewError(null); // Clear any previous errors
     regenerateStageMutation.mutate(stage, {
       onSuccess: () => {
-        // Immediately fetch updated status to show progress
-        fetchStatus();
+        // React Query will automatically refetch status
+        refetchStatus();
       },
       onError: () => {
         // Error is handled by consolidated error display
@@ -192,11 +130,11 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
 
   // Approve blueprint
   const handleApprove = () => {
-    setError(null); // Clear any previous errors
+    setPromptPreviewError(null); // Clear any previous errors
     approveBlueprintMutation.mutate(undefined, {
       onSuccess: () => {
-        // Immediately fetch updated status
-        fetchStatus();
+        // React Query will automatically refetch status
+        refetchStatus();
       },
       onError: () => {
         // Error is handled by consolidated error display
