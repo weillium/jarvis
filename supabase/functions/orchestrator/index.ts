@@ -64,9 +64,9 @@ Deno.serve(async (req) => {
         )
       }
 
-      // Get model_set from environment (defaults to 'Open AI')
+      // Get model_set from environment (defaults to 'open_ai')
       // This allows for future expansion to support multiple model providers
-      const model_set = Deno.env.get("MODEL_SET") || "Open AI"
+      const model_set = Deno.env.get("MODEL_SET") || "open_ai"
 
       // Use a Postgres function for atomic transaction
       // This ensures both event and agent are created together or not at all

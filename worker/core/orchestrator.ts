@@ -195,7 +195,7 @@ export class Orchestrator {
       try {
         // Get agent's model_set to determine which models to use
         const agent = await this.supabaseService.getAgentStatus(agentId);
-        const modelSet = agent?.model_set || 'Open AI';
+        const modelSet = agent?.model_set || 'open_ai';
         const transcriptModel = this.modelSelectionService.getModelForAgentType(modelSet, 'transcript');
         const cardsModel = this.modelSelectionService.getModelForAgentType(modelSet, 'cards');
         const factsModel = this.modelSelectionService.getModelForAgentType(modelSet, 'facts');
@@ -298,7 +298,7 @@ export class Orchestrator {
 
     // Get agent's model_set to determine which models to use
     const agent = await this.supabaseService.getAgentStatus(agentId);
-    const modelSet = agent?.model_set || 'Open AI';
+    const modelSet = agent?.model_set || 'open_ai';
     const transcriptModel = this.modelSelectionService.getModelForAgentType(modelSet, 'transcript');
     const cardsModel = this.modelSelectionService.getModelForAgentType(modelSet, 'cards');
     const factsModel = this.modelSelectionService.getModelForAgentType(modelSet, 'facts');
@@ -456,7 +456,7 @@ export class Orchestrator {
   private async createRealtimeSessions(runtime: EventRuntime, eventId: string, agentId: string): Promise<void> {
     // Get agent's model_set to determine which models to use
     const agent = await this.supabaseService.getAgentStatus(agentId);
-    const modelSet = agent?.model_set || 'Open AI';
+    const modelSet = agent?.model_set || 'open_ai';
     
     // Get model configuration based on model_set
     const transcriptModel = this.modelSelectionService.getModelForAgentType(modelSet, 'transcript');

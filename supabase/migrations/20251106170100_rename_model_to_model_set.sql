@@ -1,23 +1,23 @@
--- Rename model column to model_set and update default to 'Open AI'
+-- Rename model column to model_set and update default to 'open_ai'
 -- This allows for future expansion to support multiple model providers
 
 -- Step 1: Rename the column
 alter table agents rename column model to model_set;
 
 -- Step 2: Update the default value
-alter table agents alter column model_set set default 'Open AI';
+alter table agents alter column model_set set default 'open_ai';
 
--- Step 3: Update existing records to use the new default
-update agents set model_set = 'Open AI' where model_set = 'gpt-4o-mini' or model_set is null;
+update agents set model_set = 'open_ai' where model_set = 'gpt-4o-mini' or model_set is null or model_set = 'Open AI';
 
 -- Step 4: Update the create_event_with_agent function to use model_set
+drop function if exists create_event_with_agent(uuid, text, text, timestamptz, timestamptz, text);
 create or replace function create_event_with_agent(
   p_owner_uid uuid,
   p_title text,
   p_topic text default null,
   p_start_time timestamptz default null,
   p_end_time timestamptz default null,
-  p_model_set text default 'Open AI'
+  p_model_set text default 'open_ai'
 )
 returns jsonb
 language plpgsql

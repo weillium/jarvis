@@ -80,14 +80,14 @@ export async function POST(
     }
 
     // Get agent's model_set to determine which models to use
-    const modelSet = agents[0].model_set || 'Open AI';
+    const modelSet = agents[0].model_set || 'open_ai';
     
     // Determine models based on model_set
     let transcriptModel: string;
     let cardsModel: string;
     let factsModel: string;
     
-    if (modelSet === 'Open AI') {
+    if (modelSet === 'open_ai') {
       transcriptModel = process.env.OPENAI_TRANSCRIPT_MODEL || process.env.DEFAULT_TRANSCRIPT_MODEL || 'gpt-4o-realtime-preview-2024-10-01';
       cardsModel = process.env.OPENAI_CARDS_MODEL || process.env.DEFAULT_CARDS_MODEL || 'gpt-4o-realtime-preview-2024-10-01';
       factsModel = process.env.OPENAI_FACTS_MODEL || process.env.DEFAULT_FACTS_MODEL || 'gpt-4o-mini';

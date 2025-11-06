@@ -2,7 +2,7 @@
  * Model Selection Service
  * 
  * Handles model and API key selection based on agent model_set value.
- * Supports multiple model providers (Open AI, etc.) with fallback defaults.
+ * Supports multiple model providers (open_ai, etc.) with fallback defaults.
  */
 
 export interface ModelConfig {
@@ -16,11 +16,11 @@ export class ModelSelectionService {
   /**
    * Get model configuration based on model_set value
    * 
-   * @param modelSet - The model_set value from the agent (e.g., 'Open AI')
+   * @param modelSet - The model_set value from the agent (e.g., 'open_ai')
    * @returns Model configuration with transcript, cards, facts models, and API key
    */
   getModelConfig(modelSet: string): ModelConfig {
-    if (modelSet === 'Open AI') {
+    if (modelSet === 'open_ai') {
       return {
         transcriptModel: process.env.OPENAI_TRANSCRIPT_MODEL || process.env.DEFAULT_TRANSCRIPT_MODEL || 'gpt-4o-realtime-preview-2024-10-01',
         cardsModel: process.env.OPENAI_CARDS_MODEL || process.env.DEFAULT_CARDS_MODEL || 'gpt-4o-realtime-preview-2024-10-01',
