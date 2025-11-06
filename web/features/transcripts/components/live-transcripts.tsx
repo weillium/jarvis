@@ -1,6 +1,9 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useTranscriptsQuery } from '@/shared/hooks/use-transcripts-query';
+import { useSSEStream } from '@/shared/hooks/use-sse-stream';
+import type { SSEMessage } from '@/shared/types/card';
 import { formatDistanceToNow } from 'date-fns';
 
 interface LiveTranscriptsProps {
@@ -13,6 +16,34 @@ interface LiveTranscriptsProps {
  */
 export function LiveTranscripts({ eventId }: LiveTranscriptsProps) {
   const { data, isLoading, error } = useTranscriptsQuery(eventId);
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
+
+  const { isConnected, isConnecting, reconnect } = useSSEStream({
+    eventId,
+    onMessage: (_message: SSEMessage) => {
+      // No-op, we're just using this for connection status
+    },
+    onConnect: () => {
+      setConnectionStatus('connected');
+    },
+    onDisconnect: () => {
+      setConnectionStatus('disconnected');
+    },
+    onError: () => {
+      setConnectionStatus('disconnected');
+    },
+  });
+
+  // Update connection status based on hook state
+  useEffect(() => {
+    if (isConnecting) {
+      setConnectionStatus('connecting');
+    } else if (isConnected) {
+      setConnectionStatus('connected');
+    } else {
+      setConnectionStatus('disconnected');
+    }
+  }, [isConnected, isConnecting]);
 
   if (isLoading) {
     return (
@@ -48,32 +79,59 @@ export function LiveTranscripts({ eventId }: LiveTranscriptsProps) {
 
   return (
     <div>
+      {/* Connection Status */}
       <div
         style={{
+          marginBottom: '20px',
+          padding: '12px 16px',
+          background: connectionStatus === 'connected' ? '#f0fdf4' : connectionStatus === 'connecting' ? '#fffbeb' : '#fef2f2',
+          border: `1px solid ${connectionStatus === 'connected' ? '#86efac' : connectionStatus === 'connecting' ? '#fde047' : '#fca5a5'}`,
+          borderRadius: '8px',
           display: 'flex',
-          justifyContent: 'space-between',
           alignItems: 'center',
-          marginBottom: '16px',
+          justifyContent: 'space-between',
         }}
       >
-        <h2
-          style={{
-            fontSize: '20px',
-            fontWeight: '600',
-            color: '#0f172a',
-            margin: 0,
-          }}
-        >
-          Ring Buffer Transcripts
-        </h2>
-        <div
-          style={{
-            fontSize: '13px',
-            color: '#64748b',
-          }}
-        >
-          {transcripts.length} transcript{transcripts.length !== 1 ? 's' : ''} (last 5 minutes)
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div
+            style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              background: connectionStatus === 'connected' ? '#22c55e' : connectionStatus === 'connecting' ? '#eab308' : '#ef4444',
+            }}
+          />
+          <span
+            style={{
+              fontSize: '14px',
+              fontWeight: '500',
+              color: connectionStatus === 'connected' ? '#166534' : connectionStatus === 'connecting' ? '#854d0e' : '#991b1b',
+            }}
+          >
+            {connectionStatus === 'connected'
+              ? 'Connected - Receiving live updates'
+              : connectionStatus === 'connecting'
+              ? 'Connecting...'
+              : 'Disconnected'}
+          </span>
         </div>
+        {connectionStatus === 'disconnected' && (
+          <button
+            onClick={reconnect}
+            style={{
+              padding: '6px 12px',
+              background: '#1e293b',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '12px',
+              fontWeight: '500',
+              cursor: 'pointer',
+            }}
+          >
+            Reconnect
+          </button>
+        )}
       </div>
 
       {transcripts.length === 0 ? (

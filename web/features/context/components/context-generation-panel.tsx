@@ -294,7 +294,7 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
         }}>
           <strong>Blueprint Generation Failed</strong>
           <p style={{ margin: '8px 0 0 0' }}>
-            The blueprint generation encountered an error. You can try generating a new blueprint.
+            Blueprint generation encountered an error. You can try generating a new blueprint.
           </p>
         </div>
       )}

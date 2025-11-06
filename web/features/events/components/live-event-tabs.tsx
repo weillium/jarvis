@@ -4,19 +4,16 @@ import { EventWithStatus } from '@/shared/types/event';
 import { Tabs, SubTabs } from '@/shared/ui/tabs';
 import { EventDetail } from './event-detail';
 import { AgentOverview } from './agent-overview';
-import { ContextGenerationPanel } from '@/features/context/components/context-generation-panel';
 import { BlueprintDisplay } from '@/features/context/components/blueprint-display';
 import { ResearchResultsVisualization } from '@/features/context/components/research-results-visualization';
 import { GlossaryVisualization } from '@/features/context/components/glossary-visualization';
 import { ContextDatabaseVisualization } from './context-database-visualization';
 import { VersionHistory } from '@/features/context/components/version-history';
-import { RegenerateButton } from '@/features/context/components/regenerate-button';
 import { LiveCards } from '@/features/cards/components/live-cards';
 import { LiveFacts } from '@/features/facts/components/live-facts';
 import { LiveTranscripts } from '@/features/transcripts/components/live-transcripts';
+import { AgentSessions } from './agent-sessions';
 import { useAgentQuery } from '@/shared/hooks/use-agent-query';
-import { useBlueprintQuery } from '@/shared/hooks/use-blueprint-query';
-import { useApproveBlueprintMutation, useResetContextMutation } from '@/shared/hooks/use-mutations';
 
 interface LiveEventTabsProps {
   event: EventWithStatus;
@@ -24,51 +21,18 @@ interface LiveEventTabsProps {
 }
 
 export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
-  // Use React Query hooks for agent and blueprint data
+  // Use React Query hooks for agent data
   const { data: agentData } = useAgentQuery(eventId);
-  const { data: blueprint } = useBlueprintQuery(eventId);
-  
-  // Mutation hooks
-  const approveBlueprintMutation = useApproveBlueprintMutation(eventId);
-  const resetContextMutation = useResetContextMutation(eventId);
-  
-  // Get agent info for context generation panel
-  const agentInfo = agentData?.agent ?? null;
   
   // Derive state from queries
   const agentStatus = agentData?.agent?.status ?? null;
   const agentStage = agentData?.agent?.stage ?? null;
-  const blueprintStatus = blueprint?.status ?? null;
-  
-  // Can approve when agent status is idle, stage is blueprint, AND blueprint status is ready
-  const canApprove = agentStatus === 'idle' && agentStage === 'blueprint' && blueprintStatus === 'ready' && !blueprint?.approved_at;
-  
-  // Regeneration status tracking (derived from agent stage)
-  const isRegeneratingResearch = agentStage === 'regenerating_research';
-  const isRegeneratingGlossary = agentStage === 'regenerating_glossary';
-  const isRegeneratingChunks = agentStage === 'regenerating_chunks';
-
-  const handleApproveBlueprint = () => {
-    approveBlueprintMutation.mutate();
-  };
 
   const handleRegenerateBlueprint = () => {
     // BlueprintDisplay handles its own regenerate logic
   };
 
-  const handleReset = () => {
-    if (!confirm('Are you sure you want to invalidate all context components? This will require restarting context building.')) {
-      return;
-    }
-    resetContextMutation.mutate();
-  };
-
-  // Get mutation states
-  const approving = approveBlueprintMutation.isPending;
-  const isResetting = resetContextMutation.isPending;
-  const resetError = resetContextMutation.error ? (resetContextMutation.error instanceof Error ? resetContextMutation.error.message : 'Failed to reset context') : null;
-
-  // Agent Information subtabs
+  // Agent Context subtabs
   const agentSubtabs = [
     {
       id: 'overview',
@@ -79,107 +43,32 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
       id: 'blueprint',
       label: 'Context Blueprint',
       content: (
-        <div>
-          {/* Context Generation Progress - moved from overview */}
-          <div style={{ marginBottom: '24px' }}>
-            {resetError && (
-              <div style={{
-                marginBottom: '16px',
-                padding: '8px 12px',
-                background: '#fee2e2',
-                border: '1px solid #fecaca',
-                borderRadius: '6px',
-                color: '#991b1b',
-                fontSize: '12px',
-              }}>
-                {resetError}
-              </div>
-            )}
-            <ContextGenerationPanel 
-              eventId={eventId} 
-              embedded={true}
-              onClearContext={agentInfo && agentInfo.status !== 'idle' ? handleReset : undefined}
-              isClearing={isResetting}
-            />
-          </div>
-          
-          {/* Divider line */}
-          <div style={{
-            height: '1px',
-            background: '#e2e8f0',
-            marginBottom: '24px',
-          }} />
-          
-          <div style={{ 
-            display: 'flex', 
-            gap: '12px', 
-            marginBottom: '16px',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-          }}>
-            {canApprove && (
-              <button
-                onClick={handleApproveBlueprint}
-                disabled={approving || approveBlueprintMutation.isError}
-                style={{
-                  padding: '10px 16px',
-                  background: approving ? '#94a3b8' : '#10b981',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '13px',
-                  fontWeight: '500',
-                  cursor: approving ? 'not-allowed' : 'pointer',
-                  transition: 'background 0.2s',
-                  opacity: approving ? 0.6 : 1,
-                }}
-              >
-                {approving ? 'Approving...' : 'Approve Blueprint'}
-              </button>
-            )}
-          </div>
-          <BlueprintDisplay
-            eventId={eventId}
-            onRegenerate={handleRegenerateBlueprint}
-            embedded={true}
-          />
-        </div>
+        <BlueprintDisplay
+          eventId={eventId}
+          onRegenerate={handleRegenerateBlueprint}
+          embedded={true}
+        />
       ),
     },
     {
       id: 'research',
       label: 'Research Results',
       content: (
-        <div>
-          <div style={{ marginBottom: '16px' }}>
-            <RegenerateButton eventId={eventId} stage="research" isRegenerating={isRegeneratingResearch} />
-          </div>
-          <ResearchResultsVisualization eventId={eventId} embedded={true} />
-        </div>
+        <ResearchResultsVisualization eventId={eventId} embedded={true} />
       ),
     },
     {
       id: 'glossary',
       label: 'Glossary',
       content: (
-        <div>
-          <div style={{ marginBottom: '16px' }}>
-            <RegenerateButton eventId={eventId} stage="glossary" isRegenerating={isRegeneratingGlossary} />
-          </div>
-          <GlossaryVisualization eventId={eventId} embedded={true} />
-        </div>
+        <GlossaryVisualization eventId={eventId} embedded={true} />
       ),
     },
     {
       id: 'database',
       label: 'Context Database',
       content: (
-        <div>
-          <div style={{ marginBottom: '16px' }}>
-            <RegenerateButton eventId={eventId} stage="chunks" isRegenerating={isRegeneratingChunks} />
-          </div>
-          <ContextDatabaseVisualization eventId={eventId} agentStatus={agentStatus} agentStage={agentStage} embedded={true} />
-        </div>
+        <ContextDatabaseVisualization eventId={eventId} agentStatus={agentStatus} agentStage={agentStage} embedded={true} />
       ),
     },
     {
@@ -198,7 +87,7 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
     },
     {
       id: 'agent',
-      label: 'Agent Information',
+      label: 'Agent Context',
       content: (
         <div>
           <SubTabs tabs={agentSubtabs} defaultTab="overview" />
@@ -206,9 +95,14 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
       ),
     },
     {
-      id: 'cards',
-      label: 'Live Context Cards',
-      content: <LiveCards eventId={eventId} />,
+      id: 'sessions',
+      label: 'Agent Sessions',
+      content: <AgentSessions eventId={eventId} />,
+    },
+    {
+      id: 'transcripts',
+      label: 'Transcripts',
+      content: <LiveTranscripts eventId={eventId} />,
     },
     {
       id: 'facts',
@@ -216,9 +110,9 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
       content: <LiveFacts eventId={eventId} />,
     },
     {
-      id: 'transcripts',
-      label: 'Transcripts',
-      content: <LiveTranscripts eventId={eventId} />,
+      id: 'cards',
+      label: 'Context Cards',
+      content: <LiveCards eventId={eventId} />,
     },
   ];
 

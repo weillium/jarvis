@@ -48,21 +48,22 @@ export function ContextGenerationProgress({
       case 'regenerating_chunks':
         return 'Regenerating Chunks';
       case 'context_complete':
-        return 'Complete';
+        return 'Context Complete';
       default:
-        return stage;
+        // Capitalize first letter of unknown stages
+        return stage.charAt(0).toUpperCase() + stage.slice(1).replace(/_/g, ' ');
     }
   };
 
   const getProgressLabel = (): string => {
     if ((stage === 'researching' || stage === 'regenerating_research') && progress) {
-      return `${progress.current} / ${progress.total} queries`;
+      return `${progress.current} / ${progress.total} Queries`;
     }
     if ((stage === 'building_glossary' || stage === 'regenerating_glossary') && progress) {
-      return `${progress.current} / ${progress.total} terms`;
+      return `${progress.current} / ${progress.total} Terms`;
     }
     if ((stage === 'building_chunks' || stage === 'regenerating_chunks') && progress) {
-      return `${progress.current} / ${progress.total} chunks`;
+      return `${progress.current} / ${progress.total} Chunks`;
     }
     return '';
   };
