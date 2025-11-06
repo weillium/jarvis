@@ -34,22 +34,30 @@ export class SessionFactory {
     private readonly defaultRealtimeModel: string
   ) {}
 
-  createCardsSession(runtime: EventRuntime, hooks: SessionHooks): RealtimeSession {
-    const config = this.buildConfig('cards', runtime, hooks);
-    return new RealtimeSession(this.openai, config);
+  createTranscriptSession(runtime: EventRuntime, hooks: SessionHooks, model: string, apiKey?: string): RealtimeSession {
+    const config = this.buildConfig('transcript', runtime, hooks, model);
+    const openaiClient = apiKey ? new OpenAI({ apiKey }) : this.openai;
+    return new RealtimeSession(openaiClient, config);
   }
 
-  createFactsSession(runtime: EventRuntime, hooks: SessionHooks): RealtimeSession {
-    const config = this.buildConfig('facts', runtime, hooks);
-    return new RealtimeSession(this.openai, config);
+  createCardsSession(runtime: EventRuntime, hooks: SessionHooks, model: string, apiKey?: string): RealtimeSession {
+    const config = this.buildConfig('cards', runtime, hooks, model);
+    const openaiClient = apiKey ? new OpenAI({ apiKey }) : this.openai;
+    return new RealtimeSession(openaiClient, config);
+  }
+
+  createFactsSession(runtime: EventRuntime, hooks: SessionHooks, model: string, apiKey?: string): RealtimeSession {
+    const config = this.buildConfig('facts', runtime, hooks, model);
+    const openaiClient = apiKey ? new OpenAI({ apiKey }) : this.openai;
+    return new RealtimeSession(openaiClient, config);
   }
 
   private buildConfig(
-    agentType: 'cards' | 'facts',
+    agentType: 'transcript' | 'cards' | 'facts',
     runtime: EventRuntime,
-    hooks: SessionHooks
+    hooks: SessionHooks,
+    model: string
   ): RealtimeSessionConfig {
-    const model = this.openaiService.getRealtimeModel(this.defaultRealtimeModel);
 
     return {
       eventId: runtime.eventId,

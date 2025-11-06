@@ -32,6 +32,7 @@ interface AgentSessionOptions {
 }
 
 interface SessionCreationOptions {
+  transcript?: AgentSessionOptions;
   cards?: AgentSessionOptions;
   facts?: AgentSessionOptions;
 }
@@ -46,9 +47,25 @@ export class SessionManager {
   async createSessions(
     runtime: EventRuntime,
     onStatusChange: SessionStatusHandler,
-    options: SessionCreationOptions = {}
-  ): Promise<{ cardsSession: RealtimeSession; factsSession: RealtimeSession }> {
+    transcriptModel: string,
+    cardsModel: string,
+    factsModel: string,
+    options: SessionCreationOptions = {},
+    apiKey?: string
+  ): Promise<{ transcriptSession: RealtimeSession; cardsSession: RealtimeSession; factsSession: RealtimeSession }> {
     const supabaseClient = this.supabase.getClient();
+
+    const transcriptSession = this.sessionFactory.createTranscriptSession(runtime, {
+      supabaseClient,
+      onStatusChange: (status, sessionId) => onStatusChange('transcript', status, sessionId),
+      onLog:
+        options.transcript?.onLog ??
+        ((level, message, context) => {
+          this.logger.log(runtime.eventId, 'transcript', level, message, context);
+        }),
+      onRetrieve: options.transcript?.onRetrieve,
+      embedText: options.transcript?.embedText,
+    }, transcriptModel, apiKey);
 
     const cardsSession = this.sessionFactory.createCardsSession(runtime, {
       supabaseClient,
@@ -60,7 +77,7 @@ export class SessionManager {
         }),
       onRetrieve: options.cards?.onRetrieve,
       embedText: options.cards?.embedText,
-    });
+    }, cardsModel, apiKey);
 
     const factsSession = this.sessionFactory.createFactsSession(runtime, {
       supabaseClient,
@@ -72,21 +89,26 @@ export class SessionManager {
         }),
       onRetrieve: options.facts?.onRetrieve,
       embedText: options.facts?.embedText,
-    });
+    }, factsModel, apiKey);
 
-    return { cardsSession, factsSession };
+    return { transcriptSession, cardsSession, factsSession };
   }
 
   async connectSessions(
+    transcriptSession: RealtimeSession,
     cardsSession: RealtimeSession,
     factsSession: RealtimeSession
-  ): Promise<{ cardsSessionId: string; factsSessionId: string }> {
+  ): Promise<{ transcriptSessionId: string; cardsSessionId: string; factsSessionId: string }> {
+    const transcriptSessionId = await transcriptSession.connect();
     const cardsSessionId = await cardsSession.connect();
     const factsSessionId = await factsSession.connect();
-    return { cardsSessionId, factsSessionId };
+    return { transcriptSessionId, cardsSessionId, factsSessionId };
   }
 
-  async pauseSessions(cardsSession?: RealtimeSession, factsSession?: RealtimeSession): Promise<void> {
+  async pauseSessions(transcriptSession?: RealtimeSession, cardsSession?: RealtimeSession, factsSession?: RealtimeSession): Promise<void> {
+    if (transcriptSession) {
+      await transcriptSession.pause();
+    }
     if (cardsSession) {
       await cardsSession.pause();
     }
@@ -96,15 +118,20 @@ export class SessionManager {
   }
 
   async resumeSessions(
+    transcriptSession?: RealtimeSession,
     cardsSession?: RealtimeSession,
     factsSession?: RealtimeSession
-  ): Promise<{ cardsSessionId?: string; factsSessionId?: string }> {
+  ): Promise<{ transcriptSessionId?: string; cardsSessionId?: string; factsSessionId?: string }> {
+    const transcriptSessionId = transcriptSession ? await transcriptSession.resume() : undefined;
     const cardsSessionId = cardsSession ? await cardsSession.resume() : undefined;
     const factsSessionId = factsSession ? await factsSession.resume() : undefined;
-    return { cardsSessionId, factsSessionId };
+    return { transcriptSessionId, cardsSessionId, factsSessionId };
   }
 
-  async closeSessions(cardsSession?: RealtimeSession, factsSession?: RealtimeSession): Promise<void> {
+  async closeSessions(transcriptSession?: RealtimeSession, cardsSession?: RealtimeSession, factsSession?: RealtimeSession): Promise<void> {
+    if (transcriptSession) {
+      await transcriptSession.close();
+    }
     if (cardsSession) {
       await cardsSession.close();
     }

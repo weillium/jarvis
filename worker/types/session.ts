@@ -1,4 +1,4 @@
-export type AgentType = 'cards' | 'facts';
+export type AgentType = 'transcript' | 'cards' | 'facts';
 
 export type SessionStatus =
   | 'active'

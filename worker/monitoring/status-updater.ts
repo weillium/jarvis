@@ -19,9 +19,11 @@ export class StatusUpdater {
     
     // Extract only enrichment fields (websocket_state, ping_pong, logs, real-time metrics)
     // Database fields (status, metadata, session_id) are handled by React Query
+    const transcriptEnrichment = this.extractEnrichment(statuses.transcript);
     const cardsEnrichment = this.extractEnrichment(statuses.cards);
     const factsEnrichment = this.extractEnrichment(statuses.facts);
     
+    await this.sse.pushSessionStatus(runtime.eventId, transcriptEnrichment);
     await this.sse.pushSessionStatus(runtime.eventId, cardsEnrichment);
     await this.sse.pushSessionStatus(runtime.eventId, factsEnrichment);
   }
@@ -31,7 +33,7 @@ export class StatusUpdater {
    * Removes database fields (status, metadata, session_id) that should come from React Query
    */
   private extractEnrichment(status: AgentSessionStatus): {
-    agent_type: 'cards' | 'facts';
+    agent_type: 'transcript' | 'cards' | 'facts';
     websocket_state?: 'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED';
     ping_pong?: AgentSessionStatus['ping_pong'];
     recent_logs?: AgentSessionStatus['recent_logs'];
@@ -52,8 +54,9 @@ export class StatusUpdater {
 
   getRuntimeStatusSnapshot(
     runtime: EventRuntime
-  ): { cards: AgentSessionStatus; facts: AgentSessionStatus } {
+  ): { transcript: AgentSessionStatus; cards: AgentSessionStatus; facts: AgentSessionStatus } {
     return {
+      transcript: this.buildSessionStatus(runtime, 'transcript'),
       cards: this.buildSessionStatus(runtime, 'cards'),
       facts: this.buildSessionStatus(runtime, 'facts'),
     };
@@ -65,7 +68,7 @@ export class StatusUpdater {
    */
   async recordMetricsOnSessionClose(
     runtime: EventRuntime,
-    agentType: 'cards' | 'facts'
+    agentType: 'transcript' | 'cards' | 'facts'
   ): Promise<void> {
     const metrics = this.metrics.getMetrics(runtime.eventId, agentType);
     const logs = this.logger.getLogs(runtime.eventId, agentType);
@@ -81,6 +84,7 @@ export class StatusUpdater {
     };
 
     const runtimeStats = {
+      transcript_last_seq: runtime.transcriptLastSeq,
       cards_last_seq: runtime.cardsLastSeq,
       facts_last_seq: runtime.factsLastSeq,
       facts_last_update: new Date(runtime.factsLastUpdate).toISOString(),
@@ -105,19 +109,21 @@ export class StatusUpdater {
   private async buildStatuses(
     runtime: EventRuntime,
     mergeDatabase: boolean
-  ): Promise<{ cards: AgentSessionStatus; facts: AgentSessionStatus }> {
+  ): Promise<{ transcript: AgentSessionStatus; cards: AgentSessionStatus; facts: AgentSessionStatus }> {
+    const transcriptStatus = this.buildSessionStatus(runtime, 'transcript');
     const cardsStatus = this.buildSessionStatus(runtime, 'cards');
     const factsStatus = this.buildSessionStatus(runtime, 'facts');
 
     if (mergeDatabase) {
-      await this.mergeDatabaseInfo(runtime, cardsStatus, factsStatus);
+      await this.mergeDatabaseInfo(runtime, transcriptStatus, cardsStatus, factsStatus);
     }
 
-    return { cards: cardsStatus, facts: factsStatus };
+    return { transcript: transcriptStatus, cards: cardsStatus, facts: factsStatus };
   }
 
   private async mergeDatabaseInfo(
     runtime: EventRuntime,
+    transcriptStatus: AgentSessionStatus,
     cardsStatus: AgentSessionStatus,
     factsStatus: AgentSessionStatus
   ): Promise<void> {
@@ -126,8 +132,36 @@ export class StatusUpdater {
       runtime.agentId
     );
 
+    const transcriptSession = sessions.find((s) => s.agent_type === 'transcript');
     const cardsSession = sessions.find((s) => s.agent_type === 'cards');
     const factsSession = sessions.find((s) => s.agent_type === 'facts');
+
+    if (transcriptSession) {
+      if (transcriptSession.status) {
+        transcriptStatus.status = transcriptSession.status as SessionStatus;
+      }
+      if (transcriptSession.provider_session_id) {
+        transcriptStatus.session_id = transcriptSession.provider_session_id;
+      }
+      if (transcriptSession.created_at) {
+        transcriptStatus.metadata.created_at = transcriptSession.created_at;
+      }
+      if (transcriptSession.updated_at) {
+        transcriptStatus.metadata.updated_at = transcriptSession.updated_at;
+      }
+      if (transcriptSession.closed_at !== undefined) {
+        transcriptStatus.metadata.closed_at = transcriptSession.closed_at ?? null;
+      }
+      if (transcriptSession.model) {
+        transcriptStatus.metadata.model = transcriptSession.model;
+      }
+      if (transcriptSession.connection_count !== undefined) {
+        transcriptStatus.metadata.connection_count = transcriptSession.connection_count;
+      }
+      if (transcriptSession.last_connected_at !== undefined) {
+        transcriptStatus.metadata.last_connected_at = transcriptSession.last_connected_at ?? null;
+      }
+    }
 
     if (cardsSession) {
       if (cardsSession.status) {
@@ -186,10 +220,10 @@ export class StatusUpdater {
 
   private buildSessionStatus(
     runtime: EventRuntime,
-    agentType: 'cards' | 'facts'
+    agentType: 'transcript' | 'cards' | 'facts'
   ): AgentSessionStatus {
-    const session = agentType === 'cards' ? runtime.cardsSession : runtime.factsSession;
-    const sessionId = agentType === 'cards' ? runtime.cardsSessionId : runtime.factsSessionId;
+    const session = agentType === 'transcript' ? runtime.transcriptSession : agentType === 'cards' ? runtime.cardsSession : runtime.factsSession;
+    const sessionId = agentType === 'transcript' ? runtime.transcriptSessionId : agentType === 'cards' ? runtime.cardsSessionId : runtime.factsSessionId;
     const metrics = this.metrics.getMetrics(runtime.eventId, agentType);
     const logs = this.logger.getLogs(runtime.eventId, agentType);
 
@@ -219,6 +253,7 @@ export class StatusUpdater {
         event_id: runtime.eventId,
         agent_id: runtime.agentId,
         runtime_status: runtime.status,
+        transcript_last_seq: runtime.transcriptLastSeq,
         cards_last_seq: runtime.cardsLastSeq,
         facts_last_seq: runtime.factsLastSeq,
         facts_last_update: new Date(runtime.factsLastUpdate).toISOString(),

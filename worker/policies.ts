@@ -94,11 +94,25 @@ OUTPUT FORMAT (JSON array):
 
 Return an empty array if no new/updated facts.`;
 
-export function getPolicy(agentType: 'cards' | 'facts', version: number = 1): string {
+export function getPolicy(agentType: 'transcript' | 'cards' | 'facts', version: number = 1): string {
   if (agentType === 'cards') {
     return CARDS_POLICY_V1;
-  } else {
+  } else if (agentType === 'facts') {
     return FACTS_POLICY_V1;
+  } else {
+    // Transcript agent policy - can be customized later
+    // For now, return a basic policy
+    return `You are a transcript processing agent for live events.
+    
+POLICY:
+- Process and analyze live event transcripts
+- Extract key information and context
+- Support real-time event understanding
+
+KNOWLEDGE RETRIEVAL:
+- Use the retrieve(query, top_k) tool when you need domain-specific context
+- Call retrieve() when transcript mentions topics that need deeper context
+- The retrieve() tool searches a vector database of pre-built context for this event`;
   }
 }
 

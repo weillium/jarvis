@@ -12,6 +12,7 @@ import { StatusUpdater } from '../monitoring/status-updater';
 import { CheckpointManager } from '../monitoring/checkpoint-manager';
 import { GlossaryManager } from '../context/glossary-manager';
 import { VectorSearchService } from '../context/vector-search';
+import { ModelSelectionService } from '../services/model-selection-service';
 import type { AgentSessionStatus, AgentType, EventRuntime } from '../types';
 
 export interface OrchestratorConfig {
@@ -39,6 +40,7 @@ export class Orchestrator {
   private readonly runtimeManager: RuntimeManager;
   private readonly eventProcessor: EventProcessor;
   private readonly statusUpdater: StatusUpdater;
+  private readonly modelSelectionService: ModelSelectionService;
   private realtimeSubscription?: { unsubscribe: () => Promise<void> };
 
   constructor(
@@ -53,7 +55,8 @@ export class Orchestrator {
     sessionManager: SessionManager,
     runtimeManager: RuntimeManager,
     eventProcessor: EventProcessor,
-    statusUpdater: StatusUpdater
+    statusUpdater: StatusUpdater,
+    modelSelectionService: ModelSelectionService
   ) {
     this.config = config;
     this.supabaseService = supabaseService;
@@ -67,6 +70,7 @@ export class Orchestrator {
     this.runtimeManager = runtimeManager;
     this.eventProcessor = eventProcessor;
     this.statusUpdater = statusUpdater;
+    this.modelSelectionService = modelSelectionService;
   }
 
   async initialize(): Promise<void> {
@@ -87,14 +91,15 @@ export class Orchestrator {
     return this.runtimeManager.getRuntime(eventId);
   }
 
-  getSessionStatus(eventId: string): { cards: AgentSessionStatus | null; facts: AgentSessionStatus | null } {
+  getSessionStatus(eventId: string): { transcript: AgentSessionStatus | null; cards: AgentSessionStatus | null; facts: AgentSessionStatus | null } {
     const runtime = this.runtimeManager.getRuntime(eventId);
     if (!runtime) {
-      return { cards: null, facts: null };
+      return { transcript: null, cards: null, facts: null };
     }
 
     const statuses = this.statusUpdater.getRuntimeStatusSnapshot(runtime);
     return {
+      transcript: statuses.transcript,
       cards: statuses.cards,
       facts: statuses.facts,
     };
@@ -137,10 +142,12 @@ export class Orchestrator {
       }
 
       try {
-        const { cardsSessionId, factsSessionId } = await this.sessionManager.resumeSessions(
+        const { transcriptSessionId, cardsSessionId, factsSessionId } = await this.sessionManager.resumeSessions(
+          runtime.transcriptSession,
           runtime.cardsSession,
           runtime.factsSession
         );
+        runtime.transcriptSessionId = transcriptSessionId;
         runtime.cardsSessionId = cardsSessionId;
         runtime.factsSessionId = factsSessionId;
 
@@ -161,7 +168,7 @@ export class Orchestrator {
     const activeSessions = existingSessions.filter(
       (s) => s.status === 'active'
     );
-    if (activeSessions.length > 0 && runtime.cardsSession && runtime.factsSession) {
+    if (activeSessions.length > 0 && runtime.transcriptSession && runtime.cardsSession && runtime.factsSession) {
       console.log(
         `[orchestrator] Event ${eventId} already has ${activeSessions.length} active session(s)`
       );
@@ -186,13 +193,29 @@ export class Orchestrator {
       // No need to update status here, will be updated when connected
     } else {
       try {
+        // Get agent's model_set to determine which models to use
+        const agent = await this.supabaseService.getAgentStatus(agentId);
+        const modelSet = agent?.model_set || 'Open AI';
+        const transcriptModel = this.modelSelectionService.getModelForAgentType(modelSet, 'transcript');
+        const cardsModel = this.modelSelectionService.getModelForAgentType(modelSet, 'cards');
+        const factsModel = this.modelSelectionService.getModelForAgentType(modelSet, 'facts');
+        
         await this.supabaseService.upsertAgentSessions([
+          {
+            event_id: eventId,
+            agent_id: agentId,
+            provider_session_id: 'pending',
+            agent_type: 'transcript',
+            status: 'closed', // Will be updated to 'active' when connected
+            model: transcriptModel,
+          },
           {
             event_id: eventId,
             agent_id: agentId,
             provider_session_id: 'pending',
             agent_type: 'cards',
             status: 'closed', // Will be updated to 'active' when connected
+            model: cardsModel,
           },
           {
             event_id: eventId,
@@ -200,6 +223,7 @@ export class Orchestrator {
             provider_session_id: 'pending',
             agent_type: 'facts',
             status: 'closed', // Will be updated to 'active' when connected
+            model: factsModel,
           },
         ]);
       } catch (error: any) {
@@ -208,10 +232,12 @@ export class Orchestrator {
     }
 
     try {
-      const { cardsSessionId, factsSessionId } = await this.sessionManager.connectSessions(
+      const { transcriptSessionId, cardsSessionId, factsSessionId } = await this.sessionManager.connectSessions(
+        runtime.transcriptSession!,
         runtime.cardsSession!,
         runtime.factsSession!
       );
+      runtime.transcriptSessionId = transcriptSessionId;
       runtime.cardsSessionId = cardsSessionId;
       runtime.factsSessionId = factsSessionId;
     } catch (error: any) {
@@ -241,7 +267,8 @@ export class Orchestrator {
       runtime.status = 'ready';
     }
 
-    if (runtime.cardsSession && runtime.factsSession && runtime.cardsSessionId && runtime.factsSessionId) {
+    if (runtime.transcriptSession && runtime.cardsSession && runtime.factsSession && 
+        runtime.transcriptSessionId && runtime.cardsSessionId && runtime.factsSessionId) {
       console.log(`[orchestrator] Sessions already connected for event ${eventId}`);
       return;
     }
@@ -269,22 +296,43 @@ export class Orchestrator {
       );
     }
 
-    const { cardsSession, factsSession } = await this.sessionManager.createSessions(
+    // Get agent's model_set to determine which models to use
+    const agent = await this.supabaseService.getAgentStatus(agentId);
+    const modelSet = agent?.model_set || 'Open AI';
+    const transcriptModel = this.modelSelectionService.getModelForAgentType(modelSet, 'transcript');
+    const cardsModel = this.modelSelectionService.getModelForAgentType(modelSet, 'cards');
+    const factsModel = this.modelSelectionService.getModelForAgentType(modelSet, 'facts');
+    
+    // Get API key based on model_set
+    const apiKey = this.modelSelectionService.getApiKey(modelSet);
+    
+    const { transcriptSession, cardsSession, factsSession } = await this.sessionManager.createSessions(
       runtime,
       async (agentType, status, sessionId) => {
         console.log(
           `[orchestrator] ${agentType} session status: ${status} (${sessionId || 'no ID'})`
         );
         if (sessionId) {
+          const model = agentType === 'facts' ? factsModel : (agentType === 'transcript' ? transcriptModel : cardsModel);
           await this.supabaseService.updateAgentSession(eventId, agentType, {
             status,
             provider_session_id: sessionId,
-            model: this.config.realtimeModel,
+            model: model,
             updated_at: new Date().toISOString(),
           });
         }
       },
+      transcriptModel,
+      cardsModel,
+      factsModel,
       {
+        transcript: {
+          onRetrieve: async () => [],
+          embedText: async () => [],
+          onLog: (level, message) => {
+            console.log(`[transcript-test] ${message}`);
+          },
+        },
         cards: {
           onRetrieve: async () => [],
           embedText: async () => [],
@@ -298,19 +346,24 @@ export class Orchestrator {
             console.log(`[facts-test] ${message}`);
           },
         },
-      }
+      },
+      apiKey
     );
 
+    runtime.transcriptSession = transcriptSession;
     runtime.cardsSession = cardsSession;
     runtime.factsSession = factsSession;
+    runtime.transcriptHandlerSession = undefined;
     runtime.cardsHandlerSession = undefined;
     runtime.factsHandlerSession = undefined;
 
     try {
-      const { cardsSessionId, factsSessionId } = await this.sessionManager.connectSessions(
+      const { transcriptSessionId, cardsSessionId, factsSessionId } = await this.sessionManager.connectSessions(
+        transcriptSession,
         cardsSession,
         factsSession
       );
+      runtime.transcriptSessionId = transcriptSessionId;
       runtime.cardsSessionId = cardsSessionId;
       runtime.factsSessionId = factsSessionId;
     } catch (error: any) {
@@ -335,10 +388,11 @@ export class Orchestrator {
 
     try {
       // Record metrics before pausing (session is effectively closing)
+      await this.statusUpdater.recordMetricsOnSessionClose(runtime, 'transcript');
       await this.statusUpdater.recordMetricsOnSessionClose(runtime, 'cards');
       await this.statusUpdater.recordMetricsOnSessionClose(runtime, 'facts');
       
-      await this.sessionManager.pauseSessions(runtime.cardsSession, runtime.factsSession);
+      await this.sessionManager.pauseSessions(runtime.transcriptSession, runtime.cardsSession, runtime.factsSession);
       console.log(`[orchestrator] Event ${eventId} paused`);
     } catch (error: any) {
       console.error(`[orchestrator] Error pausing event ${eventId}: ${error.message}`);
@@ -369,15 +423,17 @@ export class Orchestrator {
         clearInterval(runtime.statusUpdateTimer);
       }
 
+      await this.checkpointManager.saveCheckpoint(runtime.eventId, 'transcript', runtime.transcriptLastSeq);
       await this.checkpointManager.saveCheckpoint(runtime.eventId, 'cards', runtime.cardsLastSeq);
       await this.checkpointManager.saveCheckpoint(runtime.eventId, 'facts', runtime.factsLastSeq);
 
       // Record metrics before closing sessions
+      await this.statusUpdater.recordMetricsOnSessionClose(runtime, 'transcript');
       await this.statusUpdater.recordMetricsOnSessionClose(runtime, 'cards');
       await this.statusUpdater.recordMetricsOnSessionClose(runtime, 'facts');
 
       this.eventProcessor.cleanup(runtime.eventId, runtime);
-      await this.sessionManager.closeSessions(runtime.cardsSession, runtime.factsSession);
+      await this.sessionManager.closeSessions(runtime.transcriptSession, runtime.cardsSession, runtime.factsSession);
     }
 
     if (this.realtimeSubscription) {
@@ -398,16 +454,34 @@ export class Orchestrator {
   }
 
   private async createRealtimeSessions(runtime: EventRuntime, eventId: string, agentId: string): Promise<void> {
+    // Get agent's model_set to determine which models to use
+    const agent = await this.supabaseService.getAgentStatus(agentId);
+    const modelSet = agent?.model_set || 'Open AI';
+    
+    // Get model configuration based on model_set
+    const transcriptModel = this.modelSelectionService.getModelForAgentType(modelSet, 'transcript');
+    const cardsModel = this.modelSelectionService.getModelForAgentType(modelSet, 'cards');
+    const factsModel = this.modelSelectionService.getModelForAgentType(modelSet, 'facts');
+    
+    // Get API key based on model_set
+    const apiKey = this.modelSelectionService.getApiKey(modelSet);
+    
     const sessions = await this.sessionManager.createSessions(
       runtime,
       async (agentType, status, sessionId) => {
         await this.handleSessionStatusChange(eventId, agentId, agentType, status, sessionId);
       },
-      this.getSessionCreationOptions(runtime)
+      transcriptModel,
+      cardsModel,
+      factsModel,
+      this.getSessionCreationOptions(runtime),
+      apiKey
     );
 
+    runtime.transcriptSession = sessions.transcriptSession;
     runtime.cardsSession = sessions.cardsSession;
     runtime.factsSession = sessions.factsSession;
+    runtime.transcriptHandlerSession = undefined;
     runtime.cardsHandlerSession = undefined;
     runtime.factsHandlerSession = undefined;
   }
@@ -461,8 +535,11 @@ export class Orchestrator {
               new_status: 'active',
               connection_count,
               metadata: {
-                websocket_state: runtime.cardsSession?.getStatus()?.websocketState || 
-                               runtime.factsSession?.getStatus()?.websocketState,
+                websocket_state: agentType === 'transcript' 
+                  ? runtime.transcriptSession?.getStatus()?.websocketState
+                  : agentType === 'cards'
+                  ? runtime.cardsSession?.getStatus()?.websocketState
+                  : runtime.factsSession?.getStatus()?.websocketState,
               },
             });
           }
@@ -495,8 +572,11 @@ export class Orchestrator {
             new_status: status,
             connection_count: currentSession?.connection_count || undefined,
             metadata: {
-              websocket_state: runtime.cardsSession?.getStatus()?.websocketState || 
-                             runtime.factsSession?.getStatus()?.websocketState,
+              websocket_state: agentType === 'transcript' 
+                ? runtime.transcriptSession?.getStatus()?.websocketState
+                : agentType === 'cards'
+                ? runtime.cardsSession?.getStatus()?.websocketState
+                : runtime.factsSession?.getStatus()?.websocketState,
             },
           });
         }
@@ -512,6 +592,14 @@ export class Orchestrator {
 
   private getSessionCreationOptions(runtime: EventRuntime) {
     return {
+      transcript: {
+        onRetrieve: async (query: string, topK: number) => {
+          return await this.handleRetrieveQuery(runtime, query, topK);
+        },
+        embedText: async (text: string) => {
+          return await this.openaiService.createEmbedding(text);
+        },
+      },
       cards: {
         onRetrieve: async (query: string, topK: number) => {
           return await this.handleRetrieveQuery(runtime, query, topK);
@@ -570,12 +658,24 @@ export class Orchestrator {
   }
 
   private logContextSummary(runtime: EventRuntime): void {
+    const transcript = this.metrics.getMetrics(runtime.eventId, 'transcript');
     const cards = this.metrics.getMetrics(runtime.eventId, 'cards');
     const facts = this.metrics.getMetrics(runtime.eventId, 'facts');
     const ringStats = runtime.ringBuffer.getStats();
     const factsStats = runtime.factsStore.getStats();
 
     console.log(`\n[context] === Summary (Event: ${runtime.eventId}) ===`);
+    console.log(`[context] Transcript Agent:`);
+    if (transcript.count > 0) {
+      console.log(`[context]   - Avg tokens: ${Math.round(transcript.total / transcript.count)}`);
+      console.log(`[context]   - Max tokens: ${transcript.max}`);
+      console.log(
+        `[context]   - Warnings: ${transcript.warnings} (${((transcript.warnings / transcript.count) * 100).toFixed(1)}%)`
+      );
+      console.log(
+        `[context]   - Critical: ${transcript.criticals} (${((transcript.criticals / transcript.count) * 100).toFixed(1)}%)`
+      );
+    }
     console.log(`[context] Cards Agent:`);
     if (cards.count > 0) {
       console.log(`[context]   - Avg tokens: ${Math.round(cards.total / cards.count)}`);

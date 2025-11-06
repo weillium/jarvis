@@ -9,6 +9,7 @@ interface CheckpointRecord {
 interface AgentStatusRecord {
   status: string;
   stage: string | null;
+  model_set?: string;
 }
 
 interface AgentRecord {
@@ -28,6 +29,15 @@ interface AgentSessionRecord {
   model?: string | null;
   connection_count?: number;
   last_connected_at?: string | null;
+}
+
+interface AgentSessionUpsert {
+  event_id: string;
+  agent_id: string;
+  provider_session_id: string;
+  agent_type: AgentType;
+  status: string;
+  model?: string;
 }
 
 interface TranscriptRecord {
@@ -149,7 +159,7 @@ export class SupabaseService {
   async getAgentStatus(agentId: string): Promise<AgentStatusRecord | null> {
     const { data, error } = await this.client
       .from('agents')
-      .select('status, stage')
+      .select('status, stage, model_set')
       .eq('id', agentId)
       .single();
 
@@ -227,13 +237,7 @@ export class SupabaseService {
   }
 
   async upsertAgentSessions(
-    sessions: Array<{
-      event_id: string;
-      agent_id: string;
-      provider_session_id: string;
-      agent_type: AgentType;
-      status: string;
-    }>
+    sessions: AgentSessionUpsert[]
   ): Promise<void> {
     if (sessions.length === 0) return;
     const { error } = await this.client

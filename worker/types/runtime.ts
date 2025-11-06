@@ -31,14 +31,18 @@ export interface EventRuntime {
   glossaryCache?: Map<string, GlossaryEntry>;
 
   // Realtime sessions
+  transcriptSession?: RealtimeSession;
   cardsSession?: RealtimeSession;
   factsSession?: RealtimeSession;
+  transcriptSessionId?: string;
   cardsSessionId?: string;
   factsSessionId?: string;
+  transcriptHandlerSession?: RealtimeSession;
   cardsHandlerSession?: RealtimeSession;
   factsHandlerSession?: RealtimeSession;
 
   // Checkpoints
+  transcriptLastSeq: number;
   cardsLastSeq: number;
   factsLastSeq: number;
 

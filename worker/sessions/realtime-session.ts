@@ -17,11 +17,11 @@ import {
   createRealtimeFactsUserPrompt,
 } from '../prompts';
 
-export type AgentType = 'cards' | 'facts';
+export type AgentType = 'transcript' | 'cards' | 'facts';
 
 export interface RealtimeSessionConfig {
   eventId: string;
-  agentType: AgentType;
+  agentType: 'transcript' | 'cards' | 'facts';
   model?: string;
   onStatusChange?: (
     status: 'active' | 'paused' | 'closed' | 'error',

@@ -1,13 +1,23 @@
--- Update create_event_with_agent function to accept and set model parameter
--- This allows the model_set to be set when the agent is created
+-- Rename model column to model_set and update default to 'Open AI'
+-- This allows for future expansion to support multiple model providers
 
+-- Step 1: Rename the column
+alter table agents rename column model to model_set;
+
+-- Step 2: Update the default value
+alter table agents alter column model_set set default 'Open AI';
+
+-- Step 3: Update existing records to use the new default
+update agents set model_set = 'Open AI' where model_set = 'gpt-4o-mini' or model_set is null;
+
+-- Step 4: Update the create_event_with_agent function to use model_set
 create or replace function create_event_with_agent(
   p_owner_uid uuid,
   p_title text,
   p_topic text default null,
   p_start_time timestamptz default null,
   p_end_time timestamptz default null,
-  p_model text default 'gpt-4o-mini'
+  p_model_set text default 'Open AI'
 )
 returns jsonb
 language plpgsql
@@ -24,9 +34,9 @@ begin
   values (p_owner_uid, p_title, p_topic, p_start_time, p_end_time)
   returning id into v_event_id;
 
-  -- Create agent linked to the event with 'idle' status and specified model
-  insert into agents (event_id, status, model)
-  values (v_event_id, 'idle', p_model)
+  -- Create agent linked to the event with 'idle' status and specified model_set
+  insert into agents (event_id, status, model_set)
+  values (v_event_id, 'idle', p_model_set)
   returning id into v_agent_id;
 
   -- Return both records as JSON

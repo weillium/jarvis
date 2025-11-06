@@ -35,6 +35,7 @@ export class RuntimeManager {
     const glossaryCache = await this.glossaryManager.loadGlossary(eventId);
 
     this.metrics.clear(eventId);
+    this.logger.clearLogs(eventId, 'transcript');
     this.logger.clearLogs(eventId, 'cards');
     this.logger.clearLogs(eventId, 'facts');
 
@@ -68,6 +69,7 @@ export class RuntimeManager {
       ringBuffer: new RingBuffer(1000, 5 * 60 * 1000),
       factsStore,
       glossaryCache,
+      transcriptLastSeq: checkpoints.transcript || 0,
       cardsLastSeq: checkpoints.cards,
       factsLastSeq: checkpoints.facts,
       factsLastUpdate: Date.now(),
@@ -82,7 +84,7 @@ export class RuntimeManager {
   async replayTranscripts(runtime: EventRuntime): Promise<void> {
     const transcripts = await this.supabase.getTranscriptsForReplay(
       runtime.eventId,
-      Math.max(runtime.cardsLastSeq, runtime.factsLastSeq),
+      Math.max(runtime.transcriptLastSeq, runtime.cardsLastSeq, runtime.factsLastSeq),
       1000
     );
 
@@ -108,6 +110,7 @@ export class RuntimeManager {
     }
 
     const lastSeq = Math.max(...transcripts.map((t) => t.seq || 0));
+    runtime.transcriptLastSeq = Math.max(runtime.transcriptLastSeq, lastSeq);
     runtime.cardsLastSeq = Math.max(runtime.cardsLastSeq, lastSeq);
     runtime.factsLastSeq = Math.max(runtime.factsLastSeq, lastSeq);
   }

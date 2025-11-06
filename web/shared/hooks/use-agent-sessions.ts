@@ -8,7 +8,7 @@ import type { TokenMetrics, RuntimeStats } from './use-agent-sessions-query';
  * This is the data streamed via SSE from the worker
  */
 export interface AgentSessionSSEEnrichment {
-  agent_type: 'cards' | 'facts';
+  agent_type: 'transcript' | 'cards' | 'facts';
   websocket_state?: 'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED';
   ping_pong?: {
     enabled: boolean;
@@ -38,7 +38,7 @@ export interface AgentSessionSSEEnrichment {
  * @deprecated Use AgentSessionSSEEnrichment for new code
  */
 export interface AgentSessionStatus {
-  agent_type: 'cards' | 'facts';
+  agent_type: 'transcript' | 'cards' | 'facts';
   session_id: string;
   status: 'active' | 'paused' | 'closed' | 'error';
   websocket_state?: 'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED';
@@ -66,7 +66,7 @@ export interface AgentSessionStatus {
 }
 
 export interface UseAgentSessionEnrichmentReturn {
-  enrichment: Map<'cards' | 'facts', AgentSessionSSEEnrichment>;
+  enrichment: Map<'transcript' | 'cards' | 'facts', AgentSessionSSEEnrichment>;
   isLoading: boolean;
   error: Error | null;
   reconnect: () => void;
@@ -338,9 +338,9 @@ export function useAgentSessions(
  */
 export function useAgentSessionEnrichment(
   eventId: string | null,
-  sessionAgentTypes: ('cards' | 'facts')[]
+  sessionAgentTypes: ('transcript' | 'cards' | 'facts')[]
 ): UseAgentSessionEnrichmentReturn {
-  const [enrichment, setEnrichment] = useState<Map<'cards' | 'facts', AgentSessionSSEEnrichment>>(new Map());
+  const [enrichment, setEnrichment] = useState<Map<'transcript' | 'cards' | 'facts', AgentSessionSSEEnrichment>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);

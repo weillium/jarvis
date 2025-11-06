@@ -19,7 +19,7 @@ interface AgentSessionsProps {
 }
 
 interface AgentSessionDisplay {
-  agent_type: 'cards' | 'facts';
+  agent_type: 'transcript' | 'cards' | 'facts';
   session_id: string;
   status: 'active' | 'paused' | 'closed' | 'error';
   metadata: {
@@ -76,8 +76,8 @@ const formatDate = (dateString: string | null): string => {
 interface SessionStatusCardProps {
   title: string;
   session: AgentSessionDisplay;
-  expandedLogs: { cards: boolean; facts: boolean };
-  setExpandedLogs: React.Dispatch<React.SetStateAction<{ cards: boolean; facts: boolean }>>;
+  expandedLogs: { transcript: boolean; cards: boolean; facts: boolean };
+  setExpandedLogs: React.Dispatch<React.SetStateAction<{ transcript: boolean; cards: boolean; facts: boolean }>>;
 }
 
 function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: SessionStatusCardProps) {
@@ -442,6 +442,9 @@ function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: Se
             color: '#64748b',
             lineHeight: '1.6',
           }}>
+            {session.runtime_stats.transcript_last_seq !== undefined && (
+              <div>Transcript Last Seq: {session.runtime_stats.transcript_last_seq}</div>
+            )}
             <div>Cards Last Seq: {session.runtime_stats.cards_last_seq}</div>
             <div>Facts Last Seq: {session.runtime_stats.facts_last_seq}</div>
             {session.runtime_stats.ring_buffer_stats && (
@@ -458,7 +461,7 @@ function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: Se
       {session.recent_logs && session.recent_logs.length > 0 && (
         <div>
           <button
-            onClick={() => setExpandedLogs(prev => ({ ...prev, [agentType]: !prev[agentType] }))}
+            onClick={() => setExpandedLogs(prev => ({ ...prev, [session.agent_type]: !prev[session.agent_type] }))}
             style={{
               width: '100%',
               padding: '8px 12px',
@@ -475,9 +478,9 @@ function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: Se
             }}
           >
             <span>Recent Logs ({session.recent_logs.length})</span>
-            <span>{isExpanded ? '▼' : '▶'}</span>
+            <span>{expandedLogs[session.agent_type] ? '▼' : '▶'}</span>
           </button>
-          {isExpanded && (
+          {expandedLogs[session.agent_type] && (
             <div style={{
               marginTop: '12px',
               maxHeight: '300px',
@@ -662,7 +665,7 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
           color: '#0f172a',
           margin: 0,
         }}>
-          Realtime Agent Sessions
+          Agent Sessions
         </h4>
         
         {/* Controls */}
@@ -712,6 +715,7 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
               return false;
             }
             
+            const transcriptSession = displaySessions.find(s => s.agent_type === 'transcript');
             const cardsSession = displaySessions.find(s => s.agent_type === 'cards');
             const factsSession = displaySessions.find(s => s.agent_type === 'facts');
             
@@ -725,17 +729,19 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
               return ageMs < 60000;
             };
             
-            const isPaused = (cardsSession?.status === 'paused') || (factsSession?.status === 'paused');
+            const isPaused = (transcriptSession?.status === 'paused') || (cardsSession?.status === 'paused') || (factsSession?.status === 'paused');
+            const transcriptClosed = transcriptSession?.status === 'closed';
             const cardsClosed = cardsSession?.status === 'closed';
             const factsClosed = factsSession?.status === 'closed';
-            const hasClosedSessions = cardsClosed || factsClosed;
-            const shouldShow = isPaused || isNewClosed(cardsSession) || isNewClosed(factsSession) || hasClosedSessions;
+            const hasClosedSessions = transcriptClosed || cardsClosed || factsClosed;
+            const shouldShow = isPaused || isNewClosed(transcriptSession) || isNewClosed(cardsSession) || isNewClosed(factsSession) || hasClosedSessions;
             
             return shouldShow;
           })() && (() => {
+            const transcriptSession = displaySessions.find(s => s.agent_type === 'transcript');
             const cardsSession = displaySessions.find(s => s.agent_type === 'cards');
             const factsSession = displaySessions.find(s => s.agent_type === 'facts');
-            const isPaused = (cardsSession?.status === 'paused') || (factsSession?.status === 'paused');
+            const isPaused = (transcriptSession?.status === 'paused') || (cardsSession?.status === 'paused') || (factsSession?.status === 'paused');
             
             return (
               <button
@@ -776,9 +782,10 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
             if (checkingSessions || !sessionsData) {
               return false;
             }
+            const transcriptSession = displaySessions.find(s => s.agent_type === 'transcript');
             const cardsSession = displaySessions.find(s => s.agent_type === 'cards');
             const factsSession = displaySessions.find(s => s.agent_type === 'facts');
-            return (cardsSession?.status === 'active' || factsSession?.status === 'active');
+            return (transcriptSession?.status === 'active' || cardsSession?.status === 'active' || factsSession?.status === 'active');
           })() && (
             <button
               onClick={handlePauseSessions}
@@ -995,21 +1002,79 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
       )}
 
       {displaySessions.length > 0 && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
-          gap: '16px',
-        }}>
-          {displaySessions.map(session => (
-            <SessionStatusCard
-              key={`${session.agent_type}-${session.session_id}-${session.status}`}
-              title={session.agent_type === 'cards' ? 'Cards Agent' : 'Facts Agent'}
-              session={session}
-              expandedLogs={expandedLogs}
-              setExpandedLogs={setExpandedLogs}
-            />
-          ))}
-        </div>
+        <>
+          {/* Realtime Agent Sessions Section */}
+          {(() => {
+            const realtimeSessions = displaySessions.filter(s => s.agent_type === 'transcript' || s.agent_type === 'cards');
+            if (realtimeSessions.length === 0) return null;
+            
+            return (
+              <div style={{ marginBottom: '32px' }}>
+                <h5 style={{
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  color: '#64748b',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  marginBottom: '16px',
+                }}>
+                  Realtime Agent Sessions
+                </h5>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
+                  gap: '16px',
+                }}>
+                  {realtimeSessions.map(session => (
+                    <SessionStatusCard
+                      key={`${session.agent_type}-${session.session_id}-${session.status}`}
+                      title={session.agent_type === 'transcript' ? 'Transcript Agent' : session.agent_type === 'cards' ? 'Cards Agent' : 'Facts Agent'}
+                      session={session}
+                      expandedLogs={expandedLogs}
+                      setExpandedLogs={setExpandedLogs}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+          
+          {/* Stateless Agent Sessions Section */}
+          {(() => {
+            const statelessSessions = displaySessions.filter(s => s.agent_type === 'facts');
+            if (statelessSessions.length === 0) return null;
+            
+            return (
+              <div>
+                <h5 style={{
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  color: '#64748b',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  marginBottom: '16px',
+                }}>
+                  Stateless Agent Sessions
+                </h5>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
+                  gap: '16px',
+                }}>
+                  {statelessSessions.map(session => (
+                    <SessionStatusCard
+                      key={`${session.agent_type}-${session.session_id}-${session.status}`}
+                      title="Facts Agent"
+                      session={session}
+                      expandedLogs={expandedLogs}
+                      setExpandedLogs={setExpandedLogs}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+        </>
       )}
 
       {isTestTranscriptModalOpen && (

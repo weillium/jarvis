@@ -1,6 +1,7 @@
 import { ProcessingMetrics } from '../types';
 
 type AgentMetricsMap = {
+  transcript: ProcessingMetrics;
   cards: ProcessingMetrics;
   facts: ProcessingMetrics;
 };
@@ -10,13 +11,14 @@ export class MetricsCollector {
 
   recordTokens(
     eventId: string,
-    agentType: 'cards' | 'facts',
+    agentType: 'transcript' | 'cards' | 'facts',
     tokens: number,
     warning: boolean,
     critical: boolean
   ): void {
     if (!this.metrics.has(eventId)) {
       this.metrics.set(eventId, {
+        transcript: { total: 0, count: 0, max: 0, warnings: 0, criticals: 0 },
         cards: { total: 0, count: 0, max: 0, warnings: 0, criticals: 0 },
         facts: { total: 0, count: 0, max: 0, warnings: 0, criticals: 0 },
       });
@@ -32,7 +34,7 @@ export class MetricsCollector {
     if (critical) agentMetrics.criticals += 1;
   }
 
-  getMetrics(eventId: string, agentType: 'cards' | 'facts'): ProcessingMetrics {
+  getMetrics(eventId: string, agentType: 'transcript' | 'cards' | 'facts'): ProcessingMetrics {
     const metrics = this.metrics.get(eventId);
     if (!metrics) {
       return { total: 0, count: 0, max: 0, warnings: 0, criticals: 0 };

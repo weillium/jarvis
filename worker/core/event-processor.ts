@@ -24,6 +24,9 @@ export class EventProcessor {
   }
 
   attachSessionHandlers(runtime: EventRuntime): void {
+    // Transcript agent handlers can be added here if needed
+    // For now, transcript agent may not emit events that need handling
+    
     if (runtime.cardsSession && runtime.cardsSession !== runtime.cardsHandlerSession) {
       runtime.cardsSession.on('card', async (card: any) => {
         await this.handleCardResponse(runtime, card);
@@ -44,6 +47,7 @@ export class EventProcessor {
       clearTimeout(runtime.factsUpdateTimer);
       runtime.factsUpdateTimer = undefined;
     }
+    runtime.transcriptHandlerSession = undefined;
     runtime.cardsHandlerSession = undefined;
     runtime.factsHandlerSession = undefined;
   }
@@ -63,6 +67,7 @@ export class EventProcessor {
       chunk.seq = nextSeq;
     }
 
+    runtime.transcriptLastSeq = Math.max(runtime.transcriptLastSeq, chunk.seq);
     runtime.cardsLastSeq = Math.max(runtime.cardsLastSeq, chunk.seq);
     runtime.factsLastSeq = Math.max(runtime.factsLastSeq, chunk.seq);
 

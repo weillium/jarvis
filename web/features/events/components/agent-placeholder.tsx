@@ -180,7 +180,7 @@ export function AgentPlaceholder({ agent, eventId }: AgentPlaceholderProps) {
               fontSize: '13px',
               color: '#64748b',
             }}>
-              Model: {agent.model}
+              Model Set: {agent.model_set}
             </span>
           </div>
         </div>
@@ -241,14 +241,14 @@ export function AgentPlaceholder({ agent, eventId }: AgentPlaceholderProps) {
             letterSpacing: '0.5px',
             marginBottom: '6px',
           }}>
-            Model
+            Model Set
           </div>
           <div style={{
             fontSize: '14px',
             fontWeight: '500',
             color: '#0f172a',
           }}>
-            {agent.model}
+            {agent.model_set}
           </div>
         </div>
       </div>

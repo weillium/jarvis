@@ -291,7 +291,7 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
               fontSize: '13px',
               color: '#64748b',
             }}>
-              Model: {agent.model}
+              Model Set: {agent.model_set}
             </span>
           </div>
         </div>
@@ -355,14 +355,14 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
             letterSpacing: '0.5px',
             marginBottom: '6px',
           }}>
-            Model
+            Model Set
           </div>
           <div style={{
             fontSize: '14px',
             fontWeight: '500',
             color: '#0f172a',
           }}>
-            {agent.model}
+            {agent.model_set}
           </div>
         </div>
         <div>

@@ -6,7 +6,7 @@ import { requireAuth, requireEventOwnership } from '@/shared/lib/auth';
  * Agent Information API Route
  * 
  * Returns comprehensive agent information for an event, including:
- * - Agent details (status, model, created_at, etc.)
+ * - Agent details (status, model_set, created_at, etc.)
  * - Context statistics (chunk count, glossary term count)
  * - Blueprint information (if exists)
  * 
@@ -141,7 +141,8 @@ export async function GET(
         event_id: agent.event_id,
         status: agent.status,
         stage: agent.stage || null,
-        model: agent.model,
+        model: agent.model || 'gpt-4o-mini',
+        model_set: agent.model_set || null,
         created_at: agent.created_at,
         updated_at: agent.updated_at,
       },

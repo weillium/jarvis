@@ -30,7 +30,7 @@ export interface Agent {
   event_id: string;
   status: AgentStatus;
   stage: string | null;
-  model: string;
+  model_set: string;
   created_at: string;
 }
 

@@ -2,6 +2,7 @@ import 'dotenv/config';
 import http from 'http';
 import { URL } from 'url';
 import { Orchestrator, OrchestratorConfig } from './core/orchestrator';
+import { ModelSelectionService } from './services/model-selection-service';
 import { SupabaseService } from './services/supabase-service';
 import { OpenAIService } from './services/openai-service';
 import { SSEService } from './services/sse-service';
@@ -34,8 +35,8 @@ function need(name: string) {
 const SUPABASE_URL  = need('SUPABASE_URL');
 const SERVICE_ROLE  = need('SUPABASE_SERVICE_ROLE_KEY');
 const OPENAI_KEY    = need('OPENAI_API_KEY');
-const EMBED_MODEL   = process.env.EMBED_MODEL || 'text-embedding-3-small';
-const GEN_MODEL     = process.env.GEN_MODEL   || 'gpt-5';
+const EMBED_MODEL   = process.env.CONTEXT_CHUNKS_MODEL || 'text-embedding-3-small';
+const CONTEXT_GEN_MODEL = process.env.CONTEXT_BLUEPRINT_MODEL || 'gpt-5';
 const REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-10-01';
 const EXA_API_KEY   = process.env.EXA_API_KEY; // Optional - fallback to stub if not provided
 // Clean SSE_ENDPOINT - remove backticks and other invalid characters
@@ -45,9 +46,10 @@ const SSE_ENDPOINT = SSE_ENDPOINT_RAW.trim().replace(/[`'"]/g, ''); // Base URL 
 /** ---------- services ---------- **/
 const supabaseService = new SupabaseService(SUPABASE_URL, SERVICE_ROLE);
 const supabaseClient = supabaseService.getClient();
-const openaiService = new OpenAIService(OPENAI_KEY, EMBED_MODEL, GEN_MODEL);
+const openaiService = new OpenAIService(OPENAI_KEY, EMBED_MODEL, CONTEXT_GEN_MODEL);
 const openai = openaiService.getClient();
 const sseService = new SSEService(SSE_ENDPOINT);
+const modelSelectionService = new ModelSelectionService();
 
 /** ---------- helpers ---------- **/
 function log(...a: any[]) { console.log(new Date().toISOString(), ...a); }
@@ -175,7 +177,7 @@ const orchestratorConfig: OrchestratorConfig = {
   supabase: supabaseClient,
   openai,
   embedModel: EMBED_MODEL,
-  genModel: GEN_MODEL,
+  genModel: CONTEXT_GEN_MODEL,
   realtimeModel: REALTIME_MODEL,
   sseEndpoint: SSE_ENDPOINT,
 };
@@ -192,7 +194,8 @@ const orchestrator = new Orchestrator(
   sessionManager,
   runtimeManager,
   eventProcessor,
-  statusUpdater
+  statusUpdater,
+  modelSelectionService
 );
 
 // Track agents currently being processed to prevent duplicate processing across pollers
@@ -202,7 +205,7 @@ const processingAgents = new Set<string>();
 const blueprintPoller = new BlueprintPoller(
   supabaseClient,
   openai,
-  GEN_MODEL,
+  CONTEXT_GEN_MODEL,
   processingAgents,
   log
 );
@@ -211,7 +214,7 @@ const contextPoller = new ContextPoller(
   supabaseClient,
   openai,
   EMBED_MODEL,
-  GEN_MODEL,
+  CONTEXT_GEN_MODEL,
   EXA_API_KEY,
   processingAgents,
   log
@@ -221,7 +224,7 @@ const regenerationPoller = new RegenerationPoller(
   supabaseClient,
   openai,
   EMBED_MODEL,
-  GEN_MODEL,
+  CONTEXT_GEN_MODEL,
   EXA_API_KEY,
   processingAgents,
   log

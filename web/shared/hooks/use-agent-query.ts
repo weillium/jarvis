@@ -7,6 +7,7 @@ export interface AgentInfo {
   status: Agent['status'];
   stage: string | null;
   model: string;
+  model_set: string | null;
   created_at: string;
   updated_at: string;
 }

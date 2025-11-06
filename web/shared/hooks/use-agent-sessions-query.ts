@@ -25,6 +25,7 @@ export interface TokenMetrics {
 }
 
 export interface RuntimeStats {
+  transcript_last_seq?: number;
   cards_last_seq: number;
   facts_last_seq: number;
   facts_last_update: string;
@@ -46,7 +47,7 @@ export interface RuntimeStats {
 }
 
 export interface AgentSession {
-  agent_type: 'cards' | 'facts';
+  agent_type: 'transcript' | 'cards' | 'facts';
   session_id: string;
   status: 'active' | 'paused' | 'closed' | 'error';
   metadata: AgentSessionMetadata;

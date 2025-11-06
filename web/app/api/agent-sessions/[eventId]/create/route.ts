@@ -24,7 +24,7 @@ export async function POST(
     // Get the agent for this event (must be context_complete stage)
     const { data: agents, error: agentError } = await supabase
       .from('agents')
-      .select('id, status, stage')
+      .select('id, status, stage, model_set')
       .eq('event_id', eventId)
       .eq('status', 'idle')
       .eq('stage', 'context_complete')
@@ -79,13 +79,29 @@ export async function POST(
       }
     }
 
-    // Agent sessions MUST use the Realtime API model, not the agent's model
-    // The agent's model is for text generation (e.g., gpt-4o-mini), but sessions need Realtime API
-    // Use environment variable or default to the correct Realtime API model
-    // This matches the worker's REALTIME_MODEL configuration
-    const model = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-10-01';
+    // Get agent's model_set to determine which models to use
+    const modelSet = agents[0].model_set || 'Open AI';
     
-    console.log(`[api/agent-sessions/create] Using Realtime model: ${model} for event ${eventId}`);
+    // Determine models based on model_set
+    let transcriptModel: string;
+    let cardsModel: string;
+    let factsModel: string;
+    
+    if (modelSet === 'Open AI') {
+      transcriptModel = process.env.OPENAI_TRANSCRIPT_MODEL || process.env.DEFAULT_TRANSCRIPT_MODEL || 'gpt-4o-realtime-preview-2024-10-01';
+      cardsModel = process.env.OPENAI_CARDS_MODEL || process.env.DEFAULT_CARDS_MODEL || 'gpt-4o-realtime-preview-2024-10-01';
+      factsModel = process.env.OPENAI_FACTS_MODEL || process.env.DEFAULT_FACTS_MODEL || 'gpt-4o-mini';
+    } else {
+      // Default fallback for unknown model_set values
+      transcriptModel = process.env.DEFAULT_TRANSCRIPT_MODEL || 'gpt-4o-realtime-preview-2024-10-01';
+      cardsModel = process.env.DEFAULT_CARDS_MODEL || 'gpt-4o-realtime-preview-2024-10-01';
+      factsModel = process.env.DEFAULT_FACTS_MODEL || 'gpt-4o-mini';
+    }
+    
+    console.log(`[api/agent-sessions/create] Using models for event ${eventId} (model_set: ${modelSet}):`);
+    console.log(`  - Transcript: ${transcriptModel}`);
+    console.log(`  - Cards: ${cardsModel}`);
+    console.log(`  - Facts: ${factsModel}`);
 
     // Create new sessions with 'closed' status (will be updated to 'active' when started)
     const { data: newSessions, error: createError } = await supabase
@@ -95,9 +111,17 @@ export async function POST(
           event_id: eventId,
           agent_id: agentId,
           provider_session_id: 'pending', // Will be set when actually started
+          agent_type: 'transcript',
+          status: 'closed', // Will be updated to 'active' when started
+          model: transcriptModel,
+        },
+        {
+          event_id: eventId,
+          agent_id: agentId,
+          provider_session_id: 'pending', // Will be set when actually started
           agent_type: 'cards',
           status: 'closed', // Will be updated to 'active' when started
-          model: model,
+          model: cardsModel,
         },
         {
           event_id: eventId,
@@ -105,7 +129,7 @@ export async function POST(
           provider_session_id: 'pending',
           agent_type: 'facts',
           status: 'closed', // Will be updated to 'active' when started
-          model: model,
+          model: factsModel,
         },
       ])
       .select();
