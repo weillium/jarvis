@@ -31,8 +31,8 @@ export class RegenerationPoller implements Poller {
   async tick(): Promise<void> {
     const { data: regeneratingAgents, error } = await this.supabase
       .from('agents')
-      .select('id,event_id,status')
-      .in('status', this.regenerationStatuses)
+      .select('id,event_id,stage')
+      .in('stage', this.regenerationStatuses)
       .limit(20);
 
     if (error) {
@@ -75,14 +75,13 @@ export class RegenerationPoller implements Poller {
           exaApiKey: this.exaApiKey,
         };
 
-        if (agent.status === 'regenerating_research') {
+        if (agent.stage === 'regenerating_research') {
           this.log('[regeneration] regenerating research for agent', agent.id);
           await regenerateResearchStage(agent.event_id, agent.id, blueprint.id, options);
-        } else if (agent.status === 'regenerating_glossary') {
+        } else if (agent.stage === 'regenerating_glossary') {
           this.log('[regeneration] regenerating glossary for agent', agent.id);
           await regenerateGlossaryStage(agent.event_id, agent.id, blueprint.id, options);
-          await this.supabase.from('agents').update({ status: 'context_complete' }).eq('id', agent.id);
-        } else if (agent.status === 'regenerating_chunks') {
+        } else if (agent.stage === 'regenerating_chunks') {
           this.log('[regeneration] regenerating chunks for agent', agent.id);
           await regenerateChunksStage(agent.event_id, agent.id, blueprint.id, options);
         }

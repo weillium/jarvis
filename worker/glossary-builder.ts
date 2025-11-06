@@ -224,7 +224,7 @@ export async function buildGlossary(
   };
 
   // Mark cycle as completed with cost metadata
-  await (supabase
+  const { error: cycleUpdateError } = await (supabase
     .from('generation_cycles') as any)
     .update({
       status: 'completed',
@@ -234,7 +234,13 @@ export async function buildGlossary(
     })
     .eq('id', generationCycleId);
 
+  if (cycleUpdateError) {
+    console.error(`[glossary] ERROR: Failed to update generation cycle to completed: ${cycleUpdateError.message}`);
+    throw new Error(`Failed to update generation cycle: ${cycleUpdateError.message}`);
+  }
+
   console.log(`[glossary] Inserted ${insertedCount} glossary terms for event ${eventId}`);
+  console.log(`[glossary] Generation cycle ${generationCycleId} marked as completed`);
   return {
     termCount: insertedCount,
     costBreakdown,

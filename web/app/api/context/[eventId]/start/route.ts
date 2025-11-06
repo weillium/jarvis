@@ -98,6 +98,9 @@ export async function POST(
 
       // If blueprints exist, mark them as superseded (regeneration case)
       if (existingBlueprints && existingBlueprints.length > 0) {
+        const blueprintIds = existingBlueprints.map(b => b.id);
+
+        // Mark blueprints as superseded
         const { error: supersedeError } = await (supabase
           .from('context_blueprints') as any)
           .update({ 
@@ -115,7 +118,34 @@ export async function POST(
           );
         }
 
-        console.log(`[api/context/start] Marked ${existingBlueprints.length} blueprint(s) as superseded`);
+        // Mark blueprint generation cycles as superseded
+        const { error: blueprintCycleError } = await (supabase
+          .from('generation_cycles') as any)
+          .update({ status: 'superseded' })
+          .eq('event_id', eventId)
+          .in('blueprint_id', blueprintIds)
+          .eq('cycle_type', 'blueprint')
+          .in('status', ['started', 'processing', 'completed']);
+
+        if (blueprintCycleError) {
+          console.warn('[api/context/start] Warning: Failed to mark blueprint cycles as superseded:', blueprintCycleError.message);
+        }
+
+        // Mark downstream generation cycles (research, glossary, chunks) as superseded
+        // These cycles are associated with the superseded blueprints
+        const { error: downstreamCycleError } = await (supabase
+          .from('generation_cycles') as any)
+          .update({ status: 'superseded' })
+          .eq('event_id', eventId)
+          .in('blueprint_id', blueprintIds)
+          .in('cycle_type', ['research', 'glossary', 'chunks'])
+          .in('status', ['started', 'processing', 'completed']);
+
+        if (downstreamCycleError) {
+          console.warn('[api/context/start] Warning: Failed to mark downstream cycles as superseded:', downstreamCycleError.message);
+        }
+
+        console.log(`[api/context/start] Marked ${existingBlueprints.length} blueprint(s) and associated cycles as superseded`);
       }
 
       // Update agent status to 'idle' with 'blueprint' stage

@@ -90,48 +90,103 @@ export async function GET(
       // Otherwise, keep as 'blueprint' (blueprint is ready/approved)
     }
 
-    // Calculate progress based on stage
-    if (agent.stage === 'researching' || (agent.status === 'idle' && agent.stage === 'researching')) {
-      stage = 'researching';
-      // Progress would need to come from actual research results
-      // For now, just indicate stage
-    } else if (agent.stage === 'building_glossary' || (agent.status === 'idle' && agent.stage === 'building_glossary')) {
-      stage = 'building_glossary';
-      // Get glossary term count (from current generation cycle if available)
-      // Note: After Phase 3, we filter by generation_cycle_id instead of is_active
-      // For now, get all terms (we'll filter by cycle in later updates)
-      const { count: glossaryCount } = await (supabase
-        .from('glossary_terms') as any)
-        .select('*', { count: 'exact', head: true })
-        .eq('event_id', eventId);
-      
-      // Estimate total based on blueprint (if available)
-      // glossary_plan is JSONB, so it's already an object
-      const glossaryPlan = blueprint?.glossary_plan as any;
-      const estimatedTerms = glossaryPlan?.target_count || 50;
-      
-      progress = {
-        current: glossaryCount || 0,
-        total: estimatedTerms,
-        percentage: Math.round(((glossaryCount || 0) / estimatedTerms) * 100),
+    // Get progress from active generation cycle (most accurate, reflects worker progress)
+    let activeCycle = null;
+    if (agent.stage === 'researching' || agent.stage === 'building_glossary' || agent.stage === 'building_chunks' ||
+        agent.stage === 'regenerating_research' || agent.stage === 'regenerating_glossary' || agent.stage === 'regenerating_chunks') {
+      // Map stage to cycle_type
+      const cycleTypeMap: Record<string, string> = {
+        'researching': 'research',
+        'regenerating_research': 'research',
+        'building_glossary': 'glossary',
+        'regenerating_glossary': 'glossary',
+        'building_chunks': 'chunks',
+        'regenerating_chunks': 'chunks',
       };
-    } else if (agent.stage === 'building_chunks' || (agent.status === 'idle' && agent.stage === 'building_chunks')) {
-      stage = 'building_chunks';
-      // Get chunk count (from current generation cycle if available)
-      // Note: After Phase 3, we filter by generation_cycle_id instead of is_active
-      // For now, get all chunks (we'll filter by cycle in later updates)
-      const { count: chunkCount } = await (supabase
-        .from('context_items') as any)
-        .select('*', { count: 'exact', head: true })
-        .eq('event_id', eventId);
+      const cycleType = cycleTypeMap[agent.stage];
       
-      const targetChunks = blueprint?.target_chunk_count || 1000;
-      progress = {
-        current: chunkCount || 0,
-        total: targetChunks,
-        percentage: Math.round(((chunkCount || 0) / targetChunks) * 100),
-      };
+      if (cycleType) {
+        // Get the most recent generation cycle for this stage (including completed ones for progress display)
+        // Prefer active cycles, but fall back to completed if no active ones exist
+        const { data: activeCycles } = await (supabase
+          .from('generation_cycles') as any)
+          .select('id, progress_current, progress_total, status')
+          .eq('event_id', eventId)
+          .eq('agent_id', agentId)
+          .eq('cycle_type', cycleType)
+          .in('status', ['started', 'processing'])
+          .order('started_at', { ascending: false })
+          .limit(1);
+        
+        if (activeCycles && activeCycles.length > 0) {
+          activeCycle = activeCycles[0];
+        } else {
+          // If no active cycle, check for most recent completed cycle (for progress display)
+          const { data: completedCycles } = await (supabase
+            .from('generation_cycles') as any)
+            .select('id, progress_current, progress_total, status')
+            .eq('event_id', eventId)
+            .eq('agent_id', agentId)
+            .eq('cycle_type', cycleType)
+            .eq('status', 'completed')
+            .order('started_at', { ascending: false })
+            .limit(1);
+          
+          if (completedCycles && completedCycles.length > 0) {
+            activeCycle = completedCycles[0];
+          }
+        }
+      }
     }
+
+    // Calculate progress based on stage
+    if (agent.stage === 'researching' || agent.stage === 'regenerating_research') {
+      stage = agent.stage === 'regenerating_research' ? 'regenerating_research' : 'researching';
+      // Use progress from generation cycle if available
+      if (activeCycle && activeCycle.progress_total > 0) {
+        progress = {
+          current: activeCycle.progress_current || 0,
+          total: activeCycle.progress_total,
+          percentage: Math.round(((activeCycle.progress_current || 0) / activeCycle.progress_total) * 100),
+        };
+      }
+    } else if (agent.stage === 'building_glossary' || agent.stage === 'regenerating_glossary') {
+      stage = agent.stage === 'regenerating_glossary' ? 'regenerating_glossary' : 'building_glossary';
+      // Use progress from generation cycle if available (reflects actual terms being built)
+      if (activeCycle && activeCycle.progress_total > 0) {
+        progress = {
+          current: activeCycle.progress_current || 0,
+          total: activeCycle.progress_total,
+          percentage: Math.round(((activeCycle.progress_current || 0) / activeCycle.progress_total) * 100),
+        };
+      }
+    } else if (agent.stage === 'building_chunks' || agent.stage === 'regenerating_chunks') {
+      stage = agent.stage === 'regenerating_chunks' ? 'regenerating_chunks' : 'building_chunks';
+      // Use progress from generation cycle if available (reflects actual chunks being built)
+      if (activeCycle && activeCycle.progress_total > 0) {
+        progress = {
+          current: activeCycle.progress_current || 0,
+          total: activeCycle.progress_total,
+          percentage: Math.round(((activeCycle.progress_current || 0) / activeCycle.progress_total) * 100),
+        };
+      }
+    }
+
+    // Check if context items exist for regeneration
+    const { count: researchCount } = await (supabase
+      .from('research_results') as any)
+      .select('*', { count: 'exact', head: true })
+      .eq('event_id', eventId);
+    
+    const { count: glossaryCount } = await (supabase
+      .from('glossary_terms') as any)
+      .select('*', { count: 'exact', head: true })
+      .eq('event_id', eventId);
+    
+    const { count: chunksCount } = await (supabase
+      .from('context_items') as any)
+      .select('*', { count: 'exact', head: true })
+      .eq('event_id', eventId);
 
     return NextResponse.json({
       ok: true,
@@ -151,6 +206,9 @@ export async function GET(
       } : null,
       stage: stage,
       progress: progress,
+      hasResearch: (researchCount || 0) > 0,
+      hasGlossary: (glossaryCount || 0) > 0,
+      hasChunks: (chunksCount || 0) > 0,
     });
   } catch (error: any) {
     console.error('[api/context/status] Unexpected error:', error);

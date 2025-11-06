@@ -38,6 +38,9 @@ interface StatusData {
     total: number;
     percentage: number;
   } | null;
+  hasResearch?: boolean;
+  hasGlossary?: boolean;
+  hasChunks?: boolean;
 }
 
 export function ContextGenerationPanel({ eventId, embedded = false, onClearContext, isClearing = false }: ContextGenerationPanelProps) {
@@ -227,6 +230,15 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
   
   // Check for agent errors
   const hasAgentError = statusData?.agent?.status === 'error';
+
+  // Check if context generation is actively running
+  const isContextGenerationRunning = statusData?.agent?.status === 'idle' && 
+    (statusData?.agent?.stage === 'researching' || 
+     statusData?.agent?.stage === 'building_glossary' || 
+     statusData?.agent?.stage === 'building_chunks' ||
+     statusData?.agent?.stage === 'regenerating_research' ||
+     statusData?.agent?.stage === 'regenerating_glossary' ||
+     statusData?.agent?.stage === 'regenerating_chunks');
 
   // Helper function to determine if stage regeneration controls should be shown
   const shouldShowStageControls = (): boolean => {
@@ -439,10 +451,10 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
             {canRegenerateBlueprint && (
               <button
                 onClick={() => handleRegenerate()}
-                disabled={!!isRegenerating || !!regeneratingStage}
+                disabled={!!isRegenerating || !!regeneratingStage || isContextGenerationRunning}
                 style={{
                   padding: '10px 16px',
-                  background: (isRegenerating) 
+                  background: (isRegenerating || isContextGenerationRunning) 
                     ? '#94a3b8' 
                     : '#8b5cf6',
                   color: '#ffffff',
@@ -450,7 +462,7 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
                   borderRadius: '6px',
                   fontSize: '12px',
                   fontWeight: '500',
-                  cursor: (isRegenerating || regeneratingStage) 
+                  cursor: (isRegenerating || regeneratingStage || isContextGenerationRunning) 
                     ? 'not-allowed' 
                     : 'pointer',
                   transition: 'background 0.2s',
@@ -491,10 +503,15 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
               <>
                 <button
                   onClick={() => handleRegenerateStage('research')}
-                  disabled={!!regeneratingStage || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research')}
+                  disabled={
+                    !!regeneratingStage || 
+                    isContextGenerationRunning ||
+                    !statusData?.hasResearch ||
+                    (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research')
+                  }
                   style={{
                     padding: '10px 16px',
-                    background: (regeneratingStage === 'research' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research')) 
+                    background: (regeneratingStage === 'research' || isContextGenerationRunning || !statusData?.hasResearch || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research')) 
                       ? '#94a3b8' 
                       : '#3b82f6',
                     color: '#ffffff',
@@ -502,7 +519,7 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
                     borderRadius: '6px',
                     fontSize: '12px',
                     fontWeight: '500',
-                    cursor: (regeneratingStage || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research')) 
+                    cursor: (regeneratingStage || isContextGenerationRunning || !statusData?.hasResearch || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research')) 
                       ? 'not-allowed' 
                       : 'pointer',
                     transition: 'background 0.2s',
@@ -514,10 +531,15 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
                 </button>
                 <button
                   onClick={() => handleRegenerateStage('glossary')}
-                  disabled={!!regeneratingStage || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary')}
+                  disabled={
+                    !!regeneratingStage || 
+                    isContextGenerationRunning ||
+                    !statusData?.hasGlossary ||
+                    (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary')
+                  }
                   style={{
                     padding: '10px 16px',
-                    background: (regeneratingStage === 'glossary' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary')) 
+                    background: (regeneratingStage === 'glossary' || isContextGenerationRunning || !statusData?.hasGlossary || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary')) 
                       ? '#94a3b8' 
                       : '#3b82f6',
                     color: '#ffffff',
@@ -525,7 +547,7 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
                     borderRadius: '6px',
                     fontSize: '12px',
                     fontWeight: '500',
-                    cursor: (regeneratingStage || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary')) 
+                    cursor: (regeneratingStage || isContextGenerationRunning || !statusData?.hasGlossary || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary')) 
                       ? 'not-allowed' 
                       : 'pointer',
                     transition: 'background 0.2s',
@@ -537,10 +559,15 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
                 </button>
                 <button
                   onClick={() => handleRegenerateStage('chunks')}
-                  disabled={!!regeneratingStage || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks')}
+                  disabled={
+                    !!regeneratingStage || 
+                    isContextGenerationRunning ||
+                    !statusData?.hasChunks ||
+                    (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks')
+                  }
                   style={{
                     padding: '10px 16px',
-                    background: (regeneratingStage === 'chunks' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks')) 
+                    background: (regeneratingStage === 'chunks' || isContextGenerationRunning || !statusData?.hasChunks || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks')) 
                       ? '#94a3b8' 
                       : '#3b82f6',
                     color: '#ffffff',
@@ -548,7 +575,7 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
                     borderRadius: '6px',
                     fontSize: '12px',
                     fontWeight: '500',
-                    cursor: (regeneratingStage || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks')) 
+                    cursor: (regeneratingStage || isContextGenerationRunning || !statusData?.hasChunks || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks')) 
                       ? 'not-allowed' 
                       : 'pointer',
                     transition: 'background 0.2s',

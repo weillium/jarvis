@@ -370,12 +370,14 @@ export async function generateContextBlueprint(
       .in('status', ['generating', 'ready', 'approved']);
 
     if (!checkError && existingBlueprints && existingBlueprints.length > 0) {
+      const blueprintIds = existingBlueprints.map((b: { id: string }) => b.id);
+
+      // Mark blueprints as superseded
       const { error: supersedeError } = await (supabase
         .from('context_blueprints') as any)
         .update({
           status: 'superseded',
           superseded_at: new Date().toISOString(),
-          replaced_by: blueprintId,
         })
         .eq('agent_id', agentId)
         .neq('id', blueprintId)
@@ -386,6 +388,35 @@ export async function generateContextBlueprint(
         // Don't throw - new blueprint is created, this is just cleanup
       } else {
         console.log(`[blueprint] Marked ${existingBlueprints.length} existing blueprint(s) as superseded`);
+
+        // Mark blueprint generation cycles as superseded
+        const { error: blueprintCycleError } = await (supabase
+          .from('generation_cycles') as any)
+          .update({ status: 'superseded' })
+          .eq('event_id', eventId)
+          .in('blueprint_id', blueprintIds)
+          .eq('cycle_type', 'blueprint')
+          .in('status', ['started', 'processing', 'completed']);
+
+        if (blueprintCycleError) {
+          console.warn(`[blueprint] Warning: Failed to mark blueprint cycles as superseded: ${blueprintCycleError.message}`);
+        }
+
+        // Mark downstream generation cycles (research, glossary, chunks) as superseded
+        // These cycles are associated with the superseded blueprints
+        const { error: downstreamCycleError } = await (supabase
+          .from('generation_cycles') as any)
+          .update({ status: 'superseded' })
+          .eq('event_id', eventId)
+          .in('blueprint_id', blueprintIds)
+          .in('cycle_type', ['research', 'glossary', 'chunks'])
+          .in('status', ['started', 'processing', 'completed']);
+
+        if (downstreamCycleError) {
+          console.warn(`[blueprint] Warning: Failed to mark downstream cycles as superseded: ${downstreamCycleError.message}`);
+        }
+
+        console.log(`[blueprint] Marked associated generation cycles as superseded`);
       }
     }
 

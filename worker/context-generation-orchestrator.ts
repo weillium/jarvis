@@ -119,13 +119,21 @@ async function updateGenerationCycle(
     updateData.metadata = { ...existingMetadata, ...updates.metadata };
   }
 
-  const { error } = await (supabase
+  const { error, data } = await (supabase
     .from('generation_cycles') as any)
     .update(updateData)
-    .eq('id', cycleId);
+    .eq('id', cycleId)
+    .select('id');
 
   if (error) {
-    console.warn(`[context-gen] Warning: Failed to update generation cycle: ${error.message}`);
+    console.error(`[context-gen] ERROR: Failed to update generation cycle ${cycleId}: ${error.message}`);
+    throw new Error(`Failed to update generation cycle: ${error.message}`);
+  }
+
+  if (!data || data.length === 0) {
+    console.warn(`[context-gen] WARNING: Generation cycle ${cycleId} not found or update affected 0 rows`);
+  } else if (updates.status === 'completed') {
+    console.log(`[context-gen] Generation cycle ${cycleId} marked as completed`);
   }
 }
 
@@ -251,21 +259,36 @@ export async function executeContextGeneration(
   } catch (error: any) {
     console.error(`[context-gen] Error executing context generation: ${error.message}`);
     
-    // Update status to error
-    await updateAgentStatus(supabase, agentId, 'error').catch(() => {});
-    await updateBlueprintStatus(supabase, blueprintId, 'error', error.message).catch(() => {});
+    // Update status to error (status='error', stage remains unchanged)
+    try {
+      await (supabase
+        .from('agents') as any)
+        .update({ status: 'error' })
+        .eq('id', agentId);
+    } catch {
+      // Ignore errors updating agent status
+    }
+    
+    try {
+      await updateBlueprintStatus(supabase, blueprintId, 'error', error.message);
+    } catch {
+      // Ignore errors updating blueprint status
+    }
     
     // Mark any active generation cycles as failed
-    await (supabase
-      .from('generation_cycles') as any)
-      .update({
-        status: 'failed',
-        error_message: error.message,
-      })
-      .eq('event_id', eventId)
-      .eq('agent_id', agentId)
-      .in('status', ['started', 'processing'])
-      .catch(() => {});
+    try {
+      await (supabase
+        .from('generation_cycles') as any)
+        .update({
+          status: 'failed',
+          error_message: error.message,
+        })
+        .eq('event_id', eventId)
+        .eq('agent_id', agentId)
+        .in('status', ['started', 'processing']);
+    } catch {
+      // Ignore errors updating generation cycles
+    }
     
     throw error;
   }
@@ -1348,11 +1371,15 @@ function calculateQualityScore(result: any, chunkText: string): number {
 async function updateAgentStatus(
   supabase: ReturnType<typeof createClient>,
   agentId: string,
-  status: string
+  stage: string
 ): Promise<void> {
+  // Map stage to status: context generation stages use 'idle' status
+  // 'running' stage uses 'active' status
+  const status = stage === 'running' ? 'active' : 'idle';
+  
   const { error } = await (supabase
     .from('agents') as any)
-    .update({ status })
+    .update({ status, stage })
     .eq('id', agentId);
 
   if (error) {
@@ -1449,52 +1476,35 @@ export async function regenerateResearchStage(
 
   console.log(`[context-gen] Research regeneration completed: ${researchResults.chunks.length} chunks found`);
 
-  // Hard delete existing research results from previous cycles (since we're regenerating)
-  const { error: researchDeleteError } = await (supabase
-    .from('research_results') as any)
-    .delete()
+  // Mark old research generation cycles as superseded (don't delete data, just mark cycles)
+  const { error: researchCycleError } = await (supabase
+    .from('generation_cycles') as any)
+    .update({
+      status: 'superseded',
+    })
     .eq('event_id', eventId)
-    .eq('blueprint_id', blueprintId)
-    .neq('generation_cycle_id', researchCycleId);
+    .eq('cycle_type', 'research')
+    .neq('id', researchCycleId)
+    .in('status', ['started', 'processing', 'completed']);
 
-  if (researchDeleteError) {
-    console.warn(`[context-gen] Warning: Failed to delete existing research: ${researchDeleteError.message}`);
+  if (researchCycleError) {
+    console.warn(`[context-gen] Warning: Failed to mark old research cycles as superseded: ${researchCycleError.message}`);
   }
 
-  // Mark downstream components (glossary, chunks) as needing regeneration
-  // Hard delete glossary and chunks from previous cycles (preserve research chunks from any cycle)
-  const { error: glossaryDeleteError } = await (supabase
-    .from('glossary_terms') as any)
-    .delete()
-    .eq('event_id', eventId)
-    .neq('generation_cycle_id', researchCycleId);
-
-  if (glossaryDeleteError) {
-    console.warn(`[context-gen] Warning: Failed to delete glossary after research regeneration: ${glossaryDeleteError.message}`);
-  }
-
-  // Hard delete non-research chunks from previous cycles (preserve research chunks from any cycle)
-  const { error: chunksDeleteError } = await (supabase
-    .from('context_items') as any)
-    .delete()
-    .eq('event_id', eventId)
-    .neq('generation_cycle_id', researchCycleId)
-    .neq('component_type', 'research');
-
-  if (chunksDeleteError) {
-    console.warn(`[context-gen] Warning: Failed to soft delete chunks after research regeneration: ${chunksDeleteError.message}`);
-  }
-
-  // Mark any active generation cycles for glossary/chunks as superseded
-  await (supabase
+  // Mark downstream components (glossary, chunks) cycles as superseded
+  // Don't delete data - only mark cycles to prevent UI visualization and downstream access
+  const { error: downstreamCycleError } = await (supabase
     .from('generation_cycles') as any)
     .update({
       status: 'superseded',
     })
     .eq('event_id', eventId)
     .in('cycle_type', ['glossary', 'chunks'])
-    .in('status', ['started', 'processing', 'completed'])
-    .catch(() => {});
+    .in('status', ['started', 'processing', 'completed']);
+
+  if (downstreamCycleError) {
+    console.warn(`[context-gen] Warning: Failed to mark downstream cycles as superseded: ${downstreamCycleError.message}`);
+  }
 
   console.log(`[context-gen] Downstream components (glossary, chunks) marked for regeneration`);
 
@@ -1630,6 +1640,25 @@ export async function regenerateGlossaryStage(
 
   console.log(`[context-gen] Glossary regeneration completed: ${glossaryCount.termCount} terms`);
 
+  // Mark old glossary generation cycles as superseded (don't delete data, just mark cycles)
+  // Note: Glossary and chunks are independent - regenerating glossary does not invalidate chunks
+  const { error: glossaryCycleError } = await (supabase
+    .from('generation_cycles') as any)
+    .update({
+      status: 'superseded',
+    })
+    .eq('event_id', eventId)
+    .eq('cycle_type', 'glossary')
+    .neq('id', glossaryCycleId)
+    .in('status', ['started', 'processing', 'completed']);
+
+  if (glossaryCycleError) {
+    console.warn(`[context-gen] Warning: Failed to mark old glossary cycles as superseded: ${glossaryCycleError.message}`);
+  }
+
+  // Update agent to context_complete
+  await updateAgentStatus(supabase, agentId, 'context_complete');
+
   return glossaryCount.termCount;
 }
 
@@ -1694,6 +1723,21 @@ export async function regenerateChunksStage(
   );
 
   console.log(`[context-gen] Chunks regeneration completed: ${chunksResult.chunkCount} chunks (cost: $${chunksResult.costBreakdown.openai.total.toFixed(4)})`);
+
+  // Mark old chunks generation cycles as superseded (don't delete data, just mark cycles)
+  const { error: chunksCycleError } = await (supabase
+    .from('generation_cycles') as any)
+    .update({
+      status: 'superseded',
+    })
+    .eq('event_id', eventId)
+    .eq('cycle_type', 'chunks')
+    .neq('id', chunksCycleId)
+    .in('status', ['started', 'processing', 'completed']);
+
+  if (chunksCycleError) {
+    console.warn(`[context-gen] Warning: Failed to mark old chunks cycles as superseded: ${chunksCycleError.message}`);
+  }
 
   // Update to context_complete
   await updateAgentStatus(supabase, agentId, 'context_complete');

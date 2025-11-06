@@ -359,7 +359,7 @@ export async function buildContextChunks(
   };
 
   // Mark cycle as completed with cost metadata
-  await (supabase
+  const { error: cycleUpdateError } = await (supabase
     .from('generation_cycles') as any)
     .update({
       status: 'completed',
@@ -369,7 +369,13 @@ export async function buildContextChunks(
     })
     .eq('id', generationCycleId);
 
+  if (cycleUpdateError) {
+    console.error(`[chunks] ERROR: Failed to update generation cycle to completed: ${cycleUpdateError.message}`);
+    throw new Error(`Failed to update generation cycle: ${cycleUpdateError.message}`);
+  }
+
   console.log(`[chunks] Inserted ${insertedCount} context chunks for event ${eventId} (cost: $${totalCost.toFixed(4)})`);
+  console.log(`[chunks] Generation cycle ${generationCycleId} marked as completed`);
   return {
     chunkCount: insertedCount,
     costBreakdown,

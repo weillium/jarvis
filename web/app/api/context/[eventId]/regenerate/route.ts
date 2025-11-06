@@ -112,20 +112,20 @@ export async function POST(
 
     const blueprintId = blueprints[0].id;
 
-    // Map stage to agent status for regeneration
-    const statusMap: Record<Stage, string> = {
+    // Map stage to agent stage for regeneration
+    const stageMap: Record<Stage, string> = {
       research: 'regenerating_research',
       glossary: 'regenerating_glossary',
       chunks: 'regenerating_chunks',
     };
 
-    // Set agent status to regeneration status (worker will pick it up)
+    // Set agent stage to regeneration stage (worker will pick it up)
+    // Agent status should remain 'idle' during regeneration
     const { error: updateError } = await (supabase
       .from('agents') as any)
       .update({ 
-        status: statusMap[stage],
-        // Store regeneration metadata in a way the worker can access
-        // We'll use a simple approach: status indicates regeneration
+        stage: stageMap[stage],
+        status: 'idle', // Ensure status is 'idle' during regeneration
       })
       .eq('id', agentId);
 
@@ -143,7 +143,7 @@ export async function POST(
       blueprint_id: blueprintId,
       event_id: eventId,
       stage: stage,
-      status: statusMap[stage],
+      agent_stage: stageMap[stage],
       message: `Regeneration of ${stage} stage started. The worker will process this shortly.`,
     });
   } catch (error: any) {

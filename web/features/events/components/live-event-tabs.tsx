@@ -139,9 +139,6 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
           </div>
           <BlueprintDisplay
             eventId={eventId}
-            onApprove={handleApproveBlueprint}
-            approving={approving}
-            canApprove={canApprove}
             onRegenerate={handleRegenerateBlueprint}
             embedded={true}
           />

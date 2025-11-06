@@ -37,10 +37,16 @@ export function ContextGenerationProgress({
         return 'Generating Blueprint';
       case 'researching':
         return 'Researching';
+      case 'regenerating_research':
+        return 'Regenerating Research';
       case 'building_glossary':
         return 'Building Glossary';
+      case 'regenerating_glossary':
+        return 'Regenerating Glossary';
       case 'building_chunks':
         return 'Building Chunks';
+      case 'regenerating_chunks':
+        return 'Regenerating Chunks';
       case 'context_complete':
         return 'Complete';
       default:
@@ -49,10 +55,13 @@ export function ContextGenerationProgress({
   };
 
   const getProgressLabel = (): string => {
-    if (stage === 'building_glossary' && progress) {
+    if ((stage === 'researching' || stage === 'regenerating_research') && progress) {
+      return `${progress.current} / ${progress.total} queries`;
+    }
+    if ((stage === 'building_glossary' || stage === 'regenerating_glossary') && progress) {
       return `${progress.current} / ${progress.total} terms`;
     }
-    if (stage === 'building_chunks' && progress) {
+    if ((stage === 'building_chunks' || stage === 'regenerating_chunks') && progress) {
       return `${progress.current} / ${progress.total} chunks`;
     }
     return '';
@@ -129,7 +138,12 @@ export function ContextGenerationProgress({
       }}>
         {['blueprint_generating', 'researching', 'building_glossary', 'building_chunks', 'context_complete'].map((s, index) => {
           // Handle both 'blueprint' and 'blueprint_generating' as the same stage
-          const isActive = stage === s || (stage === 'blueprint' && s === 'blueprint_generating');
+          // Handle regeneration stages as the same as their non-regeneration counterparts
+          const isActive = stage === s || 
+            (stage === 'blueprint' && s === 'blueprint_generating') ||
+            (stage === 'regenerating_research' && s === 'researching') ||
+            (stage === 'regenerating_glossary' && s === 'building_glossary') ||
+            (stage === 'regenerating_chunks' && s === 'building_chunks');
           const isCompleted = getStageOrder(stage) > getStageOrder(s);
 
           return (
@@ -162,8 +176,11 @@ function getStageOrder(stage: string): number {
     'blueprint': 1,
     'blueprint_generating': 1,
     'researching': 2,
+    'regenerating_research': 2,
     'building_glossary': 3,
+    'regenerating_glossary': 3,
     'building_chunks': 4,
+    'regenerating_chunks': 4,
     'context_complete': 5,
   };
   return order[stage] || 0;
