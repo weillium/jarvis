@@ -1,13 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { useAgentQuery } from '@/shared/hooks/use-agent-query';
 import { useContextVersionsQuery } from '@/shared/hooks/use-context-versions-query';
 import { useAgentSessions, AgentSessionStatus } from '@/shared/hooks/use-agent-sessions';
 import { useAgentSessionsQuery } from '@/shared/hooks/use-agent-sessions-query';
 import {
-  useResetContextMutation,
   useCreateSessionsMutation,
   useStartSessionsMutation,
   usePauseSessionsMutation,
@@ -15,16 +13,527 @@ import {
   useConfirmReadyMutation,
   useSendTestTranscriptMutation,
 } from '@/shared/hooks/use-mutations';
-import { ContextGenerationPanel } from '@/features/context/components/context-generation-panel';
 import { TestTranscriptModal } from './test-transcript-modal';
 
 interface AgentOverviewProps {
   eventId: string;
 }
 
+type GenerationCycle = {
+  cost: number | null;
+  [key: string]: unknown;
+};
+
+// Helper functions
+const getSessionStatusColor = (status: string): string => {
+  switch (status) {
+    case 'active':
+      return '#10b981';
+    case 'paused':
+      return '#8b5cf6';
+    case 'closed':
+      return '#6b7280';
+    case 'error':
+      return '#ef4444';
+    default:
+      return '#6b7280';
+  }
+};
+
+const getSessionStatusLabel = (status: string): string => {
+  switch (status) {
+    case 'active':
+      return 'Active';
+    case 'paused':
+      return 'Paused';
+    case 'closed':
+      return 'Closed';
+    case 'error':
+      return 'Error';
+    default:
+      return status;
+  }
+};
+
+const formatDate = (dateString: string | null): string => {
+  if (!dateString) return 'N/A';
+  return new Date(dateString).toLocaleString();
+};
+
+// SessionStatusCard component - moved outside to fix hooks issue
+interface SessionStatusCardProps {
+  title: string;
+  status: AgentSessionStatus | null;
+  expandedLogs: { cards: boolean; facts: boolean };
+  setExpandedLogs: React.Dispatch<React.SetStateAction<{ cards: boolean; facts: boolean }>>;
+}
+
+function SessionStatusCard({ title, status, expandedLogs, setExpandedLogs }: SessionStatusCardProps) {
+  // Real-time runtime calculation with state to trigger updates - hooks must be before early return
+  const [currentTime, setCurrentTime] = useState(new Date());
+  
+  // Determine WebSocket connection status - calculate before early return
+  const actualWebSocketState = status?.websocket_state;
+  const isWebSocketLive = status ? (actualWebSocketState === 'OPEN' || (actualWebSocketState === undefined && status.status === 'active')) : false;
+  
+  useEffect(() => {
+    if (!isWebSocketLive || !status?.metadata.created_at) return;
+    
+    // Update every second when session is active
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [isWebSocketLive, status?.metadata.created_at]);
+
+  if (!status) return null;
+
+  const statusColor = getSessionStatusColor(status.status);
+  const statusLabel = getSessionStatusLabel(status.status);
+  const agentType = status.agent_type;
+  const isExpanded = expandedLogs[agentType];
+  
+  // Determine connection status label
+  let connectionStatus: string;
+  let connectionColor: string;
+  
+  if (actualWebSocketState) {
+    // Use actual WebSocket readyState
+    switch (actualWebSocketState) {
+      case 'OPEN':
+        connectionStatus = 'Live';
+        connectionColor = '#10b981';
+        break;
+      case 'CONNECTING':
+        connectionStatus = 'Connecting';
+        connectionColor = '#f59e0b';
+        break;
+      case 'CLOSING':
+        connectionStatus = 'Closing';
+        connectionColor = '#f59e0b';
+        break;
+      case 'CLOSED':
+        connectionStatus = 'Disconnected';
+        connectionColor = '#6b7280';
+        break;
+      default:
+        connectionStatus = status.status === 'paused' ? 'Paused' : 'Disconnected';
+        connectionColor = status.status === 'paused' ? '#8b5cf6' : '#6b7280';
+    }
+  } else {
+    // Fall back to database status
+    // Check if closed session is new (created in last minute)
+    const isNewClosed = status.status === 'closed' && status.metadata?.created_at && 
+      (new Date().getTime() - new Date(status.metadata.created_at).getTime()) < 60000;
+    connectionStatus = status.status === 'active' ? 'Live' : status.status === 'paused' ? 'Paused' : isNewClosed ? 'Ready' : 'Disconnected';
+    connectionColor = status.status === 'active' ? '#10b981' : status.status === 'paused' ? '#8b5cf6' : isNewClosed ? '#64748b' : '#6b7280';
+  }
+
+  // Calculate runtime (how long session has been running)
+  const calculateRuntime = () => {
+    if (!status.metadata.created_at) return null;
+    
+    const created = new Date(status.metadata.created_at);
+    const now = currentTime;
+    const diffMs = now.getTime() - created.getTime();
+    
+    if (diffMs < 0) return null; // Invalid date
+    
+    const seconds = Math.floor(diffMs / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    
+    if (days > 0) {
+      return `${days}d ${hours % 24}h`;
+    } else if (hours > 0) {
+      return `${hours}h ${minutes % 60}m`;
+    } else if (minutes > 0) {
+      return `${minutes}m ${seconds % 60}s`;
+    } else {
+      return `${seconds}s`;
+    }
+  };
+
+  const runtime = calculateRuntime();
+
+  return (
+    <div style={{
+      padding: '20px',
+      background: '#ffffff',
+      borderRadius: '12px',
+      border: '1px solid #e2e8f0',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '16px',
+      }}>
+        <h5 style={{
+          fontSize: '16px',
+          fontWeight: '600',
+          color: '#0f172a',
+          margin: 0,
+        }}>
+          {title}
+        </h5>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+        }}>
+          <div style={{
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            background: statusColor,
+          }} />
+          <span style={{
+            fontSize: '14px',
+            fontWeight: '500',
+            color: statusColor,
+          }}>
+            {statusLabel}
+          </span>
+        </div>
+      </div>
+
+      {/* Connection Status & Runtime */}
+      <div style={{
+        marginBottom: '16px',
+        paddingBottom: '16px',
+        borderBottom: '1px solid #e2e8f0',
+      }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          marginBottom: '8px',
+        }}>
+          <div style={{
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            background: connectionColor,
+            animation: isWebSocketLive ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none',
+          }} />
+          <span style={{
+            fontSize: '12px',
+            fontWeight: '600',
+            color: connectionColor,
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+          }}>
+            WebSocket: {connectionStatus}
+            {actualWebSocketState && (
+              <span style={{
+                fontSize: '10px',
+                fontWeight: '400',
+                marginLeft: '6px',
+                opacity: 0.7,
+                textTransform: 'none',
+              }}>
+                ({actualWebSocketState})
+              </span>
+            )}
+          </span>
+        </div>
+        
+        {/* Ping-Pong Health Status */}
+        {status.websocket_state && status.websocket_state === 'OPEN' && (
+          <div style={{
+            marginBottom: '8px',
+            padding: '8px 12px',
+            background: status.ping_pong?.missedPongs === 0 ? '#f0fdf4' : status.ping_pong?.missedPongs === 1 ? '#fffbeb' : '#fef2f2',
+            borderRadius: '6px',
+            border: `1px solid ${status.ping_pong?.missedPongs === 0 ? '#bbf7d0' : status.ping_pong?.missedPongs === 1 ? '#fde68a' : '#fecaca'}`,
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '4px',
+            }}>
+              <span style={{
+                fontSize: '11px',
+                fontWeight: '600',
+                color: status.ping_pong?.missedPongs === 0 ? '#166534' : status.ping_pong?.missedPongs === 1 ? '#92400e' : '#991b1b',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+              }}>
+                Connection Health
+              </span>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}>
+                {status.ping_pong?.missedPongs === 0 && (
+                  <span style={{ fontSize: '12px' }}>✓ Healthy</span>
+                )}
+                {status.ping_pong?.missedPongs === 1 && (
+                  <span style={{ fontSize: '12px', color: '#d97706' }}>⚠ 1 Missed</span>
+                )}
+                {status.ping_pong && status.ping_pong.missedPongs >= 2 && (
+                  <span style={{ fontSize: '12px', color: '#dc2626' }}>⚠⚠ {status.ping_pong.missedPongs} Missed</span>
+                )}
+              </div>
+            </div>
+            {status.ping_pong?.enabled && (
+              <div style={{
+                fontSize: '10px',
+                color: '#64748b',
+                display: 'flex',
+                gap: '12px',
+                flexWrap: 'wrap',
+              }}>
+                {status.ping_pong.lastPongReceived && (
+                  <span>
+                    Last pong: {new Date(status.ping_pong.lastPongReceived).toLocaleTimeString()}
+                  </span>
+                )}
+                <span>
+                  Ping interval: {Math.round((status.ping_pong.pingIntervalMs || 0) / 1000)}s
+                </span>
+                {status.ping_pong.missedPongs > 0 && (
+                  <span style={{ color: '#dc2626', fontWeight: '600' }}>
+                    {status.ping_pong.missedPongs}/{status.ping_pong.maxMissedPongs} missed
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+        
+        {runtime && (
+          <div style={{
+            fontSize: '12px',
+            color: '#64748b',
+            marginBottom: '4px',
+          }}>
+            Runtime: {runtime}
+          </div>
+        )}
+        <div style={{
+          fontSize: '12px',
+          color: '#64748b',
+          fontFamily: 'monospace',
+          marginBottom: '4px',
+        }}>
+          {status.session_id === 'pending' || (status.status === 'closed' && status.metadata?.created_at && 
+            (new Date().getTime() - new Date(status.metadata.created_at).getTime()) < 60000) ? (
+              <span style={{ fontStyle: 'italic', color: '#94a3b8' }}>
+                Pending activation
+              </span>
+          ) : (
+            <>Session: {status.session_id.substring(0, 20)}...</>
+          )}
+        </div>
+        <div style={{
+          fontSize: '12px',
+          color: '#64748b',
+        }}>
+          Model: {status.metadata.model || 'N/A'}
+        </div>
+      </div>
+
+      {/* Token Metrics */}
+      {status.token_metrics && (
+        <div style={{
+          marginBottom: '16px',
+          paddingBottom: '16px',
+          borderBottom: '1px solid #e2e8f0',
+        }}>
+          <div style={{
+            fontSize: '12px',
+            fontWeight: '600',
+            color: '#64748b',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+            marginBottom: '12px',
+          }}>
+            Token Metrics
+          </div>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, 1fr)',
+            gap: '12px',
+          }}>
+            <div>
+              <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>Total</div>
+              <div style={{ fontSize: '16px', fontWeight: '600', color: '#0f172a' }}>
+                {status.token_metrics.total_tokens.toLocaleString()}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>Avg</div>
+              <div style={{ fontSize: '16px', fontWeight: '600', color: '#0f172a' }}>
+                {status.token_metrics.avg_tokens.toLocaleString()}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>Max</div>
+              <div style={{ fontSize: '16px', fontWeight: '600', color: '#0f172a' }}>
+                {status.token_metrics.max_tokens.toLocaleString()}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>Requests</div>
+              <div style={{ fontSize: '16px', fontWeight: '600', color: '#0f172a' }}>
+                {status.token_metrics.request_count}
+              </div>
+            </div>
+          </div>
+          {(status.token_metrics.warnings > 0 || status.token_metrics.criticals > 0) && (
+            <div style={{
+              marginTop: '12px',
+              padding: '8px 12px',
+              background: status.token_metrics.criticals > 0 ? '#fef2f2' : '#fffbeb',
+              borderRadius: '6px',
+              border: `1px solid ${status.token_metrics.criticals > 0 ? '#fecaca' : '#fde68a'}`,
+            }}>
+              <div style={{
+                fontSize: '12px',
+                color: status.token_metrics.criticals > 0 ? '#dc2626' : '#d97706',
+              }}>
+                {status.token_metrics.criticals > 0 && `⚠️ ${status.token_metrics.criticals} critical threshold breaches`}
+                {status.token_metrics.criticals > 0 && status.token_metrics.warnings > 0 && ' • '}
+                {status.token_metrics.warnings > 0 && `⚠️ ${status.token_metrics.warnings} warnings`}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Runtime Stats */}
+      {status.runtime && (
+        <div style={{
+          marginBottom: '16px',
+          paddingBottom: '16px',
+          borderBottom: '1px solid #e2e8f0',
+        }}>
+          <div style={{
+            fontSize: '12px',
+            fontWeight: '600',
+            color: '#64748b',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+            marginBottom: '12px',
+          }}>
+            Runtime Stats
+          </div>
+          <div style={{
+            fontSize: '12px',
+            color: '#64748b',
+            lineHeight: '1.6',
+          }}>
+            <div>Cards Last Seq: {status.runtime.cards_last_seq}</div>
+            <div>Facts Last Seq: {status.runtime.facts_last_seq}</div>
+            {status.runtime.ring_buffer_stats && (
+              <div>Ring Buffer: {status.runtime.ring_buffer_stats.finalized || 0} chunks</div>
+            )}
+            {status.runtime.facts_store_stats && (
+              <div>Facts Store: {status.runtime.facts_store_stats.capacityUsed || 0} items</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Recent Logs */}
+      {status.recent_logs && status.recent_logs.length > 0 && (
+        <div>
+          <button
+            onClick={() => setExpandedLogs(prev => ({ ...prev, [agentType]: !prev[agentType] }))}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              background: 'transparent',
+              border: '1px solid #e2e8f0',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: '500',
+              color: '#64748b',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
+          >
+            <span>Recent Logs ({status.recent_logs.length})</span>
+            <span>{isExpanded ? '▼' : '▶'}</span>
+          </button>
+          {isExpanded && (
+            <div style={{
+              marginTop: '12px',
+              maxHeight: '300px',
+              overflowY: 'auto',
+              padding: '12px',
+              background: '#f8fafc',
+              borderRadius: '6px',
+              border: '1px solid #e2e8f0',
+            }}>
+              {status.recent_logs.slice(-20).reverse().map((log, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    padding: '8px',
+                    marginBottom: '8px',
+                    background: '#ffffff',
+                    borderRadius: '4px',
+                    borderLeft: `3px solid ${
+                      log.level === 'error' ? '#ef4444' :
+                      log.level === 'warn' ? '#f59e0b' : '#3b82f6'
+                    }`,
+                  }}
+                >
+                  <div style={{
+                    fontSize: '11px',
+                    color: '#64748b',
+                    marginBottom: '4px',
+                  }}>
+                    {new Date(log.timestamp).toLocaleTimeString()}
+                    {log.context?.seq && ` • Seq ${log.context.seq}`}
+                  </div>
+                  <div style={{
+                    fontSize: '12px',
+                    color: '#0f172a',
+                    fontFamily: 'monospace',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                  }}>
+                    {log.message}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Metadata */}
+      <div style={{
+        marginTop: '16px',
+        paddingTop: '16px',
+        borderTop: '1px solid #e2e8f0',
+        fontSize: '11px',
+        color: '#94a3b8',
+      }}>
+        <div>Created: {formatDate(status.metadata.created_at)}</div>
+        <div>Updated: {formatDate(status.metadata.updated_at)}</div>
+        {status.metadata.closed_at && (
+          <div>Closed: {formatDate(status.metadata.closed_at)}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function AgentOverview({ eventId }: AgentOverviewProps) {
-  const queryClient = useQueryClient();
-  const { data: agentData, isLoading, error, refetch } = useAgentQuery(eventId);
+  const { data: agentData, isLoading, error } = useAgentQuery(eventId);
   const { data: cycles } = useContextVersionsQuery(eventId);
   const { data: sessionsData, isLoading: sessionsQueryLoading, refetch: refetchSessions } = useAgentSessionsQuery(eventId);
   
@@ -55,18 +564,10 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
   
   const { cards: cardsStatus, facts: factsStatus, isLoading: sessionsLoading, error: sessionsError, reconnect } = useAgentSessions(eventId, shouldConnectToSessions);
   
-  // Clear initial sessions when SSE provides updates (to avoid showing stale data)
-  useEffect(() => {
-    if (cardsStatus || factsStatus) {
-      setInitialSessions([]);
-    }
-  }, [cardsStatus, factsStatus]);
-  
   const [expandedLogs, setExpandedLogs] = useState<{ cards: boolean; facts: boolean }>({ cards: false, facts: false });
   const [isTestTranscriptModalOpen, setIsTestTranscriptModalOpen] = useState(false);
 
   // Mutation hooks
-  const resetContextMutation = useResetContextMutation(eventId);
   const createSessionsMutation = useCreateSessionsMutation(eventId);
   const startSessionsMutation = useStartSessionsMutation(eventId);
   const pauseSessionsMutation = usePauseSessionsMutation(eventId);
@@ -75,21 +576,10 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
   const sendTestTranscriptMutation = useSendTestTranscriptMutation(eventId);
 
   // Calculate total cost from cycles (from React Query)
-  const totalCost = cycles?.reduce((sum: number, cycle: any) => {
+  const totalCost = cycles?.reduce((sum: number, cycle: GenerationCycle) => {
     const cycleCost = cycle.cost;
-    return sum + (cycleCost !== null && cycleCost !== undefined ? parseFloat(cycleCost) : 0);
+    return sum + (cycleCost !== null && cycleCost !== undefined ? parseFloat(String(cycleCost)) : 0);
   }, 0) ?? null;
-
-  const handleReset = () => {
-    if (!confirm('Are you sure you want to invalidate all context components? This will require restarting context building.')) {
-      return;
-    }
-    resetContextMutation.mutate();
-  };
-
-  // Get mutation states
-  const isResetting = resetContextMutation.isPending;
-  const resetError = resetContextMutation.error ? (resetContextMutation.error instanceof Error ? resetContextMutation.error.message : 'Failed to reset context') : null;
 
   const getStatusColor = (status: string | null, stage?: string | null, blueprintStatus?: string | null): string => {
     if (!status) return '#6b7280';
@@ -221,16 +711,6 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
     });
   };
 
-  const handleResumeSessions = () => {
-    resumeSessionsMutation.mutate(undefined, {
-      onSuccess: async () => {
-        // Refetch sessions to get updated status (SSE will reconnect when sessions become active)
-        await refetchSessions();
-        console.log('[AgentOverview] Sessions will be resumed by worker');
-      },
-    });
-  };
-
   // Get mutation states
   const isStartingSessions = createSessionsMutation.isPending || startSessionsMutation.isPending;
   const startSessionsError = createSessionsMutation.error || startSessionsMutation.error
@@ -242,508 +722,6 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
     ? (pauseSessionsMutation.error instanceof Error ? pauseSessionsMutation.error.message : resumeSessionsMutation.error instanceof Error ? resumeSessionsMutation.error.message : confirmReadyMutation.error instanceof Error ? confirmReadyMutation.error.message : 'Failed to perform operation')
     : null;
 
-  const getSessionStatusColor = (status: string, created_at?: string): string => {
-    switch (status) {
-      case 'active':
-        return '#10b981';
-      case 'paused':
-        return '#8b5cf6'; // Purple for paused
-      case 'closed':
-        // Check if closed session is new (created in last minute)
-        if (created_at) {
-          const created = new Date(created_at);
-          const now = new Date();
-          if (now.getTime() - created.getTime() < 60000) {
-            return '#64748b'; // Gray for new (not started)
-          }
-        }
-        return '#6b7280'; // Dark gray for old closed
-      case 'error':
-        return '#ef4444';
-      default:
-        return '#6b7280';
-    }
-  };
-
-  const getSessionStatusLabel = (status: string, created_at?: string): string => {
-    switch (status) {
-      case 'active':
-        return 'Active';
-      case 'paused':
-        return 'Paused';
-      case 'closed':
-        return 'Closed';
-      case 'error':
-        return 'Error';
-      default:
-        return status;
-    }
-  };
-
-  const SessionStatusCard = ({ title, status }: { title: string; status: AgentSessionStatus | null }) => {
-    if (!status) return null;
-
-    const statusColor = getSessionStatusColor(status.status, status.metadata?.created_at);
-    const statusLabel = getSessionStatusLabel(status.status, status.metadata?.created_at);
-    const agentType = status.agent_type;
-    const isExpanded = expandedLogs[agentType];
-
-    // Determine WebSocket connection status
-    // Prefer actual WebSocket state if available, otherwise fall back to status field
-    const actualWebSocketState = status.websocket_state;
-    const isWebSocketLive = actualWebSocketState === 'OPEN' || (actualWebSocketState === undefined && status.status === 'active');
-    
-    // Determine connection status label
-    let connectionStatus: string;
-    let connectionColor: string;
-    
-    if (actualWebSocketState) {
-      // Use actual WebSocket readyState
-      switch (actualWebSocketState) {
-        case 'OPEN':
-          connectionStatus = 'Live';
-          connectionColor = '#10b981';
-          break;
-        case 'CONNECTING':
-          connectionStatus = 'Connecting';
-          connectionColor = '#f59e0b';
-          break;
-        case 'CLOSING':
-          connectionStatus = 'Closing';
-          connectionColor = '#f59e0b';
-          break;
-        case 'CLOSED':
-          connectionStatus = 'Disconnected';
-          connectionColor = '#6b7280';
-          break;
-        default:
-          connectionStatus = status.status === 'paused' ? 'Paused' : 'Disconnected';
-          connectionColor = status.status === 'paused' ? '#8b5cf6' : '#6b7280';
-      }
-    } else {
-      // Fall back to database status
-      // Check if closed session is new (created in last minute)
-      const isNewClosed = status.status === 'closed' && status.metadata?.created_at && 
-        (new Date().getTime() - new Date(status.metadata.created_at).getTime()) < 60000;
-      connectionStatus = status.status === 'active' ? 'Live' : status.status === 'paused' ? 'Paused' : isNewClosed ? 'Ready' : 'Disconnected';
-      connectionColor = status.status === 'active' ? '#10b981' : status.status === 'paused' ? '#8b5cf6' : isNewClosed ? '#64748b' : '#6b7280';
-    }
-
-    // Real-time runtime calculation with state to trigger updates
-    const [currentTime, setCurrentTime] = useState(new Date());
-    
-    useEffect(() => {
-      if (!isWebSocketLive || !status.metadata.created_at) return;
-      
-      // Update every second when session is active
-      const interval = setInterval(() => {
-        setCurrentTime(new Date());
-      }, 1000);
-      
-      return () => clearInterval(interval);
-    }, [isWebSocketLive, status.metadata.created_at]);
-
-    // Calculate runtime (how long session has been running)
-    const calculateRuntime = () => {
-      if (!status.metadata.created_at) return null;
-      
-      const created = new Date(status.metadata.created_at);
-      const now = currentTime;
-      const diffMs = now.getTime() - created.getTime();
-      
-      if (diffMs < 0) return null; // Invalid date
-      
-      const seconds = Math.floor(diffMs / 1000);
-      const minutes = Math.floor(seconds / 60);
-      const hours = Math.floor(minutes / 60);
-      const days = Math.floor(hours / 24);
-      
-      if (days > 0) {
-        return `${days}d ${hours % 24}h`;
-      } else if (hours > 0) {
-        return `${hours}h ${minutes % 60}m`;
-      } else if (minutes > 0) {
-        return `${minutes}m ${seconds % 60}s`;
-      } else {
-        return `${seconds}s`;
-      }
-    };
-
-    const runtime = calculateRuntime();
-
-    return (
-      <div style={{
-        padding: '20px',
-        background: '#ffffff',
-        borderRadius: '12px',
-        border: '1px solid #e2e8f0',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-      }}>
-        {/* Header */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '16px',
-        }}>
-          <h5 style={{
-            fontSize: '16px',
-            fontWeight: '600',
-            color: '#0f172a',
-            margin: 0,
-          }}>
-            {title}
-          </h5>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}>
-            <div style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              background: statusColor,
-            }} />
-            <span style={{
-              fontSize: '14px',
-              fontWeight: '500',
-              color: statusColor,
-            }}>
-              {statusLabel}
-            </span>
-          </div>
-        </div>
-
-        {/* Connection Status & Runtime */}
-        <div style={{
-          marginBottom: '16px',
-          paddingBottom: '16px',
-          borderBottom: '1px solid #e2e8f0',
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            marginBottom: '8px',
-          }}>
-            <div style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              background: connectionColor,
-              animation: isWebSocketLive ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none',
-            }} />
-            <span style={{
-              fontSize: '12px',
-              fontWeight: '600',
-              color: connectionColor,
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px',
-            }}>
-              WebSocket: {connectionStatus}
-              {actualWebSocketState && (
-                <span style={{
-                  fontSize: '10px',
-                  fontWeight: '400',
-                  marginLeft: '6px',
-                  opacity: 0.7,
-                  textTransform: 'none',
-                }}>
-                  ({actualWebSocketState})
-                </span>
-              )}
-            </span>
-          </div>
-          
-          {/* Ping-Pong Health Status */}
-          {status.websocket_state && status.websocket_state === 'OPEN' && (
-            <div style={{
-              marginBottom: '8px',
-              padding: '8px 12px',
-              background: status.ping_pong?.missedPongs === 0 ? '#f0fdf4' : status.ping_pong?.missedPongs === 1 ? '#fffbeb' : '#fef2f2',
-              borderRadius: '6px',
-              border: `1px solid ${status.ping_pong?.missedPongs === 0 ? '#bbf7d0' : status.ping_pong?.missedPongs === 1 ? '#fde68a' : '#fecaca'}`,
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: '4px',
-              }}>
-                <span style={{
-                  fontSize: '11px',
-                  fontWeight: '600',
-                  color: status.ping_pong?.missedPongs === 0 ? '#166534' : status.ping_pong?.missedPongs === 1 ? '#92400e' : '#991b1b',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                }}>
-                  Connection Health
-                </span>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}>
-                  {status.ping_pong?.missedPongs === 0 && (
-                    <span style={{ fontSize: '12px' }}>✓ Healthy</span>
-                  )}
-                  {status.ping_pong?.missedPongs === 1 && (
-                    <span style={{ fontSize: '12px', color: '#d97706' }}>⚠ 1 Missed</span>
-                  )}
-                  {status.ping_pong && status.ping_pong.missedPongs >= 2 && (
-                    <span style={{ fontSize: '12px', color: '#dc2626' }}>⚠⚠ {status.ping_pong.missedPongs} Missed</span>
-                  )}
-                </div>
-              </div>
-              {status.ping_pong?.enabled && (
-                <div style={{
-                  fontSize: '10px',
-                  color: '#64748b',
-                  display: 'flex',
-                  gap: '12px',
-                  flexWrap: 'wrap',
-                }}>
-                  {status.ping_pong.lastPongReceived && (
-                    <span>
-                      Last pong: {new Date(status.ping_pong.lastPongReceived).toLocaleTimeString()}
-                    </span>
-                  )}
-                  <span>
-                    Ping interval: {Math.round((status.ping_pong.pingIntervalMs || 0) / 1000)}s
-                  </span>
-                  {status.ping_pong.missedPongs > 0 && (
-                    <span style={{ color: '#dc2626', fontWeight: '600' }}>
-                      {status.ping_pong.missedPongs}/{status.ping_pong.maxMissedPongs} missed
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-          
-          {runtime && (
-            <div style={{
-              fontSize: '12px',
-              color: '#64748b',
-              marginBottom: '4px',
-            }}>
-              Runtime: {runtime}
-            </div>
-          )}
-          <div style={{
-            fontSize: '12px',
-            color: '#64748b',
-            fontFamily: 'monospace',
-            marginBottom: '4px',
-          }}>
-            {status.session_id === 'pending' || (status.status === 'closed' && status.metadata?.created_at && 
-              (new Date().getTime() - new Date(status.metadata.created_at).getTime()) < 60000) ? (
-              <span style={{ fontStyle: 'italic', color: '#94a3b8' }}>
-                Pending activation
-              </span>
-            ) : (
-              <>Session: {status.session_id.substring(0, 20)}...</>
-            )}
-          </div>
-          <div style={{
-            fontSize: '12px',
-            color: '#64748b',
-          }}>
-            Model: {status.metadata.model || 'N/A'}
-          </div>
-        </div>
-
-        {/* Token Metrics */}
-        {status.token_metrics && (
-          <div style={{
-            marginBottom: '16px',
-            paddingBottom: '16px',
-            borderBottom: '1px solid #e2e8f0',
-          }}>
-            <div style={{
-              fontSize: '12px',
-              fontWeight: '600',
-              color: '#64748b',
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px',
-              marginBottom: '12px',
-            }}>
-              Token Metrics
-            </div>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(2, 1fr)',
-              gap: '12px',
-            }}>
-              <div>
-                <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>Total</div>
-                <div style={{ fontSize: '16px', fontWeight: '600', color: '#0f172a' }}>
-                  {status.token_metrics.total_tokens.toLocaleString()}
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>Avg</div>
-                <div style={{ fontSize: '16px', fontWeight: '600', color: '#0f172a' }}>
-                  {status.token_metrics.avg_tokens.toLocaleString()}
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>Max</div>
-                <div style={{ fontSize: '16px', fontWeight: '600', color: '#0f172a' }}>
-                  {status.token_metrics.max_tokens.toLocaleString()}
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>Requests</div>
-                <div style={{ fontSize: '16px', fontWeight: '600', color: '#0f172a' }}>
-                  {status.token_metrics.request_count}
-                </div>
-              </div>
-            </div>
-            {(status.token_metrics.warnings > 0 || status.token_metrics.criticals > 0) && (
-              <div style={{
-                marginTop: '12px',
-                padding: '8px 12px',
-                background: status.token_metrics.criticals > 0 ? '#fef2f2' : '#fffbeb',
-                borderRadius: '6px',
-                border: `1px solid ${status.token_metrics.criticals > 0 ? '#fecaca' : '#fde68a'}`,
-              }}>
-                <div style={{
-                  fontSize: '12px',
-                  color: status.token_metrics.criticals > 0 ? '#dc2626' : '#d97706',
-                }}>
-                  {status.token_metrics.criticals > 0 && `⚠️ ${status.token_metrics.criticals} critical threshold breaches`}
-                  {status.token_metrics.criticals > 0 && status.token_metrics.warnings > 0 && ' • '}
-                  {status.token_metrics.warnings > 0 && `⚠️ ${status.token_metrics.warnings} warnings`}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Runtime Stats */}
-        {status.runtime && (
-          <div style={{
-            marginBottom: '16px',
-            paddingBottom: '16px',
-            borderBottom: '1px solid #e2e8f0',
-          }}>
-            <div style={{
-              fontSize: '12px',
-              fontWeight: '600',
-              color: '#64748b',
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px',
-              marginBottom: '12px',
-            }}>
-              Runtime Stats
-            </div>
-            <div style={{
-              fontSize: '12px',
-              color: '#64748b',
-              lineHeight: '1.6',
-            }}>
-              <div>Cards Last Seq: {status.runtime.cards_last_seq}</div>
-              <div>Facts Last Seq: {status.runtime.facts_last_seq}</div>
-              {status.runtime.ring_buffer_stats && (
-                <div>Ring Buffer: {status.runtime.ring_buffer_stats.finalized || 0} chunks</div>
-              )}
-              {status.runtime.facts_store_stats && (
-                <div>Facts Store: {status.runtime.facts_store_stats.capacityUsed || 0} items</div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Recent Logs */}
-        {status.recent_logs && status.recent_logs.length > 0 && (
-          <div>
-            <button
-              onClick={() => setExpandedLogs(prev => ({ ...prev, [agentType]: !prev[agentType] }))}
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                background: 'transparent',
-                border: '1px solid #e2e8f0',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontSize: '12px',
-                fontWeight: '500',
-                color: '#64748b',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-              }}
-            >
-              <span>Recent Logs ({status.recent_logs.length})</span>
-              <span>{isExpanded ? '▼' : '▶'}</span>
-            </button>
-            {isExpanded && (
-              <div style={{
-                marginTop: '12px',
-                maxHeight: '300px',
-                overflowY: 'auto',
-                padding: '12px',
-                background: '#f8fafc',
-                borderRadius: '6px',
-                border: '1px solid #e2e8f0',
-              }}>
-                {status.recent_logs.slice(-20).reverse().map((log, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      padding: '8px',
-                      marginBottom: '8px',
-                      background: '#ffffff',
-                      borderRadius: '4px',
-                      borderLeft: `3px solid ${
-                        log.level === 'error' ? '#ef4444' :
-                        log.level === 'warn' ? '#f59e0b' : '#3b82f6'
-                      }`,
-                    }}
-                  >
-                    <div style={{
-                      fontSize: '11px',
-                      color: '#64748b',
-                      marginBottom: '4px',
-                    }}>
-                      {new Date(log.timestamp).toLocaleTimeString()}
-                      {log.context?.seq && ` • Seq ${log.context.seq}`}
-                    </div>
-                    <div style={{
-                      fontSize: '12px',
-                      color: '#0f172a',
-                      fontFamily: 'monospace',
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-word',
-                    }}>
-                      {log.message}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Metadata */}
-        <div style={{
-          marginTop: '16px',
-          paddingTop: '16px',
-          borderTop: '1px solid #e2e8f0',
-          fontSize: '11px',
-          color: '#94a3b8',
-        }}>
-          <div>Created: {formatDate(status.metadata.created_at)}</div>
-          <div>Updated: {formatDate(status.metadata.updated_at)}</div>
-          {status.metadata.closed_at && (
-            <div>Closed: {formatDate(status.metadata.closed_at)}</div>
-          )}
-        </div>
-      </div>
-    );
-  };
 
   if (isLoading) {
     return (
@@ -781,7 +759,7 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
           color: '#ef4444',
           fontSize: '14px',
         }}>
-          {error || 'No agent found for this event'}
+          {error instanceof Error ? error.message : (error ? String(error) : 'No agent found for this event')}
         </p>
       </div>
     );
@@ -1300,18 +1278,22 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
               {/* Cards Agent Session - prefer SSE data, fallback to initial sessions */}
               {(cardsStatus || initialSessions.find(s => s.agent_type === 'cards')) && (
                 <SessionStatusCard
-                  key={`cards-${cardsStatus?.session_id || initialSessions.find(s => s.agent_type === 'cards')?.session_id}-${cardsStatus?.status || initialSessions.find(s => s.agent_type === 'cards')?.status}-${cardsStatus?.metadata?.updated_at || initialSessions.find(s => s.agent_type === 'cards')?.metadata?.updated_at || Date.now()}`}
+                  key={`cards-${cardsStatus?.session_id || initialSessions.find(s => s.agent_type === 'cards')?.session_id || 'none'}-${cardsStatus?.status || initialSessions.find(s => s.agent_type === 'cards')?.status || 'none'}`}
                   title="Cards Agent"
                   status={cardsStatus || initialSessions.find(s => s.agent_type === 'cards') || null}
+                  expandedLogs={expandedLogs}
+                  setExpandedLogs={setExpandedLogs}
                 />
               )}
               
               {/* Facts Agent Session - prefer SSE data, fallback to initial sessions */}
               {(factsStatus || initialSessions.find(s => s.agent_type === 'facts')) && (
                 <SessionStatusCard
-                  key={`facts-${factsStatus?.session_id || initialSessions.find(s => s.agent_type === 'facts')?.session_id}-${factsStatus?.status || initialSessions.find(s => s.agent_type === 'facts')?.status}-${factsStatus?.metadata?.updated_at || initialSessions.find(s => s.agent_type === 'facts')?.metadata?.updated_at || Date.now()}`}
+                  key={`facts-${factsStatus?.session_id || initialSessions.find(s => s.agent_type === 'facts')?.session_id || 'none'}-${factsStatus?.status || initialSessions.find(s => s.agent_type === 'facts')?.status || 'none'}`}
                   title="Facts Agent"
                   status={factsStatus || initialSessions.find(s => s.agent_type === 'facts') || null}
+                  expandedLogs={expandedLogs}
+                  setExpandedLogs={setExpandedLogs}
                 />
               )}
             </div>

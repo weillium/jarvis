@@ -270,7 +270,8 @@ export function useAgentSessions(
       // Component will use initialSessions or polling for status
       setCards(null);
       setFacts(null);
-      setIsLoading(false);
+      setError(null);
+      setIsLoading(false); // CRITICAL: Set loading to false so UI shows "No active sessions" instead of stuck on loading
     }
 
     return () => {
@@ -289,9 +290,15 @@ export function useAgentSessions(
   useEffect(() => {
     setCards(null);
     setFacts(null);
-    setIsLoading(true);
+    // Only set loading to true if we might need to connect
+    // If shouldConnect is provided and returns false, we know we shouldn't connect, so set loading to false immediately
+    if (shouldConnect && !shouldConnect()) {
+      setIsLoading(false);
+    } else {
+      setIsLoading(true);
+    }
     setError(null);
-  }, [eventId]);
+  }, [eventId, shouldConnect]);
 
   return {
     cards,

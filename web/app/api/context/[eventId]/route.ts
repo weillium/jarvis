@@ -60,7 +60,15 @@ export async function GET(
     }
 
     // Sort client-side: rank first (if exists), then enrichment_timestamp (newest first)
-    const sorted = (data || []).sort((a: any, b: any) => {
+    type ContextItem = {
+      id: string;
+      chunk: string;
+      metadata: { enrichment_timestamp?: string } | null;
+      rank: number | null;
+      generation_cycle_id: string | null;
+    };
+    
+    const sorted = (data || []).sort((a: ContextItem, b: ContextItem) => {
       // Primary sort: by rank (lower is better)
       const aRank = a.rank;
       const bRank = b.rank;
@@ -80,10 +88,11 @@ export async function GET(
     });
 
     return NextResponse.json({ data: sorted });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[api/context] Unexpected error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
     return NextResponse.json({ 
-      error: error?.message || 'Internal server error' 
+      error: errorMessage
     }, { status: 500 });
   }
 }

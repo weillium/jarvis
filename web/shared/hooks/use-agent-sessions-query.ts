@@ -39,6 +39,12 @@ export function useAgentSessionsQuery(eventId: string | null) {
       }
       
       const res = await fetch(`/api/agent-sessions/${eventId}/check`);
+      
+      // Check if response is ok before parsing
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: Failed to check agent sessions`);
+      }
+      
       const data = await res.json();
       
       if (!data.ok) {
@@ -50,6 +56,8 @@ export function useAgentSessionsQuery(eventId: string | null) {
     enabled: !!eventId,
     staleTime: 1000 * 10, // 10 seconds
     refetchInterval: 5000, // Poll every 5 seconds (to detect session status changes)
+    retry: 1, // Only retry once on failure (don't retry indefinitely)
+    retryDelay: 1000, // Wait 1 second before retry
   });
 }
 

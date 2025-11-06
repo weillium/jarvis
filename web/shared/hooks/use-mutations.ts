@@ -31,6 +31,8 @@ export function useApproveBlueprintMutation(eventId: string) {
       // Invalidate agent and blueprint queries to refetch updated data
       queryClient.invalidateQueries({ queryKey: ['agent', eventId] });
       queryClient.invalidateQueries({ queryKey: ['blueprint', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['blueprint-full', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['context-status', eventId] });
     },
   });
 }
@@ -53,8 +55,14 @@ export function useResetContextMutation(eventId: string) {
       return data;
     },
     onSuccess: () => {
-      // Invalidate agent query to refetch updated status
+      // Invalidate agent query and all context-related queries to refetch updated status
       queryClient.invalidateQueries({ queryKey: ['agent', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['context-status', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['blueprint', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['blueprint-full', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['research', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['glossary', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['context-database', eventId] });
     },
   });
 }
@@ -80,6 +88,8 @@ export function useStartContextGenerationMutation(eventId: string) {
       // Invalidate agent and blueprint queries to show updated status
       queryClient.invalidateQueries({ queryKey: ['agent', eventId] });
       queryClient.invalidateQueries({ queryKey: ['blueprint', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['blueprint-full', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['context-status', eventId] });
     },
   });
 }
@@ -101,9 +111,19 @@ export function useRegenerateStageMutation(eventId: string) {
       }
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (_, stage) => {
       // Invalidate agent query to show updated status
       queryClient.invalidateQueries({ queryKey: ['agent', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['context-status', eventId] });
+      
+      // Invalidate stage-specific queries
+      if (stage === 'research') {
+        queryClient.invalidateQueries({ queryKey: ['research', eventId] });
+      } else if (stage === 'glossary') {
+        queryClient.invalidateQueries({ queryKey: ['glossary', eventId] });
+      } else if (stage === 'chunks') {
+        queryClient.invalidateQueries({ queryKey: ['context-database', eventId] });
+      }
     },
   });
 }
@@ -141,9 +161,18 @@ export function useStartOrRegenerateMutation(eventId: string) {
     onSuccess: (_, variables) => {
       // Invalidate agent query to show updated status
       queryClient.invalidateQueries({ queryKey: ['agent', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['context-status', eventId] });
+      
       // Invalidate blueprint query if it was a blueprint operation
       if (variables.stage === 'blueprint') {
         queryClient.invalidateQueries({ queryKey: ['blueprint', eventId] });
+        queryClient.invalidateQueries({ queryKey: ['blueprint-full', eventId] });
+      } else if (variables.stage === 'research') {
+        queryClient.invalidateQueries({ queryKey: ['research', eventId] });
+      } else if (variables.stage === 'glossary') {
+        queryClient.invalidateQueries({ queryKey: ['glossary', eventId] });
+      } else if (variables.stage === 'chunks') {
+        queryClient.invalidateQueries({ queryKey: ['context-database', eventId] });
       }
     },
   });
@@ -173,6 +202,7 @@ export function useCreateSessionsMutation(eventId: string) {
     onSuccess: () => {
       // Invalidate agent query to reflect status change (context_complete -> testing)
       queryClient.invalidateQueries({ queryKey: ['agent', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['agent-sessions', eventId] });
     },
   });
 }
@@ -197,6 +227,7 @@ export function useStartSessionsMutation(eventId: string) {
     onSuccess: () => {
       // Invalidate agent query to reflect status change
       queryClient.invalidateQueries({ queryKey: ['agent', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['agent-sessions', eventId] });
     },
   });
 }
@@ -221,6 +252,7 @@ export function usePauseSessionsMutation(eventId: string) {
     onSuccess: () => {
       // Invalidate agent query to reflect status change
       queryClient.invalidateQueries({ queryKey: ['agent', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['agent-sessions', eventId] });
     },
   });
 }
@@ -245,6 +277,7 @@ export function useResumeSessionsMutation(eventId: string) {
     onSuccess: () => {
       // Invalidate agent query to reflect status change
       queryClient.invalidateQueries({ queryKey: ['agent', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['agent-sessions', eventId] });
     },
   });
 }
@@ -269,6 +302,7 @@ export function useConfirmReadyMutation(eventId: string) {
     onSuccess: () => {
       // Invalidate agent query (testing -> ready)
       queryClient.invalidateQueries({ queryKey: ['agent', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['agent-sessions', eventId] });
     },
   });
 }
