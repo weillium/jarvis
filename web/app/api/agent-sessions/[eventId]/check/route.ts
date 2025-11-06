@@ -28,6 +28,7 @@ export async function GET(
 
     // Fetch all sessions (any status) for display purposes
     // SSE connection will only be established when sessions are starting/active
+    console.log(`[api/agent-sessions/check] Fetching sessions for event_id: ${eventId}`);
     const { data: sessions, error: sessionsError } = await supabase
       .from('agent_sessions')
       .select('id, agent_type, status, provider_session_id, created_at, updated_at, closed_at, model, token_metrics, runtime_stats, metrics_recorded_at')
@@ -42,33 +43,49 @@ export async function GET(
       );
     }
 
+    console.log(`[api/agent-sessions/check] Found ${sessions?.length || 0} sessions for event ${eventId}:`, 
+      sessions?.map(s => ({ id: s.id, agent_type: s.agent_type, status: s.status })) || []);
+
     const hasSessions = sessions && sessions.length > 0;
     // Only consider sessions as "active" if they're in starting/active status (for SSE connection)
     // SSE should only connect when sessions are actively processing content, not when paused
     const activeSessions = sessions?.filter(s => s.status === 'active') || [];
     const hasActiveSessions = activeSessions.length > 0;
 
-    return NextResponse.json({
+    const transformedSessions = sessions?.map(s => ({
+      agent_type: s.agent_type,
+      session_id: s.provider_session_id || s.id,
+      status: s.status,
+      metadata: {
+        created_at: s.created_at,
+        updated_at: s.updated_at,
+        closed_at: s.closed_at,
+        model: s.model || undefined,
+      },
+      token_metrics: s.token_metrics || undefined,
+      runtime_stats: s.runtime_stats || undefined,
+      metrics_recorded_at: s.metrics_recorded_at || undefined,
+    })) || [];
+
+    console.log(`[api/agent-sessions/check] Returning ${transformedSessions.length} transformed sessions`);
+
+    const response = {
       ok: true,
       hasSessions, // True if any sessions exist (for display)
       hasActiveSessions, // True only if sessions are starting/active (for SSE connection - only when actively processing)
       sessionCount: sessions?.length || 0,
       activeSessionCount: activeSessions.length,
-      sessions: sessions?.map(s => ({
-        agent_type: s.agent_type,
-        session_id: s.provider_session_id || s.id,
-        status: s.status,
-        metadata: {
-          created_at: s.created_at,
-          updated_at: s.updated_at,
-          closed_at: s.closed_at,
-          model: s.model || undefined,
-        },
-        token_metrics: s.token_metrics || undefined,
-        runtime_stats: s.runtime_stats || undefined,
-        metrics_recorded_at: s.metrics_recorded_at || undefined,
-      })) || [],
+      sessions: transformedSessions,
+    };
+
+    console.log(`[api/agent-sessions/check] Response:`, {
+      ok: response.ok,
+      hasSessions: response.hasSessions,
+      sessionCount: response.sessionCount,
+      sessionsLength: response.sessions.length,
     });
+
+    return NextResponse.json(response);
   } catch (error: any) {
     console.error('[api/agent-sessions/check] Error:', error);
     return NextResponse.json(

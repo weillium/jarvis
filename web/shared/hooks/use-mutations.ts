@@ -257,30 +257,6 @@ export function usePauseSessionsMutation(eventId: string) {
   });
 }
 
-/**
- * Resume agent sessions mutation
- */
-export function useResumeSessionsMutation(eventId: string) {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/agent-sessions/${eventId}/resume`, {
-        method: 'POST',
-      });
-      const data = await res.json();
-      if (!data.ok) {
-        throw new Error(data.error || 'Failed to resume sessions');
-      }
-      return data;
-    },
-    onSuccess: () => {
-      // Invalidate agent query to reflect status change
-      queryClient.invalidateQueries({ queryKey: ['agent', eventId] });
-      queryClient.invalidateQueries({ queryKey: ['agent-sessions', eventId] });
-    },
-  });
-}
 
 /**
  * Confirm ready mutation

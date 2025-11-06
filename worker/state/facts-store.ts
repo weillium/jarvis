@@ -24,10 +24,11 @@ export class FactsStore {
   /**
    * Evict facts when over capacity
    * Evicts lowest-confidence facts first, then oldest if confidence is tied
+   * @returns Array of fact keys that were evicted
    */
-  private evictIfNeeded(): void {
+  private evictIfNeeded(): string[] {
     if (this.facts.size <= this.maxItems) {
-      return;
+      return [];
     }
 
     const overCapacity = this.facts.size - this.maxItems;
@@ -48,20 +49,24 @@ export class FactsStore {
     });
 
     // Evict the first N (lowest confidence/oldest)
+    const evictedKeys: string[] = [];
     for (let i = 0; i < overCapacity; i++) {
       const [key] = factsArray[i];
       this.facts.delete(key);
       this.evictionCount++;
+      evictedKeys.push(key);
     }
 
     console.log(`[facts] Evicted ${overCapacity} facts (capacity: ${this.maxItems}, total evictions: ${this.evictionCount})`);
+    return evictedKeys;
   }
 
   /**
    * Upsert a fact (update if exists, insert if not)
    * Automatically evicts facts if over capacity
+   * @returns Array of fact keys that were evicted (empty if no eviction occurred)
    */
-  upsert(key: string, value: any, confidence: number, sourceSeq: number, sourceId?: number): void {
+  upsert(key: string, value: any, confidence: number, sourceSeq: number, sourceId?: number): string[] {
     const existing = this.facts.get(key);
 
     if (existing) {
@@ -81,6 +86,7 @@ export class FactsStore {
           ? [...existing.sources, sourceId].slice(-10) // Keep last 10 sources
           : existing.sources,
       });
+      return [];
     } else {
       // Insert new fact
       this.facts.set(key, {
@@ -91,9 +97,36 @@ export class FactsStore {
         sources: sourceId ? [sourceId] : [],
       });
 
-      // Evict if over capacity
-      this.evictIfNeeded();
+      // Evict if over capacity and return evicted keys
+      return this.evictIfNeeded();
     }
+  }
+
+  /**
+   * Load facts into the store (used when initializing from database)
+   * If loading more facts than capacity, evictions will occur automatically
+   * @returns Array of fact keys that were evicted (if any)
+   */
+  loadFacts(facts: Array<{ key: string; value: any; confidence: number; lastSeenSeq: number; sources: number[] }>): string[] {
+    const evictedKeys: string[] = [];
+    
+    for (const fact of facts) {
+      this.facts.set(fact.key, {
+        key: fact.key,
+        value: fact.value,
+        confidence: fact.confidence,
+        lastSeenSeq: fact.lastSeenSeq,
+        sources: fact.sources || [],
+      });
+      
+      // Check if we need to evict after each addition (if we're over capacity)
+      if (this.facts.size > this.maxItems) {
+        const keysEvicted = this.evictIfNeeded();
+        evictedKeys.push(...keysEvicted);
+      }
+    }
+    
+    return evictedKeys;
   }
 
   /**

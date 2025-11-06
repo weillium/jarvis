@@ -69,6 +69,7 @@ interface FactRecord {
   confidence: number;
   last_seen_seq: number;
   sources: number[];
+  is_active?: boolean;
 }
 
 type TranscriptCallback = (payload: { new: any }) => void;
@@ -376,9 +377,71 @@ export class SupabaseService {
   }
 
   async upsertFact(fact: FactRecord): Promise<void> {
+    // Ensure is_active is set to true if not specified (default for new/updated facts)
+    const factWithActive = {
+      ...fact,
+      is_active: fact.is_active !== undefined ? fact.is_active : true,
+    };
+    
     const { error } = await this.client
       .from('facts')
-      .upsert(fact, { onConflict: 'event_id,fact_key' });
+      .upsert(factWithActive, { onConflict: 'event_id,fact_key' });
+
+    if (error) throw error;
+  }
+
+  /**
+   * Get facts for an event
+   * @param eventId - Event ID
+   * @param activeOnly - If true, only return facts where is_active = true
+   */
+  async getFacts(eventId: string, activeOnly: boolean = true): Promise<FactRecord[]> {
+    let query = this.client
+      .from('facts')
+      .select('*')
+      .eq('event_id', eventId);
+
+    if (activeOnly) {
+      query = query.eq('is_active', true);
+    }
+
+    const { data, error } = await query.order('last_seen_seq', { ascending: false });
+
+    if (error) throw error;
+    return (data as FactRecord[]) || [];
+  }
+
+  /**
+   * Purge all facts for an event (set is_active = false)
+   * This marks facts as inactive without deleting them from the database
+   */
+  async deleteFactsForEvent(eventId: string): Promise<void> {
+    const { error } = await this.client
+      .from('facts')
+      .update({ is_active: false })
+      .eq('event_id', eventId);
+
+    if (error) throw error;
+  }
+
+  /**
+   * Update is_active status for specific facts
+   * @param eventId - Event ID
+   * @param factKeys - Array of fact keys to update
+   * @param isActive - New is_active value
+   */
+  async updateFactActiveStatus(
+    eventId: string,
+    factKeys: string[],
+    isActive: boolean
+  ): Promise<void> {
+    if (factKeys.length === 0) return;
+
+    const { error } = await this.client
+      .from('facts')
+      .update({ is_active: isActive })
+      .eq('event_id', eventId)
+      .in('fact_key', factKeys);
 
     if (error) throw error;
   }

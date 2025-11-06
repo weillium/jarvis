@@ -38,12 +38,35 @@ export class RuntimeManager {
     this.logger.clearLogs(eventId, 'cards');
     this.logger.clearLogs(eventId, 'facts');
 
+    // Load active facts from database
+    const factsStore = new FactsStore(50);
+    const activeFacts = await this.supabase.getFacts(eventId, true);
+    if (activeFacts.length > 0) {
+      const evictedKeys = factsStore.loadFacts(
+        activeFacts.map((f) => ({
+          key: f.fact_key,
+          value: f.fact_value,
+          confidence: f.confidence,
+          lastSeenSeq: f.last_seen_seq,
+          sources: f.sources || [],
+        }))
+      );
+      
+      // Mark any evicted facts as inactive in database
+      if (evictedKeys.length > 0) {
+        await this.supabase.updateFactActiveStatus(eventId, evictedKeys, false);
+        console.log(`[runtime-manager] Loaded ${activeFacts.length} active facts, evicted ${evictedKeys.length} facts (capacity limit)`);
+      } else {
+        console.log(`[runtime-manager] Loaded ${activeFacts.length} active facts into FactsStore for event ${eventId}`);
+      }
+    }
+
     const runtime: EventRuntime = {
       eventId,
       agentId,
       status: 'context_complete',
       ringBuffer: new RingBuffer(1000, 5 * 60 * 1000),
-      factsStore: new FactsStore(50),
+      factsStore,
       glossaryCache,
       cardsLastSeq: checkpoints.cards,
       factsLastSeq: checkpoints.facts,

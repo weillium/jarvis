@@ -13,6 +13,7 @@ import { VersionHistory } from '@/features/context/components/version-history';
 import { RegenerateButton } from '@/features/context/components/regenerate-button';
 import { LiveCards } from '@/features/cards/components/live-cards';
 import { LiveFacts } from '@/features/facts/components/live-facts';
+import { LiveTranscripts } from '@/features/transcripts/components/live-transcripts';
 import { useAgentQuery } from '@/shared/hooks/use-agent-query';
 import { useBlueprintQuery } from '@/shared/hooks/use-blueprint-query';
 import { useApproveBlueprintMutation, useResetContextMutation } from '@/shared/hooks/use-mutations';
@@ -213,6 +214,11 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
       id: 'facts',
       label: 'Key Facts',
       content: <LiveFacts eventId={eventId} />,
+    },
+    {
+      id: 'transcripts',
+      label: 'Transcripts',
+      content: <LiveTranscripts eventId={eventId} />,
     },
   ];
 

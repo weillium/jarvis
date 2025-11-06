@@ -346,45 +346,14 @@ export class Orchestrator {
     }
   }
 
+  /**
+   * Resume event (deprecated - now just calls startEvent)
+   * Kept for backward compatibility with existing code that may reference it
+   */
   async resumeEvent(eventId: string, agentId: string): Promise<void> {
-    console.log(`[orchestrator] Resuming event ${eventId}`);
-
-    let runtime = this.runtimeManager.getRuntime(eventId);
-    if (!runtime) {
-      runtime = await this.runtimeManager.createRuntime(eventId, agentId);
-    }
-
-    const pausedSessions = await this.supabaseService.getAgentSessionsForAgent(eventId, agentId, [
-      'paused',
-    ]);
-    if (!pausedSessions.length) {
-      throw new Error(`No paused sessions found for event ${eventId}`);
-    }
-
-    if (!runtime.cardsSession || !runtime.factsSession) {
-      await this.createRealtimeSessions(runtime, eventId, agentId);
-    }
-
-    try {
-      const { cardsSessionId, factsSessionId } = await this.sessionManager.resumeSessions(
-        runtime.cardsSession,
-        runtime.factsSession
-      );
-      runtime.cardsSessionId = cardsSessionId;
-      runtime.factsSessionId = factsSessionId;
-
-      this.eventProcessor.attachSessionHandlers(runtime);
-
-      runtime.status = 'running';
-      await this.supabaseService.updateAgentStatus(agentId, 'running');
-
-      console.log(`[orchestrator] Event ${eventId} resumed successfully`);
-      this.startPeriodicSummary(runtime);
-      await this.statusUpdater.updateAndPushStatus(runtime);
-    } catch (error: any) {
-      console.error(`[orchestrator] Error resuming event ${eventId}: ${error.message}`);
-      throw error;
-    }
+    console.log(`[orchestrator] Resuming event ${eventId} (using unified startEvent)`);
+    // Delegate to startEvent which handles both new and paused sessions
+    return this.startEvent(eventId, agentId);
   }
 
   async shutdown(): Promise<void> {

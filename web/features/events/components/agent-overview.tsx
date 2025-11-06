@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAgentQuery } from '@/shared/hooks/use-agent-query';
 import { useContextVersionsQuery } from '@/shared/hooks/use-context-versions-query';
 import { useAgentSessionEnrichment, AgentSessionSSEEnrichment } from '@/shared/hooks/use-agent-sessions';
@@ -10,7 +10,6 @@ import {
   useCreateSessionsMutation,
   useStartSessionsMutation,
   usePauseSessionsMutation,
-  useResumeSessionsMutation,
   useConfirmReadyMutation,
   useSendTestTranscriptMutation,
 } from '@/shared/hooks/use-mutations';
@@ -610,7 +609,7 @@ function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: Se
 export function AgentOverview({ eventId }: AgentOverviewProps) {
   const { data: agentData, isLoading, error } = useAgentQuery(eventId);
   const { data: cycles } = useContextVersionsQuery(eventId);
-  const { data: sessionsData, isLoading: sessionsQueryLoading, refetch: refetchSessions } = useAgentSessionsQuery(eventId);
+  const { data: sessionsData, isLoading: sessionsQueryLoading, error: sessionsQueryError, refetch: refetchSessions } = useAgentSessionsQuery(eventId);
   
   const agent = agentData?.agent;
   const contextStats = agentData?.contextStats;
@@ -620,7 +619,10 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
   const checkingSessions = sessionsQueryLoading;
   
   // Get session agent types that exist (for SSE connection)
-  const existingAgentTypes = sessionsData?.sessions.map(s => s.agent_type) || [];
+  // Only connect SSE for active/paused sessions - closed/error sessions don't need enrichment
+  const existingAgentTypes = sessionsData?.sessions
+    .filter(s => s.status === 'active' || s.status === 'paused')
+    .map(s => s.agent_type) || [];
   
   // SSE - only for enrichment (connection health, real-time metrics)
   const { enrichment, isLoading: enrichmentLoading, error: enrichmentError, reconnect } = useAgentSessionEnrichment(
@@ -648,24 +650,47 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
   }
   
   // Merge DB state with SSE enrichment
-  const displaySessions: AgentSessionDisplay[] = (sessionsData?.sessions || []).map(dbSession => {
-    const sseData = enrichment.get(dbSession.agent_type);
+  // Cards should render based on React Query data, independent of SSE connection state
+  // Ensure we have valid session data from React Query
+  const displaySessions: AgentSessionDisplay[] = (() => {
+    // Debug logging
+    console.log('[AgentOverview] sessionsData:', {
+      exists: !!sessionsData,
+      hasSessions: sessionsData?.hasSessions,
+      sessionCount: sessionsData?.sessionCount,
+      sessionsIsArray: Array.isArray(sessionsData?.sessions),
+      sessionsLength: sessionsData?.sessions?.length || 0,
+      sessionsDataRaw: sessionsData,
+    });
     
-    // For metrics: use DB if available (session closed), otherwise use SSE (session active)
-    const tokenMetrics = dbSession.token_metrics || sseData?.token_metrics;
-    const runtimeStats = dbSession.runtime_stats || sseData?.runtime_stats;
+    // Return empty array if no session data from React Query
+    if (!sessionsData?.sessions || !Array.isArray(sessionsData.sessions)) {
+      console.warn('[AgentOverview] No valid sessions data - sessionsData?.sessions is not an array:', sessionsData?.sessions);
+      return [];
+    }
     
-    return {
-      ...dbSession, // DB fields (status, metadata, session_id)
-      token_metrics: tokenMetrics,
-      runtime_stats: runtimeStats,
-      metrics_recorded_at: dbSession.metrics_recorded_at, // DB only
-      // SSE enrichment
-      websocket_state: sseData?.websocket_state,
-      ping_pong: sseData?.ping_pong,
-      recent_logs: sseData?.recent_logs,
-    };
-  });
+    console.log(`[AgentOverview] Processing ${sessionsData.sessions.length} sessions from React Query`);
+    
+    // Map all sessions from DB (including closed/error status) and enrich with SSE data if available
+    return sessionsData.sessions.map(dbSession => {
+      const sseData = enrichment.get(dbSession.agent_type);
+      
+      // For metrics: use DB if available (session closed), otherwise use SSE (session active)
+      const tokenMetrics = dbSession.token_metrics || sseData?.token_metrics;
+      const runtimeStats = dbSession.runtime_stats || sseData?.runtime_stats;
+      
+      return {
+        ...dbSession, // DB fields (status, metadata, session_id)
+        token_metrics: tokenMetrics,
+        runtime_stats: runtimeStats,
+        metrics_recorded_at: dbSession.metrics_recorded_at, // DB only
+        // SSE enrichment (only available for active/paused sessions)
+        websocket_state: sseData?.websocket_state,
+        ping_pong: sseData?.ping_pong,
+        recent_logs: sseData?.recent_logs,
+      };
+    });
+  })();
   
   const [expandedLogs, setExpandedLogs] = useState<{ cards: boolean; facts: boolean }>({ cards: false, facts: false });
   const [isTestTranscriptModalOpen, setIsTestTranscriptModalOpen] = useState(false);
@@ -674,7 +699,6 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
   const createSessionsMutation = useCreateSessionsMutation(eventId);
   const startSessionsMutation = useStartSessionsMutation(eventId);
   const pauseSessionsMutation = usePauseSessionsMutation(eventId);
-  const resumeSessionsMutation = useResumeSessionsMutation(eventId);
   const confirmReadyMutation = useConfirmReadyMutation(eventId);
   const sendTestTranscriptMutation = useSendTestTranscriptMutation(eventId);
 
@@ -820,9 +844,9 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
     ? (createSessionsMutation.error instanceof Error ? createSessionsMutation.error.message : startSessionsMutation.error instanceof Error ? startSessionsMutation.error.message : 'Failed to start sessions')
     : null;
   const isPausing = pauseSessionsMutation.isPending;
-  const isResuming = resumeSessionsMutation.isPending || confirmReadyMutation.isPending;
-  const pauseResumeError = pauseSessionsMutation.error || resumeSessionsMutation.error || confirmReadyMutation.error
-    ? (pauseSessionsMutation.error instanceof Error ? pauseSessionsMutation.error.message : resumeSessionsMutation.error instanceof Error ? resumeSessionsMutation.error.message : confirmReadyMutation.error instanceof Error ? confirmReadyMutation.error.message : 'Failed to perform operation')
+  const isResuming = startSessionsMutation.isPending || confirmReadyMutation.isPending;
+  const pauseResumeError = pauseSessionsMutation.error || startSessionsMutation.error || confirmReadyMutation.error
+    ? (pauseSessionsMutation.error instanceof Error ? pauseSessionsMutation.error.message : startSessionsMutation.error instanceof Error ? startSessionsMutation.error.message : confirmReadyMutation.error instanceof Error ? confirmReadyMutation.error.message : 'Failed to perform operation')
     : null;
 
 
@@ -1157,6 +1181,11 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
               {(() => {
                 // Only show button if we have database data (not still loading)
                 if (checkingSessions || !sessionsData) {
+                  console.log('[AgentOverview] Start Sessions button hidden:', {
+                    checkingSessions,
+                    hasSessionsData: !!sessionsData,
+                    displaySessionsLength: displaySessions.length,
+                  });
                   return false;
                 }
                 
@@ -1165,15 +1194,38 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
                 const factsSession = displaySessions.find(s => s.agent_type === 'facts');
                 
                 // Helper to check if session is newly closed (created in last minute)
-                const isNewClosed = (session: typeof cardsSession) => 
-                  session?.status === 'closed' && session?.metadata?.created_at && 
-                  (new Date().getTime() - new Date(session.metadata.created_at).getTime()) < 60000;
+                const isNewClosed = (session: typeof cardsSession) => {
+                  if (!session?.status || session.status !== 'closed' || !session?.metadata?.created_at) {
+                    return false;
+                  }
+                  const createdTime = new Date(session.metadata.created_at).getTime();
+                  const now = new Date().getTime();
+                  const ageMs = now - createdTime;
+                  const isNew = ageMs < 60000;
+                  return isNew;
+                };
                 
                 // Check if sessions are paused
                 const isPaused = (cardsSession?.status === 'paused') || (factsSession?.status === 'paused');
                 
                 // Show if sessions are paused (resume) or newly closed (start)
-                return isPaused || isNewClosed(cardsSession) || isNewClosed(factsSession);
+                // Also show if sessions exist in closed state (regardless of age) - allow restarting closed sessions
+                const cardsClosed = cardsSession?.status === 'closed';
+                const factsClosed = factsSession?.status === 'closed';
+                const hasClosedSessions = cardsClosed || factsClosed;
+                const shouldShow = isPaused || isNewClosed(cardsSession) || isNewClosed(factsSession) || hasClosedSessions;
+                
+                console.log('[AgentOverview] Start Sessions button check:', {
+                  cardsStatus: cardsSession?.status,
+                  factsStatus: factsSession?.status,
+                  isPaused,
+                  cardsNewClosed: isNewClosed(cardsSession),
+                  factsNewClosed: isNewClosed(factsSession),
+                  hasClosedSessions,
+                  shouldShow,
+                });
+                
+                return shouldShow;
               })() && (() => {
                 // Get session status from database for button labels
                 const cardsSession = displaySessions.find(s => s.agent_type === 'cards');
@@ -1336,6 +1388,31 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
             </div>
           )}
           
+          {sessionsQueryError && (
+            <div style={{
+              padding: '12px',
+              background: '#fef2f2',
+              borderRadius: '8px',
+              border: '1px solid #fecaca',
+              marginBottom: '16px',
+            }}>
+              <div style={{
+                fontSize: '12px',
+                color: '#dc2626',
+                fontWeight: '600',
+                marginBottom: '4px',
+              }}>
+                Error loading sessions:
+              </div>
+              <div style={{
+                fontSize: '12px',
+                color: '#dc2626',
+              }}>
+                {sessionsQueryError instanceof Error ? sessionsQueryError.message : String(sessionsQueryError)}
+              </div>
+            </div>
+          )}
+
           {enrichmentError && (
             <div style={{
               padding: '12px',

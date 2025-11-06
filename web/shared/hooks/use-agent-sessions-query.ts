@@ -77,19 +77,40 @@ export function useAgentSessionsQuery(eventId: string | null) {
         throw new Error('Event ID required');
       }
       
+      console.log(`[useAgentSessionsQuery] Fetching sessions for event: ${eventId}`);
       const res = await fetch(`/api/agent-sessions/${eventId}/check`);
       
       // Check if response is ok before parsing
       if (!res.ok) {
+        const errorText = await res.text();
+        console.error(`[useAgentSessionsQuery] HTTP ${res.status} error:`, errorText);
         throw new Error(`HTTP ${res.status}: Failed to check agent sessions`);
       }
       
       const data = await res.json();
+      console.log(`[useAgentSessionsQuery] Received response:`, {
+        ok: data.ok,
+        hasSessions: data.hasSessions,
+        sessionCount: data.sessionCount,
+        sessionsLength: data.sessions?.length || 0,
+      });
       
       if (!data.ok) {
+        console.error(`[useAgentSessionsQuery] API returned error:`, data.error);
         throw new Error(data.error || 'Failed to check agent sessions');
       }
       
+      // Validate response structure
+      if (!data.sessions || !Array.isArray(data.sessions)) {
+        console.error(`[useAgentSessionsQuery] Invalid response structure - sessions is not an array:`, data);
+        // Return empty array instead of throwing to prevent infinite retries
+        return {
+          ...data,
+          sessions: [],
+        };
+      }
+      
+      console.log(`[useAgentSessionsQuery] Returning ${data.sessions.length} sessions`);
       return data;
     },
     enabled: !!eventId,

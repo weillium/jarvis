@@ -109,25 +109,36 @@ export class FactsProcessor {
       const parsed = JSON.parse(factsJson);
       const newFacts = parsed.facts || [];
 
+      const evictedKeys: string[] = [];
+      
       for (const fact of newFacts) {
         if (!fact.key || !fact.value) continue;
 
-        const confidence = fact.confidence || 0.7;
-        runtime.factsStore.upsert(
+        const initialConfidence = fact.confidence || 0.7;
+        const keysEvicted = runtime.factsStore.upsert(
           fact.key,
           fact.value,
-          confidence,
+          initialConfidence,
           runtime.factsLastSeq,
           undefined
         );
+        
+        // Accumulate evicted keys to mark as inactive later
+        if (keysEvicted.length > 0) {
+          evictedKeys.push(...keysEvicted);
+        }
+
+        // Get the computed confidence from FactsStore (may have been adjusted)
+        const storedFact = runtime.factsStore.get(fact.key);
+        const computedConfidence = storedFact?.confidence ?? initialConfidence;
 
         await this.supabase.upsertFact({
           event_id: runtime.eventId,
           fact_key: fact.key,
           fact_value: fact.value,
-          confidence,
+          confidence: computedConfidence,
           last_seen_seq: runtime.factsLastSeq,
-          sources: [],
+          sources: storedFact?.sources || [],
         });
 
         await this.supabase.insertAgentOutput({
@@ -138,6 +149,12 @@ export class FactsProcessor {
           type: 'fact_update',
           payload: fact,
         });
+      }
+
+      // Mark evicted facts as inactive in database
+      if (evictedKeys.length > 0) {
+        await this.supabase.updateFactActiveStatus(runtime.eventId, evictedKeys, false);
+        console.log(`[facts-processor] Marked ${evictedKeys.length} evicted facts as inactive for event ${runtime.eventId}`);
       }
 
       this.logger.log(

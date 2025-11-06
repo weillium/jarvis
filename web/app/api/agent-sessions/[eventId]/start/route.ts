@@ -4,6 +4,13 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
+/**
+ * Start or resume agent sessions for an event
+ * POST /api/agent-sessions/[eventId]/start
+ * 
+ * Unified endpoint that handles both starting new sessions and resuming paused sessions.
+ * Updates sessions to 'active' status and the worker will pick them up and establish WebSocket connections.
+ */
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ eventId: string }> }
@@ -14,16 +21,31 @@ export async function POST(
       auth: { persistSession: false },
     });
 
-    // Get the agent for this event (must be in active status with testing or running stage)
-    // Testing: for new sessions or testing workflow
-    // Running: for resuming paused sessions
-    const { data: agents, error: agentError } = await supabase
+    // Get the agent for this event - accept multiple states
+    // Try active + (testing | running) first, then idle + context_complete
+    let { data: agents, error: agentError } = await supabase
       .from('agents')
       .select('id, status, stage')
       .eq('event_id', eventId)
       .eq('status', 'active')
       .in('stage', ['testing', 'running'])
       .limit(1);
+    
+    if (!agents || agents.length === 0) {
+      const { data: agents2, error: error2 } = await supabase
+        .from('agents')
+        .select('id, status, stage')
+        .eq('event_id', eventId)
+        .eq('status', 'idle')
+        .eq('stage', 'context_complete')
+        .limit(1);
+      
+      if (error2) {
+        agentError = error2;
+      } else {
+        agents = agents2;
+      }
+    }
 
     if (agentError) {
       return NextResponse.json(
@@ -36,18 +58,19 @@ export async function POST(
       return NextResponse.json(
         {
           ok: false,
-          error: 'No agent found with testing or running status for this event. Create sessions first.',
+          error: 'No agent found for this event. Create sessions first.',
         },
         { status: 404 }
       );
     }
 
-    const agentId = agents[0].id;
+    const agent = agents[0];
+    const agentId = agent.id;
 
-    // Check for sessions that can be started: 'closed' (new sessions) or 'paused' (resume)
+    // Check for sessions that can be started: 'closed' or 'paused' (any age)
     const { data: sessionsToStart, error: sessionsError } = await supabase
       .from('agent_sessions')
-      .select('id, agent_type, status, created_at')
+      .select('id, agent_type, status')
       .eq('event_id', eventId)
       .eq('agent_id', agentId)
       .in('status', ['closed', 'paused']);
@@ -69,21 +92,19 @@ export async function POST(
       );
     }
 
-    // Filter closed sessions to only include new ones (created in last minute)
-    const oneMinuteAgo = new Date(Date.now() - 60000).toISOString();
-    const newClosedSessions = sessionsToStart.filter(s => 
-      s.status === 'closed' && s.created_at && s.created_at >= oneMinuteAgo
-    );
     const pausedCount = sessionsToStart.filter(s => s.status === 'paused').length;
+    const closedCount = sessionsToStart.filter(s => s.status === 'closed').length;
 
-    if (newClosedSessions.length === 0 && pausedCount === 0) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: 'No new sessions (created in last minute) or paused sessions found. Create new sessions first.',
-        },
-        { status: 404 }
-      );
+    // Update agent status to active with running stage if needed (for paused sessions or context_complete)
+    if (pausedCount > 0 || agent.stage === 'context_complete') {
+      const { error: agentUpdateError } = await supabase
+        .from('agents')
+        .update({ status: 'active', stage: 'running' })
+        .eq('id', agentId);
+
+      if (agentUpdateError) {
+        console.warn(`Failed to update agent status: ${agentUpdateError.message}`);
+      }
     }
 
     // Update sessions to 'active' - worker will pick them up and connect
@@ -92,7 +113,7 @@ export async function POST(
       .update({ status: 'active' })
       .eq('event_id', eventId)
       .eq('agent_id', agentId)
-      .in('id', [...newClosedSessions.map(s => s.id), ...sessionsToStart.filter(s => s.status === 'paused').map(s => s.id)]);
+      .in('id', sessionsToStart.map(s => s.id));
 
     if (updateError) {
       return NextResponse.json(
@@ -102,20 +123,18 @@ export async function POST(
     }
 
     // Note: Worker will pick up sessions with 'active' status and connect them
-    // The worker's startEvent will handle:
-    // - New sessions: create connections from 'closed' → 'active'
-    // - Paused sessions: resume connections from 'paused' → 'active'
+    // The worker's startEvent will handle both new sessions and paused sessions
 
     return NextResponse.json({
       ok: true,
-      message: pausedCount > 0 
-        ? `Sessions will be resumed by worker. ${pausedCount} paused session(s) updated to active.`
-        : `Sessions will be started by worker. ${newClosedSessions.length} new session(s) updated to active.`,
+      message: pausedCount > 0
+        ? `Sessions will be started by worker. ${pausedCount} paused session(s) and ${closedCount} closed session(s) updated to active.`
+        : `Sessions will be started by worker. ${closedCount} closed session(s) updated to active.`,
       eventId,
       agentId,
       sessionsUpdated: sessionsToStart.length,
-      newSessionsCount: newClosedSessions.length,
       pausedCount,
+      closedCount,
     });
   } catch (error: any) {
     console.error('Error starting agent sessions:', error);
