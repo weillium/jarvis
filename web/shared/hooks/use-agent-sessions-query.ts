@@ -5,6 +5,8 @@ export interface AgentSessionMetadata {
   updated_at: string;
   closed_at: string | null;
   model?: string;
+  connection_count: number;
+  last_connected_at: string | null;
 }
 
 export interface TokenMetrics {

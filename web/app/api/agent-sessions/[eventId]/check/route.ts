@@ -31,7 +31,7 @@ export async function GET(
     console.log(`[api/agent-sessions/check] Fetching sessions for event_id: ${eventId}`);
     const { data: sessions, error: sessionsError } = await supabase
       .from('agent_sessions')
-      .select('id, agent_type, status, provider_session_id, created_at, updated_at, closed_at, model, token_metrics, runtime_stats, metrics_recorded_at')
+      .select('id, agent_type, status, provider_session_id, created_at, updated_at, closed_at, model, connection_count, last_connected_at, token_metrics, runtime_stats, metrics_recorded_at')
       .eq('event_id', eventId)
       .order('created_at', { ascending: true });
 
@@ -61,6 +61,8 @@ export async function GET(
         updated_at: s.updated_at,
         closed_at: s.closed_at,
         model: s.model || undefined,
+        connection_count: s.connection_count || 0,
+        last_connected_at: s.last_connected_at || null,
       },
       token_metrics: s.token_metrics || undefined,
       runtime_stats: s.runtime_stats || undefined,

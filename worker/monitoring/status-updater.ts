@@ -148,6 +148,12 @@ export class StatusUpdater {
       if (cardsSession.model) {
         cardsStatus.metadata.model = cardsSession.model;
       }
+      if (cardsSession.connection_count !== undefined) {
+        cardsStatus.metadata.connection_count = cardsSession.connection_count;
+      }
+      if (cardsSession.last_connected_at !== undefined) {
+        cardsStatus.metadata.last_connected_at = cardsSession.last_connected_at ?? null;
+      }
     }
 
     if (factsSession) {
@@ -168,6 +174,12 @@ export class StatusUpdater {
       }
       if (factsSession.model) {
         factsStatus.metadata.model = factsSession.model;
+      }
+      if (factsSession.connection_count !== undefined) {
+        factsStatus.metadata.connection_count = factsSession.connection_count;
+      }
+      if (factsSession.last_connected_at !== undefined) {
+        factsStatus.metadata.last_connected_at = factsSession.last_connected_at ?? null;
       }
     }
   }

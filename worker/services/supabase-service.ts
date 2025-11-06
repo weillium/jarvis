@@ -26,6 +26,8 @@ interface AgentSessionRecord {
   updated_at?: string;
   closed_at?: string | null;
   model?: string | null;
+  connection_count?: number;
+  last_connected_at?: string | null;
 }
 
 interface TranscriptRecord {
@@ -197,7 +199,7 @@ export class SupabaseService {
   ): Promise<AgentSessionRecord[]> {
     let query = this.client
       .from('agent_sessions')
-      .select('id, agent_type, status, provider_session_id, created_at, updated_at, closed_at, model')
+      .select('id, agent_type, status, provider_session_id, created_at, updated_at, closed_at, model, connection_count, last_connected_at')
       .eq('event_id', eventId)
       .eq('agent_id', agentId);
 
@@ -289,6 +291,102 @@ export class SupabaseService {
 
     if (error) {
       throw new Error(`Failed to update session metrics: ${error.message}`);
+    }
+  }
+
+  /**
+   * Increment connection count and update last_connected_at for a session
+   * This is called when a session connects or resumes
+   */
+  async incrementConnectionCount(
+    eventId: string,
+    agentType: AgentType
+  ): Promise<{ connection_count: number; session_id: string }> {
+    // First, get the current session to get its ID and current count
+    const { data: session, error: fetchError } = await this.client
+      .from('agent_sessions')
+      .select('id, connection_count')
+      .eq('event_id', eventId)
+      .eq('agent_type', agentType)
+      .single();
+
+    if (fetchError || !session) {
+      throw new Error(`Failed to find session for increment: ${fetchError?.message || 'not found'}`);
+    }
+
+    const currentCount = session.connection_count || 0;
+    const newCount = currentCount + 1;
+
+    // Update connection_count and last_connected_at atomically
+    const { error: updateError } = await this.client
+      .from('agent_sessions')
+      .update({
+        connection_count: newCount,
+        last_connected_at: new Date().toISOString(),
+      })
+      .eq('id', session.id);
+
+    if (updateError) {
+      throw new Error(`Failed to increment connection count: ${updateError.message}`);
+    }
+
+    return {
+      connection_count: newCount,
+      session_id: session.id,
+    };
+  }
+
+  /**
+   * Get session ID by event_id and agent_type (for history logging)
+   */
+  async getAgentSessionId(eventId: string, agentType: AgentType): Promise<string | null> {
+    const { data, error } = await this.client
+      .from('agent_sessions')
+      .select('id')
+      .eq('event_id', eventId)
+      .eq('agent_type', agentType)
+      .single();
+
+    if (error || !data) {
+      return null;
+    }
+
+    return data.id;
+  }
+
+  /**
+   * Log connection event to agent_sessions_history
+   */
+  async logAgentSessionHistory(params: {
+    agent_session_id: string;
+    event_id: string;
+    agent_id: string;
+    agent_type: AgentType;
+    event_type: 'connected' | 'disconnected' | 'paused' | 'resumed' | 'error' | 'closed';
+    provider_session_id?: string;
+    previous_status?: string;
+    new_status?: string;
+    connection_count?: number;
+    error_message?: string;
+    metadata?: Record<string, any>;
+  }): Promise<void> {
+    const { error } = await this.client.rpc('log_agent_session_history', {
+      p_agent_session_id: params.agent_session_id,
+      p_event_id: params.event_id,
+      p_agent_id: params.agent_id,
+      p_agent_type: params.agent_type,
+      p_event_type: params.event_type,
+      p_provider_session_id: params.provider_session_id || null,
+      p_previous_status: params.previous_status || null,
+      p_new_status: params.new_status || null,
+      p_connection_count: params.connection_count || null,
+      p_error_message: params.error_message || null,
+      p_metadata: params.metadata || null,
+    });
+
+    if (error) {
+      // Log error but don't throw - history logging shouldn't break the main flow
+      console.error(`Failed to log session history: ${error.message}`, params);
     }
   }
 

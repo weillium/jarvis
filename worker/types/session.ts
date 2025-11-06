@@ -60,5 +60,7 @@ export interface AgentSessionStatus {
     updated_at: string;
     closed_at: string | null;
     model: string;
+    connection_count: number;
+    last_connected_at: string | null;
   };
 }

@@ -79,7 +79,7 @@ export async function GET(
 
       const { data: sessions, error: sessionsError } = await supabase
         .from('agent_sessions')
-        .select('id, agent_type, status, provider_session_id, created_at, updated_at, closed_at, model')
+        .select('id, agent_type, status, provider_session_id, created_at, updated_at, closed_at, model, connection_count, last_connected_at')
         .eq('event_id', eventId)
         .order('created_at', { ascending: true });
 
@@ -107,6 +107,8 @@ export async function GET(
             updated_at: s.updated_at,
             closed_at: s.closed_at,
             model: s.model || undefined,
+            connection_count: s.connection_count || 0,
+            last_connected_at: s.last_connected_at || null,
           },
           note: 'Worker unavailable. Showing database status only. For real-time WebSocket state, ensure worker is running and accessible.',
         })) || [],

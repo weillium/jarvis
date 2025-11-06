@@ -425,6 +425,83 @@ export class Orchestrator {
     }
 
     try {
+      // Get current session status to track previous status for history
+      const currentSessions = await this.supabaseService.getAgentSessionsForAgent(eventId, agentId, []);
+      const currentSession = currentSessions.find(s => s.agent_type === agentType);
+      const previousStatus = currentSession?.status;
+
+      // Handle connection tracking when status becomes 'active'
+      if (status === 'active' && sessionId) {
+        try {
+          // Increment connection_count and update last_connected_at
+          const { connection_count, session_id } = await this.supabaseService.incrementConnectionCount(
+            eventId,
+            agentType
+          );
+
+          // Also update provider_session_id if provided
+          if (sessionId) {
+            await this.supabaseService.updateAgentSession(eventId, agentType, {
+              provider_session_id: sessionId,
+              status: 'active',
+            });
+          }
+
+          // Log connection history
+          const sessionDbId = session_id || await this.supabaseService.getAgentSessionId(eventId, agentType);
+          if (sessionDbId) {
+            await this.supabaseService.logAgentSessionHistory({
+              agent_session_id: sessionDbId,
+              event_id: eventId,
+              agent_id: agentId,
+              agent_type: agentType,
+              event_type: previousStatus === 'paused' ? 'resumed' : 'connected',
+              provider_session_id: sessionId,
+              previous_status: previousStatus || undefined,
+              new_status: 'active',
+              connection_count,
+              metadata: {
+                websocket_state: runtime.cardsSession?.getStatus()?.websocketState || 
+                               runtime.factsSession?.getStatus()?.websocketState,
+              },
+            });
+          }
+        } catch (error: any) {
+          console.error(
+            `[orchestrator] Error tracking connection for ${agentType}: ${error.message}`
+          );
+          // Don't throw - connection tracking failure shouldn't break the session
+        }
+      } else if (status !== 'active') {
+        // Log other status changes (paused, error, closed, etc.)
+        const sessionDbId = await this.supabaseService.getAgentSessionId(eventId, agentType);
+        if (sessionDbId) {
+          const eventTypeMap: Record<string, 'disconnected' | 'paused' | 'error' | 'closed'> = {
+            'paused': 'paused',
+            'error': 'error',
+            'closed': 'closed',
+          };
+
+          const eventType = eventTypeMap[status] || 'disconnected';
+          
+          await this.supabaseService.logAgentSessionHistory({
+            agent_session_id: sessionDbId,
+            event_id: eventId,
+            agent_id: agentId,
+            agent_type: agentType,
+            event_type: eventType,
+            provider_session_id: sessionId || currentSession?.provider_session_id || undefined,
+            previous_status: previousStatus || undefined,
+            new_status: status,
+            connection_count: currentSession?.connection_count || undefined,
+            metadata: {
+              websocket_state: runtime.cardsSession?.getStatus()?.websocketState || 
+                             runtime.factsSession?.getStatus()?.websocketState,
+            },
+          });
+        }
+      }
+
       await this.statusUpdater.updateAndPushStatus(runtime);
     } catch (error: any) {
       console.error(
