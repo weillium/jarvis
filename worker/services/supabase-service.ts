@@ -18,7 +18,7 @@ interface AgentRecord {
   status: string;
 }
 
-interface AgentSessionRecord {
+export interface AgentSessionRecord {
   id: string;
   agent_type: AgentType;
   status: string;
@@ -38,6 +38,13 @@ interface AgentSessionUpsert {
   agent_type: AgentType;
   status: string;
   model?: string;
+}
+
+export interface AgentSummaryRecord {
+  id: string;
+  status: string;
+  stage: string | null;
+  model_set: string | null;
 }
 
 interface TranscriptRecord {
@@ -167,6 +174,36 @@ export class SupabaseService {
     return data as AgentStatusRecord;
   }
 
+  async getAgentForEvent(
+    eventId: string,
+    statuses?: string[],
+    stages?: string[]
+  ): Promise<AgentSummaryRecord | null> {
+    let query = this.client
+      .from('agents')
+      .select('id, status, stage, model_set')
+      .eq('event_id', eventId)
+      .order('created_at', { ascending: true })
+      .limit(1);
+
+    if (statuses?.length) {
+      query = query.in('status', statuses);
+    }
+
+    if (stages?.length) {
+      query = query.in('stage', stages);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      return null;
+    }
+
+    const [record] = data as AgentSummaryRecord[];
+    return record;
+  }
+
   async updateAgentStatus(agentId: string, status: string, stage?: string | null): Promise<void> {
     const updateData: any = { status };
     if (stage !== undefined) {
@@ -218,6 +255,32 @@ export class SupabaseService {
     }
 
     const { data, error } = await query;
+    if (error) throw error;
+    return (data as AgentSessionRecord[]) || [];
+  }
+
+  async deleteAgentSessions(eventId: string, agentId: string): Promise<void> {
+    const { error } = await this.client
+      .from('agent_sessions')
+      .delete()
+      .eq('event_id', eventId)
+      .eq('agent_id', agentId);
+
+    if (error) throw error;
+  }
+
+  async insertAgentSessions(
+    sessions: AgentSessionUpsert[]
+  ): Promise<AgentSessionRecord[]> {
+    if (sessions.length === 0) {
+      return [];
+    }
+
+    const { data, error } = await this.client
+      .from('agent_sessions')
+      .insert(sessions)
+      .select('*');
+
     if (error) throw error;
     return (data as AgentSessionRecord[]) || [];
   }

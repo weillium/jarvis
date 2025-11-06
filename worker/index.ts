@@ -236,11 +236,41 @@ const sessionStartupPoller = new SessionStartupPoller(supabaseClient, orchestrat
 /** ---------- HTTP server for direct worker queries ---------- **/
 function createWorkerServer() {
   const WORKER_PORT = parseInt(process.env.WORKER_PORT || '3001', 10);
+  const parseJsonBody = (req: http.IncomingMessage): Promise<any> =>
+    new Promise((resolve, reject) => {
+      let body = '';
+
+      req.on('data', (chunk: Buffer) => {
+        body += chunk.toString();
+
+        if (body.length > 1_000_000) {
+          reject(new Error('Payload too large'));
+          req.socket.destroy();
+        }
+      });
+
+      req.on('end', () => {
+        if (!body) {
+          resolve({});
+          return;
+        }
+
+        try {
+          resolve(JSON.parse(body));
+        } catch (error) {
+          reject(new Error('Invalid JSON body'));
+        }
+      });
+
+      req.on('error', (error) => {
+        reject(error);
+      });
+    });
   
   const server = http.createServer(async (req, res) => {
     // CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     res.setHeader('Content-Type', 'application/json');
 
@@ -260,6 +290,59 @@ function createWorkerServer() {
         res.writeHead(200);
         res.end(JSON.stringify({ ok: true, status: 'healthy' }));
         return;
+      }
+
+      // Create agent sessions endpoint
+      if (pathname === '/sessions/create' && req.method === 'POST') {
+        try {
+          const body = await parseJsonBody(req);
+          const eventId =
+            typeof body?.event_id === 'string'
+              ? body.event_id
+              : typeof body?.eventId === 'string'
+              ? body.eventId
+              : null;
+
+          if (!eventId) {
+            res.writeHead(400);
+            res.end(JSON.stringify({ ok: false, error: 'event_id is required' }));
+            return;
+          }
+
+          const result = await orchestrator.createAgentSessionsForEvent(eventId);
+
+          res.writeHead(200);
+          res.end(
+            JSON.stringify({
+              ok: true,
+              event_id: eventId,
+              agent_id: result.agentId,
+              model_set: result.modelSet,
+              sessions: result.sessions.map((session) => ({
+                id: session.id,
+                agent_type: session.agent_type,
+                status: session.status,
+                model: session.model,
+              })),
+            })
+          );
+          return;
+        } catch (error: any) {
+          const statusCode =
+            error?.message &&
+            (error.message.includes('No agent') || error.message.includes('context_complete'))
+              ? 404
+              : 500;
+
+          res.writeHead(statusCode);
+          res.end(
+            JSON.stringify({
+              ok: false,
+              error: error?.message || 'Failed to create agent sessions',
+            })
+          );
+          return;
+        }
       }
 
       // WebSocket state endpoint: GET /websocket-state?event_id=<eventId>
@@ -353,6 +436,7 @@ function createWorkerServer() {
     log(`[worker-server] Endpoints:`);
     log(`[worker-server]   GET /health - Health check`);
     log(`[worker-server]   GET /websocket-state?event_id=<eventId> - Get WebSocket connection state`);
+    log(`[worker-server]   POST /sessions/create - Create agent sessions for an event`);
   });
 
   return server;

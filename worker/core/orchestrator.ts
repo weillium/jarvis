@@ -3,7 +3,7 @@ import type OpenAI from 'openai';
 import { RuntimeManager } from './runtime-manager';
 import { EventProcessor } from './event-processor';
 import { SessionManager } from '../sessions/session-manager';
-import { SupabaseService } from '../services/supabase-service';
+import { SupabaseService, AgentSessionRecord } from '../services/supabase-service';
 import { OpenAIService } from '../services/openai-service';
 import { SSEService } from '../services/sse-service';
 import { Logger } from '../monitoring/logger';
@@ -102,6 +102,89 @@ export class Orchestrator {
       transcript: statuses.transcript,
       cards: statuses.cards,
       facts: statuses.facts,
+    };
+  }
+
+  async createAgentSessionsForEvent(eventId: string): Promise<{
+    agentId: string;
+    modelSet: string;
+    sessions: AgentSessionRecord[];
+  }> {
+    console.log(`[orchestrator] Creating agent sessions (event: ${eventId})`);
+
+    const agent = await this.supabaseService.getAgentForEvent(
+      eventId,
+      ['idle'],
+      ['context_complete']
+    );
+
+    if (!agent) {
+      throw new Error('No agent with context_complete stage found for this event');
+    }
+
+    const agentId = agent.id;
+    const modelSet = agent.model_set || 'open_ai';
+
+    const existingSessions = await this.supabaseService.getAgentSessionsForAgent(eventId, agentId);
+    if (existingSessions.length > 0) {
+      console.log(
+        `[orchestrator] Found ${existingSessions.length} existing session(s); deleting before recreation`
+      );
+      await this.supabaseService.deleteAgentSessions(eventId, agentId);
+    }
+
+    const transcriptModel = this.modelSelectionService.getModelForAgentType(modelSet, 'transcript');
+    const cardsModel = this.modelSelectionService.getModelForAgentType(modelSet, 'cards');
+    const factsModel = this.modelSelectionService.getModelForAgentType(modelSet, 'facts');
+
+    const sessions = await this.supabaseService.insertAgentSessions([
+      {
+        event_id: eventId,
+        agent_id: agentId,
+        provider_session_id: 'pending',
+        agent_type: 'transcript',
+        status: 'closed',
+        model: transcriptModel,
+      },
+      {
+        event_id: eventId,
+        agent_id: agentId,
+        provider_session_id: 'pending',
+        agent_type: 'cards',
+        status: 'closed',
+        model: cardsModel,
+      },
+      {
+        event_id: eventId,
+        agent_id: agentId,
+        provider_session_id: 'pending',
+        agent_type: 'facts',
+        status: 'closed',
+        model: factsModel,
+      },
+    ]);
+
+    try {
+      await this.supabaseService.updateAgentStatus(agentId, 'active', 'testing');
+    } catch (error: any) {
+      console.warn(
+        `[orchestrator] Sessions created for event ${eventId} but failed to update agent status: ${error.message}`
+      );
+    }
+
+    console.log(
+      `[orchestrator] Created agent sessions for event ${eventId} using model_set=${modelSet}`,
+      {
+        transcriptModel,
+        cardsModel,
+        factsModel,
+      }
+    );
+
+    return {
+      agentId,
+      modelSet,
+      sessions,
     };
   }
 
