@@ -1064,15 +1064,6 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
               }}>
                 Context Chunks
               </div>
-              {blueprint?.target_chunk_count && (
-                <div style={{
-                  fontSize: '11px',
-                  color: '#94a3b8',
-                  marginTop: '4px',
-                }}>
-                  Target: {blueprint.target_chunk_count.toLocaleString()}
-                </div>
-              )}
             </div>
           </div>
         </div>

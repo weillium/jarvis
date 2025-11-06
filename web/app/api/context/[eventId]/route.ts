@@ -14,12 +14,43 @@ export async function GET(
     const user = await requireAuth(supabase);
     await requireEventOwnership(supabase, user.id, eventId);
 
-    // Fetch context items from current generation cycle
+    // Fetch context items, excluding those from superseded generation cycles
+    // First, get all generation cycle IDs that are NOT superseded
+    const { data: activeCycles, error: cycleError } = await supabase
+      .from('generation_cycles')
+      .select('id')
+      .eq('event_id', eventId)
+      .neq('status', 'superseded')
+      .in('cycle_type', ['chunks', 'research']); // Context items come from chunks or research cycles
+
+    if (cycleError) {
+      console.warn('[api/context] Warning: Failed to fetch active cycles:', cycleError.message);
+      // Continue with empty list - will only show legacy items
+    }
+
+    // Build list of active cycle IDs
+    const activeCycleIds: string[] = [];
+    if (activeCycles && activeCycles.length > 0) {
+      activeCycleIds.push(...activeCycles.map((c: { id: string }) => c.id));
+    }
+
+    // Fetch context items only from active cycles (or null/legacy items)
+    // Handle null generation_cycle_id separately since .in() doesn't match NULL
     // Note: After Phase 4, metadata fields are in JSONB metadata column
-    const { data, error } = await supabase
+    let query = supabase
       .from('context_items')
       .select('id, chunk, metadata, rank, generation_cycle_id')
-      .eq('event_id', eventId)
+      .eq('event_id', eventId);
+
+    if (activeCycleIds.length > 0) {
+      // Include items with null generation_cycle_id OR items from active cycles
+      query = query.or(`generation_cycle_id.is.null,generation_cycle_id.in.(${activeCycleIds.join(',')})`);
+    } else {
+      // If no active cycles, only show legacy items (null generation_cycle_id)
+      query = query.is('generation_cycle_id', null);
+    }
+
+    const { data, error } = await query
       .order('rank', { ascending: true, nullsFirst: true })
       .order('metadata->>enrichment_timestamp', { ascending: false, nullsFirst: true });
 

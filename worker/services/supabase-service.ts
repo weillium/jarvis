@@ -297,6 +297,26 @@ export class SupabaseService {
   }
 
   async getGlossaryTerms(eventId: string, generationCycleId?: string): Promise<GlossaryRecord[]> {
+    // First, get all active (non-superseded) generation cycle IDs for glossary
+    const { data: activeCycles, error: cycleError } = await this.client
+      .from('generation_cycles')
+      .select('id')
+      .eq('event_id', eventId)
+      .neq('status', 'superseded')
+      .in('cycle_type', ['glossary']);
+
+    if (cycleError) {
+      console.warn('[supabase-service] Warning: Failed to fetch active glossary cycles:', cycleError.message);
+    }
+
+    // Build list of active cycle IDs
+    const activeCycleIds: string[] = [];
+    if (activeCycles && activeCycles.length > 0) {
+      activeCycleIds.push(...activeCycles.map((c: { id: string }) => c.id));
+    }
+
+    // If specific generationCycleId provided, use it (caller's responsibility to ensure it's not superseded)
+    // Otherwise, filter by active cycles or legacy items
     let query = this.client
       .from('glossary_terms')
       .select('*')
@@ -304,6 +324,12 @@ export class SupabaseService {
     
     if (generationCycleId) {
       query = query.eq('generation_cycle_id', generationCycleId);
+    } else if (activeCycleIds.length > 0) {
+      // Include items with null generation_cycle_id OR items from active cycles
+      query = query.or(`generation_cycle_id.is.null,generation_cycle_id.in.(${activeCycleIds.join(',')})`);
+    } else {
+      // If no active cycles, only show legacy items (null generation_cycle_id)
+      query = query.is('generation_cycle_id', null);
     }
     
     const { data, error } = await query.order('confidence_score', { ascending: false });

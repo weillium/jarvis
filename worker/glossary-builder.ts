@@ -95,13 +95,43 @@ export async function buildGlossary(
   };
 
   // Fetch research from research_results table if not provided
+  // Exclude research from superseded generation cycles
   let research: ResearchResults;
   if (!researchResults) {
-    const { data: researchData, error: researchError } = await (supabase
+    // First, get all active (non-superseded) generation cycle IDs for research
+    const { data: activeCycles, error: cycleError } = await (supabase
+      .from('generation_cycles') as any)
+      .select('id')
+      .eq('event_id', eventId)
+      .neq('status', 'superseded')
+      .in('cycle_type', ['research']);
+
+    if (cycleError) {
+      console.warn(`[glossary] Warning: Failed to fetch active research cycles: ${cycleError.message}`);
+    }
+
+    // Build list of active cycle IDs
+    const activeCycleIds: string[] = [];
+    if (activeCycles && activeCycles.length > 0) {
+      activeCycleIds.push(...activeCycles.map((c: { id: string }) => c.id));
+    }
+
+    // Fetch research results only from active cycles (or legacy items)
+    let researchQuery = (supabase
       .from('research_results') as any)
       .select('content, metadata, query, api')
       .eq('event_id', eventId)
       .eq('blueprint_id', blueprintId);
+
+    if (activeCycleIds.length > 0) {
+      // Include items with null generation_cycle_id OR items from active cycles
+      researchQuery = researchQuery.or(`generation_cycle_id.is.null,generation_cycle_id.in.(${activeCycleIds.join(',')})`);
+    } else {
+      // If no active cycles, only show legacy items (null generation_cycle_id)
+      researchQuery = researchQuery.is('generation_cycle_id', null);
+    }
+
+    const { data: researchData, error: researchError } = await researchQuery;
 
     if (researchError) {
       console.warn(`[glossary] Warning: Failed to fetch research results: ${researchError.message}`);
@@ -118,18 +148,8 @@ export async function buildGlossary(
     research = researchResults;
   }
 
-  // Hard delete existing glossary terms from previous generation cycles
-  if (generationCycleId) {
-    const { error: deleteError } = await (supabase
-      .from('glossary_terms') as any)
-      .delete()
-      .eq('event_id', eventId)
-      .neq('generation_cycle_id', generationCycleId);
-    
-    if (deleteError) {
-      console.warn(`[glossary] Warning: Failed to delete old glossary terms: ${deleteError.message}`);
-    }
-  }
+  // Legacy deletion code removed - we now use superseding approach
+  // Old glossary terms are marked as superseded via generation cycles, not deleted
 
   // Extract context from research results
   const researchContext = research.chunks

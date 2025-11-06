@@ -40,14 +40,42 @@ export async function GET(
 
     const supabase = getSupabaseClient();
 
-    // Fetch research results (from current generation cycle)
-    // Note: After Phase 3, we filter by generation_cycle_id instead of is_active
-    // For now, get all results (we'll filter by cycle in later updates)
-    const { data: results, error } = await (supabase
+    // Fetch research results, excluding those from superseded generation cycles
+    // First, get all generation cycle IDs that are NOT superseded
+    const { data: activeCycles, error: cycleError } = await (supabase
+      .from('generation_cycles') as any)
+      .select('id')
+      .eq('event_id', eventId)
+      .neq('status', 'superseded')
+      .in('cycle_type', ['research']);
+
+    if (cycleError) {
+      console.warn('[api/context/research] Warning: Failed to fetch active cycles:', cycleError.message);
+      // Continue with empty list - will only show legacy items
+    }
+
+    // Build list of active cycle IDs
+    const activeCycleIds: string[] = [];
+    if (activeCycles && activeCycles.length > 0) {
+      activeCycleIds.push(...activeCycles.map((c: { id: string }) => c.id));
+    }
+
+    // Fetch research results only from active cycles (or null/legacy items)
+    // Handle null generation_cycle_id separately since .in() doesn't match NULL
+    let query = (supabase
       .from('research_results') as any)
       .select('*')
-      .eq('event_id', eventId)
-      .order('created_at', { ascending: false });
+      .eq('event_id', eventId);
+
+    if (activeCycleIds.length > 0) {
+      // Include items with null generation_cycle_id OR items from active cycles
+      query = query.or(`generation_cycle_id.is.null,generation_cycle_id.in.(${activeCycleIds.join(',')})`);
+    } else {
+      // If no active cycles, only show legacy items (null generation_cycle_id)
+      query = query.is('generation_cycle_id', null);
+    }
+
+    const { data: results, error } = await query.order('created_at', { ascending: false });
 
     if (error) {
       console.error('[api/context/research] Error fetching research results:', error);

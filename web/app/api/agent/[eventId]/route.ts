@@ -63,19 +63,22 @@ export async function GET(
     const agent = agents[0];
     const agentId = agent.id;
 
-    // Fetch context statistics in parallel (from current generation cycle)
-    // Note: After Phase 3, we filter by generation_cycle_id instead of is_active
-    // For now, get all items (we'll filter by cycle in later updates)
-    const [chunksResult, glossaryResult, blueprintResult] = await Promise.all([
-      // Get chunk count
-      (supabase.from('context_items') as any)
-        .select('*', { count: 'exact', head: true })
-        .eq('event_id', eventId),
+    // Fetch context statistics in parallel, excluding items from superseded generation cycles
+    // First, get all active (non-superseded) generation cycle IDs
+    const [activeChunksCycles, activeGlossaryCycles, blueprintResult] = await Promise.all([
+      // Get active chunks/research cycle IDs
+      (supabase.from('generation_cycles') as any)
+        .select('id')
+        .eq('event_id', eventId)
+        .neq('status', 'superseded')
+        .in('cycle_type', ['chunks', 'research']),
       
-      // Get glossary term count
-      (supabase.from('glossary_terms') as any)
-        .select('*', { count: 'exact', head: true })
-        .eq('event_id', eventId),
+      // Get active glossary cycle IDs
+      (supabase.from('generation_cycles') as any)
+        .select('id')
+        .eq('event_id', eventId)
+        .neq('status', 'superseded')
+        .in('cycle_type', ['glossary']),
       
       // Get latest blueprint
       (supabase.from('context_blueprints') as any)
@@ -84,6 +87,44 @@ export async function GET(
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
+    ]);
+
+    // Build lists of active cycle IDs
+    const activeChunksCycleIds: string[] = [];
+    if (activeChunksCycles.data && activeChunksCycles.data.length > 0) {
+      activeChunksCycleIds.push(...activeChunksCycles.data.map((c: { id: string }) => c.id));
+    }
+
+    const activeGlossaryCycleIds: string[] = [];
+    if (activeGlossaryCycles.data && activeGlossaryCycles.data.length > 0) {
+      activeGlossaryCycleIds.push(...activeGlossaryCycles.data.map((c: { id: string }) => c.id));
+    }
+
+    // Fetch counts, excluding items from superseded generation cycles
+    // Handle null generation_cycle_id separately since .in() doesn't match NULL
+    let chunksQuery = (supabase.from('context_items') as any)
+      .select('*', { count: 'exact', head: true })
+      .eq('event_id', eventId);
+    
+    if (activeChunksCycleIds.length > 0) {
+      chunksQuery = chunksQuery.or(`generation_cycle_id.is.null,generation_cycle_id.in.(${activeChunksCycleIds.join(',')})`);
+    } else {
+      chunksQuery = chunksQuery.is('generation_cycle_id', null);
+    }
+    
+    let glossaryQuery = (supabase.from('glossary_terms') as any)
+      .select('*', { count: 'exact', head: true })
+      .eq('event_id', eventId);
+    
+    if (activeGlossaryCycleIds.length > 0) {
+      glossaryQuery = glossaryQuery.or(`generation_cycle_id.is.null,generation_cycle_id.in.(${activeGlossaryCycleIds.join(',')})`);
+    } else {
+      glossaryQuery = glossaryQuery.is('generation_cycle_id', null);
+    }
+
+    const [chunksResult, glossaryResult] = await Promise.all([
+      chunksQuery,
+      glossaryQuery,
     ]);
 
     const contextStats = {

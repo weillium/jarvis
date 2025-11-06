@@ -65,16 +65,19 @@ export async function POST(
       // Agent exists, check if we can start blueprint generation
       const agent = existingAgents[0];
       
-      // Only allow starting if agent is in a valid state (idle with no stage, or idle with blueprint stage, or error)
+      // Allow starting blueprint generation if:
+      // - Agent is idle (with any stage, including context_complete to allow regeneration)
+      // - Agent is in error state
+      // Blueprint regeneration is allowed even after context generation is complete
       const isValidState = 
-        (agent.status === 'idle' && (agent.stage === null || agent.stage === 'blueprint')) ||
+        agent.status === 'idle' ||
         agent.status === 'error';
       
       if (!isValidState) {
         return NextResponse.json(
           { 
             ok: false, 
-            error: `Cannot start blueprint generation. Agent status is '${agent.status}' with stage '${agent.stage}'. Valid states: idle (no stage or blueprint stage) or error` 
+            error: `Cannot start blueprint generation. Agent status is '${agent.status}' with stage '${agent.stage}'. Valid states: idle (any stage) or error` 
           },
           { status: 400 }
         );
