@@ -1,12 +1,12 @@
 import { AgentSessionStatus, EventRuntime, SessionStatus } from '../types';
-import { SupabaseService } from '../services/supabase-service';
 import { SSEService } from '../services/sse-service';
 import { Logger } from './logger';
 import { MetricsCollector } from './metrics-collector';
+import { AgentSessionsRepository } from '../services/supabase/agent-sessions-repository';
 
 export class StatusUpdater {
   constructor(
-    private supabase: SupabaseService,
+    private readonly agentSessions: AgentSessionsRepository,
     private sse: SSEService,
     private logger: Logger,
     private metrics: MetricsCollector,
@@ -93,7 +93,7 @@ export class StatusUpdater {
     };
 
     try {
-      await this.supabase.updateAgentSessionMetrics(
+      await this.agentSessions.updateSessionMetrics(
         runtime.eventId,
         agentType,
         tokenMetrics,
@@ -127,7 +127,7 @@ export class StatusUpdater {
     cardsStatus: AgentSessionStatus,
     factsStatus: AgentSessionStatus
   ): Promise<void> {
-    const sessions = await this.supabase.getAgentSessionsForAgent(
+    const sessions = await this.agentSessions.getSessionsForAgent(
       runtime.eventId,
       runtime.agentId
     );

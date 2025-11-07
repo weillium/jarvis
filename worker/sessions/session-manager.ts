@@ -1,10 +1,10 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AgentType, EventRuntime } from '../types';
 import { RealtimeSession } from './realtime-session';
 import { SessionFactory } from './session-factory';
-import { SupabaseService } from '../services/supabase-service';
 import { Logger } from '../monitoring/logger';
 
-interface TranscriptAudioOptions {
+export interface TranscriptAudioOptions {
   audioBase64: string;
   isFinal?: boolean;
   sampleRate?: number;
@@ -34,13 +34,13 @@ type LogHandler = (
   context?: { seq?: number }
 ) => void;
 
-interface AgentSessionOptions {
+export interface AgentSessionOptions {
   onRetrieve?: RetrieveHandler;
   embedText?: EmbedHandler;
   onLog?: LogHandler;
 }
 
-interface SessionCreationOptions {
+export interface SessionCreationOptions {
   transcript?: AgentSessionOptions;
   cards?: AgentSessionOptions;
   facts?: AgentSessionOptions;
@@ -49,7 +49,7 @@ interface SessionCreationOptions {
 export class SessionManager {
   constructor(
     private readonly sessionFactory: SessionFactory,
-    private readonly supabase: SupabaseService,
+    private readonly supabaseClient: SupabaseClient,
     private readonly logger: Logger
   ) {}
 
@@ -60,12 +60,10 @@ export class SessionManager {
     options: AgentSessionOptions = {},
     apiKey?: string
   ): Promise<RealtimeSession> {
-    const supabaseClient = this.supabase.getClient();
-
     return this.sessionFactory.createTranscriptSession(
       runtime,
       {
-        supabaseClient,
+        supabaseClient: this.supabaseClient,
         onStatusChange: (status, sessionId) => onStatusChange('transcript', status, sessionId),
         onLog:
           options.onLog ??
@@ -96,10 +94,8 @@ export class SessionManager {
     options: SessionCreationOptions = {},
     apiKey?: string
   ): Promise<{ transcriptSession: RealtimeSession; cardsSession: RealtimeSession; factsSession: RealtimeSession }> {
-    const supabaseClient = this.supabase.getClient();
-
     const transcriptSession = this.sessionFactory.createTranscriptSession(runtime, {
-      supabaseClient,
+      supabaseClient: this.supabaseClient,
       onStatusChange: (status, sessionId) => onStatusChange('transcript', status, sessionId),
       onLog:
         options.transcript?.onLog ??
@@ -111,7 +107,7 @@ export class SessionManager {
     }, transcriptModel, apiKey);
 
     const cardsSession = this.sessionFactory.createCardsSession(runtime, {
-      supabaseClient,
+      supabaseClient: this.supabaseClient,
       onStatusChange: (status, sessionId) => onStatusChange('cards', status, sessionId),
       onLog:
         options.cards?.onLog ??
@@ -123,7 +119,7 @@ export class SessionManager {
     }, cardsModel, apiKey);
 
     const factsSession = this.sessionFactory.createFactsSession(runtime, {
-      supabaseClient,
+      supabaseClient: this.supabaseClient,
       onStatusChange: (status, sessionId) => onStatusChange('facts', status, sessionId),
       onLog:
         options.facts?.onLog ??

@@ -1,6 +1,5 @@
 import { EventRuntime, TranscriptChunk } from '../types';
 import { ContextBuilder, AgentContext } from '../context/context-builder';
-import { SupabaseService } from '../services/supabase-service';
 import { OpenAIService } from '../services/openai-service';
 import { Logger } from '../monitoring/logger';
 import { MetricsCollector } from '../monitoring/metrics-collector';
@@ -9,13 +8,14 @@ import { RealtimeSession } from '../sessions/realtime-session';
 import { getPolicy } from '../policies';
 import { createCardGenerationUserPrompt } from '../prompts';
 import { checkBudgetStatus, formatTokenBreakdown } from '../utils/token-counter';
+import { AgentOutputsRepository } from '../services/supabase/agent-outputs-repository';
 
 type DetermineCardTypeFn = (card: any, transcriptText: string) => 'text' | 'text_visual' | 'visual';
 
 export class CardsProcessor {
   constructor(
     private contextBuilder: ContextBuilder,
-    private supabase: SupabaseService,
+    private readonly agentOutputs: AgentOutputsRepository,
     private openai: OpenAIService,
     private logger: Logger,
     private metrics: MetricsCollector,
@@ -122,7 +122,7 @@ export class CardsProcessor {
         card.image_url = null;
       }
 
-      await this.supabase.insertAgentOutput({
+      await this.agentOutputs.insertAgentOutput({
         event_id: runtime.eventId,
         agent_id: runtime.agentId,
         agent_type: 'cards',

@@ -1,9 +1,9 @@
-import { SupabaseService } from '../services/supabase-service';
 import { OpenAIService } from '../services/openai-service';
+import { VectorSearchGateway } from '../services/supabase/vector-search-gateway';
 
 export class VectorSearchService {
   constructor(
-    private supabase: SupabaseService,
+    private readonly vectorSearch: VectorSearchGateway,
     private openai: OpenAIService
   ) {}
 
@@ -13,6 +13,6 @@ export class VectorSearchService {
     topK: number = 5
   ): Promise<Array<{ id: string; chunk: string; similarity: number }>> {
     const queryEmb = await this.openai.createEmbedding(query);
-    return this.supabase.vectorSearch(eventId, queryEmb, Math.min(topK, 10));
+    return this.vectorSearch.search(eventId, queryEmb, Math.min(topK, 10));
   }
 }

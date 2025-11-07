@@ -1,6 +1,5 @@
 import { EventRuntime, Fact } from '../types';
 import { ContextBuilder } from '../context/context-builder';
-import { SupabaseService } from '../services/supabase-service';
 import { OpenAIService } from '../services/openai-service';
 import { Logger } from '../monitoring/logger';
 import { MetricsCollector } from '../monitoring/metrics-collector';
@@ -8,11 +7,14 @@ import { CheckpointManager } from '../monitoring/checkpoint-manager';
 import { RealtimeSession } from '../sessions/realtime-session';
 import { FACTS_EXTRACTION_SYSTEM_PROMPT, createFactsExtractionUserPrompt } from '../prompts';
 import { checkBudgetStatus, formatTokenBreakdown } from '../utils/token-counter';
+import { FactsRepository } from '../services/supabase/facts-repository';
+import { AgentOutputsRepository } from '../services/supabase/agent-outputs-repository';
 
 export class FactsProcessor {
   constructor(
     private contextBuilder: ContextBuilder,
-    private supabase: SupabaseService,
+    private readonly factsRepository: FactsRepository,
+    private readonly agentOutputs: AgentOutputsRepository,
     private openai: OpenAIService,
     private logger: Logger,
     private metrics: MetricsCollector,
@@ -132,7 +134,7 @@ export class FactsProcessor {
         const storedFact = runtime.factsStore.get(fact.key);
         const computedConfidence = storedFact?.confidence ?? initialConfidence;
 
-        await this.supabase.upsertFact({
+        await this.factsRepository.upsertFact({
           event_id: runtime.eventId,
           fact_key: fact.key,
           fact_value: fact.value,
@@ -141,7 +143,7 @@ export class FactsProcessor {
           sources: storedFact?.sources || [],
         });
 
-        await this.supabase.insertAgentOutput({
+        await this.agentOutputs.insertAgentOutput({
           event_id: runtime.eventId,
           agent_id: runtime.agentId,
           agent_type: 'facts',
@@ -153,7 +155,7 @@ export class FactsProcessor {
 
       // Mark evicted facts as inactive in database
       if (evictedKeys.length > 0) {
-        await this.supabase.updateFactActiveStatus(runtime.eventId, evictedKeys, false);
+        await this.factsRepository.updateFactActiveStatus(runtime.eventId, evictedKeys, false);
         console.log(`[facts-processor] Marked ${evictedKeys.length} evicted facts as inactive for event ${runtime.eventId}`);
       }
 

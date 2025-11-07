@@ -1,5 +1,7 @@
 import type { AgentSessionStatus } from '../types';
 
+type SessionStatusPayload = Pick<AgentSessionStatus, 'agent_type'> & Partial<AgentSessionStatus>;
+
 export class SSEService {
   private baseUrl: string | null;
 
@@ -15,7 +17,7 @@ export class SSEService {
     return this.baseUrl;
   }
 
-  async pushSessionStatus(eventId: string, status: AgentSessionStatus): Promise<void> {
+  async pushSessionStatus(eventId: string, status: SessionStatusPayload): Promise<void> {
     if (!this.baseUrl) {
       console.warn('[sse] Invalid SSE endpoint configured');
       return;

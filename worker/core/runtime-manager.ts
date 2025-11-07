@@ -1,17 +1,21 @@
 import { EventRuntime, TranscriptChunk } from '../types';
 import { RingBuffer } from '../state/ring-buffer';
 import { FactsStore } from '../state/facts-store';
-import { SupabaseService } from '../services/supabase-service';
 import { GlossaryManager } from '../context/glossary-manager';
 import { CheckpointManager } from '../monitoring/checkpoint-manager';
 import { MetricsCollector } from '../monitoring/metrics-collector';
 import { Logger } from '../monitoring/logger';
+import { FactsRepository } from '../services/supabase/facts-repository';
+import { TranscriptsRepository } from '../services/supabase/transcripts-repository';
+import { AgentsRepository } from '../services/supabase/agents-repository';
 
 export class RuntimeManager {
   private readonly runtimes: Map<string, EventRuntime> = new Map();
 
   constructor(
-    private readonly supabase: SupabaseService,
+    private readonly agentsRepository: AgentsRepository,
+    private readonly factsRepository: FactsRepository,
+    private readonly transcriptsRepository: TranscriptsRepository,
     private readonly glossaryManager: GlossaryManager,
     private readonly checkpointManager: CheckpointManager,
     private readonly metrics: MetricsCollector,
@@ -41,7 +45,7 @@ export class RuntimeManager {
 
     // Load active facts from database
     const factsStore = new FactsStore(50);
-    const activeFacts = await this.supabase.getFacts(eventId, true);
+    const activeFacts = await this.factsRepository.getFacts(eventId, true);
     if (activeFacts.length > 0) {
       const evictedKeys = factsStore.loadFacts(
         activeFacts.map((f) => ({
@@ -55,7 +59,7 @@ export class RuntimeManager {
       
       // Mark any evicted facts as inactive in database
       if (evictedKeys.length > 0) {
-        await this.supabase.updateFactActiveStatus(eventId, evictedKeys, false);
+        await this.factsRepository.updateFactActiveStatus(eventId, evictedKeys, false);
         console.log(`[runtime-manager] Loaded ${activeFacts.length} active facts, evicted ${evictedKeys.length} facts (capacity limit)`);
       } else {
         console.log(`[runtime-manager] Loaded ${activeFacts.length} active facts into FactsStore for event ${eventId}`);
@@ -82,7 +86,7 @@ export class RuntimeManager {
   }
 
   async replayTranscripts(runtime: EventRuntime): Promise<void> {
-    const transcripts = await this.supabase.getTranscriptsForReplay(
+    const transcripts = await this.transcriptsRepository.getTranscriptsForReplay(
       runtime.eventId,
       Math.max(runtime.transcriptLastSeq, runtime.cardsLastSeq, runtime.factsLastSeq),
       1000
@@ -116,7 +120,7 @@ export class RuntimeManager {
   }
 
   async resumeExistingEvents(limit: number = 50): Promise<EventRuntime[]> {
-    const agents = await this.supabase.getAgentsByStatus('running', limit);
+    const agents = await this.agentsRepository.getAgentsByStatus('running', limit);
     if (!agents.length) {
       return [];
     }

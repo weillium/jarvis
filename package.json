@@ -1,4 +1,7 @@
 {
+  "engines": {
+    "node": ">=25.1.0 <26"
+  },
   "dependencies": {
     "@tanstack/react-query-devtools": "^5.90.2",
     "node": "^25.1.0"

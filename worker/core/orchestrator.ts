@@ -1,96 +1,94 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import type OpenAI from 'openai';
 import { RuntimeManager } from './runtime-manager';
 import { EventProcessor } from './event-processor';
-import { SessionManager } from '../sessions/session-manager';
-import { SupabaseService, AgentSessionRecord } from '../services/supabase-service';
-import { OpenAIService } from '../services/openai-service';
 import { SSEService } from '../services/sse-service';
 import { Logger } from '../monitoring/logger';
 import { MetricsCollector } from '../monitoring/metrics-collector';
 import { StatusUpdater } from '../monitoring/status-updater';
 import { CheckpointManager } from '../monitoring/checkpoint-manager';
 import { GlossaryManager } from '../context/glossary-manager';
-import { VectorSearchService } from '../context/vector-search';
 import { ModelSelectionService } from '../services/model-selection-service';
 import type { AgentSessionStatus, AgentType, EventRuntime } from '../types';
-
-interface TranscriptAudioChunk {
-  audioBase64: string;
-  seq?: number;
-  isFinal?: boolean;
-  sampleRate?: number;
-  encoding?: string;
-  durationMs?: number;
-  speaker?: string;
-}
+import { SessionLifecycle } from './session-lifecycle';
+import { RuntimeService } from './runtime-service';
+import {
+  TranscriptAudioChunk,
+  TranscriptIngestionService,
+} from './transcript-ingestion-service';
+import type { AgentSessionRecord } from '../services/supabase/types';
+import { AgentsRepository } from '../services/supabase/agents-repository';
+import { AgentSessionsRepository } from '../services/supabase/agent-sessions-repository';
+import { TranscriptsRepository } from '../services/supabase/transcripts-repository';
 
 export interface OrchestratorConfig {
-  supabase: SupabaseClient;
   openai: OpenAI;
   embedModel: string;
   genModel: string;
   realtimeModel: string;
   sseEndpoint?: string;
-  supabaseService?: SupabaseService;
-  openaiService?: OpenAIService;
   sseService?: SSEService;
   transcriptOnly?: boolean;
 }
 
 export class Orchestrator {
   private readonly config: OrchestratorConfig;
-  private readonly supabaseService: SupabaseService;
-  private readonly openaiService: OpenAIService;
+  private readonly agentsRepository: AgentsRepository;
+  private readonly agentSessionsRepository: AgentSessionsRepository;
+  private readonly transcriptsRepository: TranscriptsRepository;
   private readonly logger: Logger;
   private readonly metrics: MetricsCollector;
   private readonly checkpointManager: CheckpointManager;
   private readonly glossaryManager: GlossaryManager;
-  private readonly vectorSearch: VectorSearchService;
-  private readonly sessionManager: SessionManager;
+  private readonly sessionLifecycle: SessionLifecycle;
   private readonly runtimeManager: RuntimeManager;
+  private readonly runtimeService: RuntimeService;
   private readonly eventProcessor: EventProcessor;
   private readonly statusUpdater: StatusUpdater;
   private readonly modelSelectionService: ModelSelectionService;
+  private readonly transcriptIngestion: TranscriptIngestionService;
   private readonly transcriptOnly: boolean;
   private realtimeSubscription?: { unsubscribe: () => Promise<void> };
 
   constructor(
     config: OrchestratorConfig,
-    supabaseService: SupabaseService,
-    openaiService: OpenAIService,
+    agentsRepository: AgentsRepository,
+    agentSessionsRepository: AgentSessionsRepository,
+    transcriptsRepository: TranscriptsRepository,
     logger: Logger,
     metrics: MetricsCollector,
     checkpointManager: CheckpointManager,
     glossaryManager: GlossaryManager,
-    vectorSearch: VectorSearchService,
-    sessionManager: SessionManager,
     runtimeManager: RuntimeManager,
+    runtimeService: RuntimeService,
     eventProcessor: EventProcessor,
     statusUpdater: StatusUpdater,
-    modelSelectionService: ModelSelectionService
+    modelSelectionService: ModelSelectionService,
+    sessionLifecycle: SessionLifecycle,
+    transcriptIngestion: TranscriptIngestionService
   ) {
     this.config = config;
-    this.supabaseService = supabaseService;
-    this.openaiService = openaiService;
+    this.agentsRepository = agentsRepository;
+    this.agentSessionsRepository = agentSessionsRepository;
+    this.transcriptsRepository = transcriptsRepository;
     this.logger = logger;
     this.metrics = metrics;
     this.checkpointManager = checkpointManager;
     this.glossaryManager = glossaryManager;
-    this.vectorSearch = vectorSearch;
-    this.sessionManager = sessionManager;
+    this.sessionLifecycle = sessionLifecycle;
     this.runtimeManager = runtimeManager;
+    this.runtimeService = runtimeService;
     this.eventProcessor = eventProcessor;
     this.statusUpdater = statusUpdater;
     this.modelSelectionService = modelSelectionService;
+    this.transcriptIngestion = transcriptIngestion;
     this.transcriptOnly = config.transcriptOnly ?? false;
   }
 
   async initialize(): Promise<void> {
     console.log('[orchestrator] Initializing...');
 
-    this.realtimeSubscription = this.supabaseService.subscribeToTranscripts(({ new: record }) => {
-      void this.handleTranscriptInsert(record);
+    this.realtimeSubscription = this.transcriptsRepository.subscribeToTranscripts(({ new: record }) => {
+      void this.transcriptIngestion.handleTranscriptInsert(record);
     });
     console.log('[orchestrator] Subscribed to transcript events');
 
@@ -123,16 +121,6 @@ export class Orchestrator {
       throw new Error('Audio payload is required');
     }
 
-    const runtime = await this.ensureRuntime(eventId);
-
-    if (!runtime.transcriptSession) {
-      await this.createRealtimeSessions(runtime, eventId, runtime.agentId);
-    }
-
-    if (!runtime.transcriptSession) {
-      throw new Error(`Transcript session unavailable for event ${eventId}`);
-    }
-
     console.log('[orchestrator] Received transcript audio chunk', {
       eventId,
       bytes: Math.round((chunk.audioBase64.length * 3) / 4),
@@ -142,21 +130,8 @@ export class Orchestrator {
       encoding: chunk.encoding,
     });
 
-    await this.sessionManager.appendAudioToTranscriptSession(runtime.transcriptSession, {
-      audioBase64: chunk.audioBase64,
-      isFinal: chunk.isFinal,
-      sampleRate: chunk.sampleRate,
-      encoding: chunk.encoding,
-      durationMs: chunk.durationMs,
-      speaker: chunk.speaker,
-    });
-
-    runtime.pendingTranscriptChunk = {
-      speaker: chunk.speaker ?? null,
-      sampleRate: chunk.sampleRate,
-      encoding: chunk.encoding,
-      durationMs: chunk.durationMs,
-    };
+    const runtime = await this.transcriptIngestion.appendAudio(eventId, chunk);
+    this.attachTranscriptHandler(runtime, eventId, runtime.agentId);
   }
 
   async createAgentSessionsForEvent(eventId: string): Promise<{
@@ -166,7 +141,7 @@ export class Orchestrator {
   }> {
     console.log(`[orchestrator] Creating agent sessions (event: ${eventId})`);
 
-    const agent = await this.supabaseService.getAgentForEvent(
+    const agent = await this.agentsRepository.getAgentForEvent(
       eventId,
       ['idle'],
       ['context_complete']
@@ -179,19 +154,19 @@ export class Orchestrator {
     const agentId = agent.id;
     const modelSet = agent.model_set || 'open_ai';
 
-    const existingSessions = await this.supabaseService.getAgentSessionsForAgent(eventId, agentId);
+    const existingSessions = await this.agentSessionsRepository.getSessionsForAgent(eventId, agentId);
     if (existingSessions.length > 0) {
       console.log(
         `[orchestrator] Found ${existingSessions.length} existing session(s); deleting before recreation`
       );
-      await this.supabaseService.deleteAgentSessions(eventId, agentId);
+      await this.agentSessionsRepository.deleteSessions(eventId, agentId);
     }
 
     const transcriptModel = this.modelSelectionService.getModelForAgentType(modelSet, 'transcript');
     const cardsModel = this.modelSelectionService.getModelForAgentType(modelSet, 'cards');
     const factsModel = this.modelSelectionService.getModelForAgentType(modelSet, 'facts');
 
-    const sessions = await this.supabaseService.insertAgentSessions([
+    const sessions = await this.agentSessionsRepository.insertSessions([
       {
         event_id: eventId,
         agent_id: agentId,
@@ -254,7 +229,7 @@ export class Orchestrator {
       runtime.status = 'context_complete';
     }
 
-    const existingSessions = await this.supabaseService.getAgentSessionsForAgent(eventId, agentId, [
+    const existingSessions = await this.agentSessionsRepository.getSessionsForAgent(eventId, agentId, [
       'closed',
       'active',
       'paused',
@@ -266,24 +241,30 @@ export class Orchestrator {
         `[orchestrator] Event ${eventId} has ${pausedSessions.length} paused session(s), resuming...`
       );
 
-      if (!runtime.transcriptSession || (!this.transcriptOnly && (!runtime.cardsSession || !runtime.factsSession))) {
-        await this.createRealtimeSessions(runtime, eventId, agentId);
+      if (
+        !runtime.transcriptSession ||
+        (!this.transcriptOnly && (!runtime.cardsSession || !runtime.factsSession))
+      ) {
+        await this.sessionLifecycle.createRealtimeSessions({
+          runtime,
+          eventId,
+          agentId,
+          transcriptOnly: this.transcriptOnly,
+        });
       }
 
       try {
-        const { transcriptSessionId, cardsSessionId, factsSessionId } = await this.sessionManager.resumeSessions(
-          runtime.transcriptSession,
-          this.transcriptOnly ? undefined : runtime.cardsSession,
-          this.transcriptOnly ? undefined : runtime.factsSession
-        );
+        const { transcriptSessionId, cardsSessionId, factsSessionId } =
+          await this.sessionLifecycle.resumeSessions(runtime, this.transcriptOnly);
         runtime.transcriptSessionId = transcriptSessionId;
         runtime.cardsSessionId = this.transcriptOnly ? undefined : cardsSessionId;
         runtime.factsSessionId = this.transcriptOnly ? undefined : factsSessionId;
 
+        this.attachTranscriptHandler(runtime, eventId, agentId);
         this.eventProcessor.attachSessionHandlers(runtime);
 
         runtime.status = 'running';
-        await this.supabaseService.updateAgentStatus(agentId, 'active', 'running');
+        await this.agentsRepository.updateAgentStatus(agentId, 'active', 'running');
 
         console.log(`[orchestrator] Event ${eventId} resumed successfully`);
         this.startPeriodicSummary(runtime);
@@ -308,17 +289,23 @@ export class Orchestrator {
       );
 
       runtime.status = 'running';
-      const currentAgent = await this.supabaseService.getAgentStatus(agentId);
+      const currentAgent = await this.agentsRepository.getAgentStatus(agentId);
       if (currentAgent && currentAgent.stage !== 'testing') {
-        await this.supabaseService.updateAgentStatus(agentId, 'active', 'running');
+        await this.agentsRepository.updateAgentStatus(agentId, 'active', 'running');
       }
       this.startPeriodicSummary(runtime);
       return;
     }
 
-    await this.createRealtimeSessions(runtime, eventId, agentId);
+    await this.sessionLifecycle.createRealtimeSessions({
+      runtime,
+      eventId,
+      agentId,
+      transcriptOnly: this.transcriptOnly,
+    });
+    this.attachTranscriptHandler(runtime, eventId, agentId);
 
-    const existingSessionRecords = await this.supabaseService.getAgentSessionsForAgent(
+    const existingSessionRecords = await this.agentSessionsRepository.getSessionsForAgent(
       eventId,
       agentId
     );
@@ -328,13 +315,13 @@ export class Orchestrator {
     } else {
       try {
         // Get agent's model_set to determine which models to use
-        const agent = await this.supabaseService.getAgentStatus(agentId);
+        const agent = await this.agentsRepository.getAgentStatus(agentId);
         const modelSet = agent?.model_set || 'open_ai';
         const transcriptModel = this.modelSelectionService.getModelForAgentType(modelSet, 'transcript');
         const cardsModel = this.modelSelectionService.getModelForAgentType(modelSet, 'cards');
         const factsModel = this.modelSelectionService.getModelForAgentType(modelSet, 'facts');
         
-        await this.supabaseService.upsertAgentSessions([
+        await this.agentSessionsRepository.upsertSessions([
           {
             event_id: eventId,
             agent_id: agentId,
@@ -366,42 +353,11 @@ export class Orchestrator {
     }
 
     try {
-      if (this.transcriptOnly) {
-        if (!runtime.transcriptSession) {
-          throw new Error('Transcript session missing');
-        }
-        const transcriptSessionId = await runtime.transcriptSession.connect();
-        runtime.transcriptSessionId = transcriptSessionId;
-        runtime.cardsSession = undefined;
-        runtime.cardsSessionId = undefined;
-        runtime.factsSession = undefined;
-        runtime.factsSessionId = undefined;
-
-        // Ensure non-transcript sessions remain closed when in transcript-only mode
-        await Promise.all(
-          ['cards', 'facts'].map(async (agentType) => {
-            try {
-              await this.supabaseService.updateAgentSession(eventId, agentType as AgentType, {
-                status: 'closed',
-                updated_at: new Date().toISOString(),
-              });
-            } catch (sessionError: any) {
-              console.warn(
-                `[orchestrator] Failed to reset ${agentType} session status in transcript-only mode: ${sessionError.message}`
-              );
-            }
-          })
-        );
-      } else {
-        const { transcriptSessionId, cardsSessionId, factsSessionId } = await this.sessionManager.connectSessions(
-          runtime.transcriptSession!,
-          runtime.cardsSession!,
-          runtime.factsSession!
-        );
-        runtime.transcriptSessionId = transcriptSessionId;
-        runtime.cardsSessionId = cardsSessionId;
-        runtime.factsSessionId = factsSessionId;
-      }
+      const { transcriptSessionId, cardsSessionId, factsSessionId } =
+        await this.sessionLifecycle.connectSessions(runtime, eventId, this.transcriptOnly);
+      runtime.transcriptSessionId = transcriptSessionId;
+      runtime.cardsSessionId = cardsSessionId;
+      runtime.factsSessionId = factsSessionId;
     } catch (error: any) {
       console.error(`[orchestrator] Failed to connect sessions: ${error.message}`);
       throw error;
@@ -411,9 +367,9 @@ export class Orchestrator {
     this.startPeriodicSummary(runtime);
 
     runtime.status = 'running';
-    const currentAgent = await this.supabaseService.getAgentStatus(agentId);
+    const currentAgent = await this.agentsRepository.getAgentStatus(agentId);
     if (currentAgent && currentAgent.stage !== 'testing') {
-      await this.supabaseService.updateAgentStatus(agentId, 'active', 'running');
+      await this.agentsRepository.updateAgentStatus(agentId, 'active', 'running');
     }
 
     console.log(`[orchestrator] Event ${eventId} started`);
@@ -444,7 +400,7 @@ export class Orchestrator {
       return;
     }
 
-    const existingSessions = await this.supabaseService.getAgentSessionsForAgent(eventId, agentId, [
+    const existingSessions = await this.agentSessionsRepository.getSessionsForAgent(eventId, agentId, [
       'closed',
     ]);
     if (!existingSessions.length) {
@@ -467,16 +423,6 @@ export class Orchestrator {
       );
     }
 
-    // Get agent's model_set to determine which models to use
-    const agent = await this.supabaseService.getAgentStatus(agentId);
-    const modelSet = agent?.model_set || 'open_ai';
-    const transcriptModel = this.modelSelectionService.getModelForAgentType(modelSet, 'transcript');
-    const cardsModel = this.modelSelectionService.getModelForAgentType(modelSet, 'cards');
-    const factsModel = this.modelSelectionService.getModelForAgentType(modelSet, 'facts');
-    
-    // Get API key based on model_set
-    const apiKey = this.modelSelectionService.getApiKey(modelSet);
-    
     const sessionOptions = {
       transcript: {
         onRetrieve: async () => [],
@@ -500,114 +446,26 @@ export class Orchestrator {
       },
     } as const;
 
-    if (this.transcriptOnly) {
-      console.log('[orchestrator] Transcript-only mode enabled');
-      runtime.transcriptSession = await this.sessionManager.createTranscriptSession(
-        runtime,
-        async (agentType, status, sessionId) => {
-          console.log(
-            `[orchestrator] ${agentType} session status: ${status} (${sessionId || 'no ID'})`
-          );
-          if (sessionId) {
-            await this.supabaseService.updateAgentSession(eventId, agentType, {
-              status,
-              provider_session_id: sessionId,
-              model: transcriptModel,
-              updated_at: new Date().toISOString(),
-            });
-          }
-        },
-        transcriptModel,
-        sessionOptions.transcript,
-        apiKey
-      );
-      runtime.cardsSession = undefined;
-      runtime.factsSession = undefined;
-      runtime.transcriptHandlerSession = undefined;
-      runtime.cardsHandlerSession = undefined;
-      runtime.factsHandlerSession = undefined;
-      this.attachTranscriptHandler(runtime, eventId, agentId);
-    } else {
-      const { transcriptSession, cardsSession, factsSession } = await this.sessionManager.createSessions(
-        runtime,
-        async (agentType, status, sessionId) => {
-          console.log(
-            `[orchestrator] ${agentType} session status: ${status} (${sessionId || 'no ID'})`
-          );
-          if (sessionId) {
-            const model = agentType === 'facts' ? factsModel : (agentType === 'transcript' ? transcriptModel : cardsModel);
-            await this.supabaseService.updateAgentSession(eventId, agentType, {
-              status,
-              provider_session_id: sessionId,
-              model: model,
-              updated_at: new Date().toISOString(),
-            });
-          }
-        },
-        transcriptModel,
-        cardsModel,
-        factsModel,
-        {
-          transcript: sessionOptions.transcript,
-          cards: sessionOptions.cards,
-          facts: sessionOptions.facts,
-        },
-        apiKey
-      );
-
-      runtime.transcriptSession = transcriptSession;
-      runtime.cardsSession = cardsSession;
-      runtime.factsSession = factsSession;
-      runtime.transcriptHandlerSession = undefined;
-      runtime.cardsHandlerSession = undefined;
-      runtime.factsHandlerSession = undefined;
-      this.attachTranscriptHandler(runtime, eventId, agentId);
-    }
+    await this.sessionLifecycle.createRealtimeSessions({
+      runtime,
+      eventId,
+      agentId,
+      transcriptOnly: this.transcriptOnly,
+      sessionOptions,
+    });
+    this.attachTranscriptHandler(runtime, eventId, agentId);
 
     try {
-      if (this.transcriptOnly) {
-        if (!runtime.transcriptSession) {
-          throw new Error('Transcript session missing');
-        }
-        console.log('[orchestrator] Connecting transcript session (transcript-only mode)');
-        const transcriptSessionId = await runtime.transcriptSession.connect();
-        runtime.transcriptSessionId = transcriptSessionId;
-        runtime.cardsSession = undefined;
-        runtime.cardsSessionId = undefined;
-        runtime.factsSession = undefined;
-        runtime.factsSessionId = undefined;
-
-        await Promise.all(
-          ['cards', 'facts'].map(async (agentType) => {
-            try {
-              await this.supabaseService.updateAgentSession(eventId, agentType as AgentType, {
-                status: 'closed',
-                updated_at: new Date().toISOString(),
-              });
-            } catch (sessionError: any) {
-              console.warn(
-                `[orchestrator] Failed to reset ${agentType} session status in transcript-only mode: ${sessionError.message}`
-              );
-            }
-          })
-        );
-
-        console.log(`[orchestrator] Transcript session connected (id: ${transcriptSessionId})`);
-      } else {
-        const { transcriptSessionId, cardsSessionId, factsSessionId } = await this.sessionManager.connectSessions(
-          runtime.transcriptSession!,
-          runtime.cardsSession!,
-          runtime.factsSession!
-        );
-        runtime.transcriptSessionId = transcriptSessionId;
-        runtime.cardsSessionId = cardsSessionId;
-        runtime.factsSessionId = factsSessionId;
-        console.log('[orchestrator] Sessions connected', {
-          transcriptSessionId,
-          cardsSessionId,
-          factsSessionId,
-        });
-      }
+      const { transcriptSessionId, cardsSessionId, factsSessionId } =
+        await this.sessionLifecycle.connectSessions(runtime, eventId, this.transcriptOnly);
+      runtime.transcriptSessionId = transcriptSessionId;
+      runtime.cardsSessionId = cardsSessionId;
+      runtime.factsSessionId = factsSessionId;
+      console.log('[orchestrator] Sessions connected', {
+        transcriptSessionId,
+        cardsSessionId,
+        factsSessionId,
+      });
     } catch (error: any) {
       console.error(`[orchestrator] Failed to connect sessions: ${error.message}`);
       throw error;
@@ -634,7 +492,7 @@ export class Orchestrator {
       await this.statusUpdater.recordMetricsOnSessionClose(runtime, 'cards');
       await this.statusUpdater.recordMetricsOnSessionClose(runtime, 'facts');
       
-      await this.sessionManager.pauseSessions(runtime.transcriptSession, runtime.cardsSession, runtime.factsSession);
+      await this.sessionLifecycle.pauseSessions(runtime);
       console.log(`[orchestrator] Event ${eventId} paused`);
     } catch (error: any) {
       console.error(`[orchestrator] Error pausing event ${eventId}: ${error.message}`);
@@ -675,7 +533,7 @@ export class Orchestrator {
       await this.statusUpdater.recordMetricsOnSessionClose(runtime, 'facts');
 
       this.eventProcessor.cleanup(runtime.eventId, runtime);
-      await this.sessionManager.closeSessions(runtime.transcriptSession, runtime.cardsSession, runtime.factsSession);
+      await this.sessionLifecycle.closeSessions(runtime);
     }
 
     if (this.realtimeSubscription) {
@@ -686,368 +544,7 @@ export class Orchestrator {
   }
 
   async resetEventRuntime(eventId: string): Promise<void> {
-    const runtime = this.runtimeManager.getRuntime(eventId);
-    if (!runtime) {
-      return;
-    }
-
-    console.log(`[orchestrator] Resetting runtime for event ${eventId}`);
-
-    if (runtime.summaryTimer) {
-      clearInterval(runtime.summaryTimer);
-      runtime.summaryTimer = undefined;
-    }
-    if (runtime.statusUpdateTimer) {
-      clearInterval(runtime.statusUpdateTimer);
-      runtime.statusUpdateTimer = undefined;
-    }
-    if (runtime.factsUpdateTimer) {
-      clearTimeout(runtime.factsUpdateTimer);
-      runtime.factsUpdateTimer = undefined;
-    }
-
-    try {
-      await this.statusUpdater.recordMetricsOnSessionClose(runtime, 'transcript');
-    } catch (error: any) {
-      console.warn(`[orchestrator] Failed to record transcript metrics on reset: ${error.message}`);
-    }
-    try {
-      await this.statusUpdater.recordMetricsOnSessionClose(runtime, 'cards');
-    } catch (error: any) {
-      console.warn(`[orchestrator] Failed to record cards metrics on reset: ${error.message}`);
-    }
-    try {
-      await this.statusUpdater.recordMetricsOnSessionClose(runtime, 'facts');
-    } catch (error: any) {
-      console.warn(`[orchestrator] Failed to record facts metrics on reset: ${error.message}`);
-    }
-
-    this.eventProcessor.cleanup(eventId, runtime);
-
-    try {
-      await this.sessionManager.closeSessions(
-        runtime.transcriptSession,
-        runtime.cardsSession,
-        runtime.factsSession
-      );
-    } catch (error: any) {
-      console.error(`[orchestrator] Error closing sessions during reset: ${error.message}`);
-    }
-
-    runtime.transcriptSession = undefined;
-    runtime.cardsSession = undefined;
-    runtime.factsSession = undefined;
-    runtime.transcriptSessionId = undefined;
-    runtime.cardsSessionId = undefined;
-    runtime.factsSessionId = undefined;
-    runtime.transcriptHandlerSession = undefined;
-    runtime.cardsHandlerSession = undefined;
-    runtime.factsHandlerSession = undefined;
-    runtime.status = 'context_complete';
-
-    this.runtimeManager.removeRuntime(eventId);
-
-    console.log(`[orchestrator] Runtime reset complete for event ${eventId}`);
-  }
-
-  private async handleTranscriptInsert(transcript: any): Promise<void> {
-    const eventId = transcript.event_id;
-    const runtime = this.runtimeManager.getRuntime(eventId);
-    if (!runtime) {
-      return;
-    }
-
-    if (typeof transcript.seq === 'number' && transcript.seq <= runtime.transcriptLastSeq) {
-      return;
-    }
-
-    await this.eventProcessor.handleTranscript(runtime, transcript);
-  }
-
-  private async ensureRuntime(eventId: string): Promise<EventRuntime> {
-    let runtime = this.runtimeManager.getRuntime(eventId);
-    if (runtime) {
-      runtime.updatedAt = new Date();
-      return runtime;
-    }
-
-    const agent = await this.supabaseService.getAgentForEvent(eventId);
-    if (!agent) {
-      throw new Error(`No agent found for event ${eventId}`);
-    }
-
-    runtime = await this.runtimeManager.createRuntime(eventId, agent.id);
-    return runtime;
-  }
-
-  private attachTranscriptHandler(runtime: EventRuntime, eventId: string, agentId: string): void {
-    if (!runtime.transcriptSession) {
-      return;
-    }
-
-    if (runtime.transcriptHandlerSession === runtime.transcriptSession) {
-      return;
-    }
-
-    runtime.transcriptSession.on('transcript', async (payload: { text: string; isFinal?: boolean; receivedAt?: string }) => {
-      try {
-        await this.handleRealtimeTranscript(eventId, agentId, runtime, payload);
-      } catch (error: any) {
-        console.error(`[orchestrator] Failed to process realtime transcript: ${error.message}`);
-      }
-    });
-
-    runtime.transcriptHandlerSession = runtime.transcriptSession;
-  }
-
-  private async handleRealtimeTranscript(
-    eventId: string,
-    agentId: string,
-    runtime: EventRuntime,
-    payload: { text: string; isFinal?: boolean; receivedAt?: string }
-  ): Promise<void> {
-    const text = payload.text?.trim();
-    if (!text) {
-      return;
-    }
-
-    const seq = runtime.transcriptLastSeq + 1;
-    const atMs = payload.receivedAt ? Date.parse(payload.receivedAt) || Date.now() : Date.now();
-    const final = payload.isFinal !== false;
-    const speaker = runtime.pendingTranscriptChunk?.speaker ?? null;
-
-    const record = await this.supabaseService.insertTranscript({
-      event_id: eventId,
-      seq,
-      text,
-      at_ms: atMs,
-      final,
-      speaker,
-    });
-
-    runtime.pendingTranscriptChunk = undefined;
-
-    runtime.ringBuffer.add({
-      seq,
-      at_ms: atMs,
-      speaker: speaker ?? undefined,
-      text,
-      final,
-      transcript_id: record.id,
-    });
-
-    runtime.transcriptLastSeq = seq;
-    runtime.cardsLastSeq = Math.max(runtime.cardsLastSeq, seq);
-    runtime.factsLastSeq = Math.max(runtime.factsLastSeq, seq);
-
-    await this.eventProcessor.handleTranscript(runtime, {
-      event_id: record.event_id,
-      id: record.id,
-      seq: record.seq,
-      at_ms: record.at_ms,
-      speaker: record.speaker,
-      text: record.text,
-      final: record.final,
-    });
-  }
-
-  private async createRealtimeSessions(runtime: EventRuntime, eventId: string, agentId: string): Promise<void> {
-    // Get agent's model_set to determine which models to use
-    const agent = await this.supabaseService.getAgentStatus(agentId);
-    const modelSet = agent?.model_set || 'open_ai';
-    
-    // Get model configuration based on model_set
-    const transcriptModel = this.modelSelectionService.getModelForAgentType(modelSet, 'transcript');
-    const cardsModel = this.modelSelectionService.getModelForAgentType(modelSet, 'cards');
-    const factsModel = this.modelSelectionService.getModelForAgentType(modelSet, 'facts');
-    
-    // Get API key based on model_set
-    const apiKey = this.modelSelectionService.getApiKey(modelSet);
-
-    const sessionOptions = this.getSessionCreationOptions(runtime);
-
-    if (this.transcriptOnly) {
-      runtime.transcriptSession = await this.sessionManager.createTranscriptSession(
-        runtime,
-        async (agentType, status, sessionId) => {
-          await this.handleSessionStatusChange(eventId, agentId, agentType, status, sessionId);
-        },
-        transcriptModel,
-        sessionOptions.transcript ?? {},
-        apiKey
-      );
-      runtime.cardsSession = undefined;
-      runtime.factsSession = undefined;
-      runtime.transcriptHandlerSession = undefined;
-      runtime.cardsHandlerSession = undefined;
-      runtime.factsHandlerSession = undefined;
-      return;
-    }
-
-    const sessions = await this.sessionManager.createSessions(
-      runtime,
-      async (agentType, status, sessionId) => {
-        await this.handleSessionStatusChange(eventId, agentId, agentType, status, sessionId);
-      },
-      transcriptModel,
-      cardsModel,
-      factsModel,
-      sessionOptions,
-      apiKey
-    );
-
-    runtime.transcriptSession = sessions.transcriptSession;
-    runtime.cardsSession = sessions.cardsSession;
-    runtime.factsSession = sessions.factsSession;
-    runtime.transcriptHandlerSession = undefined;
-    runtime.cardsHandlerSession = undefined;
-    runtime.factsHandlerSession = undefined;
-  }
-
-  private async handleSessionStatusChange(
-    eventId: string,
-    agentId: string,
-    agentType: AgentType,
-    status: 'generated' | 'starting' | 'active' | 'paused' | 'closed' | 'error',
-    sessionId?: string
-  ): Promise<void> {
-    const runtime = this.runtimeManager.getRuntime(eventId);
-    if (!runtime) {
-      return;
-    }
-
-    try {
-      // Get current session status to track previous status for history
-      const currentSessions = await this.supabaseService.getAgentSessionsForAgent(eventId, agentId, []);
-      const currentSession = currentSessions.find(s => s.agent_type === agentType);
-      const previousStatus = currentSession?.status;
-
-      // Handle connection tracking when status becomes 'active'
-      if (status === 'active' && sessionId) {
-        try {
-          // Increment connection_count and update last_connected_at
-          const { connection_count, session_id } = await this.supabaseService.incrementConnectionCount(
-            eventId,
-            agentType
-          );
-
-          // Also update provider_session_id if provided
-          if (sessionId) {
-            await this.supabaseService.updateAgentSession(eventId, agentType, {
-              provider_session_id: sessionId,
-              status: 'active',
-            });
-          }
-
-          // Log connection history
-          const sessionDbId = session_id || await this.supabaseService.getAgentSessionId(eventId, agentType);
-          if (sessionDbId) {
-            await this.supabaseService.logAgentSessionHistory({
-              agent_session_id: sessionDbId,
-              event_id: eventId,
-              agent_id: agentId,
-              agent_type: agentType,
-              event_type: previousStatus === 'paused' ? 'resumed' : 'connected',
-              provider_session_id: sessionId,
-              previous_status: previousStatus || undefined,
-              new_status: 'active',
-              connection_count,
-              metadata: {
-                websocket_state: agentType === 'transcript' 
-                  ? runtime.transcriptSession?.getStatus()?.websocketState
-                  : agentType === 'cards'
-                  ? runtime.cardsSession?.getStatus()?.websocketState
-                  : runtime.factsSession?.getStatus()?.websocketState,
-              },
-            });
-          }
-        } catch (error: any) {
-          console.error(
-            `[orchestrator] Error tracking connection for ${agentType}: ${error.message}`
-          );
-          // Don't throw - connection tracking failure shouldn't break the session
-        }
-      } else if (status !== 'active') {
-        // Log other status changes (paused, error, closed, etc.)
-        const sessionDbId = await this.supabaseService.getAgentSessionId(eventId, agentType);
-        if (sessionDbId) {
-          const eventTypeMap: Record<string, 'disconnected' | 'paused' | 'error' | 'closed'> = {
-            'paused': 'paused',
-            'error': 'error',
-            'closed': 'closed',
-          };
-
-          const eventType = eventTypeMap[status] || 'disconnected';
-          
-          await this.supabaseService.logAgentSessionHistory({
-            agent_session_id: sessionDbId,
-            event_id: eventId,
-            agent_id: agentId,
-            agent_type: agentType,
-            event_type: eventType,
-            provider_session_id: sessionId || currentSession?.provider_session_id || undefined,
-            previous_status: previousStatus || undefined,
-            new_status: status,
-            connection_count: currentSession?.connection_count || undefined,
-            metadata: {
-              websocket_state: agentType === 'transcript' 
-                ? runtime.transcriptSession?.getStatus()?.websocketState
-                : agentType === 'cards'
-                ? runtime.cardsSession?.getStatus()?.websocketState
-                : runtime.factsSession?.getStatus()?.websocketState,
-            },
-          });
-        }
-      }
-
-      await this.statusUpdater.updateAndPushStatus(runtime);
-    } catch (error: any) {
-      console.error(
-        `[orchestrator] Error updating session status after change: ${error.message}`
-      );
-    }
-  }
-
-  private getSessionCreationOptions(runtime: EventRuntime) {
-    return {
-      transcript: {
-        onRetrieve: async (query: string, topK: number) => {
-          return await this.handleRetrieveQuery(runtime, query, topK);
-        },
-        embedText: async (text: string) => {
-          return await this.openaiService.createEmbedding(text);
-        },
-      },
-      cards: {
-        onRetrieve: async (query: string, topK: number) => {
-          return await this.handleRetrieveQuery(runtime, query, topK);
-        },
-        embedText: async (text: string) => {
-          return await this.openaiService.createEmbedding(text);
-        },
-      },
-      facts: {
-        onRetrieve: async (query: string, topK: number) => {
-          return await this.handleRetrieveQuery(runtime, query, topK);
-        },
-      },
-    };
-  }
-
-  private async handleRetrieveQuery(
-    runtime: EventRuntime,
-    query: string,
-    topK: number
-  ): Promise<Array<{ id: string; chunk: string; similarity: number }>> {
-    try {
-      console.log(`[rag] retrieve() called: query="${query}", top_k=${topK}`);
-      const results = await this.vectorSearch.search(runtime.eventId, query, topK);
-      console.log(`[rag] retrieve() returned ${results.length} chunks`);
-      return results;
-    } catch (error: any) {
-      console.error(`[rag] Error executing retrieve(): ${error.message}`);
-      return [];
-    }
+    await this.runtimeService.resetRuntime(eventId);
   }
 
   private startPeriodicSummary(runtime: EventRuntime): void {
@@ -1121,4 +618,9 @@ export class Orchestrator {
     console.log(`[context] ========================================\n`);
   }
 
+  private attachTranscriptHandler(runtime: EventRuntime, eventId: string, agentId: string): void {
+    this.sessionLifecycle.attachTranscriptHandler(runtime, async (payload) => {
+      await this.transcriptIngestion.handleRealtimeTranscript(eventId, agentId, runtime, payload);
+    });
+  }
 }

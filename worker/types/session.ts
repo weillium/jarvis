@@ -34,6 +34,7 @@ export interface AgentSessionStatus {
     event_id: string;
     agent_id: string;
     runtime_status: string;
+    transcript_last_seq: number;
     cards_last_seq: number;
     facts_last_seq: number;
     facts_last_update: string;
@@ -60,7 +61,7 @@ export interface AgentSessionStatus {
     updated_at: string;
     closed_at: string | null;
     model: string;
-    connection_count: number;
-    last_connected_at: string | null;
+    connection_count?: number;
+    last_connected_at?: string | null;
   };
 }

@@ -1,11 +1,11 @@
 import { AgentType } from '../types';
-import { SupabaseService } from '../services/supabase-service';
+import { CheckpointsRepository } from '../services/supabase/checkpoints-repository';
 
 export class CheckpointManager {
-  constructor(private supabase: SupabaseService) {}
+  constructor(private readonly checkpointsRepo: CheckpointsRepository) {}
 
   async loadCheckpoints(eventId: string): Promise<{ transcript: number; cards: number; facts: number }> {
-    const checkpoints = await this.supabase.getCheckpoints(eventId);
+    const checkpoints = await this.checkpointsRepo.getCheckpoints(eventId);
     const transcriptCheckpoint = checkpoints.find((c) => c.agent_type === 'transcript');
     const cardsCheckpoint = checkpoints.find((c) => c.agent_type === 'cards');
     const factsCheckpoint = checkpoints.find((c) => c.agent_type === 'facts');
@@ -22,6 +22,6 @@ export class CheckpointManager {
     agentType: AgentType,
     lastSeq: number
   ): Promise<void> {
-    await this.supabase.upsertCheckpoint(eventId, agentType, lastSeq);
+    await this.checkpointsRepo.upsertCheckpoint(eventId, agentType, lastSeq);
   }
 }

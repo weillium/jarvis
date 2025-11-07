@@ -6,6 +6,16 @@ Your `.env` file already exists with required variables configured!
 
 ## 🚀 Quick Launch Steps
 
+### 0. Use Node.js 25
+
+```bash
+nvm use
+# or, if nvm is unavailable
+corepack env use node@25.1.0
+```
+
+> The repository root includes `.nvmrc` / `.node-version` so `nvm use` or `nodenv` will automatically select Node.js 25.1.0. If you rely on Corepack directly, `corepack env use node@25.1.0` ensures the worker runs under the same runtime before invoking pnpm.
+
 ### 1. Verify Setup (Optional but Recommended)
 
 ```bash

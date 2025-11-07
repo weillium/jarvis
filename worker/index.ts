@@ -3,7 +3,6 @@ import http from 'http';
 import { URL } from 'url';
 import { Orchestrator, OrchestratorConfig } from './core/orchestrator';
 import { ModelSelectionService } from './services/model-selection-service';
-import { SupabaseService } from './services/supabase-service';
 import { OpenAIService } from './services/openai-service';
 import { SSEService } from './services/sse-service';
 import { Logger } from './monitoring/logger';
@@ -20,6 +19,20 @@ import { SessionFactory } from './sessions/session-factory';
 import { SessionManager } from './sessions/session-manager';
 import { RuntimeManager } from './core/runtime-manager';
 import { EventProcessor } from './core/event-processor';
+import { SessionLifecycle } from './core/session-lifecycle';
+import { RuntimeService } from './core/runtime-service';
+import { TranscriptIngestionService } from './core/transcript-ingestion-service';
+import {
+  createSupabaseClient,
+  AgentsRepository,
+  AgentSessionsRepository,
+  CheckpointsRepository,
+  TranscriptsRepository,
+  GlossaryRepository,
+  AgentOutputsRepository,
+  FactsRepository,
+  VectorSearchGateway,
+} from './services/supabase';
 import { BlueprintPoller } from './polling/blueprint-poller';
 import { ContextPoller } from './polling/context-poller';
 import { RegenerationPoller } from './polling/regeneration-poller';
@@ -45,8 +58,15 @@ const SSE_ENDPOINT = SSE_ENDPOINT_RAW.trim().replace(/[`'"]/g, ''); // Base URL 
 const TRANSCRIPT_ONLY = process.env.TRANSCRIPT_AGENT_ONLY !== 'false';
 
 /** ---------- services ---------- **/
-const supabaseService = new SupabaseService(SUPABASE_URL, SERVICE_ROLE);
-const supabaseClient = supabaseService.getClient();
+const supabaseClient = createSupabaseClient(SUPABASE_URL, SERVICE_ROLE);
+const agentsRepository = new AgentsRepository(supabaseClient);
+const agentSessionsRepository = new AgentSessionsRepository(supabaseClient);
+const checkpointsRepository = new CheckpointsRepository(supabaseClient);
+const transcriptsRepository = new TranscriptsRepository(supabaseClient);
+const glossaryRepository = new GlossaryRepository(supabaseClient);
+const agentOutputsRepository = new AgentOutputsRepository(supabaseClient);
+const factsRepository = new FactsRepository(supabaseClient);
+const vectorSearchGateway = new VectorSearchGateway(supabaseClient);
 const openaiService = new OpenAIService(OPENAI_KEY, EMBED_MODEL, CONTEXT_GEN_MODEL);
 const openai = openaiService.getClient();
 const sseService = new SSEService(SSE_ENDPOINT);
@@ -58,9 +78,9 @@ function log(...a: any[]) { console.log(new Date().toISOString(), ...a); }
 /** ---------- monitoring ---------- **/
 const logger = new Logger();
 const metricsCollector = new MetricsCollector();
-const checkpointManager = new CheckpointManager(supabaseService);
+const checkpointManager = new CheckpointManager(checkpointsRepository);
 const statusUpdater = new StatusUpdater(
-  supabaseService,
+  agentSessionsRepository,
   sseService,
   logger,
   metricsCollector,
@@ -68,8 +88,8 @@ const statusUpdater = new StatusUpdater(
 );
 
 /** ---------- context ---------- **/
-const glossaryManager = new GlossaryManager(supabaseService);
-const vectorSearchService = new VectorSearchService(supabaseService, openaiService);
+const glossaryManager = new GlossaryManager(glossaryRepository);
+const vectorSearchService = new VectorSearchService(vectorSearchGateway, openaiService);
 const contextBuilder = new ContextBuilder(glossaryManager);
 
 /** ---------- processing ---------- **/
@@ -129,7 +149,7 @@ const determineCardType = (
 
 const cardsProcessor = new CardsProcessor(
   contextBuilder,
-  supabaseService,
+  agentOutputsRepository,
   openaiService,
   logger,
   metricsCollector,
@@ -139,14 +159,15 @@ const cardsProcessor = new CardsProcessor(
 
 const factsProcessor = new FactsProcessor(
   contextBuilder,
-  supabaseService,
+  factsRepository,
+  agentOutputsRepository,
   openaiService,
   logger,
   metricsCollector,
   checkpointManager
 );
 
-const transcriptProcessor = new TranscriptProcessor(supabaseService);
+const transcriptProcessor = new TranscriptProcessor(transcriptsRepository);
 
 /** ---------- sessions ---------- **/
 const sessionFactory = new SessionFactory(
@@ -155,11 +176,22 @@ const sessionFactory = new SessionFactory(
   vectorSearchService,
   REALTIME_MODEL
 );
-const sessionManager = new SessionManager(sessionFactory, supabaseService, logger);
+const sessionManager = new SessionManager(sessionFactory, supabaseClient, logger);
+const sessionLifecycle = new SessionLifecycle(
+  sessionManager,
+  agentsRepository,
+  agentSessionsRepository,
+  openaiService,
+  vectorSearchService,
+  modelSelectionService,
+  statusUpdater
+);
 
 /** ---------- core ---------- **/
 const runtimeManager = new RuntimeManager(
-  supabaseService,
+  agentsRepository,
+  factsRepository,
+  transcriptsRepository,
   glossaryManager,
   checkpointManager,
   metricsCollector,
@@ -170,12 +202,26 @@ const eventProcessor = new EventProcessor(
   cardsProcessor,
   factsProcessor,
   transcriptProcessor,
-  supabaseService,
+  agentOutputsRepository,
+  factsRepository,
   determineCardType
+);
+const runtimeService = new RuntimeService(
+  agentsRepository,
+  runtimeManager,
+  statusUpdater,
+  sessionLifecycle,
+  eventProcessor
+);
+const transcriptIngestionService = new TranscriptIngestionService(
+  runtimeService,
+  sessionLifecycle,
+  transcriptsRepository,
+  eventProcessor,
+  TRANSCRIPT_ONLY
 );
 
 const orchestratorConfig: OrchestratorConfig = {
-  supabase: supabaseClient,
   openai,
   embedModel: EMBED_MODEL,
   genModel: CONTEXT_GEN_MODEL,
@@ -186,18 +232,20 @@ const orchestratorConfig: OrchestratorConfig = {
 
 const orchestrator = new Orchestrator(
   orchestratorConfig,
-  supabaseService,
-  openaiService,
+  agentsRepository,
+  agentSessionsRepository,
+  transcriptsRepository,
   logger,
   metricsCollector,
   checkpointManager,
   glossaryManager,
-  vectorSearchService,
-  sessionManager,
   runtimeManager,
+  runtimeService,
   eventProcessor,
   statusUpdater,
-  modelSelectionService
+  modelSelectionService,
+  sessionLifecycle,
+  transcriptIngestionService
 );
 
 // Track agents currently being processed to prevent duplicate processing across pollers

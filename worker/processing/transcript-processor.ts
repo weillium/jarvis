@@ -1,8 +1,8 @@
 import { TranscriptChunk } from '../types';
-import { SupabaseService } from '../services/supabase-service';
+import { TranscriptsRepository } from '../services/supabase/transcripts-repository';
 
 export class TranscriptProcessor {
-  constructor(private supabase: SupabaseService) {}
+  constructor(private readonly transcriptsRepo: TranscriptsRepository) {}
 
   convertToChunk(transcript: any): TranscriptChunk {
     return {
@@ -20,6 +20,6 @@ export class TranscriptProcessor {
       return;
     }
 
-    await this.supabase.updateTranscriptSeq(transcriptId, nextSeq);
+    await this.transcriptsRepo.updateTranscriptSeq(transcriptId, nextSeq);
   }
 }

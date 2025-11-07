@@ -2,8 +2,9 @@ import { EventRuntime } from '../types';
 import { CardsProcessor } from '../processing/cards-processor';
 import { FactsProcessor } from '../processing/facts-processor';
 import { TranscriptProcessor } from '../processing/transcript-processor';
-import { SupabaseService } from '../services/supabase-service';
 import type { TranscriptChunk } from '../types';
+import { AgentOutputsRepository } from '../services/supabase/agent-outputs-repository';
+import { FactsRepository } from '../services/supabase/facts-repository';
 
 type DetermineCardTypeFn = (card: any, transcriptText: string) => 'text' | 'text_visual' | 'visual';
 
@@ -14,7 +15,8 @@ export class EventProcessor {
     private readonly cardsProcessor: CardsProcessor,
     private readonly factsProcessor: FactsProcessor,
     private readonly transcriptProcessor: TranscriptProcessor,
-    private readonly supabase: SupabaseService,
+    private readonly agentOutputs: AgentOutputsRepository,
+    private readonly factsRepository: FactsRepository,
     private readonly determineCardType: DetermineCardTypeFn
   ) {}
 
@@ -112,7 +114,7 @@ export class EventProcessor {
         card.image_url = null;
       }
 
-      await this.supabase.insertAgentOutput({
+      await this.agentOutputs.insertAgentOutput({
         event_id: runtime.eventId,
         agent_id: runtime.agentId,
         agent_type: 'cards',
@@ -154,7 +156,7 @@ export class EventProcessor {
         const storedFact = runtime.factsStore.get(fact.key);
         const computedConfidence = storedFact?.confidence ?? initialConfidence;
 
-        await this.supabase.upsertFact({
+        await this.factsRepository.upsertFact({
           event_id: runtime.eventId,
           fact_key: fact.key,
           fact_value: fact.value,
@@ -163,7 +165,7 @@ export class EventProcessor {
           sources: storedFact?.sources || [],
         });
 
-        await this.supabase.insertAgentOutput({
+        await this.agentOutputs.insertAgentOutput({
           event_id: runtime.eventId,
           agent_id: runtime.agentId,
           agent_type: 'facts',
@@ -175,7 +177,7 @@ export class EventProcessor {
 
       // Mark evicted facts as inactive in database
       if (evictedKeys.length > 0) {
-        await this.supabase.updateFactActiveStatus(runtime.eventId, evictedKeys, false);
+        await this.factsRepository.updateFactActiveStatus(runtime.eventId, evictedKeys, false);
         console.log(`[event-processor] Marked ${evictedKeys.length} evicted facts as inactive for event ${runtime.eventId}`);
       }
 

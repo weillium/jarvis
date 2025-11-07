@@ -1,11 +1,11 @@
 import { GlossaryEntry } from '../types';
-import { SupabaseService } from '../services/supabase-service';
+import { GlossaryRepository } from '../services/supabase/glossary-repository';
 
 export class GlossaryManager {
-  constructor(private supabase: SupabaseService) {}
+  constructor(private readonly glossaryRepo: GlossaryRepository) {}
 
   async loadGlossary(eventId: string): Promise<Map<string, GlossaryEntry>> {
-    const terms = await this.supabase.getGlossaryTerms(eventId);
+    const terms = await this.glossaryRepo.getGlossaryTerms(eventId);
     const cache = new Map<string, GlossaryEntry>();
 
     for (const term of terms) {
