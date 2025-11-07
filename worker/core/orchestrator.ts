@@ -685,6 +685,71 @@ export class Orchestrator {
     console.log('[orchestrator] Shutdown complete');
   }
 
+  async resetEventRuntime(eventId: string): Promise<void> {
+    const runtime = this.runtimeManager.getRuntime(eventId);
+    if (!runtime) {
+      return;
+    }
+
+    console.log(`[orchestrator] Resetting runtime for event ${eventId}`);
+
+    if (runtime.summaryTimer) {
+      clearInterval(runtime.summaryTimer);
+      runtime.summaryTimer = undefined;
+    }
+    if (runtime.statusUpdateTimer) {
+      clearInterval(runtime.statusUpdateTimer);
+      runtime.statusUpdateTimer = undefined;
+    }
+    if (runtime.factsUpdateTimer) {
+      clearTimeout(runtime.factsUpdateTimer);
+      runtime.factsUpdateTimer = undefined;
+    }
+
+    try {
+      await this.statusUpdater.recordMetricsOnSessionClose(runtime, 'transcript');
+    } catch (error: any) {
+      console.warn(`[orchestrator] Failed to record transcript metrics on reset: ${error.message}`);
+    }
+    try {
+      await this.statusUpdater.recordMetricsOnSessionClose(runtime, 'cards');
+    } catch (error: any) {
+      console.warn(`[orchestrator] Failed to record cards metrics on reset: ${error.message}`);
+    }
+    try {
+      await this.statusUpdater.recordMetricsOnSessionClose(runtime, 'facts');
+    } catch (error: any) {
+      console.warn(`[orchestrator] Failed to record facts metrics on reset: ${error.message}`);
+    }
+
+    this.eventProcessor.cleanup(eventId, runtime);
+
+    try {
+      await this.sessionManager.closeSessions(
+        runtime.transcriptSession,
+        runtime.cardsSession,
+        runtime.factsSession
+      );
+    } catch (error: any) {
+      console.error(`[orchestrator] Error closing sessions during reset: ${error.message}`);
+    }
+
+    runtime.transcriptSession = undefined;
+    runtime.cardsSession = undefined;
+    runtime.factsSession = undefined;
+    runtime.transcriptSessionId = undefined;
+    runtime.cardsSessionId = undefined;
+    runtime.factsSessionId = undefined;
+    runtime.transcriptHandlerSession = undefined;
+    runtime.cardsHandlerSession = undefined;
+    runtime.factsHandlerSession = undefined;
+    runtime.status = 'context_complete';
+
+    this.runtimeManager.removeRuntime(eventId);
+
+    console.log(`[orchestrator] Runtime reset complete for event ${eventId}`);
+  }
+
   private async handleTranscriptInsert(transcript: any): Promise<void> {
     const eventId = transcript.event_id;
     const runtime = this.runtimeManager.getRuntime(eventId);

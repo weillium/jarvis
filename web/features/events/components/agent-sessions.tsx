@@ -73,6 +73,27 @@ const formatDate = (dateString: string | null): string => {
   return new Date(dateString).toLocaleString();
 };
 
+const formatDuration = (milliseconds: number): string => {
+  const totalSeconds = Math.floor(milliseconds / 1000);
+  const seconds = totalSeconds % 60;
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const minutes = totalMinutes % 60;
+  const totalHours = Math.floor(totalMinutes / 60);
+  const hours = totalHours % 24;
+  const days = Math.floor(totalHours / 24);
+
+  if (days > 0) {
+    return `${days}d ${hours}h`;
+  }
+  if (totalHours > 0) {
+    return `${totalHours}h ${minutes}m`;
+  }
+  if (totalMinutes > 0) {
+    return `${totalMinutes}m ${seconds}s`;
+  }
+  return `${seconds}s`;
+};
+
 // SessionStatusCard component
 interface SessionStatusCardProps {
   title: string;
@@ -82,21 +103,24 @@ interface SessionStatusCardProps {
 }
 
 function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: SessionStatusCardProps) {
-  const [currentTime, setCurrentTime] = useState(new Date());
-  
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
+
   const actualWebSocketState = session.websocket_state;
-  const isWebSocketLive = actualWebSocketState === 'OPEN' || (actualWebSocketState === undefined && session.status === 'active');
-  
+  const isWebSocketLive = actualWebSocketState === 'OPEN';
+
+  const shouldTick = isWebSocketLive && !session.runtime_stats?.uptime_ms;
+
   React.useEffect(() => {
-    if (!isWebSocketLive || !session.metadata.created_at) return;
-    
+    if (!shouldTick || !session.metadata.created_at) {
+      return;
+    }
+
     const interval = setInterval(() => {
-      setCurrentTime(new Date());
+      setCurrentTime(Date.now());
     }, 1000);
-    
+
     return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isWebSocketLive]);
+  }, [shouldTick, session.metadata.created_at]);
 
   const statusColor = getSessionStatusColor(session.status);
   const statusLabel = getSessionStatusLabel(session.status);
@@ -131,36 +155,40 @@ function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: Se
   } else {
     const isNewClosed = session.status === 'closed' && session.metadata?.created_at && 
       (new Date().getTime() - new Date(session.metadata.created_at).getTime()) < 60000;
-    connectionStatus = session.status === 'active' ? 'Live' : session.status === 'paused' ? 'Paused' : isNewClosed ? 'Ready' : 'Disconnected';
-    connectionColor = session.status === 'active' ? '#10b981' : session.status === 'paused' ? '#8b5cf6' : isNewClosed ? '#64748b' : '#6b7280';
+    if (session.status === 'active') {
+      connectionStatus = 'Awaiting SSE';
+      connectionColor = '#f59e0b';
+    } else if (session.status === 'paused') {
+      connectionStatus = 'Paused';
+      connectionColor = '#8b5cf6';
+    } else if (isNewClosed) {
+      connectionStatus = 'Ready';
+      connectionColor = '#64748b';
+    } else {
+      connectionStatus = 'Disconnected';
+      connectionColor = '#6b7280';
+    }
   }
 
-  const calculateRuntime = () => {
-    if (!session.metadata.created_at) return null;
-    
-    const created = new Date(session.metadata.created_at);
-    const now = currentTime;
-    const diffMs = now.getTime() - created.getTime();
-    
-    if (diffMs < 0) return null;
-    
-    const seconds = Math.floor(diffMs / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-    
-    if (days > 0) {
-      return `${days}d ${hours % 24}h`;
-    } else if (hours > 0) {
-      return `${hours}h ${minutes % 60}m`;
-    } else if (minutes > 0) {
-      return `${minutes}m ${seconds % 60}s`;
-    } else {
-      return `${seconds}s`;
+  const metricsRecordedAtMs = session.metrics_recorded_at ? new Date(session.metrics_recorded_at).getTime() : null;
+  const baseUptimeMs = session.runtime_stats?.uptime_ms;
+  const runtimeMs = (() => {
+    if (typeof baseUptimeMs === 'number') {
+      if (!metricsRecordedAtMs || !isWebSocketLive) {
+        return baseUptimeMs;
+      }
+      const elapsedSinceMetrics = Date.now() - metricsRecordedAtMs;
+      return baseUptimeMs + Math.max(elapsedSinceMetrics, 0);
     }
-  };
+    if (!session.metadata.created_at) {
+      return null;
+    }
+    const createdAtMs = new Date(session.metadata.created_at).getTime();
+    const diffMs = currentTime - createdAtMs;
+    return diffMs >= 0 ? diffMs : null;
+  })();
 
-  const runtime = calculateRuntime();
+  const runtime = runtimeMs !== null && runtimeMs !== undefined ? formatDuration(runtimeMs) : null;
 
   return (
     <div style={{
@@ -247,7 +275,7 @@ function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: Se
           </span>
         </div>
         
-        {session.websocket_state && session.websocket_state === 'OPEN' && (
+        {actualWebSocketState === 'OPEN' && (
           <div style={{
             marginBottom: '8px',
             padding: '8px 12px',
@@ -685,6 +713,71 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
           gap: '8px',
           alignItems: 'center',
         }}>
+          {/* Start/Resume Sessions button */}
+          {(() => {
+            if (checkingSessions || !sessionsData) {
+              return false;
+            }
+
+            const transcriptSession = displaySessions.find(s => s.agent_type === 'transcript');
+            const cardsSession = displaySessions.find(s => s.agent_type === 'cards');
+            const factsSession = displaySessions.find(s => s.agent_type === 'facts');
+
+            const isNewClosed = (session: typeof cardsSession) => {
+              if (!session?.status || session.status !== 'closed' || !session?.metadata?.created_at) {
+                return false;
+              }
+              const createdTime = new Date(session.metadata.created_at).getTime();
+              const now = new Date().getTime();
+              const ageMs = now - createdTime;
+              return ageMs < 60000;
+            };
+
+            const isPaused = (transcriptSession?.status === 'paused') || (cardsSession?.status === 'paused') || (factsSession?.status === 'paused');
+            const transcriptClosed = transcriptSession?.status === 'closed';
+            const cardsClosed = cardsSession?.status === 'closed';
+            const factsClosed = factsSession?.status === 'closed';
+            const hasClosedSessions = transcriptClosed || cardsClosed || factsClosed;
+            const shouldShow = isPaused || isNewClosed(transcriptSession) || isNewClosed(cardsSession) || isNewClosed(factsSession) || hasClosedSessions;
+
+            if (!shouldShow) {
+              return false;
+            }
+
+            return (
+              <button
+                onClick={handleStartSessions}
+                disabled={isStartingSessions}
+                style={{
+                  padding: '8px 16px',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  color: '#ffffff',
+                  background: isStartingSessions ? '#93c5fd' : '#3b82f6',
+                  cursor: isStartingSessions ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isStartingSessions) {
+                    e.currentTarget.style.background = '#2563eb';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isStartingSessions) {
+                    e.currentTarget.style.background = '#3b82f6';
+                  }
+                }}
+                title={isPaused ? 'Resume paused sessions' : 'Start sessions'}
+              >
+                {isStartingSessions
+                  ? (isPaused ? 'Resuming...' : 'Starting...')
+                  : (isPaused ? 'Resume Sessions' : 'Start Sessions')}
+              </button>
+            );
+          })()}
+
           {/* Create Sessions button */}
           {agent?.status === 'idle' && agent?.stage === 'context_complete' && 
            !checkingSessions && 
@@ -748,74 +841,6 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
           >
             {isResettingSessions ? 'Resetting...' : 'Reset Sessions'}
           </button>
-          
-          {/* Start/Resume Sessions button */}
-          {(() => {
-            if (checkingSessions || !sessionsData) {
-              return false;
-            }
-            
-            const transcriptSession = displaySessions.find(s => s.agent_type === 'transcript');
-            const cardsSession = displaySessions.find(s => s.agent_type === 'cards');
-            const factsSession = displaySessions.find(s => s.agent_type === 'facts');
-            
-            const isNewClosed = (session: typeof cardsSession) => {
-              if (!session?.status || session.status !== 'closed' || !session?.metadata?.created_at) {
-                return false;
-              }
-              const createdTime = new Date(session.metadata.created_at).getTime();
-              const now = new Date().getTime();
-              const ageMs = now - createdTime;
-              return ageMs < 60000;
-            };
-            
-            const isPaused = (transcriptSession?.status === 'paused') || (cardsSession?.status === 'paused') || (factsSession?.status === 'paused');
-            const transcriptClosed = transcriptSession?.status === 'closed';
-            const cardsClosed = cardsSession?.status === 'closed';
-            const factsClosed = factsSession?.status === 'closed';
-            const hasClosedSessions = transcriptClosed || cardsClosed || factsClosed;
-            const shouldShow = isPaused || isNewClosed(transcriptSession) || isNewClosed(cardsSession) || isNewClosed(factsSession) || hasClosedSessions;
-            
-            return shouldShow;
-          })() && (() => {
-            const transcriptSession = displaySessions.find(s => s.agent_type === 'transcript');
-            const cardsSession = displaySessions.find(s => s.agent_type === 'cards');
-            const factsSession = displaySessions.find(s => s.agent_type === 'facts');
-            const isPaused = (transcriptSession?.status === 'paused') || (cardsSession?.status === 'paused') || (factsSession?.status === 'paused');
-            
-            return (
-              <button
-                onClick={handleStartSessions}
-                disabled={isStartingSessions}
-                style={{
-                  padding: '8px 16px',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  color: '#ffffff',
-                  background: isStartingSessions ? '#93c5fd' : '#3b82f6',
-                  cursor: isStartingSessions ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  if (!isStartingSessions) {
-                    e.currentTarget.style.background = '#2563eb';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isStartingSessions) {
-                    e.currentTarget.style.background = '#3b82f6';
-                  }
-                }}
-                title={isPaused ? 'Resume paused sessions' : 'Start sessions'}
-              >
-                {isStartingSessions 
-                  ? (isPaused ? 'Resuming...' : 'Starting...')
-                  : (isPaused ? 'Resume Sessions' : 'Start Sessions')}
-              </button>
-            );
-          })()}
           
           {/* Pause Sessions button */}
           {(() => {

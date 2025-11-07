@@ -347,6 +347,34 @@ function createWorkerServer() {
         }
       }
 
+      if (pathname === '/sessions/reset' && req.method === 'POST') {
+        try {
+          const body = await parseJsonBody(req);
+          const eventId =
+            typeof body?.event_id === 'string'
+              ? body.event_id
+              : typeof body?.eventId === 'string'
+              ? body.eventId
+              : null;
+
+          if (!eventId) {
+            res.writeHead(400);
+            res.end(JSON.stringify({ ok: false, error: 'event_id is required' }));
+            return;
+          }
+
+          await orchestrator.resetEventRuntime(eventId);
+
+          res.writeHead(200);
+          res.end(JSON.stringify({ ok: true, event_id: eventId }));
+          return;
+        } catch (error: any) {
+          res.writeHead(500);
+          res.end(JSON.stringify({ ok: false, error: error?.message || 'Failed to reset event runtime' }));
+          return;
+        }
+      }
+
       // Transcript audio ingestion endpoint
       if (pathname === '/sessions/transcript/audio' && req.method === 'POST') {
         try {
@@ -387,11 +415,24 @@ function createWorkerServer() {
             speaker: typeof body?.speaker === 'string' ? body.speaker : undefined,
           } as const;
 
-          await orchestrator.appendTranscriptAudio(eventId, chunkMetadata);
+          try {
+            await orchestrator.appendTranscriptAudio(eventId, chunkMetadata);
 
-          res.writeHead(202);
-          res.end(JSON.stringify({ ok: true }));
-          return;
+            res.writeHead(202);
+            res.end(JSON.stringify({ ok: true }));
+            return;
+          } catch (err: any) {
+            const message = err?.message || 'Failed to append transcript audio';
+            console.error('[worker] appendTranscriptAudio failed:', message);
+            res.writeHead(err?.statusCode || 500);
+            res.end(
+              JSON.stringify({
+                ok: false,
+                error: message,
+              })
+            );
+            return;
+          }
         } catch (error: any) {
           const statusCode = error?.statusCode || (error?.message?.includes('not found') ? 404 : 500);
           res.writeHead(statusCode);

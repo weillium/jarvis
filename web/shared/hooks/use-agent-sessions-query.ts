@@ -32,6 +32,7 @@ export interface RuntimeStats {
   cards_last_seq: number;
   facts_last_seq: number;
   facts_last_update: string;
+  uptime_ms?: number;
   ring_buffer_stats: {
     total: number;
     finalized: number;

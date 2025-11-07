@@ -60,7 +60,9 @@ export class RealtimeSession {
   private session?: OpenAIRealtimeWebSocket;
   private config: RealtimeSessionConfig;
   private isActive: boolean = false;
-  private messageQueue: any[] = [];
+  private messageQueue: Array<{ message: string; context?: any }> = [];
+  private currentMessage: { message: string; context?: any } | null = null;
+  private pendingResponse: boolean = false;
   private pendingAudioBytes: number = 0;
   private eventHandlers: Map<string, ((data: any) => void)[]> = new Map();
   private onStatusChange?: (
@@ -85,6 +87,11 @@ export class RealtimeSession {
   private readonly PING_INTERVAL_MS = parseInt(process.env.REALTIME_PING_INTERVAL_MS || '25000', 10); // Default 25 seconds
   private readonly PONG_TIMEOUT_MS = parseInt(process.env.REALTIME_PONG_TIMEOUT_MS || '10000', 10); // Default 10 seconds
   private readonly MAX_MISSED_PONGS = parseInt(process.env.REALTIME_MAX_MISSED_PONGS || '3', 10); // Reconnect after 3 missed pongs
+  private reconnectTimer?: NodeJS.Timeout;
+  private errorRetryAttempts = 0;
+  private readonly MAX_ERROR_RETRIES = parseInt(process.env.REALTIME_MAX_ERROR_RETRIES || '5', 10);
+  private readonly RETRY_BACKOFF_BASE_MS = parseInt(process.env.REALTIME_RETRY_BACKOFF_MS || '1000', 10);
+  private readonly RETRY_BACKOFF_CAP_MS = parseInt(process.env.REALTIME_RETRY_BACKOFF_CAP_MS || '8000', 10);
 
   constructor(openai: OpenAI, config: RealtimeSessionConfig) {
     this.openai = openai;
@@ -94,6 +101,142 @@ export class RealtimeSession {
     this.supabase = config.supabase;
     this.onRetrieve = config.onRetrieve;
     this.embedText = config.embedText;
+  }
+
+  private clearReconnectTimer(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = undefined;
+    }
+  }
+
+  private safeCloseSession(reason: string): void {
+    if (!this.session) {
+      return;
+    }
+
+    try {
+      this.session.close({ code: 1011, reason });
+    } catch (closeError: any) {
+      console.warn(`[realtime] Failed to close session cleanly: ${closeError.message}`);
+    } finally {
+      this.session = undefined;
+    }
+  }
+
+  private classifyRealtimeError(error: any): 'transient' | 'fatal' {
+    const message = (error?.message || '').toLowerCase();
+    const code = (error?.code || '').toLowerCase();
+    const type = (error?.type || '').toLowerCase();
+
+    const transientIndicators = [
+      'not ready',
+      'could not send data',
+      'connection closed',
+      'connection reset',
+      'timeout',
+      'temporarily unavailable',
+      'buffer too small',
+      'ping',
+      'pong',
+      'retry later',
+      'rate limit',
+      '503',
+      '504',
+    ];
+
+    if (transientIndicators.some((indicator) => message.includes(indicator))) {
+      return 'transient';
+    }
+
+    const fatalIndicators = [
+      'unknown parameter',
+      'invalid api key',
+      'api key not valid',
+      'unauthorized',
+      'forbidden',
+      'unsupported',
+      'malformed',
+      'invalid_request_error',
+      'policy violation',
+    ];
+
+    if (fatalIndicators.some((indicator) => message.includes(indicator))) {
+      return 'fatal';
+    }
+    if (fatalIndicators.some((indicator) => code.includes(indicator) || type.includes(indicator))) {
+      return 'fatal';
+    }
+
+    if (type === 'invalid_request_error') {
+      return 'fatal';
+    }
+
+    // Default to transient for unknown errors to allow retry, but cap by retry count
+    return 'transient';
+  }
+
+  private transitionToErrorState(error: any, contextMessage?: string): void {
+    this.stopPingPong();
+    this.clearReconnectTimer();
+    this.safeCloseSession('Fatal error - closing');
+    this.isActive = false;
+    this.errorRetryAttempts = 0;
+    this.pendingAudioBytes = 0;
+    this.pendingResponse = false;
+    this.currentMessage = null;
+    this.messageQueue = [];
+
+    const message = contextMessage || error?.message || String(error);
+    this.onLog?.('error', `Session failed: ${message}`);
+    this.onStatusChange?.('error');
+    void this.updateDatabaseStatus('error');
+    this.emit('error', error instanceof Error ? error : new Error(message));
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer) {
+      return;
+    }
+
+    const nextAttempt = this.errorRetryAttempts + 1;
+    if (nextAttempt > this.MAX_ERROR_RETRIES) {
+      this.transitionToErrorState(
+        new Error(`Exceeded max realtime reconnect attempts (${this.MAX_ERROR_RETRIES})`),
+        `Exceeded max realtime reconnect attempts (${this.MAX_ERROR_RETRIES})`
+      );
+      return;
+    }
+
+    const exponentialDelay = this.RETRY_BACKOFF_BASE_MS * Math.pow(2, nextAttempt - 1);
+    const delay = Math.min(exponentialDelay, this.RETRY_BACKOFF_CAP_MS);
+
+    this.onLog?.(
+      'warn',
+      `Realtime session retry scheduled in ${delay}ms (attempt ${nextAttempt}/${this.MAX_ERROR_RETRIES})`
+    );
+
+    this.reconnectTimer = setTimeout(async () => {
+      this.reconnectTimer = undefined;
+      this.errorRetryAttempts = nextAttempt;
+
+      try {
+        await this.connect();
+        this.errorRetryAttempts = 0;
+      } catch (connectError: any) {
+        const classification = this.classifyRealtimeError(connectError);
+        const message = connectError?.message || String(connectError);
+        console.warn(`[realtime] Reconnect attempt ${this.errorRetryAttempts} failed: ${message}`);
+        this.onLog?.('warn', `Reconnect attempt ${this.errorRetryAttempts} failed: ${message}`);
+
+        if (classification === 'fatal' || this.errorRetryAttempts >= this.MAX_ERROR_RETRIES) {
+          this.transitionToErrorState(connectError, message);
+          return;
+        }
+
+        this.scheduleReconnect();
+      }
+    }, delay);
   }
 
   /**
@@ -135,20 +278,8 @@ export class RealtimeSession {
       // Set up event handlers BEFORE marking as active
       this.setupEventHandlers();
 
-      // Wait for session to be ready before sending configuration
-      // The create() method returns a WebSocket, but we should wait for it to be ready
-      // Use a small delay to allow the WebSocket to establish connection
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Phase 3: Connection readiness check
-      try {
-        const underlyingSocket = (this.session as any).socket || (this.session as any).ws;
-        const readyState = underlyingSocket?.readyState;
-        const readyStateNames = ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'];
-        this.onLog?.('log', `Connection readyState: ${readyStateNames[readyState] || 'unknown'}`);
-      } catch (error: any) {
-        console.warn(`[realtime] [${this.config.agentType}] Could not check readiness: ${error.message}`);
-      }
+      await this.waitForTransportReady();
+      this.logWebSocketState('After transport ready');
 
       // Define retrieve tool for RAG (available to all agents)
       const retrieveTool: any = {
@@ -240,6 +371,16 @@ export class RealtimeSession {
             output_modalities: ['text'],
             max_output_tokens: 4096,
             tools,
+            audio: this.config.agentType === 'transcript'
+              ? {
+                  input: {
+                    format: {
+                      type: 'audio/pcm',
+                      rate: 24000,
+                    },
+                  },
+                }
+              : undefined,
           },
         } as RealtimeClientEvent);
         
@@ -302,6 +443,10 @@ export class RealtimeSession {
       // Notify active status
       this.onStatusChange?.('active', sessionId);
 
+      // Reset retry tracking on successful connect
+      this.errorRetryAttempts = 0;
+      this.clearReconnectTimer();
+
       // Update database
       if (this.supabase) {
         await this.updateDatabaseStatus('active', sessionId);
@@ -309,6 +454,8 @@ export class RealtimeSession {
 
       const connectMessage = `Session connected: ${sessionId} (${this.config.agentType})`;
       this.onLog?.('log', connectMessage);
+
+      void this.processQueue();
 
       return sessionId;
     } catch (error: any) {
@@ -442,20 +589,41 @@ export class RealtimeSession {
                 const results = await this.onRetrieve(query, topK);
 
                 // Create function_call_output item to return results
-                this.session!.send({
-                  type: 'conversation.item.create',
-                  item: {
-                    type: 'function_call_output',
-                    call_id: callId,
-                    output: JSON.stringify({
-                      chunks: results.map((r) => ({
-                        id: r.id,
-                        chunk: r.chunk,
-                        similarity: r.similarity,
-                      })),
-                    }),
-                  },
-                } as RealtimeClientEvent);
+              if (this.isActive && this.session) {
+                try {
+                  this.session.send({
+                    type: 'conversation.item.create',
+                    item: {
+                      type: 'function_call_output',
+                      call_id: callId,
+                      output: JSON.stringify({
+                        chunks: results.map((r) => ({
+                          id: r.id,
+                          chunk: r.chunk,
+                          similarity: r.similarity,
+                        })),
+                      }),
+                    },
+                  } as RealtimeClientEvent);
+                } catch (sendError: any) {
+                  if (!String(sendError?.message || '').toLowerCase().includes('invalid_tool_call_id')) {
+                    throw sendError;
+                  }
+                  console.warn('[realtime] Ignoring stale tool output for expired call_id', {
+                    eventId: this.config.eventId,
+                    agentType: this.config.agentType,
+                    callId,
+                  });
+                  return;
+                }
+              } else {
+                console.warn('[realtime] Skipping tool output - session inactive', {
+                  eventId: this.config.eventId,
+                  agentType: this.config.agentType,
+                  callId,
+                });
+                return;
+              }
 
                 const successMessage = `retrieve() returned ${results.length} chunks`;
                 this.onLog?.('log', successMessage);
@@ -463,32 +631,58 @@ export class RealtimeSession {
                 const errorMessage = `Error executing retrieve(): ${error.message}`;
                 this.onLog?.('error', errorMessage);
 
-                // Return error in function output
-                this.session!.send({
-                  type: 'conversation.item.create',
-                  item: {
-                    type: 'function_call_output',
-                    call_id: callId,
-                    output: JSON.stringify({
-                      error: error.message,
-                      chunks: [],
-                    }),
-                  },
-                } as RealtimeClientEvent);
+              if (this.isActive && this.session) {
+                try {
+                  this.session.send({
+                    type: 'conversation.item.create',
+                    item: {
+                      type: 'function_call_output',
+                      call_id: callId,
+                      output: JSON.stringify({
+                        error: error.message,
+                        chunks: [],
+                      }),
+                    },
+                  } as RealtimeClientEvent);
+                } catch (sendError: any) {
+                  if (!String(sendError?.message || '').toLowerCase().includes('invalid_tool_call_id')) {
+                    throw sendError;
+                  }
+                  console.warn('[realtime] Ignoring error tool output for expired call_id', {
+                    eventId: this.config.eventId,
+                    agentType: this.config.agentType,
+                    callId,
+                    error: error.message,
+                  });
+                }
+              }
               }
             } else {
               const warnMessage = `retrieve() called but no onRetrieve callback provided`;
               this.onLog?.('warn', warnMessage);
               
               // Return empty result
-              this.session!.send({
-                type: 'conversation.item.create',
-                item: {
-                  type: 'function_call_output',
-                  call_id: callId,
-                  output: JSON.stringify({ chunks: [] }),
-                },
-              } as RealtimeClientEvent);
+            if (this.isActive && this.session) {
+              try {
+                this.session.send({
+                  type: 'conversation.item.create',
+                  item: {
+                    type: 'function_call_output',
+                    call_id: callId,
+                    output: JSON.stringify({ chunks: [] }),
+                  },
+                } as RealtimeClientEvent);
+              } catch (sendError: any) {
+                if (!String(sendError?.message || '').toLowerCase().includes('invalid_tool_call_id')) {
+                  throw sendError;
+                }
+                console.warn('[realtime] Ignoring empty tool output for expired call_id', {
+                  eventId: this.config.eventId,
+                  agentType: this.config.agentType,
+                  callId,
+                });
+              }
+            }
             }
           } 
           // Check if this is a produce_card() call (Cards agent only)
@@ -619,18 +813,47 @@ export class RealtimeSession {
         console.error(
           `[realtime] Error processing response.done: ${error.message}`
         );
+      } finally {
+        this.pendingResponse = false;
+        this.currentMessage = null;
+        void this.processQueue();
       }
     });
 
     // Handle errors
     this.session.on('error', (error: any) => {
-      const errorMessage = `Session error: ${error.message || JSON.stringify(error)}`;
-      console.error(`[realtime] ${errorMessage}`);
-      this.onLog?.('error', errorMessage);
+      const baseMessage = `Session error: ${error.message || JSON.stringify(error)}`;
+      const errorMessage = (error?.message || '').toLowerCase();
+
+      if (errorMessage.includes('could not close the connection')) {
+        console.warn(`[realtime] ${baseMessage} (ignored close failure)`);
+        return;
+      }
+
+      const classification = this.classifyRealtimeError(error);
+
+      if (classification === 'fatal') {
+        console.error(`[realtime] ${baseMessage}`);
+        this.onLog?.('error', baseMessage);
+        this.transitionToErrorState(error, baseMessage);
+        return;
+      }
+
+      console.warn(`[realtime] ${baseMessage} (transient - retrying)`);
+      this.onLog?.('warn', `${baseMessage} (transient - retrying)`);
+
       this.isActive = false;
-      this.onStatusChange?.('error');
-      this.updateDatabaseStatus('error');
-      this.emit('error', error);
+      this.pendingAudioBytes = 0;
+      if (this.currentMessage) {
+        this.messageQueue.unshift(this.currentMessage);
+        this.currentMessage = null;
+      }
+      this.pendingResponse = false;
+      this.stopPingPong();
+      this.onStatusChange?.('paused');
+      void this.updateDatabaseStatus('paused');
+      this.safeCloseSession('Transient error - reconnecting');
+      this.scheduleReconnect();
     });
 
     // Generic event handler for debugging
@@ -662,6 +885,156 @@ export class RealtimeSession {
     this.onLog?.('log', 'Event handlers registered');
   }
 
+  private async waitForTransportReady(timeoutMs: number = 5000): Promise<void> {
+    if (!this.session) {
+      throw new Error('Session not initialized');
+    }
+
+    const start = Date.now();
+    const sessionRef: any = this.session;
+    const transport = sessionRef.transport;
+    const socket: any = sessionRef.socket || sessionRef.ws;
+
+    const isOpen = (): boolean => {
+      if (transport?.state) {
+        return transport.state === 'open';
+      }
+      if (typeof transport?.readyState === 'string') {
+        return transport.readyState.toLowerCase() === 'open';
+      }
+      if (typeof transport?.readyState === 'number') {
+        return transport.readyState === 1;
+      }
+      if (socket?.readyState !== undefined) {
+        const openConst = socket.OPEN ?? 1;
+        return socket.readyState === openConst;
+      }
+      return false;
+    };
+
+    if (isOpen()) {
+      this.onLog?.('log', 'Realtime transport already open');
+      return;
+    }
+
+    this.onLog?.('log', 'Waiting for realtime transport to open');
+
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      let pollInterval: NodeJS.Timeout | null = null;
+      const removeListeners: Array<() => void> = [];
+
+      const cleanup = () => {
+        if (pollInterval) {
+          clearInterval(pollInterval);
+          pollInterval = null;
+        }
+        removeListeners.forEach((remove) => {
+          try {
+            remove();
+          } catch (err) {
+            if (err instanceof Error) {
+              console.warn('[realtime] Failed to remove transport listener', err.message);
+            }
+          }
+        });
+        removeListeners.length = 0;
+      };
+
+      const resolveOnce = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve();
+      };
+
+      const rejectOnce = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(error);
+      };
+
+      const timeoutId = setTimeout(() => {
+        rejectOnce(new Error('Timed out waiting for realtime transport to open'));
+      }, timeoutMs);
+
+      removeListeners.push(() => clearTimeout(timeoutId));
+
+      if (transport && typeof transport.addEventListener === 'function') {
+        const handleTransportOpen = () => resolveOnce();
+        const handleTransportError = (event: any) => {
+          if (isOpen()) {
+            resolveOnce();
+            return;
+          }
+          const error = event?.error instanceof Error ? event.error : new Error('Transport error before open');
+          rejectOnce(error);
+        };
+        transport.addEventListener('open', handleTransportOpen);
+        transport.addEventListener('error', handleTransportError);
+        removeListeners.push(() => {
+          if (typeof transport.removeEventListener === 'function') {
+            transport.removeEventListener('open', handleTransportOpen);
+            transport.removeEventListener('error', handleTransportError);
+          }
+        });
+      }
+
+      if (socket) {
+        if (typeof socket.on === 'function') {
+          const handleSocketOpen = () => resolveOnce();
+          const handleSocketError = (err: any) => {
+            if (isOpen()) {
+              resolveOnce();
+              return;
+            }
+            const error = err instanceof Error ? err : new Error(String(err));
+            rejectOnce(error);
+          };
+          socket.on('open', handleSocketOpen);
+          socket.on('error', handleSocketError);
+          removeListeners.push(() => {
+            if (typeof socket.off === 'function') {
+              socket.off('open', handleSocketOpen);
+              socket.off('error', handleSocketError);
+            } else if (typeof socket.removeListener === 'function') {
+              socket.removeListener('open', handleSocketOpen);
+              socket.removeListener('error', handleSocketError);
+            }
+          });
+        } else if (typeof socket.addEventListener === 'function') {
+          const handleSocketOpen = () => resolveOnce();
+          const handleSocketError = (event: any) => {
+            if (isOpen()) {
+              resolveOnce();
+              return;
+            }
+            const error = event?.error instanceof Error ? event.error : new Error('WebSocket error before open');
+            rejectOnce(error);
+          };
+          socket.addEventListener('open', handleSocketOpen);
+          socket.addEventListener('error', handleSocketError);
+          removeListeners.push(() => {
+            if (typeof socket.removeEventListener === 'function') {
+              socket.removeEventListener('open', handleSocketOpen);
+              socket.removeEventListener('error', handleSocketError);
+            }
+          });
+        }
+      }
+
+      pollInterval = setInterval(() => {
+        if (isOpen()) {
+          resolveOnce();
+        }
+      }, 50);
+    });
+
+    const elapsed = Date.now() - start;
+    this.onLog?.('log', `Realtime transport opened after ${elapsed}ms`);
+  }
+
   /**
    * Emit event to registered handlers
    */
@@ -688,8 +1061,9 @@ export class RealtimeSession {
       throw new Error('Session not connected');
     }
 
-    // Phase 8: Message queue status logging
-    if (this.messageQueue.length > 0) {
+    this.messageQueue.push({ message, context });
+
+    if (this.messageQueue.length > 1 || this.pendingResponse) {
       console.warn(`[realtime] [${this.config.agentType}] Sending message with queue backlog`, {
         queueLength: this.messageQueue.length,
         eventId: this.config.eventId,
@@ -697,43 +1071,7 @@ export class RealtimeSession {
       this.onLog?.('warn', `Message queue backlog: ${this.messageQueue.length} items`);
     }
 
-    // Format message based on agent type
-    const formattedMessage = this.formatMessage(message, context);
-
-    try {
-      // Step 1: Add user message to conversation
-      this.session.send({
-        type: 'conversation.item.create',
-        item: formattedMessage.item,
-      } as RealtimeClientEvent);
-
-      // Step 2: Trigger response generation
-      // Note: JSON format is specified in instructions, not response.create
-      this.session.send({
-        type: 'response.create',
-      } as RealtimeClientEvent);
-
-      console.log(`[realtime] Message sent (${this.config.agentType})`);
-
-      // Process any queued messages (if connection was delayed)
-      if (this.messageQueue.length > 0) {
-        await this.processQueue();
-      }
-    } catch (error: any) {
-      console.error(`[realtime] Error sending message: ${error.message}`);
-
-      // Optionally queue for retry on connection errors
-      if (
-        (error as any).code === 'ECONNRESET' ||
-        (error as any).code === 'TIMEOUT'
-      ) {
-        this.messageQueue.push(formattedMessage);
-        // Schedule retry
-        setTimeout(() => this.processQueue(), 1000);
-      }
-
-      throw error;
-    }
+    await this.processQueue();
   }
 
   /**
@@ -744,27 +1082,41 @@ export class RealtimeSession {
       return;
     }
 
-    // Phase 8: Message queue processing logging
-    console.log(`[realtime] [${this.config.agentType}] Processing message queue`, {
-      queueLength: this.messageQueue.length,
-      eventId: this.config.eventId,
-    });
+    if (this.pendingResponse) {
+      return;
+    }
 
-    while (this.messageQueue.length > 0) {
-      const message = this.messageQueue.shift();
-      try {
-        this.session.send({
-          type: 'conversation.item.create',
-          item: message.item,
-        } as RealtimeClientEvent);
-        this.session.send({
-          type: 'response.create',
-        } as RealtimeClientEvent);
-      } catch (error: any) {
-        // Re-queue if failed
-        this.messageQueue.unshift(message);
-        break;
-      }
+    if (this.messageQueue.length === 0) {
+      return;
+    }
+
+    const next = this.messageQueue.shift();
+    if (!next) {
+      return;
+    }
+
+    this.currentMessage = next;
+    const formattedMessage = this.formatMessage(next.message, next.context);
+
+    try {
+      this.pendingResponse = true;
+
+      this.session.send({
+        type: 'conversation.item.create',
+        item: formattedMessage.item,
+      } as RealtimeClientEvent);
+
+      this.session.send({
+        type: 'response.create',
+      } as RealtimeClientEvent);
+
+      console.log(`[realtime] Message sent (${this.config.agentType})`);
+    } catch (error: any) {
+      this.pendingResponse = false;
+      this.messageQueue.unshift(next);
+      this.currentMessage = null;
+      console.error(`[realtime] Error sending message: ${error.message}`);
+      throw error;
     }
   }
 
@@ -855,10 +1207,6 @@ export class RealtimeSession {
         this.session.send({ type: 'input_audio_buffer.commit' } as RealtimeClientEvent);
         this.session.send({
           type: 'response.create',
-          response: {
-            instructions: undefined,
-            modalities: ['text'],
-          },
         } as RealtimeClientEvent);
         this.pendingAudioBytes = 0;
       }
