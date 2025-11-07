@@ -56,9 +56,9 @@ const CARD_TYPES: ReadonlySet<RealtimeCardDTO['card_type']> = new Set([
   'visual',
 ]);
 
-const safeJsonParse = (raw: string): unknown | null => {
+const safeJsonParse = <T>(raw: string): T | null => {
   try {
-    return JSON.parse(raw);
+    return JSON.parse(raw) as T;
   } catch {
     return null;
   }
@@ -169,13 +169,102 @@ const mapFactCandidate = (value: unknown): RealtimeFactDTO | null => {
   return fact;
 };
 
-const isInvalidToolCallError = (error: unknown): boolean => {
-  if (!error || typeof error !== 'object') {
-    return false;
+const extractErrorField = (
+  value: unknown,
+  field: 'message' | 'code' | 'type'
+): string => {
+  if (value instanceof Error && field === 'message') {
+    return value.message;
   }
-  const message = 'message' in error ? String((error as { message?: unknown }).message || '') : '';
-  return message.toLowerCase().includes('invalid_tool_call_id');
+  if (isRecord(value)) {
+    const fieldValue = value[field];
+    if (typeof fieldValue === 'string') {
+      return fieldValue;
+    }
+  }
+  return '';
 };
+
+const extractErrorMessage = (value: unknown): string => {
+  const message = extractErrorField(value, 'message');
+  if (message) {
+    return message;
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return 'Unknown error';
+  }
+};
+
+const getLowercaseErrorField = (
+  value: unknown,
+  field: 'message' | 'code' | 'type'
+): string => extractErrorField(value, field).toLowerCase();
+
+const isInvalidToolCallError = (error: unknown): boolean =>
+  getLowercaseErrorField(error, 'message').includes('invalid_tool_call_id');
+
+interface SocketLike {
+  readyState?: number;
+  on?: (event: string, handler: (...args: unknown[]) => void) => void;
+  off?: (event: string, handler: (...args: unknown[]) => void) => void;
+  addEventListener?: (event: string, handler: (...args: unknown[]) => void) => void;
+  removeEventListener?: (event: string, handler: (...args: unknown[]) => void) => void;
+  removeListener?: (event: string, handler: (...args: unknown[]) => void) => void;
+  OPEN?: number;
+  __connectedAt?: string;
+  ping?: () => void;
+}
+
+interface TransportLike {
+  state?: string;
+  readyState?: string | number;
+  addEventListener?: (event: string, handler: (...args: unknown[]) => void) => void;
+  removeEventListener?: (event: string, handler: (...args: unknown[]) => void) => void;
+}
+
+const isSocketLike = (value: unknown): value is SocketLike =>
+  isRecord(value) &&
+  (typeof value.readyState === 'number' ||
+    typeof value.on === 'function' ||
+    typeof value.addEventListener === 'function' ||
+    typeof value.ping === 'function');
+
+const isTransportLike = (value: unknown): value is TransportLike =>
+  isRecord(value) &&
+  (typeof value.state === 'string' ||
+    typeof value.readyState === 'string' ||
+    typeof value.readyState === 'number');
+
+const getSessionInternals = (
+  session: OpenAIRealtimeWebSocket | undefined
+): { transport?: TransportLike; socket?: SocketLike } => {
+  if (!session) {
+    return {};
+  }
+
+  const candidate = session as unknown;
+  if (!isRecord(candidate)) {
+    return {};
+  }
+
+  const transport = isTransportLike(candidate.transport) ? candidate.transport : undefined;
+  const socketCandidate =
+    isSocketLike(candidate.socket) ? candidate.socket : isSocketLike(candidate.ws) ? candidate.ws : undefined;
+
+  return {
+    transport,
+    socket: socketCandidate,
+  };
+};
+
+const getUnderlyingSocket = (
+  session: OpenAIRealtimeWebSocket | undefined
+): SocketLike | undefined => getSessionInternals(session).socket;
 
 const extractAssistantText = (event: ResponseDoneEvent): string | null => {
   const items = event.response.output;
@@ -302,17 +391,19 @@ export class RealtimeSession {
 
     try {
       this.session.close({ code: 1011, reason });
-    } catch (closeError: any) {
-      console.warn(`[realtime] Failed to close session cleanly: ${closeError.message}`);
+    } catch (closeError: unknown) {
+      console.warn(
+        `[realtime] Failed to close session cleanly: ${extractErrorMessage(closeError)}`
+      );
     } finally {
       this.session = undefined;
     }
   }
 
-  private classifyRealtimeError(error: any): 'transient' | 'fatal' {
-    const message = (error?.message || '').toLowerCase();
-    const code = (error?.code || '').toLowerCase();
-    const type = (error?.type || '').toLowerCase();
+  private classifyRealtimeError(error: unknown): 'transient' | 'fatal' {
+    const message = getLowercaseErrorField(error, 'message');
+    const code = getLowercaseErrorField(error, 'code');
+    const type = getLowercaseErrorField(error, 'type');
 
     const transientIndicators = [
       'not ready',
@@ -372,8 +463,7 @@ export class RealtimeSession {
     this.currentMessage = null;
     this.messageQueue = [];
 
-    const message =
-      contextMessage || (error instanceof Error ? error.message : String(error));
+    const message = contextMessage || extractErrorMessage(error);
     this.onLog?.('error', `Session failed: ${message}`);
     this.onStatusChange?.('error');
     void this.updateDatabaseStatus('error');
@@ -409,9 +499,9 @@ export class RealtimeSession {
       try {
         await this.connect();
         this.errorRetryAttempts = 0;
-      } catch (connectError: any) {
+      } catch (connectError: unknown) {
         const classification = this.classifyRealtimeError(connectError);
-        const message = connectError?.message || String(connectError);
+        const message = extractErrorMessage(connectError);
         console.warn(`[realtime] Reconnect attempt ${this.errorRetryAttempts} failed: ${message}`);
         this.onLog?.('warn', `Reconnect attempt ${this.errorRetryAttempts} failed: ${message}`);
 
@@ -571,9 +661,10 @@ export class RealtimeSession {
         } as RealtimeClientEvent);
         
         this.onLog?.('log', 'Session configuration sent');
-      } catch (error: any) {
+      } catch (error: unknown) {
         // If send fails, wait a bit and retry once
-        if (error.message?.includes('could not send data') || error.message?.includes('not ready')) {
+        const errorMessage = getLowercaseErrorField(error, 'message');
+        if (errorMessage.includes('could not send data') || errorMessage.includes('not ready')) {
           await new Promise(resolve => setTimeout(resolve, 100));
           try {
             this.session.send({
@@ -586,15 +677,15 @@ export class RealtimeSession {
                 tools,
               },
             } as RealtimeClientEvent);
-          } catch (retryError: any) {
+          } catch (retryError: unknown) {
             // Log but don't throw - connection might still work
+            const underlyingSocket = getSessionInternals(this.session).socket;
             console.error(`[realtime] [${this.config.agentType}] Session update send failed after retry`, {
-              error: retryError.message,
-              stack: retryError.stack,
-              readyState: (this.session as any)?.socket?.readyState,
+              error: extractErrorMessage(retryError),
+              readyState: underlyingSocket?.readyState,
               eventId: this.config.eventId,
             });
-            this.onLog?.('error', `Session update failed: ${retryError.message}`);
+            this.onLog?.('error', `Session update failed: ${extractErrorMessage(retryError)}`);
             // The session might still work, so we continue
           }
         } else {
@@ -615,11 +706,11 @@ export class RealtimeSession {
 
       // Store connection timestamp on underlying socket if accessible
       try {
-        const underlyingSocket = (this.session as any).socket || (this.session as any).ws;
+        const underlyingSocket = getUnderlyingSocket(this.session);
         if (underlyingSocket) {
-          (underlyingSocket).__connectedAt = new Date().toISOString();
+          underlyingSocket.__connectedAt = new Date().toISOString();
         }
-      } catch (error) {
+      } catch (error: unknown) {
         // Ignore if we can't access underlying socket
       }
 
@@ -644,22 +735,23 @@ export class RealtimeSession {
       void this.processQueue();
 
       return sessionId;
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Phase 9: Enhanced error context
+      const underlyingSocket = getUnderlyingSocket(this.session);
       const errorContext = {
-        errorType: error.constructor?.name || 'Unknown',
-        message: error.message,
-        stack: error.stack,
-        code: error.code,
+        errorType: error instanceof Error ? error.constructor.name : 'Unknown',
+        message: extractErrorMessage(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        code: extractErrorField(error, 'code') || undefined,
         eventId: this.config.eventId,
         agentType: this.config.agentType,
         model: this.config.model,
         isActive: this.isActive,
-        readyState: (this.session as any)?.socket?.readyState,
+        readyState: underlyingSocket?.readyState,
         timestamp: new Date().toISOString(),
       };
       
-      this.onLog?.('error', `Connection failed: ${error.message}`);
+      this.onLog?.('error', `Connection failed: ${errorContext.message}`);
 
       // Notify error status
       this.onStatusChange?.('error');
@@ -685,7 +777,13 @@ export class RealtimeSession {
     }
 
     try {
-      const updateData: any = {
+      const updateData: {
+        status: typeof status;
+        updated_at: string;
+        provider_session_id?: string;
+        model?: string;
+        closed_at?: string;
+      } = {
         status,
         updated_at: new Date().toISOString(),
       };
@@ -710,8 +808,8 @@ export class RealtimeSession {
           event_id: this.config.eventId,
           agent_type: this.config.agentType,
         });
-    } catch (error: any) {
-      this.onLog?.('error', `Database status update failed: ${error.message}`);
+    } catch (error: unknown) {
+      this.onLog?.('error', `Database status update failed: ${extractErrorMessage(error)}`);
       // Don't throw - status update failure shouldn't break session
     }
   }
@@ -733,22 +831,15 @@ export class RealtimeSession {
     // Handle pong responses (WebSocket ping-pong)
     // Note: OpenAI SDK may handle ping/pong at the WebSocket level, but we'll track it
     // Check if the underlying socket supports ping/pong events
-    try {
-      const underlyingSocket = (this.session as any).socket || (this.session as any).ws;
-      if (underlyingSocket && typeof underlyingSocket.on === 'function') {
-        // Standard WebSocket 'pong' event (fires when pong frame is received)
-        underlyingSocket.on('pong', () => {
-          this.handlePong();
-        });
-      } else {
-        // Ping/pong not available on this socket - disable ping/pong mechanism
-        this.onLog?.('warn', 'Ping/pong not available on socket - SDK may handle it internally');
-        this.stopPingPong();
-      }
-    } catch (error: any) {
-      // If we can't access underlying socket, ping-pong may still work at SDK level
-      this.onLog?.('warn', `Could not attach pong handler: ${error.message}`);
-      // Disable ping/pong if we can't set it up
+    const underlyingSocket = getUnderlyingSocket(this.session);
+    if (underlyingSocket && typeof underlyingSocket.on === 'function') {
+      // Standard WebSocket 'pong' event (fires when pong frame is received)
+      underlyingSocket.on('pong', () => {
+        this.handlePong();
+      });
+    } else {
+      // Ping/pong not available on this socket - disable ping/pong mechanism
+      this.onLog?.('warn', 'Ping/pong not available on socket - SDK may handle it internally');
       this.stopPingPong();
     }
 
@@ -758,7 +849,7 @@ export class RealtimeSession {
       'response.function_call_arguments.done',
       async (event: ResponseFunctionCallArgumentsDoneEvent) => {
         try {
-          const parsedArgs = safeJsonParse(event.arguments);
+          const parsedArgs = safeJsonParse<Record<string, unknown>>(event.arguments);
           if (parsedArgs === null) {
             this.onLog?.('warn', 'Failed to parse function call arguments');
             return;
@@ -790,8 +881,8 @@ export class RealtimeSession {
                 })),
               });
               this.onLog?.('log', `retrieve() returned ${results.length} chunks`);
-            } catch (toolError) {
-              const errorMessage = toolError instanceof Error ? toolError.message : String(toolError);
+            } catch (toolError: unknown) {
+              const errorMessage = extractErrorMessage(toolError);
               this.onLog?.('error', `Error executing retrieve(): ${errorMessage}`);
               await this.sendToolResult(callId, { error: errorMessage, chunks: [] });
             }
@@ -808,9 +899,8 @@ export class RealtimeSession {
             });
             this.onLog?.('log', `produce_card() completed: ${card.kind} card`, { seq: card.source_seq });
           }
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          this.onLog?.('error', `Error handling function call: ${message}`);
+        } catch (error: unknown) {
+          this.onLog?.('error', `Error handling function call: ${extractErrorMessage(error)}`);
         }
       }
     );
@@ -838,7 +928,7 @@ export class RealtimeSession {
             return;
           }
 
-          const parsedResponse = safeJsonParse(event.text);
+          const parsedResponse = safeJsonParse<unknown>(event.text);
           if (parsedResponse === null) {
             this.onLog?.('warn', 'Failed to parse response text as JSON');
             return;
@@ -857,10 +947,10 @@ export class RealtimeSession {
               this.emitEvent('facts', factsArray);
             }
           }
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          console.error(`[realtime] Error parsing response: ${message}`);
-          this.emitEvent('error', error instanceof Error ? error : new Error(message));
+        } catch (error: unknown) {
+          const formatted = extractErrorMessage(error);
+          console.error(`[realtime] Error parsing response: ${formatted}`);
+          this.emitEvent('error', error instanceof Error ? error : new Error(formatted));
         }
       }
     );
@@ -884,7 +974,7 @@ export class RealtimeSession {
             receivedAt: new Date().toISOString(),
           });
         } else {
-          const parsedResponse = safeJsonParse(assistantText);
+          const parsedResponse = safeJsonParse<unknown>(assistantText);
           if (parsedResponse === null) {
             this.onLog?.('warn', 'Failed to parse response.done payload');
             return;
@@ -904,8 +994,8 @@ export class RealtimeSession {
             }
           }
         }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+      } catch (error: unknown) {
+        const message = extractErrorMessage(error);
         console.error(`[realtime] Error processing response.done: ${message}`);
       } finally {
         this.pendingResponse = false;
@@ -915,9 +1005,9 @@ export class RealtimeSession {
     });
 
     // Handle errors
-    this.session.on('error', (error: any) => {
-      const baseMessage = `Session error: ${error.message || JSON.stringify(error)}`;
-      const errorMessage = (error?.message || '').toLowerCase();
+    this.session.on('error', (error: unknown) => {
+      const baseMessage = `Session error: ${extractErrorMessage(error)}`;
+      const errorMessage = getLowercaseErrorField(error, 'message');
 
       if (errorMessage.includes('could not close the connection')) {
         console.warn(`[realtime] ${baseMessage} (ignored close failure)`);
@@ -985,9 +1075,7 @@ export class RealtimeSession {
     }
 
     const start = Date.now();
-    const sessionRef: any = this.session;
-    const transport = sessionRef.transport;
-    const socket: any = sessionRef.socket || sessionRef.ws;
+    const { transport, socket } = getSessionInternals(this.session);
 
     const isOpen = (): boolean => {
       if (transport?.state) {
@@ -1026,10 +1114,9 @@ export class RealtimeSession {
         removeListeners.forEach((remove) => {
           try {
             remove();
-          } catch (err) {
-            if (err instanceof Error) {
-              console.warn('[realtime] Failed to remove transport listener', err.message);
-            }
+          } catch (err: unknown) {
+            const message = extractErrorMessage(err);
+            console.warn('[realtime] Failed to remove transport listener', message);
           }
         });
         removeListeners.length = 0;
@@ -1057,13 +1144,16 @@ export class RealtimeSession {
 
       if (transport && typeof transport.addEventListener === 'function') {
         const handleTransportOpen = () => resolveOnce();
-        const handleTransportError = (event: any) => {
+        const handleTransportError = (event: unknown) => {
           if (isOpen()) {
             resolveOnce();
             return;
           }
-          const error = event?.error instanceof Error ? event.error : new Error('Transport error before open');
-          rejectOnce(error);
+          const transportError =
+            (isRecord(event) && event.error instanceof Error
+              ? event.error
+              : new Error('Transport error before open'));
+          rejectOnce(transportError);
         };
         transport.addEventListener('open', handleTransportOpen);
         transport.addEventListener('error', handleTransportError);
@@ -1078,13 +1168,12 @@ export class RealtimeSession {
       if (socket) {
         if (typeof socket.on === 'function') {
           const handleSocketOpen = () => resolveOnce();
-          const handleSocketError = (err: any) => {
+          const handleSocketError = (err: unknown) => {
             if (isOpen()) {
               resolveOnce();
               return;
             }
-            const error = err instanceof Error ? err : new Error(String(err));
-            rejectOnce(error);
+            rejectOnce(err instanceof Error ? err : new Error(extractErrorMessage(err)));
           };
           socket.on('open', handleSocketOpen);
           socket.on('error', handleSocketError);
@@ -1099,13 +1188,16 @@ export class RealtimeSession {
           });
         } else if (typeof socket.addEventListener === 'function') {
           const handleSocketOpen = () => resolveOnce();
-          const handleSocketError = (event: any) => {
+          const handleSocketError = (event: unknown) => {
             if (isOpen()) {
               resolveOnce();
               return;
             }
-            const error = event?.error instanceof Error ? event.error : new Error('WebSocket error before open');
-            rejectOnce(error);
+            const socketError =
+              (isRecord(event) && event.error instanceof Error
+                ? event.error
+                : new Error('WebSocket error before open'));
+            rejectOnce(socketError);
           };
           socket.addEventListener('open', handleSocketOpen);
           socket.addEventListener('error', handleSocketError);
@@ -1177,21 +1269,18 @@ export class RealtimeSession {
     try {
       this.pendingResponse = true;
 
-      this.session.send({
-        type: 'conversation.item.create',
-        item: formattedMessage.item,
-      } as RealtimeClientEvent);
+      this.session.send(formattedMessage as RealtimeClientEvent);
 
       this.session.send({
         type: 'response.create',
       } as RealtimeClientEvent);
 
       console.log(`[realtime] Message sent (${this.config.agentType})`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.pendingResponse = false;
       this.messageQueue.unshift(next);
       this.currentMessage = null;
-      console.error(`[realtime] Error sending message: ${error.message}`);
+      console.error(`[realtime] Error sending message: ${extractErrorMessage(error)}`);
       throw error;
     }
   }
@@ -1287,8 +1376,8 @@ export class RealtimeSession {
         } as RealtimeClientEvent);
         this.pendingAudioBytes = 0;
       }
-    } catch (error: any) {
-      console.error(`[realtime] Error appending audio chunk: ${error.message}`);
+    } catch (error: unknown) {
+      console.error(`[realtime] Error appending audio chunk: ${extractErrorMessage(error)}`);
       throw error;
     }
   }
@@ -1308,7 +1397,7 @@ export class RealtimeSession {
           output: JSON.stringify(output),
         },
       } as RealtimeClientEvent);
-    } catch (error) {
+    } catch (error: unknown) {
       if (isInvalidToolCallError(error)) {
         console.warn('[realtime] Ignoring tool output for expired call_id', {
           eventId: this.config.eventId,
@@ -1332,9 +1421,10 @@ export class RealtimeSession {
     handlers.forEach((handler) => {
       try {
         handler(data);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.error(`[realtime] Error in event handler for ${event}: ${message}`);
+      } catch (error: unknown) {
+        console.error(
+          `[realtime] Error in event handler for ${event}: ${extractErrorMessage(error)}`
+        );
       }
     });
   }
@@ -1374,7 +1464,7 @@ export class RealtimeSession {
         
         // OpenAIRealtimeWebSocket wraps the underlying WebSocket
         // Access the underlying socket if available
-        const underlyingSocket = (this.session as any).socket || (this.session as any).ws;
+        const underlyingSocket = getUnderlyingSocket(this.session);
         if (underlyingSocket) {
           // Standard WebSocket readyState values:
           // 0 = CONNECTING, 1 = OPEN, 2 = CLOSING, 3 = CLOSED
@@ -1389,7 +1479,7 @@ export class RealtimeSession {
             connectedAt = (underlyingSocket).__connectedAt;
           }
         }
-      } catch (error) {
+      } catch (error: unknown) {
         // If we can't access the underlying socket, fall back to isActive
         websocketState = this.isActive ? 'OPEN' : 'CLOSED';
       }
@@ -1424,7 +1514,7 @@ export class RealtimeSession {
    */
   private logWebSocketState(operation: string, context?: Record<string, any>): void {
     try {
-      const underlyingSocket = (this.session as any)?.socket || (this.session as any)?.ws;
+      const underlyingSocket = getUnderlyingSocket(this.session);
       const readyState = underlyingSocket?.readyState;
       const readyStateNames = ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'];
       
@@ -1434,7 +1524,7 @@ export class RealtimeSession {
         eventId: this.config.eventId,
         ...context,
       });
-    } catch (error) {
+    } catch (error: unknown) {
       // Ignore if we can't access state
     }
   }
@@ -1496,7 +1586,7 @@ export class RealtimeSession {
 
     try {
       // Get underlying WebSocket to send ping frame
-      const underlyingSocket = (this.session as any).socket || (this.session as any).ws;
+      const underlyingSocket = getUnderlyingSocket(this.session);
       if (underlyingSocket && underlyingSocket.readyState === 1 && typeof underlyingSocket.ping === 'function') {
         // Send WebSocket ping frame (not application message)
         underlyingSocket.ping();
@@ -1521,14 +1611,15 @@ export class RealtimeSession {
         });
         this.handlePongTimeout();
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       // If ping fails, disable ping/pong mechanism
-      if (error.message?.includes('ping is not a function') || error.message?.includes('underlyingSocket')) {
+      const message = getLowercaseErrorField(error, 'message');
+      if (message.includes('ping is not a function') || message.includes('underlyingsocket')) {
         console.log(`[realtime] Ping/pong not supported - disabling (${this.config.agentType})`);
         this.stopPingPong();
         return;
       }
-      console.error(`[realtime] Error sending ping: ${error.message}`);
+      console.error(`[realtime] Error sending ping: ${extractErrorMessage(error)}`);
       this.handlePongTimeout();
     }
   }
@@ -1625,8 +1716,8 @@ export class RealtimeSession {
       }
 
       console.log(`[realtime] Session paused (${this.config.agentType})`);
-    } catch (error: any) {
-      console.error(`[realtime] Error pausing session: ${error.message}`);
+    } catch (error: unknown) {
+      console.error(`[realtime] Error pausing session: ${extractErrorMessage(error)}`);
       throw error;
     }
   }
@@ -1677,8 +1768,8 @@ export class RealtimeSession {
       }
 
       console.log(`[realtime] Session closed (${this.config.agentType})`);
-    } catch (error: any) {
-      console.error(`[realtime] Error closing session: ${error.message}`);
+    } catch (error: unknown) {
+      console.error(`[realtime] Error closing session: ${extractErrorMessage(error)}`);
       throw error;
     }
   }
