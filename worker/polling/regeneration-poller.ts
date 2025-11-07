@@ -1,5 +1,5 @@
-import OpenAI from 'openai';
-import { Poller } from './base-poller';
+import type OpenAI from 'openai';
+import type { Poller } from './base-poller';
 import {
   regenerateResearchStage,
   regenerateGlossaryStage,

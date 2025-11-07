@@ -5,13 +5,13 @@
  * Goal: Generate 45-75 high-quality chunks from multiple sources
  */
 
-import { createClient } from '@supabase/supabase-js';
-import OpenAI from 'openai';
-import { BaseEnricher } from './enrichers/base-enricher';
+import type { createClient } from '@supabase/supabase-js';
+import type OpenAI from 'openai';
+import type { BaseEnricher } from './enrichers/base-enricher';
 import { WebSearchEnricher } from './enrichers/web-search';
 import { DocumentExtractor } from './enrichers/document-extractor';
 import { WikipediaEnricher } from './enrichers/wikipedia';
-import { EnrichmentConfig, EnrichmentResult } from './types';
+import type { EnrichmentConfig, EnrichmentResult } from './types';
 
 export class EnrichmentOrchestrator {
   private enrichers: Map<string, BaseEnricher> = new Map();

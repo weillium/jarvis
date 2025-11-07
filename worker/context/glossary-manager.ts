@@ -1,5 +1,5 @@
-import { GlossaryEntry } from '../types';
-import { GlossaryRepository } from '../services/supabase/glossary-repository';
+import type { GlossaryEntry } from '../types';
+import type { GlossaryRepository } from '../services/supabase/glossary-repository';
 
 export class GlossaryManager {
   constructor(private readonly glossaryRepo: GlossaryRepository) {}

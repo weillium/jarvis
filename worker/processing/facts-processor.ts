@@ -1,14 +1,21 @@
-import { EventRuntime, Fact } from '../types';
-import { ContextBuilder } from '../context/context-builder';
-import { OpenAIService } from '../services/openai-service';
-import { Logger } from '../monitoring/logger';
-import { MetricsCollector } from '../monitoring/metrics-collector';
-import { CheckpointManager } from '../monitoring/checkpoint-manager';
-import { RealtimeSession } from '../sessions/realtime-session';
+import type { EventRuntime, Fact } from '../types';
+import type { ContextBuilder } from '../context/context-builder';
+import type { OpenAIService } from '../services/openai-service';
+import type { Logger } from '../monitoring/logger';
+import type { MetricsCollector } from '../monitoring/metrics-collector';
+import type { CheckpointManager } from '../monitoring/checkpoint-manager';
+import type { RealtimeSession } from '../sessions/realtime-session';
 import { FACTS_EXTRACTION_SYSTEM_PROMPT, createFactsExtractionUserPrompt } from '../prompts';
 import { checkBudgetStatus, formatTokenBreakdown } from '../utils/token-counter';
-import { FactsRepository } from '../services/supabase/facts-repository';
-import { AgentOutputsRepository } from '../services/supabase/agent-outputs-repository';
+import type { FactsRepository } from '../services/supabase/facts-repository';
+import type { AgentOutputsRepository } from '../services/supabase/agent-outputs-repository';
+
+interface GeneratedFactCandidate {
+  key?: string;
+  value?: string;
+  confidence?: number;
+  [key: string]: unknown;
+}
 
 export class FactsProcessor {
   constructor(
@@ -74,8 +81,10 @@ export class FactsProcessor {
         runtime.factsLastSeq
       );
       runtime.factsLastUpdate = Date.now();
-    } catch (error: any) {
-      this.logger.log(runtime.eventId, 'facts', 'error', `Error processing: ${error.message}`, { seq: runtime.factsLastSeq });
+    // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.log(runtime.eventId, 'facts', 'error', `Error processing: ${message}`, { seq: runtime.factsLastSeq });
     }
   }
 
@@ -83,14 +92,13 @@ export class FactsProcessor {
     runtime: EventRuntime,
     recentText: string,
     currentFacts: Fact[],
-    glossaryContext?: string
+    _glossaryContext?: string
   ): Promise<void> {
     const policy = FACTS_EXTRACTION_SYSTEM_PROMPT;
 
     const userPrompt = createFactsExtractionUserPrompt(
       recentText,
-      JSON.stringify(currentFacts, null, 2),
-      glossaryContext
+      JSON.stringify(currentFacts, null, 2)
     );
 
     try {
@@ -108,8 +116,8 @@ export class FactsProcessor {
       const factsJson = response.choices[0]?.message?.content;
       if (!factsJson) return;
 
-      const parsed = JSON.parse(factsJson);
-      const newFacts = parsed.facts || [];
+      const parsed = JSON.parse(factsJson) as { facts?: GeneratedFactCandidate[] };
+      const newFacts: GeneratedFactCandidate[] = parsed.facts ?? [];
 
       const evictedKeys: string[] = [];
       
@@ -166,8 +174,10 @@ export class FactsProcessor {
         `Updated ${newFacts.length} facts (event: ${runtime.eventId})`,
         { seq: runtime.factsLastSeq }
       );
-    } catch (error: any) {
-      this.logger.log(runtime.eventId, 'facts', 'error', `Error generating facts: ${error.message}`, { seq: runtime.factsLastSeq });
+    // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.log(runtime.eventId, 'facts', 'error', `Error generating facts: ${message}`, { seq: runtime.factsLastSeq });
     }
   }
 }

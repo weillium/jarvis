@@ -1,9 +1,9 @@
-import { RuntimeManager } from './runtime-manager';
-import { StatusUpdater } from '../monitoring/status-updater';
-import { SessionLifecycle } from './session-lifecycle';
-import { EventProcessor } from './event-processor';
+import type { RuntimeManager } from './runtime-manager';
+import type { StatusUpdater } from '../monitoring/status-updater';
+import type { SessionLifecycle } from './session-lifecycle';
+import type { EventProcessor } from './event-processor';
 import type { EventRuntime } from '../types';
-import { AgentsRepository } from '../services/supabase/agents-repository';
+import type { AgentsRepository } from '../services/supabase/agents-repository';
 
 export class RuntimeService {
   constructor(

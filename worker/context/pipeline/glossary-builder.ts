@@ -4,14 +4,15 @@
  * Stores terms, definitions, acronyms, and related metadata in glossary_terms table
  */
 
-import { createClient } from '@supabase/supabase-js';
-import OpenAI from 'openai';
+import type { createClient } from '@supabase/supabase-js';
+import type OpenAI from 'openai';
 import { Exa } from 'exa-js';
-import { Blueprint } from './blueprint-generator';
+import type { Blueprint } from './blueprint-generator';
 import {
   calculateOpenAICost,
   calculateExaAnswerCost,
   getPricingVersion,
+  type OpenAIUsage,
 } from './pricing-config';
 import {
   EXA_ANSWER_SYSTEM_PROMPT,
@@ -29,13 +30,19 @@ export interface GlossaryBuilderOptions {
   exaApiKey?: string; // Optional Exa API key for authoritative definitions
 }
 
+export type ResearchChunkMetadata = {
+  api?: string;
+  quality_score?: number;
+} & Record<string, unknown>;
+
 export interface ResearchResults {
   chunks: Array<{
     text: string;
     source: string;
-    metadata?: Record<string, any>;
+    metadata?: ResearchChunkMetadata;
   }>;
 }
+type ResearchChunk = ResearchResults['chunks'][number];
 
 /**
  * Build glossary from blueprint plan and research results
@@ -44,7 +51,7 @@ export interface ResearchResults {
 export interface GlossaryCostBreakdown {
   openai: {
     total: number;
-    chat_completions: Array<{ cost: number; usage: any; model: string }>;
+    chat_completions: Array<{ cost: number; usage: OpenAIUsage; model: string }>;
   };
   exa: {
     total: number;
@@ -56,6 +63,26 @@ export interface GlossaryBuildResult {
   termCount: number;
   costBreakdown: GlossaryCostBreakdown;
 }
+
+type SupabaseErrorLike = { message: string } | null;
+type SupabaseMutationResult = { error: SupabaseErrorLike };
+type SupabaseListResult<T> = { data: T[] | null; error: SupabaseErrorLike };
+type IdRow = { id: string };
+type ResearchResultRecord = {
+  content: string;
+  metadata: ResearchChunkMetadata | null;
+  query: string | null;
+  api: string | null;
+};
+type ChatCompletionRequest = Parameters<OpenAI['chat']['completions']['create']>[0];
+type GlossaryPlanTerm = {
+  term: string;
+  is_acronym: boolean;
+  category: string;
+  priority: number;
+};
+const asDbPayload = <T>(payload: T) => payload as unknown as never;
+type ErrorWithResponse = Error & { response?: { data?: unknown } };
 
 export async function buildGlossary(
   eventId: string,
@@ -99,8 +126,11 @@ export async function buildGlossary(
   let research: ResearchResults;
   if (!researchResults) {
     // First, get all active (non-superseded) generation cycle IDs for research
-    const { data: activeCycles, error: cycleError } = await (supabase
-      .from('generation_cycles') as any)
+    const {
+      data: activeCycles,
+      error: cycleError,
+    }: SupabaseListResult<IdRow> = await supabase
+      .from('generation_cycles')
       .select('id')
       .eq('event_id', eventId)
       .neq('status', 'superseded')
@@ -113,12 +143,12 @@ export async function buildGlossary(
     // Build list of active cycle IDs
     const activeCycleIds: string[] = [];
     if (activeCycles && activeCycles.length > 0) {
-      activeCycleIds.push(...activeCycles.map((c: { id: string }) => c.id));
+      activeCycleIds.push(...activeCycles.map((cycle: IdRow) => cycle.id));
     }
 
     // Fetch research results only from active cycles (or legacy items)
-    let researchQuery = (supabase
-      .from('research_results') as any)
+    let researchQuery = supabase
+      .from('research_results')
       .select('content, metadata, query, api')
       .eq('event_id', eventId)
       .eq('blueprint_id', blueprintId);
@@ -131,17 +161,20 @@ export async function buildGlossary(
       researchQuery = researchQuery.is('generation_cycle_id', null);
     }
 
-    const { data: researchData, error: researchError } = await researchQuery;
+    const {
+      data: researchData,
+      error: researchError,
+    }: SupabaseListResult<ResearchResultRecord> = await researchQuery;
 
     if (researchError) {
       console.warn(`[glossary] Warning: Failed to fetch research results: ${researchError.message}`);
     }
 
     research = {
-      chunks: (researchData || []).map((item: any) => ({
+      chunks: (researchData ?? []).map((item: ResearchResultRecord) => ({
         text: item.content,
         source: item.api || 'research',
-        metadata: item.metadata || {},
+        metadata: item.metadata || undefined,
       })),
     };
   } else {
@@ -153,20 +186,24 @@ export async function buildGlossary(
 
   // Extract context from research results
   const researchContext = research.chunks
-    .map(c => c.text)
+    .map((chunk: ResearchChunk) => chunk.text)
     .join('\n\n')
     .substring(0, 10000); // Limit context size
 
   let insertedCount = 0;
 
   // Update generation cycle progress
-  const { error: cycleError } = await (supabase
-    .from('generation_cycles') as any)
-    .update({
+  const { error: processingError }: SupabaseMutationResult = await supabase
+    .from('generation_cycles')
+    .update(asDbPayload({
       status: 'processing',
       progress_total: termsToBuild.length,
-    })
+    }))
     .eq('id', generationCycleId);
+
+  if (processingError) {
+    console.warn(`[glossary] Failed to mark cycle ${generationCycleId} as processing: ${processingError.message}`);
+  }
 
   // Process terms in batches to avoid rate limits
   const batchSize = 5;
@@ -187,9 +224,9 @@ export async function buildGlossary(
       // Store definitions in database
       for (const def of definitions) {
         try {
-          const { error } = await (supabase
-            .from('glossary_terms') as any)
-            .insert({
+          const { error: insertError }: SupabaseMutationResult = await supabase
+            .from('glossary_terms')
+            .insert(asDbPayload({
               event_id: eventId,
               generation_cycle_id: generationCycleId,
               term: def.term,
@@ -201,24 +238,32 @@ export async function buildGlossary(
               confidence_score: def.confidence_score || 0.8,
               source: def.source || 'llm_generation',
               source_url: def.source_url || null,
-            });
+            }));
 
-          if (error) {
-            console.error(`[glossary] Error inserting term "${def.term}": ${error.message}`);
+          if (insertError) {
+            console.error(`[glossary] Error inserting term "${def.term}": ${insertError.message}`);
           } else {
             insertedCount++;
             // Update progress
-            await (supabase
-              .from('generation_cycles') as any)
-              .update({ progress_current: insertedCount })
+            const { error: progressError }: SupabaseMutationResult = await supabase
+              .from('generation_cycles')
+              .update(asDbPayload({ progress_current: insertedCount }))
               .eq('id', generationCycleId);
+
+            if (progressError) {
+              console.warn(`[glossary] Failed to update cycle progress for ${generationCycleId}: ${progressError.message}`);
+            }
           }
-        } catch (error: any) {
-          console.error(`[glossary] Error processing term "${def.term}": ${error.message}`);
+        // TODO: narrow unknown -> PostgrestError after upstream callsite analysis
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(`[glossary] Error processing term "${def.term}": ${message}`);
         }
       }
-    } catch (error: any) {
-      console.error(`[glossary] Error processing batch: ${error.message}`);
+    // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[glossary] Error processing batch: ${message}`);
     }
   }
 
@@ -244,14 +289,14 @@ export async function buildGlossary(
   };
 
   // Mark cycle as completed with cost metadata
-  const { error: cycleUpdateError } = await (supabase
-    .from('generation_cycles') as any)
-    .update({
+  const { error: cycleUpdateError }: SupabaseMutationResult = await supabase
+    .from('generation_cycles')
+    .update(asDbPayload({
       status: 'completed',
       progress_current: insertedCount,
       completed_at: new Date().toISOString(),
       metadata: costMetadata,
-    })
+    }))
     .eq('id', generationCycleId);
 
   if (cycleUpdateError) {
@@ -351,8 +396,10 @@ async function generateTermDefinitions(
             // Fall through to LLM generation
           }
         }
-      } catch (exaError: any) {
-        console.warn(`[glossary] Exa /answer failed for term "${term.term}": ${exaError.message}. Falling back to LLM.`);
+      // TODO: narrow unknown -> ExaAPIError after upstream callsite analysis
+      } catch (exaError: unknown) {
+        const message = exaError instanceof Error ? exaError.message : String(exaError);
+        console.warn(`[glossary] Exa /answer failed for term "${term.term}": ${message}. Falling back to LLM.`);
         // Fall through to LLM generation
       }
     }
@@ -365,7 +412,9 @@ async function generateTermDefinitions(
   if (termsForLLM.length > 0) {
     const systemPrompt = GLOSSARY_DEFINITION_SYSTEM_PROMPT;
 
-    const termsList = termsForLLM.map(t => `- ${t.term}${t.is_acronym ? ' (acronym)' : ''} - ${t.category}`).join('\n');
+    const termsList = termsForLLM
+      .map((term: GlossaryPlanTerm) => `- ${term.term}${term.is_acronym ? ' (acronym)' : ''} - ${term.category}`)
+      .join('\n');
 
     const userPrompt = createGlossaryDefinitionUserPrompt(
       termsList,
@@ -388,7 +437,7 @@ async function generateTermDefinitions(
       }
       
       // Build request options - conditionally include temperature
-      const requestOptions: any = {
+      const requestOptions: ChatCompletionRequest = {
         model: genModel,
         messages: [
           { role: 'system', content: systemPrompt },
@@ -402,7 +451,9 @@ async function generateTermDefinitions(
         requestOptions.temperature = 0.5; // Lower temperature for more consistent definitions
       }
       
-      const response = await openai.chat.completions.create(requestOptions);
+      const response = await openai.chat.completions.create(
+        requestOptions
+      ) as OpenAI.Chat.Completions.ChatCompletion;
 
       // Track OpenAI cost
       if (response.usage) {
@@ -425,35 +476,43 @@ async function generateTermDefinitions(
         throw new Error('Empty response from LLM');
       }
 
-      const parsed = JSON.parse(content);
+      const parsed: unknown = JSON.parse(content);
       // Handle both "definitions" and "terms" keys (json_object format always returns object)
-      const llmDefinitions = parsed.definitions || parsed.terms || [];
+      const llmDefinitions =
+        (parsed as { definitions?: unknown; terms?: unknown }).definitions ??
+        (parsed as { definitions?: unknown; terms?: unknown }).terms ??
+        [];
 
       if (!Array.isArray(llmDefinitions)) {
         throw new Error('LLM did not return array of definitions');
       }
 
       // Validate and normalize definitions
-      const normalizedLLMDefinitions = llmDefinitions.map((def: any) => ({
-        term: def.term || '',
-        definition: def.definition || '',
-        acronym_for: def.acronym_for || undefined,
-        category: def.category || 'general',
-        usage_examples: def.usage_examples || [],
-        related_terms: def.related_terms || [],
-        confidence_score: def.confidence_score || 0.8,
-        source: def.source || 'llm_generation',
-        source_url: def.source_url || undefined,
-      }));
+      const normalizedLLMDefinitions = llmDefinitions.map((def: unknown) => {
+        const normalized = def as Partial<TermDefinition>;
+        return {
+          term: normalized.term || '',
+          definition: normalized.definition || '',
+          acronym_for: normalized.acronym_for || undefined,
+          category: normalized.category || 'general',
+          usage_examples: normalized.usage_examples || [],
+          related_terms: normalized.related_terms || [],
+          confidence_score: normalized.confidence_score || 0.8,
+          source: normalized.source || 'llm_generation',
+          source_url: normalized.source_url || undefined,
+        };
+      });
 
       definitions.push(...normalizedLLMDefinitions);
-    } catch (error: any) {
-      console.error(`[glossary] Error generating LLM definitions: ${error.message}`);
+    // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[glossary] Error generating LLM definitions: ${message}`);
       // Return basic definitions on error
-      const fallbackDefinitions = termsForLLM.map(t => ({
-        term: t.term,
-        definition: `Term: ${t.term}. Definition to be completed.`,
-        category: t.category,
+      const fallbackDefinitions = termsForLLM.map((term: GlossaryPlanTerm) => ({
+        term: term.term,
+        definition: `Term: ${term.term}. Definition to be completed.`,
+        category: term.category,
         confidence_score: 0.5,
         source: 'llm_generation',
       }));
@@ -488,7 +547,8 @@ async function transformExaAnswerToGlossary(
 ): Promise<TermDefinition | null> {
   try {
     const systemPrompt = EXA_ANSWER_TRANSFORM_SYSTEM_PROMPT;
-    const userPrompt = createExaAnswerTransformUserPrompt(term, isAcronym, category, exaAnswer);
+    const termDescriptor = `- ${term}${isAcronym ? ' (acronym)' : ''} - ${category}`;
+    const userPrompt = createExaAnswerTransformUserPrompt(termDescriptor, exaAnswer);
 
     // Some models (like o1, o1-preview, o1-mini, gpt-5) don't support custom temperature values
     const modelLower = genModel.toLowerCase();
@@ -497,7 +557,7 @@ async function transformExaAnswerToGlossary(
     const onlySupportsDefaultTemp = isO1Model || isGpt5Model;
     const supportsCustomTemperature = !onlySupportsDefaultTemp;
 
-    const requestOptions: any = {
+    const requestOptions: ChatCompletionRequest = {
       model: genModel,
       messages: [
         { role: 'system', content: systemPrompt },
@@ -510,7 +570,9 @@ async function transformExaAnswerToGlossary(
       requestOptions.temperature = 0.3; // Low temperature for consistent transformation
     }
 
-    const response = await openai.chat.completions.create(requestOptions);
+    const response = await openai.chat.completions.create(
+      requestOptions
+    ) as OpenAI.Chat.Completions.ChatCompletion;
     const content = response.choices[0]?.message?.content;
 
     if (!content) {
@@ -544,12 +606,16 @@ async function transformExaAnswerToGlossary(
         source: 'exa',
         source_url: sourceUrl,
       };
-    } catch (parseError: any) {
-      console.warn(`[glossary] Failed to parse transformed Exa answer for "${term}": ${parseError.message}`);
+    // TODO: narrow unknown -> SyntaxError after upstream callsite analysis
+    } catch (parseError: unknown) {
+      const message = parseError instanceof Error ? parseError.message : String(parseError);
+      console.warn(`[glossary] Failed to parse transformed Exa answer for "${term}": ${message}`);
       return null;
     }
-  } catch (error: any) {
-    console.warn(`[glossary] Error transforming Exa answer for "${term}": ${error.message}`);
+  // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[glossary] Error transforming Exa answer for "${term}": ${message}`);
     return null;
   }
 }

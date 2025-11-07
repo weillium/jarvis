@@ -1,5 +1,13 @@
 import OpenAI from 'openai';
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import type {
+  ChatCompletionContentPart,
+  ChatCompletionMessage,
+  ChatCompletionMessageParam
+} from 'openai/resources/chat/completions';
+import type {
+  ChatCompletionDTO,
+  ChatCompletionMessageDTO
+} from '../types';
 
 export class OpenAIService {
   private client: OpenAI;
@@ -47,7 +55,7 @@ export class OpenAIService {
       responseFormat?: { type: 'json_object' };
       temperature?: number;
     }
-  ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+  ): Promise<ChatCompletionDTO> {
     const request: OpenAI.Chat.Completions.ChatCompletionCreateParams = {
       model: this.genModel,
       messages,
@@ -61,6 +69,69 @@ export class OpenAIService {
       request.temperature = options.temperature;
     }
 
-    return this.client.chat.completions.create(request);
+    const response = await this.client.chat.completions.create(request);
+    return mapChatCompletionResponse(response);
   }
 }
+
+const mapChatCompletionResponse = (
+  response: OpenAI.Chat.Completions.ChatCompletion
+): ChatCompletionDTO => ({
+  id: response.id,
+  created: response.created,
+  model: response.model,
+  choices: response.choices.map(choice => ({
+    index: choice.index,
+    finishReason: choice.finish_reason ?? null,
+    message: mapMessage(choice.message),
+  })),
+  usage: response.usage
+    ? {
+        promptTokens: response.usage.prompt_tokens,
+        completionTokens: response.usage.completion_tokens ?? 0,
+        totalTokens: response.usage.total_tokens,
+      }
+    : undefined,
+});
+
+const mapMessage = (message: ChatCompletionMessage): ChatCompletionMessageDTO => ({
+  role: message.role,
+  content: normalizeMessageContent(message.content),
+  refusal: message.refusal ?? null,
+});
+
+const normalizeMessageContent = (
+  content: ChatCompletionMessage['content']
+): string | null => {
+  if (typeof content === 'string' || content === null) {
+    return content;
+  }
+
+  if (!Array.isArray(content)) {
+    return null;
+  }
+
+  const contentParts = content as ChatCompletionContentPart[];
+
+  const textParts = contentParts
+    .map(extractTextFromPart)
+    .filter((value: string): value is string => value.trim().length > 0);
+
+  if (textParts.length === 0) {
+    return null;
+  }
+
+  return textParts.join('\n');
+};
+
+const extractTextFromPart = (part: ChatCompletionContentPart): string => {
+  if (part.type === 'text') {
+    return part.text ?? '';
+  }
+
+  if ('text' in part && typeof part.text === 'string') {
+    return part.text;
+  }
+
+  return '';
+};

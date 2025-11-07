@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { FactRecord } from './types';
+import { mapFactRecords } from './dto-mappers';
 
 export class FactsRepository {
   constructor(private readonly client: SupabaseClient) {}
@@ -27,7 +28,7 @@ export class FactsRepository {
     const { data, error } = await query.order('last_seen_seq', { ascending: false });
 
     if (error) throw error;
-    return (data as FactRecord[]) || [];
+    return mapFactRecords(data);
   }
 
   async deleteFactsForEvent(eventId: string): Promise<void> {

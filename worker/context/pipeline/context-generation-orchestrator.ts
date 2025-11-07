@@ -11,11 +11,12 @@
  * Uses generation_cycles for tracking and versioning
  */
 
-import { createClient } from '@supabase/supabase-js';
-import OpenAI from 'openai';
+import type { createClient } from '@supabase/supabase-js';
+import type OpenAI from 'openai';
 import { Exa } from 'exa-js';
-import { Blueprint } from './blueprint-generator';
-import { buildGlossary, GlossaryBuilderOptions, ResearchResults } from './glossary-builder';
+import type { Blueprint } from './blueprint-generator';
+import type { ResearchResults } from './glossary-builder';
+import { buildGlossary, GlossaryBuilderOptions } from './glossary-builder';
 import { buildContextChunks, ChunksBuilderOptions } from './chunks-builder';
 import {
   STUB_RESEARCH_SYSTEM_PROMPT,

@@ -1,13 +1,13 @@
-import { EventRuntime, TranscriptChunk } from '../types';
+import type { EventRuntime, TranscriptChunk } from '../types';
 import { RingBuffer } from '../state/ring-buffer';
 import { FactsStore } from '../state/facts-store';
-import { GlossaryManager } from '../context/glossary-manager';
-import { CheckpointManager } from '../monitoring/checkpoint-manager';
-import { MetricsCollector } from '../monitoring/metrics-collector';
-import { Logger } from '../monitoring/logger';
-import { FactsRepository } from '../services/supabase/facts-repository';
-import { TranscriptsRepository } from '../services/supabase/transcripts-repository';
-import { AgentsRepository } from '../services/supabase/agents-repository';
+import type { GlossaryManager } from '../context/glossary-manager';
+import type { CheckpointManager } from '../monitoring/checkpoint-manager';
+import type { MetricsCollector } from '../monitoring/metrics-collector';
+import type { Logger } from '../monitoring/logger';
+import type { FactsRepository } from '../services/supabase/facts-repository';
+import type { TranscriptsRepository } from '../services/supabase/transcripts-repository';
+import type { AgentsRepository } from '../services/supabase/agents-repository';
 
 export class RuntimeManager {
   private readonly runtimes: Map<string, EventRuntime> = new Map();

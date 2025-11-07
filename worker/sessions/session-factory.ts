@@ -1,9 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
-import { RealtimeSession, RealtimeSessionConfig } from './realtime-session';
+import type { RealtimeSessionConfig } from './realtime-session';
+import { RealtimeSession } from './realtime-session';
 import type { EventRuntime } from '../types';
-import { VectorSearchService } from '../context/vector-search';
-import { OpenAIService } from '../services/openai-service';
+import type { VectorSearchService } from '../context/vector-search';
+import type { OpenAIService } from '../services/openai-service';
 
 type SessionStatus = 'active' | 'paused' | 'closed' | 'error';
 type StatusHandler = (status: SessionStatus, sessionId?: string) => Promise<void>;

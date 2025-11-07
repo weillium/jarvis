@@ -1,8 +1,8 @@
-import { AgentSessionStatus, EventRuntime, SessionStatus } from '../types';
-import { SSEService } from '../services/sse-service';
-import { Logger } from './logger';
-import { MetricsCollector } from './metrics-collector';
-import { AgentSessionsRepository } from '../services/supabase/agent-sessions-repository';
+import type { AgentSessionStatus, EventRuntime, SessionStatus } from '../types';
+import type { SSEService } from '../services/sse-service';
+import type { Logger } from './logger';
+import type { MetricsCollector } from './metrics-collector';
+import type { AgentSessionsRepository } from '../services/supabase/agent-sessions-repository';
 
 export class StatusUpdater {
   constructor(

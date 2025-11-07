@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { InsertTranscriptParams, TranscriptRecord } from './types';
+import { mapTranscriptRecord, mapTranscriptRecords } from './dto-mappers';
 
 type TranscriptCallback = (payload: { new: any }) => void;
 
@@ -41,7 +42,7 @@ export class TranscriptsRepository {
       .limit(limit);
 
     if (error) throw error;
-    return (data as TranscriptRecord[]) || [];
+    return mapTranscriptRecords(data);
   }
 
   async insertTranscript(params: InsertTranscriptParams): Promise<TranscriptRecord> {
@@ -58,8 +59,10 @@ export class TranscriptsRepository {
       .select('id, event_id, seq, at_ms, speaker, text, final')
       .single();
 
-    if (error) throw error;
-    return data as TranscriptRecord;
+    if (error || !data) {
+      throw error ?? new Error('Failed to insert transcript');
+    }
+    return mapTranscriptRecord(data);
   }
 
   async updateTranscriptSeq(transcriptId: number, seq: number): Promise<void> {

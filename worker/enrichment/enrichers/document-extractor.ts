@@ -9,8 +9,8 @@
  */
 
 import { BaseEnricher } from './base-enricher';
-import { EnrichmentResult } from '../types';
-import { createClient } from '@supabase/supabase-js';
+import type { EnrichmentResult } from '../types';
+import type { createClient } from '@supabase/supabase-js';
 
 export class DocumentExtractor extends BaseEnricher {
   name = 'document_extractor';

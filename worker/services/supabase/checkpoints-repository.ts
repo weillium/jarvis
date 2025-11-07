@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AgentType } from '../../types';
 import type { CheckpointRecord } from './types';
+import { mapCheckpointRecords } from './dto-mappers';
 
 export class CheckpointsRepository {
   constructor(private readonly client: SupabaseClient) {}
@@ -12,7 +13,7 @@ export class CheckpointsRepository {
       .eq('event_id', eventId);
 
     if (error) throw error;
-    return (data as CheckpointRecord[]) || [];
+    return mapCheckpointRecords(data);
   }
 
   async upsertCheckpoint(eventId: string, agentType: AgentType, lastSeq: number): Promise<void> {

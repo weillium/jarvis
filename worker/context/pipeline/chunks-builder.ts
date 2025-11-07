@@ -4,10 +4,10 @@
  * Stores chunks in context_items table with rank and research_source
  */
 
-import { createClient } from '@supabase/supabase-js';
-import OpenAI from 'openai';
-import { Blueprint } from './blueprint-generator';
-import { ResearchResults } from './glossary-builder';
+import type { createClient } from '@supabase/supabase-js';
+import type OpenAI from 'openai';
+import type { Blueprint } from './blueprint-generator';
+import type { ResearchResults, ResearchChunkMetadata } from './glossary-builder';
 import {
   CONTEXT_CHUNKS_GENERATION_SYSTEM_PROMPT,
   createContextChunksUserPrompt,
@@ -31,8 +31,11 @@ export interface ChunkWithRank {
   research_source: string;
   rank: number;
   quality_score?: number;
-  metadata?: Record<string, any>;
+  metadata?: ChunkMetadata;
 }
+
+type ChunkMetadata = ResearchChunkMetadata;
+type ResearchChunk = ResearchResults['chunks'][number];
 
 /**
  * Build context chunks from blueprint plan, research results, and documents
@@ -42,8 +45,8 @@ export interface ChunkWithRank {
 export interface ChunksCostBreakdown {
   openai: {
     total: number;
-    chat_completions: Array<{ cost: number; usage: any; model: string }>;
-    embeddings: Array<{ cost: number; usage: any; model: string }>;
+    chat_completions: Array<{ cost: number; usage: OpenAIUsage; model: string }>;
+    embeddings: Array<{ cost: number; usage: OpenAIUsage; model: string }>;
   };
 }
 
@@ -51,6 +54,19 @@ export interface ChunksBuildResult {
   chunkCount: number;
   costBreakdown: ChunksCostBreakdown;
 }
+
+type SupabaseErrorLike = { message: string } | null;
+type SupabaseMutationResult = { error: SupabaseErrorLike };
+type SupabaseListResult<T> = { data: T[] | null; error: SupabaseErrorLike };
+type IdRow = { id: string };
+type ResearchResultRecord = {
+  content: string;
+  metadata: ChunkMetadata | null;
+  query: string | null;
+  api: string | null;
+};
+type ChatCompletionRequest = Parameters<OpenAI['chat']['completions']['create']>[0];
+const asDbPayload = <T>(payload: T) => payload as unknown as never;
 
 export async function buildContextChunks(
   eventId: string,
@@ -79,8 +95,11 @@ export async function buildContextChunks(
   let research: ResearchResults;
   if (!researchResults) {
     // First, get all active (non-superseded) generation cycle IDs for research
-    const { data: activeCycles, error: cycleError } = await (supabase
-      .from('generation_cycles') as any)
+    const {
+      data: activeCycles,
+      error: cycleError,
+    }: SupabaseListResult<IdRow> = await supabase
+      .from('generation_cycles')
       .select('id')
       .eq('event_id', eventId)
       .neq('status', 'superseded')
@@ -93,12 +112,12 @@ export async function buildContextChunks(
     // Build list of active cycle IDs
     const activeCycleIds: string[] = [];
     if (activeCycles && activeCycles.length > 0) {
-      activeCycleIds.push(...activeCycles.map((c: { id: string }) => c.id));
+      activeCycleIds.push(...activeCycles.map(c => c.id));
     }
 
     // Fetch research results only from active cycles (or legacy items)
-    let researchQuery = (supabase
-      .from('research_results') as any)
+    let researchQuery = supabase
+      .from('research_results')
       .select('content, metadata, query, api')
       .eq('event_id', eventId)
       .eq('blueprint_id', blueprintId);
@@ -111,17 +130,20 @@ export async function buildContextChunks(
       researchQuery = researchQuery.is('generation_cycle_id', null);
     }
 
-    const { data: researchData, error: researchError } = await researchQuery;
+    const {
+      data: researchData,
+      error: researchError,
+    }: SupabaseListResult<ResearchResultRecord> = await researchQuery;
 
     if (researchError) {
       console.warn(`[chunks] Warning: Failed to fetch research results: ${researchError.message}`);
     }
 
     research = {
-      chunks: (researchData || []).map((item: any) => ({
+      chunks: (researchData ?? []).map(item => ({
         text: item.content,
         source: item.api || 'research',
-        metadata: item.metadata || {},
+        metadata: item.metadata || undefined,
       })),
     };
   } else {
@@ -132,13 +154,17 @@ export async function buildContextChunks(
   // Old chunks are marked as superseded via generation cycles, not deleted
 
   // Update generation cycle to processing
-  await (supabase
-    .from('generation_cycles') as any)
-    .update({
+  const { error: processingError }: SupabaseMutationResult = await supabase
+    .from('generation_cycles')
+    .update(asDbPayload({
       status: 'processing',
       progress_total: blueprint.chunks_plan.target_count || 500,
-    })
+    }))
     .eq('id', generationCycleId);
+
+  if (processingError) {
+    console.warn(`[chunks] Failed to mark generation cycle as processing: ${processingError.message}`);
+  }
 
   // 1. Collect chunks from all sources
   const allChunks: ChunkWithRank[] = [];
@@ -320,35 +346,46 @@ export async function buildContextChunks(
             enrichment_timestamp: new Date().toISOString(),
           };
 
-          const { error } = await (supabase
-            .from('context_items') as any)
-            .insert({
+          const { error: insertError }: SupabaseMutationResult = await supabase
+            .from('context_items')
+            .insert(asDbPayload({
               event_id: eventId,
               generation_cycle_id: generationCycleId,
               chunk: chunk.text,
               embedding: embedding,
               rank: chunk.rank,
               metadata: itemMetadata,
-            });
+            }));
 
-          if (error) {
-            console.error(`[chunks] Error inserting chunk at rank ${chunk.rank}: ${error.message}`);
+          if (insertError) {
+            console.error(`[chunks] Error inserting chunk at rank ${chunk.rank}: ${insertError.message}`);
           } else {
             insertedCount++;
             // Update progress
-            await (supabase
-              .from('generation_cycles') as any)
-              .update({ progress_current: insertedCount })
+            const { error: progressError }: SupabaseMutationResult = await supabase
+              .from('generation_cycles')
+              .update(asDbPayload({ progress_current: insertedCount }))
               .eq('id', generationCycleId);
+
+            if (progressError) {
+              console.warn(`[chunks] Failed to update progress for cycle ${generationCycleId}: ${progressError.message}`);
+            }
           }
-        } catch (error: any) {
-          console.error(`[chunks] Error processing chunk: ${error.message}`);
+        // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(`[chunks] Error processing chunk: ${message}`);
         }
       }
-    } catch (error: any) {
-      console.error(`[chunks] Error processing batch: ${error.message}`);
-      if (error.response?.data) {
-        console.error(`[chunks] OpenAI API error details:`, JSON.stringify(error.response.data, null, 2));
+    // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[chunks] Error processing batch: ${message}`);
+      if (typeof error === 'object' && error && 'response' in error) {
+        const response = (error as { response?: { data?: unknown } }).response;
+        if (response?.data) {
+          console.error(`[chunks] OpenAI API error details:`, JSON.stringify(response.data, null, 2));
+        }
       }
       // Log the first invalid chunk in the batch for debugging
       if (validBatch.length > 0) {
@@ -377,14 +414,14 @@ export async function buildContextChunks(
   };
 
   // Mark cycle as completed with cost metadata
-  const { error: cycleUpdateError } = await (supabase
-    .from('generation_cycles') as any)
-    .update({
+  const { error: cycleUpdateError }: SupabaseMutationResult = await supabase
+    .from('generation_cycles')
+    .update(asDbPayload({
       status: 'completed',
       progress_current: insertedCount,
       completed_at: new Date().toISOString(),
       metadata: costMetadata,
-    })
+    }))
     .eq('id', generationCycleId);
 
   if (cycleUpdateError) {
@@ -425,15 +462,22 @@ async function generateLLMChunks(
   const systemPrompt = CONTEXT_CHUNKS_GENERATION_SYSTEM_PROMPT;
 
   const researchSummary = researchResults.chunks
-    .map(c => c.text)
+    .map((chunk: ResearchChunk) => chunk.text)
     .join('\n\n')
     .substring(0, 3000);
 
+  const blueprintDetails = [
+    `Target chunks: ${neededLLMChunks}`,
+    `Quality tier: ${blueprint.chunks_plan.quality_tier}`,
+    `Inferred topics: ${blueprint.inferred_topics.join(', ')}`
+  ].join('\n');
+
+  const glossaryHighlights = blueprint.key_terms.slice(0, 10).join(', ');
+
   const userPrompt = createContextChunksUserPrompt(
-    neededLLMChunks,
-    blueprint.inferred_topics.join(', '),
-    blueprint.key_terms.slice(0, 10).join(', '),
-    researchSummary
+    researchSummary,
+    blueprintDetails,
+    glossaryHighlights
   );
 
   try {
@@ -444,7 +488,7 @@ async function generateLLMChunks(
     const supportsCustomTemperature = !onlySupportsDefaultTemp;
     
     // Build request options - conditionally include temperature
-    const requestOptions: any = {
+    const requestOptions: ChatCompletionRequest = {
       model: genModel,
       messages: [
         { role: 'system', content: systemPrompt },
@@ -458,7 +502,9 @@ async function generateLLMChunks(
       requestOptions.temperature = 0.7;
     }
     
-    const response = await openai.chat.completions.create(requestOptions);
+    const response = await openai.chat.completions.create(
+      requestOptions
+    ) as OpenAI.Chat.Completions.ChatCompletion;
 
     // Track OpenAI cost for chat completion
   if (response.usage) {
@@ -489,20 +535,21 @@ async function generateLLMChunks(
       throw new Error('Empty response from LLM');
     }
 
-    let parsed: any;
+    let parsed: unknown;
     try {
       parsed = JSON.parse(content);
-    } catch (e) {
+    // TODO: narrow unknown -> SyntaxError after upstream callsite analysis
+    } catch (parseError: unknown) {
       console.error(`[chunks] Failed to parse LLM response as JSON: ${content.substring(0, 200)}`);
       throw new Error('LLM response is not valid JSON');
     }
 
     // Handle both formats: { chunks: [...] } and [...] (array directly)
-    let chunks: any[] = [];
+    let chunks: unknown[] = [];
     if (Array.isArray(parsed)) {
       chunks = parsed;
-    } else if (parsed && Array.isArray(parsed.chunks)) {
-      chunks = parsed.chunks;
+    } else if (parsed && Array.isArray((parsed as { chunks?: unknown[] }).chunks)) {
+      chunks = (parsed as { chunks: unknown[] }).chunks ?? [];
     } else {
       console.error(`[chunks] Unexpected LLM response format. Parsed:`, JSON.stringify(parsed).substring(0, 200));
       throw new Error('LLM did not return array of chunks in expected format');
@@ -510,17 +557,17 @@ async function generateLLMChunks(
 
     // Filter and validate chunks - ensure they are non-empty strings
     const validChunks = chunks
-      .filter((chunk: any) => {
-        return chunk && typeof chunk === 'string' && chunk.trim().length > 0;
-      })
-      .map((chunk: string) => chunk.trim()) // Normalize by trimming
+      .filter((chunk): chunk is string => typeof chunk === 'string' && chunk.trim().length > 0)
+      .map(chunk => chunk.trim()) // Normalize by trimming
       .slice(0, neededLLMChunks);
 
     console.log(`[chunks] Generated ${validChunks.length} valid LLM chunks (filtered ${chunks.length - validChunks.length} invalid)`);
 
     return validChunks;
-  } catch (error: any) {
-    console.error(`[chunks] Error generating LLM chunks: ${error.message}`);
+  // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[chunks] Error generating LLM chunks: ${message}`);
     return [];
   }
 }

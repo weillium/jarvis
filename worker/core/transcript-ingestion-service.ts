@@ -1,8 +1,8 @@
-import { RuntimeService } from './runtime-service';
-import { SessionLifecycle } from './session-lifecycle';
-import { EventProcessor } from './event-processor';
+import type { RuntimeService } from './runtime-service';
+import type { SessionLifecycle } from './session-lifecycle';
+import type { EventProcessor } from './event-processor';
 import type { EventRuntime } from '../types';
-import { TranscriptsRepository } from '../services/supabase/transcripts-repository';
+import type { TranscriptsRepository } from '../services/supabase/transcripts-repository';
 
 export interface TranscriptAudioChunk {
   audioBase64: string;

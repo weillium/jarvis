@@ -1,4 +1,4 @@
-import { ProcessingMetrics } from '../types';
+import type { ProcessingMetrics } from '../types';
 
 type AgentMetricsMap = {
   transcript: ProcessingMetrics;

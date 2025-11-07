@@ -34,24 +34,16 @@ Instructions:
 export const FACTS_EXTRACTION_SYSTEM_PROMPT = `You are a facts extractor. Track stable keys (agenda, decisions, deadlines, metrics). Return JSON array of facts.`;
 
 export function createFactsExtractionUserPrompt(
-  runtimeContext: string,
   recentTranscript: string,
-  existingFacts: string,
-  glossaryContext: string
+  existingFacts: string
 ): string {
   return `You are an event intelligence assistant extracting stable facts.
-
-Runtime Context:
-${runtimeContext}
 
 Recent Transcript Window:
 ${recentTranscript}
 
 Existing Facts:
 ${existingFacts}
-
-Glossary Context:
-${glossaryContext}
 
 Instructions:
 - Identify durable facts (agenda, decisions, deadlines, metrics, speakers)
@@ -98,5 +90,4 @@ ${nextChunkPreview}
 
 Provide 1-2 guidance bullets for the facts agent focusing on durable facts, missing fields, and confidence adjustments.`;
 }
-
 

@@ -9,8 +9,8 @@
  * 4. System executes the blueprint to build context
  */
 
-import { createClient } from '@supabase/supabase-js';
-import OpenAI from 'openai';
+import type { createClient } from '@supabase/supabase-js';
+import type OpenAI from 'openai';
 import {
   BLUEPRINT_GENERATION_SYSTEM_PROMPT,
   createBlueprintUserPrompt,
@@ -122,6 +122,30 @@ interface LLMBlueprintResponse {
   };
 }
 
+type SupabaseErrorLike = { message: string } | null;
+
+type SupabaseMutationResult = { error: SupabaseErrorLike };
+
+type SupabaseSingleResult<T> = {
+  data: T | null;
+  error: SupabaseErrorLike;
+};
+
+type SupabaseListResult<T> = {
+  data: T[] | null;
+  error: SupabaseErrorLike;
+};
+
+type BlueprintWithUsage = Blueprint & {
+  __actualUsage?: OpenAIUsage | null;
+};
+
+type EventRecord = { id: string; title: string; topic: string | null };
+type BlueprintRecord = { id: string };
+type GenerationCycleRecord = { id: string };
+type ChatCompletionRequest = Parameters<OpenAI['chat']['completions']['create']>[0];
+const asDbPayload = <T>(payload: T) => payload as unknown as never;
+
 // ============================================================================
 // Document Extraction (Stubbed for MVP)
 // ============================================================================
@@ -162,8 +186,10 @@ async function extractDocumentsText(
     // 
     // For now, LLM can create a blueprint knowing documents exist
     return `[${docs.length} document(s) uploaded - text extraction will be available in full implementation]`;
-  } catch (error: any) {
-    console.warn(`[blueprint] Error extracting documents: ${error.message}`);
+  // TODO: narrow unknown -> PostgrestError | Error after upstream callsite analysis
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[blueprint] Error extracting documents: ${message}`);
     return '';
   }
 }
@@ -196,9 +222,9 @@ export async function generateContextBlueprint(
     // 1. Update agent to ensure it's in the correct state for blueprint generation
     // Status should be 'idle' with stage 'blueprint' (already set by /start endpoint)
     // We just ensure it's correct - no need to change status during generation
-    const { error: statusError } = await (supabase
-      .from('agents') as any)
-      .update({ status: 'idle', stage: 'blueprint' })
+    const { error: statusError }: SupabaseMutationResult = await supabase
+      .from('agents')
+      .update(asDbPayload({ status: 'idle', stage: 'blueprint' }))
       .eq('id', agentId);
 
     if (statusError) {
@@ -206,11 +232,14 @@ export async function generateContextBlueprint(
     }
 
     // 2. Fetch event data
-    const { data: event, error: eventError } = await supabase
+    const {
+      data: event,
+      error: eventError,
+    }: SupabaseSingleResult<EventRecord> = await supabase
       .from('events')
       .select('id, title, topic')
       .eq('id', eventId)
-      .single() as { data: { id: string; title: string; topic: string | null } | null; error: any };
+      .single();
 
     if (eventError || !event) {
       throw new Error(`Failed to fetch event: ${eventError?.message || 'Event not found'}`);
@@ -223,15 +252,18 @@ export async function generateContextBlueprint(
     const hasDocuments = documentsText.length > 0 && !documentsText.includes('will be available');
 
     // 4. Insert blueprint record with 'generating' status first (so we can create generation cycle)
-    const { data: blueprintRecord, error: insertError } = await (supabase
-      .from('context_blueprints') as any)
-      .insert({
+    const {
+      data: blueprintRecord,
+      error: insertError,
+    }: SupabaseSingleResult<BlueprintRecord> = await supabase
+      .from('context_blueprints')
+      .insert(asDbPayload({
         event_id: eventId,
         agent_id: agentId,
         status: 'generating',
-      })
+      }))
       .select('id')
-      .single() as { data: { id: string } | null; error: any };
+      .single();
 
     if (insertError || !blueprintRecord) {
       throw new Error(`Failed to create blueprint record: ${insertError?.message || 'Insert failed'}`);
@@ -243,9 +275,12 @@ export async function generateContextBlueprint(
     // 5. Create generation cycle for blueprint generation (to track costs)
     let generationCycleId: string | null = null;
     try {
-      const { data: cycleData, error: cycleError } = await (supabase
-        .from('generation_cycles') as any)
-        .insert({
+      const {
+        data: cycleData,
+        error: cycleError,
+      }: SupabaseSingleResult<GenerationCycleRecord> = await supabase
+        .from('generation_cycles')
+        .insert(asDbPayload({
           event_id: eventId,
           agent_id: agentId,
           blueprint_id: blueprintId,
@@ -254,9 +289,9 @@ export async function generateContextBlueprint(
           status: 'processing',
           progress_current: 0,
           progress_total: 0,
-        })
+        }))
         .select('id')
-        .single() as { data: { id: string } | null; error: any };
+        .single();
 
       if (!cycleError && cycleData) {
         generationCycleId = cycleData.id;
@@ -264,8 +299,10 @@ export async function generateContextBlueprint(
       } else {
         console.warn(`[blueprint] Failed to create generation cycle: ${cycleError?.message || 'Unknown error'}`);
       }
-    } catch (err: any) {
-      console.warn(`[blueprint] Error creating generation cycle: ${err.message}`);
+    // TODO: narrow unknown -> PostgrestError after upstream callsite analysis
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`[blueprint] Error creating generation cycle: ${message}`);
     }
 
     // 6. Generate blueprint using LLM
@@ -279,23 +316,23 @@ export async function generateContextBlueprint(
     );
 
     // 7. Update blueprint with generated data and mark as 'ready'
-    const { error: updateError } = await (supabase
-      .from('context_blueprints') as any)
-      .update({
+    const { error: updateError }: SupabaseMutationResult = await supabase
+      .from('context_blueprints')
+      .update(asDbPayload({
         status: 'ready',
-        blueprint: blueprint as any,
+        blueprint,
         important_details: blueprint.important_details,
         inferred_topics: blueprint.inferred_topics,
         key_terms: blueprint.key_terms,
-        research_plan: blueprint.research_plan as any,
+        research_plan: blueprint.research_plan,
         research_apis: blueprint.research_plan.queries.map(q => q.api),
         research_search_count: blueprint.research_plan.total_searches,
         estimated_cost: blueprint.cost_breakdown.total,
-        glossary_plan: blueprint.glossary_plan as any,
-        chunks_plan: blueprint.chunks_plan as any,
+        glossary_plan: blueprint.glossary_plan,
+        chunks_plan: blueprint.chunks_plan,
         target_chunk_count: blueprint.chunks_plan.target_count,
         quality_tier: blueprint.chunks_plan.quality_tier,
-      })
+      }))
       .eq('id', blueprintId);
 
     if (updateError) {
@@ -308,9 +345,9 @@ export async function generateContextBlueprint(
     if (generationCycleId) {
       try {
         // Calculate actual cost from LLM usage (passed from generateBlueprintWithLLM)
-        const actualUsage = (blueprint as any).__actualUsage as OpenAIUsage | null;
+        const actualUsage = blueprint.__actualUsage ?? null;
         let actualCost = 0;
-        let estimatedCost = blueprint.cost_breakdown.total || 0;
+        const estimatedCost = blueprint.cost_breakdown.total || 0;
 
         if (actualUsage) {
           actualCost = calculateOpenAICost(actualUsage, genModel, false);
@@ -340,14 +377,14 @@ export async function generateContextBlueprint(
           pricing_version: getPricingVersion(),
         };
 
-        const { error: cycleUpdateError } = await (supabase
-          .from('generation_cycles') as any)
-          .update({
+        const { error: cycleUpdateError }: SupabaseMutationResult = await supabase
+          .from('generation_cycles')
+          .update(asDbPayload({
             status: 'completed',
             progress_current: 1,
             progress_total: 1,
             metadata: costMetadata,
-          })
+          }))
           .eq('id', generationCycleId);
 
         if (cycleUpdateError) {
@@ -355,15 +392,20 @@ export async function generateContextBlueprint(
         } else {
           console.log(`[blueprint] Generation cycle updated with actual cost: $${actualCost.toFixed(4)}`);
         }
-      } catch (err: any) {
-        console.warn(`[blueprint] Error updating generation cycle: ${err.message}`);
+      // TODO: narrow unknown -> PostgrestError after upstream callsite analysis
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(`[blueprint] Error updating generation cycle: ${message}`);
       }
     }
 
     // 9. Mark any remaining non-superseded blueprints as superseded (safety check)
     // The API endpoint should have already handled this, but we do it here as a safety measure
-    const { data: existingBlueprints, error: checkError } = await (supabase
-      .from('context_blueprints') as any)
+    const {
+      data: existingBlueprints,
+      error: checkError,
+    }: SupabaseListResult<BlueprintRecord> = await supabase
+      .from('context_blueprints')
       .select('id')
       .eq('agent_id', agentId)
       .neq('id', blueprintId)
@@ -373,12 +415,12 @@ export async function generateContextBlueprint(
       const blueprintIds = existingBlueprints.map((b: { id: string }) => b.id);
 
       // Mark blueprints as superseded
-      const { error: supersedeError } = await (supabase
-        .from('context_blueprints') as any)
-        .update({
+      const { error: supersedeError }: SupabaseMutationResult = await supabase
+        .from('context_blueprints')
+        .update(asDbPayload({
           status: 'superseded',
           superseded_at: new Date().toISOString(),
-        })
+        }))
         .eq('agent_id', agentId)
         .neq('id', blueprintId)
         .in('status', ['generating', 'ready', 'approved']);
@@ -390,9 +432,9 @@ export async function generateContextBlueprint(
         console.log(`[blueprint] Marked ${existingBlueprints.length} existing blueprint(s) as superseded`);
 
         // Mark blueprint generation cycles as superseded
-        const { error: blueprintCycleError } = await (supabase
-          .from('generation_cycles') as any)
-          .update({ status: 'superseded' })
+        const { error: blueprintCycleError }: SupabaseMutationResult = await supabase
+          .from('generation_cycles')
+          .update(asDbPayload({ status: 'superseded' }))
           .eq('event_id', eventId)
           .in('blueprint_id', blueprintIds)
           .eq('cycle_type', 'blueprint')
@@ -404,9 +446,9 @@ export async function generateContextBlueprint(
 
         // Mark downstream generation cycles (research, glossary, chunks) as superseded
         // These cycles are associated with the superseded blueprints
-        const { error: downstreamCycleError } = await (supabase
-          .from('generation_cycles') as any)
-          .update({ status: 'superseded' })
+        const { error: downstreamCycleError }: SupabaseMutationResult = await supabase
+          .from('generation_cycles')
+          .update(asDbPayload({ status: 'superseded' }))
           .eq('event_id', eventId)
           .in('blueprint_id', blueprintIds)
           .in('cycle_type', ['research', 'glossary', 'chunks'])
@@ -427,24 +469,30 @@ export async function generateContextBlueprint(
 
     console.log(`[blueprint] Blueprint generation complete for event ${eventId}`);
     return blueprintId;
-  } catch (error: any) {
-    console.error(`[blueprint] Error generating blueprint: ${error.message}`);
+  // TODO: narrow unknown -> PostgrestError | Error after upstream callsite analysis
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[blueprint] Error generating blueprint: ${message}`);
     
     // Update agent status to error
     try {
-      await (supabase
-        .from('agents') as any)
-        .update({ status: 'error' })
+      await supabase
+        .from('agents')
+        .update(asDbPayload({ status: 'error' }))
         .eq('id', agentId);
-    } catch (err: any) {
-      console.error(`[blueprint] Failed to update agent status to error: ${err.message}`);
+    // TODO: narrow unknown -> PostgrestError after upstream callsite analysis
+    } catch (err: unknown) {
+      const errMessage = err instanceof Error ? err.message : String(err);
+      console.error(`[blueprint] Failed to update agent status to error: ${errMessage}`);
     }
 
     // Try to store error in blueprint record if it exists
     try {
       // Find the blueprint record that was created (if any)
-      const { data: blueprintRecords } = await (supabase
-        .from('context_blueprints') as any)
+      const {
+        data: blueprintRecords,
+      }: SupabaseListResult<BlueprintRecord> = await supabase
+        .from('context_blueprints')
         .select('id')
         .eq('agent_id', agentId)
         .eq('status', 'generating')
@@ -455,34 +503,38 @@ export async function generateContextBlueprint(
         const blueprintId = blueprintRecords[0].id;
         
         // Update blueprint status to error
-        await (supabase
-          .from('context_blueprints') as any)
-          .update({
+        await supabase
+          .from('context_blueprints')
+          .update(asDbPayload({
             status: 'error',
-            error_message: error.message,
-          })
+            error_message: message,
+          }))
           .eq('id', blueprintId);
 
         // Update generation cycle to failed if it exists
-        const { data: cycles } = await (supabase
-          .from('generation_cycles') as any)
+        const {
+          data: cycles,
+        }: SupabaseListResult<GenerationCycleRecord> = await supabase
+          .from('generation_cycles')
           .select('id')
           .eq('blueprint_id', blueprintId)
           .eq('cycle_type', 'blueprint')
           .in('status', ['started', 'processing']);
 
         if (cycles && cycles.length > 0) {
-          await (supabase
-            .from('generation_cycles') as any)
-            .update({
+          await supabase
+            .from('generation_cycles')
+            .update(asDbPayload({
               status: 'failed',
-              error_message: error.message,
-            })
+              error_message: message,
+            }))
             .in('id', cycles.map(c => c.id));
         }
       }
-    } catch (err: any) {
-      console.error(`[blueprint] Failed to update blueprint/generation cycle error status: ${err.message}`);
+    // TODO: narrow unknown -> PostgrestError after upstream callsite analysis
+    } catch (err: unknown) {
+      const errMessage = err instanceof Error ? err.message : String(err);
+      console.error(`[blueprint] Failed to update blueprint/generation cycle error status: ${errMessage}`);
     }
 
     throw error;
@@ -499,7 +551,7 @@ async function generateBlueprintWithLLM(
   hasDocuments: boolean,
   openai: OpenAI,
   genModel: string
-): Promise<Blueprint> {
+): Promise<BlueprintWithUsage> {
   const topic = eventTopic || eventTitle;
 
   // Use shared system prompt
@@ -544,7 +596,7 @@ IMPORTANT: This is a retry attempt. The previous response had empty or insuffici
       console.log(`[blueprint] LLM attempt ${attempt + 1}/${maxRetries + 1} for topic "${topic}"${isRetry && supportsCustomTemperature ? ' (retry with lower temperature)' : ''}`);
 
       // Build request options - conditionally include temperature
-      const requestOptions: any = {
+      const requestOptions: ChatCompletionRequest = {
         model: genModel,
         messages: [
           { role: 'system', content: systemPrompt },
@@ -559,7 +611,9 @@ IMPORTANT: This is a retry attempt. The previous response had empty or insuffici
         requestOptions.temperature = currentTemperature;
       }
 
-      const response = await openai.chat.completions.create(requestOptions);
+      const response = await openai.chat.completions.create(
+        requestOptions
+      ) as OpenAI.Chat.Completions.ChatCompletion;
 
       const content = response.choices[0]?.message?.content;
       if (!content) {
@@ -578,7 +632,7 @@ IMPORTANT: This is a retry attempt. The previous response had empty or insuffici
         if (totalUsage) {
           totalUsage = {
             prompt_tokens: totalUsage.prompt_tokens + attemptUsage.prompt_tokens,
-            completion_tokens: totalUsage.completion_tokens + attemptUsage.completion_tokens,
+            completion_tokens: (totalUsage.completion_tokens ?? 0) + (attemptUsage.completion_tokens ?? 0),
             total_tokens: totalUsage.total_tokens + attemptUsage.total_tokens,
           };
         } else {
@@ -638,16 +692,18 @@ IMPORTANT: This is a retry attempt. The previous response had empty or insuffici
           break;
         }
       }
-    } catch (error: any) {
-      lastError = error;
-      console.error(`[blueprint] Error on attempt ${attempt + 1}: ${error.message}`);
+    // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
+    } catch (error: unknown) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[blueprint] Error on attempt ${attempt + 1}: ${message}`);
       
       if (attempt < maxRetries) {
         attempt++;
         continue; // Retry
       } else {
         // All retries exhausted, rethrow
-        throw new Error(`Failed to generate blueprint after ${maxRetries + 1} attempts: ${error.message}`);
+        throw new Error(`Failed to generate blueprint after ${maxRetries + 1} attempts: ${message}`);
       }
     }
   }
@@ -656,22 +712,25 @@ IMPORTANT: This is a retry attempt. The previous response had empty or insuffici
     throw new Error(`Failed to parse LLM response: ${lastError?.message || 'Unknown error'}`);
   }
 
+  const isMeaningfulString = (value: unknown): value is string =>
+    typeof value === 'string' && value.trim().length > 0;
+
   // Validate and normalize the blueprint
-  const blueprint: Blueprint = {
+  const blueprint: BlueprintWithUsage = {
     important_details: (Array.isArray(parsed.important_details) && parsed.important_details.length >= 5)
-      ? parsed.important_details.filter((item: any) => item && typeof item === 'string' && item.trim().length > 0)
+      ? parsed.important_details.filter(isMeaningfulString)
       : (parsed.important_details || []).length > 0
         ? parsed.important_details
         : [`Event focuses on ${topic} - content generation failed, please regenerate blueprint`],
     
     inferred_topics: (Array.isArray(parsed.inferred_topics) && parsed.inferred_topics.length >= 5)
-      ? parsed.inferred_topics.filter((item: any) => item && typeof item === 'string' && item.trim().length > 0)
+      ? parsed.inferred_topics.filter(isMeaningfulString)
       : (parsed.inferred_topics || []).length > 0
         ? parsed.inferred_topics
         : [`${topic} Fundamentals`, `${topic} Best Practices`],
     
     key_terms: (Array.isArray(parsed.key_terms) && parsed.key_terms.length >= 10)
-      ? parsed.key_terms.filter((item: any) => item && typeof item === 'string' && item.trim().length > 0)
+      ? parsed.key_terms.filter(isMeaningfulString)
       : (parsed.key_terms || []).length > 0
         ? parsed.key_terms
         : [topic],
@@ -785,7 +844,7 @@ IMPORTANT: This is a retry attempt. The previous response had empty or insuffici
     
     // Attach actual usage for cost calculation (will be removed before storing in DB)
     if (totalUsage) {
-      (blueprint as any).__actualUsage = totalUsage;
+      blueprint.__actualUsage = totalUsage;
     }
     
     return blueprint;

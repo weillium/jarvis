@@ -2,7 +2,8 @@ import type { TranscriptChunk } from './runtime';
 
 export interface AgentContext {
   bullets: string[];
-  facts: Record<string, any>;
+  // TODO: narrow unknown -> Record<string, FactRecord> after upstream callsite analysis
+  facts: Record<string, unknown>;
   glossaryContext: string;
 }
 

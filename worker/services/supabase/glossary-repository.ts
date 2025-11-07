@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { GlossaryRecord } from './types';
+import { mapGlossaryRecords, mapIdList } from './dto-mappers';
 
 export class GlossaryRepository {
   constructor(private readonly client: SupabaseClient) {}
@@ -16,10 +17,7 @@ export class GlossaryRepository {
       console.warn('[glossary-repo] Warning: Failed to fetch active glossary cycles:', cycleError.message);
     }
 
-    const activeCycleIds: string[] = [];
-    if (activeCycles && activeCycles.length > 0) {
-      activeCycleIds.push(...activeCycles.map((c: { id: string }) => c.id));
-    }
+    const activeCycleIds: string[] = mapIdList(activeCycles);
 
     let query = this.client.from('glossary_terms').select('*').eq('event_id', eventId);
 
@@ -35,6 +33,6 @@ export class GlossaryRepository {
 
     const { data, error } = await query.order('confidence_score', { ascending: false });
     if (error) throw error;
-    return (data as GlossaryRecord[]) || [];
+    return mapGlossaryRecords(data);
   }
 }

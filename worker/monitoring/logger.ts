@@ -1,4 +1,4 @@
-import { LogEntry, AgentType } from '../types';
+import type { LogEntry, AgentType } from '../types';
 
 export class Logger {
   private logBuffers: Map<string, LogEntry[]> = new Map();

@@ -1,5 +1,5 @@
-import { OpenAIService } from '../services/openai-service';
-import { VectorSearchGateway } from '../services/supabase/vector-search-gateway';
+import type { OpenAIService } from '../services/openai-service';
+import type { VectorSearchGateway } from '../services/supabase/vector-search-gateway';
 
 export class VectorSearchService {
   constructor(

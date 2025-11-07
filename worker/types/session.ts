@@ -38,8 +38,10 @@ export interface AgentSessionStatus {
     cards_last_seq: number;
     facts_last_seq: number;
     facts_last_update: string;
-    ring_buffer_stats: any;
-    facts_store_stats: any;
+    // TODO: narrow unknown -> RingBufferStats after upstream callsite analysis
+    ring_buffer_stats: unknown;
+    // TODO: narrow unknown -> FactsStoreStats after upstream callsite analysis
+    facts_store_stats: unknown;
   };
   token_metrics: {
     total_tokens: number;

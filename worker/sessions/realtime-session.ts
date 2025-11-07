@@ -3,19 +3,31 @@
  * Manages WebSocket connections to OpenAI Realtime API for Cards and Facts agents
  */
 
-import OpenAI from 'openai';
+import type OpenAI from 'openai';
 import { OpenAIRealtimeWebSocket } from 'openai/realtime/websocket';
 import type {
+  ConversationItemCreateEvent,
   RealtimeClientEvent,
   RealtimeServerEvent,
   ResponseDoneEvent,
+  ResponseFunctionCallArgumentsDoneEvent,
   ResponseTextDoneEvent,
 } from 'openai/resources/realtime/realtime';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { getPolicy } from '../policies';
 import {
   createRealtimeCardsUserPrompt,
   createRealtimeFactsUserPrompt,
 } from '../prompts';
+import type {
+  Fact,
+  RealtimeCardDTO,
+  RealtimeFactDTO,
+  RealtimeModelResponseDTO,
+  RealtimeToolCallDTO,
+  RealtimeTranscriptDTO,
+  VectorMatchRecord
+} from '../types';
 
 export type AgentType = 'transcript' | 'cards' | 'facts';
 
@@ -32,11 +44,167 @@ export interface RealtimeSessionConfig {
     message: string,
     context?: { seq?: number }
   ) => void;
-  supabase?: any; // Supabase client for database updates
+  supabase?: SupabaseClient; // Supabase client for database updates
   // Callbacks for tool execution
-  onRetrieve?: (query: string, topK: number) => Promise<Array<{ id: string; chunk: string; similarity: number }>>;
+  onRetrieve?: (query: string, topK: number) => Promise<VectorMatchRecord[]>;
   embedText?: (text: string) => Promise<number[]>;
 }
+
+const CARD_TYPES: ReadonlySet<RealtimeCardDTO['card_type']> = new Set([
+  'text',
+  'text_visual',
+  'visual',
+]);
+
+const safeJsonParse = (raw: string): unknown | null => {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const clampTopK = (value: number): number => {
+  const normalized = Number.isFinite(value) ? Math.floor(value) : 5;
+  return Math.min(10, Math.max(1, normalized));
+};
+
+const mapToolCallArguments = (
+  args: unknown,
+  callId: string
+): RealtimeToolCallDTO | null => {
+  if (!isRecord(args)) {
+    return null;
+  }
+
+  if (typeof args.query === 'string') {
+    const topKValue = typeof args.top_k === 'number' ? clampTopK(args.top_k) : 5;
+    return {
+      type: 'retrieve',
+      callId,
+      query: args.query,
+      topK: topKValue,
+    };
+  }
+
+  const card = mapCardFromRecord(args);
+  if (card) {
+    return {
+      type: 'produce_card',
+      callId,
+      card,
+    };
+  }
+
+  return null;
+};
+
+const mapCardFromRecord = (record: Record<string, unknown>): RealtimeCardDTO | null => {
+  if (
+    typeof record.kind !== 'string' ||
+    typeof record.card_type !== 'string' ||
+    typeof record.title !== 'string'
+  ) {
+    return null;
+  }
+
+  const cardType = CARD_TYPES.has(record.card_type as RealtimeCardDTO['card_type'])
+    ? (record.card_type as RealtimeCardDTO['card_type'])
+    : 'text';
+
+  const sourceSeq =
+    typeof record.source_seq === 'number' ? record.source_seq : 0;
+
+  return {
+    kind: record.kind,
+    card_type: cardType,
+    title: record.title,
+    body: typeof record.body === 'string' ? record.body : null,
+    label: typeof record.label === 'string' ? record.label : null,
+    image_url: typeof record.image_url === 'string' ? record.image_url : null,
+    source_seq: sourceSeq,
+  };
+};
+
+const mapCardPayload = (payload: unknown): RealtimeCardDTO | null => {
+  if (!isRecord(payload)) {
+    return null;
+  }
+  return mapCardFromRecord(payload);
+};
+
+const mapFactsPayload = (payload: unknown): RealtimeFactDTO[] => {
+  if (Array.isArray(payload)) {
+    return payload
+      .map(mapFactCandidate)
+      .filter((fact): fact is RealtimeFactDTO => fact !== null);
+  }
+
+  if (isRecord(payload) && Array.isArray(payload.facts)) {
+    return payload.facts
+      .map(mapFactCandidate)
+      .filter((fact): fact is RealtimeFactDTO => fact !== null);
+  }
+
+  return [];
+};
+
+const mapFactCandidate = (value: unknown): RealtimeFactDTO | null => {
+  if (!isRecord(value) || typeof value.key !== 'string' || !('value' in value)) {
+    return null;
+  }
+
+  const fact: RealtimeFactDTO = {
+    key: value.key,
+    value: value.value,
+  };
+
+  if (typeof value.confidence === 'number') {
+    fact.confidence = value.confidence;
+  }
+
+  return fact;
+};
+
+const isInvalidToolCallError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+  const message = 'message' in error ? String((error as { message?: unknown }).message || '') : '';
+  return message.toLowerCase().includes('invalid_tool_call_id');
+};
+
+const extractAssistantText = (event: ResponseDoneEvent): string | null => {
+  const items = event.response.output;
+  if (!Array.isArray(items)) {
+    return null;
+  }
+
+  for (const item of items) {
+    if (
+      isRecord(item) &&
+      item.type === 'message' &&
+      item.role === 'assistant' &&
+      Array.isArray(item.content)
+    ) {
+      const textContent = item.content.find(
+        (content) =>
+          isRecord(content) &&
+          typeof content.type === 'string' &&
+          content.type === 'text' &&
+          typeof content.text === 'string'
+      );
+      if (textContent && typeof textContent.text === 'string') {
+        return textContent.text;
+      }
+    }
+  }
+
+  return null;
+};
 
 export interface RealtimeSessionStatus {
   isActive: boolean;
@@ -55,16 +223,33 @@ export interface RealtimeSessionStatus {
   };
 }
 
+interface RealtimeMessageContext {
+  bullets?: string[];
+  glossaryContext?: string;
+  recentText?: string;
+  facts?: Fact[] | Record<string, unknown>;
+}
+
+type RealtimeSessionEvent = 'card' | 'response' | 'facts' | 'transcript' | 'error';
+
+type RealtimeSessionEventPayloads = {
+  card: RealtimeCardDTO;
+  response: RealtimeModelResponseDTO;
+  facts: RealtimeFactDTO[];
+  transcript: RealtimeTranscriptDTO;
+  error: Error;
+};
+
 export class RealtimeSession {
   private openai: OpenAI;
   private session?: OpenAIRealtimeWebSocket;
   private config: RealtimeSessionConfig;
   private isActive: boolean = false;
-  private messageQueue: Array<{ message: string; context?: any }> = [];
-  private currentMessage: { message: string; context?: any } | null = null;
+  private messageQueue: Array<{ message: string; context?: RealtimeMessageContext }> = [];
+  private currentMessage: { message: string; context?: RealtimeMessageContext } | null = null;
   private pendingResponse: boolean = false;
   private pendingAudioBytes: number = 0;
-  private eventHandlers: Map<string, ((data: any) => void)[]> = new Map();
+  private eventHandlers: { [K in RealtimeSessionEvent]?: Array<(data: RealtimeSessionEventPayloads[K]) => void> } = {};
   private onStatusChange?: (
     status: 'active' | 'paused' | 'closed' | 'error',
     sessionId?: string
@@ -74,8 +259,8 @@ export class RealtimeSession {
     message: string,
     context?: { seq?: number }
   ) => void;
-  private supabase?: any;
-  private onRetrieve?: (query: string, topK: number) => Promise<Array<{ id: string; chunk: string; similarity: number }>>;
+  private supabase?: SupabaseClient;
+  private onRetrieve?: (query: string, topK: number) => Promise<VectorMatchRecord[]>;
   private embedText?: (text: string) => Promise<number[]>;
   
   // Ping-pong heartbeat tracking
@@ -176,7 +361,7 @@ export class RealtimeSession {
     return 'transient';
   }
 
-  private transitionToErrorState(error: any, contextMessage?: string): void {
+  private transitionToErrorState(error: unknown, contextMessage?: string): void {
     this.stopPingPong();
     this.clearReconnectTimer();
     this.safeCloseSession('Fatal error - closing');
@@ -187,11 +372,12 @@ export class RealtimeSession {
     this.currentMessage = null;
     this.messageQueue = [];
 
-    const message = contextMessage || error?.message || String(error);
+    const message =
+      contextMessage || (error instanceof Error ? error.message : String(error));
     this.onLog?.('error', `Session failed: ${message}`);
     this.onStatusChange?.('error');
     void this.updateDatabaseStatus('error');
-    this.emit('error', error instanceof Error ? error : new Error(message));
+    this.emitEvent('error', error instanceof Error ? error : new Error(message));
   }
 
   private scheduleReconnect(): void {
@@ -431,7 +617,7 @@ export class RealtimeSession {
       try {
         const underlyingSocket = (this.session as any).socket || (this.session as any).ws;
         if (underlyingSocket) {
-          (underlyingSocket as any).__connectedAt = new Date().toISOString();
+          (underlyingSocket).__connectedAt = new Date().toISOString();
         }
       } catch (error) {
         // Ignore if we can't access underlying socket
@@ -570,160 +756,61 @@ export class RealtimeSession {
     // When agent calls a tool, we receive the arguments and need to execute the tool
     this.session.on(
       'response.function_call_arguments.done',
-      async (event: any) => {
+      async (event: ResponseFunctionCallArgumentsDoneEvent) => {
         try {
-          const args = JSON.parse(event.arguments);
-          const callId = event.call_id;
-
-          // Check if this is a retrieve() call by looking for query parameter
-          if (args.query) {
-            const query = args.query;
-            const topK = args.top_k || 5;
-
-            const logMessage = `retrieve() called: query="${query}", top_k=${topK}`;
-            this.onLog?.('log', logMessage);
-
-            // Execute retrieve if callback provided
-            if (this.onRetrieve) {
-              try {
-                const results = await this.onRetrieve(query, topK);
-
-                // Create function_call_output item to return results
-              if (this.isActive && this.session) {
-                try {
-                  this.session.send({
-                    type: 'conversation.item.create',
-                    item: {
-                      type: 'function_call_output',
-                      call_id: callId,
-                      output: JSON.stringify({
-                        chunks: results.map((r) => ({
-                          id: r.id,
-                          chunk: r.chunk,
-                          similarity: r.similarity,
-                        })),
-                      }),
-                    },
-                  } as RealtimeClientEvent);
-                } catch (sendError: any) {
-                  if (!String(sendError?.message || '').toLowerCase().includes('invalid_tool_call_id')) {
-                    throw sendError;
-                  }
-                  console.warn('[realtime] Ignoring stale tool output for expired call_id', {
-                    eventId: this.config.eventId,
-                    agentType: this.config.agentType,
-                    callId,
-                  });
-                  return;
-                }
-              } else {
-                console.warn('[realtime] Skipping tool output - session inactive', {
-                  eventId: this.config.eventId,
-                  agentType: this.config.agentType,
-                  callId,
-                });
-                return;
-              }
-
-                const successMessage = `retrieve() returned ${results.length} chunks`;
-                this.onLog?.('log', successMessage);
-              } catch (error: any) {
-                const errorMessage = `Error executing retrieve(): ${error.message}`;
-                this.onLog?.('error', errorMessage);
-
-              if (this.isActive && this.session) {
-                try {
-                  this.session.send({
-                    type: 'conversation.item.create',
-                    item: {
-                      type: 'function_call_output',
-                      call_id: callId,
-                      output: JSON.stringify({
-                        error: error.message,
-                        chunks: [],
-                      }),
-                    },
-                  } as RealtimeClientEvent);
-                } catch (sendError: any) {
-                  if (!String(sendError?.message || '').toLowerCase().includes('invalid_tool_call_id')) {
-                    throw sendError;
-                  }
-                  console.warn('[realtime] Ignoring error tool output for expired call_id', {
-                    eventId: this.config.eventId,
-                    agentType: this.config.agentType,
-                    callId,
-                    error: error.message,
-                  });
-                }
-              }
-              }
-            } else {
-              const warnMessage = `retrieve() called but no onRetrieve callback provided`;
-              this.onLog?.('warn', warnMessage);
-              
-              // Return empty result
-            if (this.isActive && this.session) {
-              try {
-                this.session.send({
-                  type: 'conversation.item.create',
-                  item: {
-                    type: 'function_call_output',
-                    call_id: callId,
-                    output: JSON.stringify({ chunks: [] }),
-                  },
-                } as RealtimeClientEvent);
-              } catch (sendError: any) {
-                if (!String(sendError?.message || '').toLowerCase().includes('invalid_tool_call_id')) {
-                  throw sendError;
-                }
-                console.warn('[realtime] Ignoring empty tool output for expired call_id', {
-                  eventId: this.config.eventId,
-                  agentType: this.config.agentType,
-                  callId,
-                });
-              }
-            }
-            }
-          } 
-          // Check if this is a produce_card() call (Cards agent only)
-          else if (args.kind && args.card_type && args.title && args.source_seq !== undefined) {
-            const logMessage = `produce_card() called: kind="${args.kind}", card_type="${args.card_type}"`;
-            this.onLog?.('log', logMessage, { seq: args.source_seq });
-
-            // Create card object from function arguments
-            const card = {
-              kind: args.kind,
-              card_type: args.card_type,
-              title: args.title,
-              body: args.body || null,
-              label: args.label || null,
-              image_url: args.image_url || null,
-              source_seq: args.source_seq,
-            };
-
-            // Emit card event to registered handlers
-            this.emit('card', card);
-
-            // Return success confirmation
-            this.session!.send({
-              type: 'conversation.item.create',
-              item: {
-                type: 'function_call_output',
-                call_id: callId,
-                output: JSON.stringify({ success: true, card_id: `card_${Date.now()}` }),
-              },
-            } as RealtimeClientEvent);
-
-            const successMessage = `produce_card() completed: ${args.kind} card`;
-            this.onLog?.('log', successMessage, { seq: args.source_seq });
-          } 
-          else {
-            const warnMessage = `Unknown function call: ${JSON.stringify(args)}`;
-            this.onLog?.('warn', warnMessage);
+          const parsedArgs = safeJsonParse(event.arguments);
+          if (parsedArgs === null) {
+            this.onLog?.('warn', 'Failed to parse function call arguments');
+            return;
           }
-        } catch (error: any) {
-          const errorMessage = `Error handling function call: ${error.message}`;
-          this.onLog?.('error', errorMessage);
+
+          const toolCall = mapToolCallArguments(parsedArgs, event.call_id);
+          if (!toolCall) {
+            this.onLog?.('warn', 'Received unsupported tool call arguments');
+            return;
+          }
+
+          if (toolCall.type === 'retrieve') {
+            const { query, topK, callId } = toolCall;
+            this.onLog?.('log', `retrieve() called: query="${query}", top_k=${topK}`);
+
+            if (!this.onRetrieve) {
+              this.onLog?.('warn', 'retrieve() called but no onRetrieve callback provided');
+              await this.sendToolResult(callId, { chunks: [] });
+              return;
+            }
+
+            try {
+              const results = await this.onRetrieve(query, topK);
+              await this.sendToolResult(callId, {
+                chunks: results.map((r) => ({
+                  id: r.id,
+                  chunk: r.chunk,
+                  similarity: r.similarity,
+                })),
+              });
+              this.onLog?.('log', `retrieve() returned ${results.length} chunks`);
+            } catch (toolError) {
+              const errorMessage = toolError instanceof Error ? toolError.message : String(toolError);
+              this.onLog?.('error', `Error executing retrieve(): ${errorMessage}`);
+              await this.sendToolResult(callId, { error: errorMessage, chunks: [] });
+            }
+          } else if (toolCall.type === 'produce_card') {
+            const card = toolCall.card;
+            this.onLog?.('log', `produce_card() called: kind="${card.kind}", card_type="${card.card_type}"`, {
+              seq: card.source_seq,
+            });
+            this.emitEvent('card', card);
+
+            await this.sendToolResult(toolCall.callId, {
+              success: true,
+              card_id: `card_${Date.now()}`,
+            });
+            this.onLog?.('log', `produce_card() completed: ${card.kind} card`, { seq: card.source_seq });
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          this.onLog?.('error', `Error handling function call: ${message}`);
         }
       }
     );
@@ -739,7 +826,7 @@ export class RealtimeSession {
               return;
             }
 
-            this.emit('transcript', {
+            this.emitEvent('transcript', {
               text,
               isFinal: true,
               receivedAt: new Date().toISOString(),
@@ -747,23 +834,33 @@ export class RealtimeSession {
             return;
           }
 
-          // Parse JSON response for cards/facts agents
-          const response = JSON.parse(event.text);
-          this.emit('response', response);
+          if (!event.text) {
+            return;
+          }
+
+          const parsedResponse = safeJsonParse(event.text);
+          if (parsedResponse === null) {
+            this.onLog?.('warn', 'Failed to parse response text as JSON');
+            return;
+          }
+
+          this.emitEvent('response', { raw: parsedResponse });
 
           if (this.config.agentType === 'cards') {
-            this.emit('card', response);
+            const card = mapCardPayload(parsedResponse);
+            if (card) {
+              this.emitEvent('card', card);
+            }
           } else {
-            const factsArray = Array.isArray(response)
-              ? response
-              : response.facts || [];
-            this.emit('facts', factsArray);
+            const factsArray = mapFactsPayload(parsedResponse);
+            if (factsArray.length > 0) {
+              this.emitEvent('facts', factsArray);
+            }
           }
-        } catch (error: any) {
-          console.error(
-            `[realtime] Error parsing response: ${error.message}`
-          );
-          this.emit('error', error);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(`[realtime] Error parsing response: ${message}`);
+          this.emitEvent('error', error instanceof Error ? error : new Error(message));
         }
       }
     );
@@ -771,48 +868,45 @@ export class RealtimeSession {
     // Handle response completion (fallback if text.done doesn't fire)
     this.session.on('response.done', async (event: ResponseDoneEvent) => {
       try {
-        // Extract text from response output items
-        const textItem = event.response.output?.find(
-          (item: any) => item.type === 'message' && item.role === 'assistant'
-        ) as any;
+        const assistantText = extractAssistantText(event);
+        if (!assistantText) {
+          return;
+        }
 
-        // Check if it's a message item with content
-        if (textItem && textItem.type === 'message' && textItem.content) {
-          const textContent = textItem.content.find(
-            (c: any) => c.type === 'text'
-          );
-          if (!textContent?.text) {
+        if (this.config.agentType === 'transcript') {
+          const text = assistantText.trim();
+          if (text.length === 0) {
+            return;
+          }
+          this.emitEvent('transcript', {
+            text,
+            isFinal: true,
+            receivedAt: new Date().toISOString(),
+          });
+        } else {
+          const parsedResponse = safeJsonParse(assistantText);
+          if (parsedResponse === null) {
+            this.onLog?.('warn', 'Failed to parse response.done payload');
             return;
           }
 
-          if (this.config.agentType === 'transcript') {
-            const text = textContent.text.trim();
-            if (text.length === 0) {
-              return;
-            }
-            this.emit('transcript', {
-              text,
-              isFinal: true,
-              receivedAt: new Date().toISOString(),
-            });
-          } else {
-            const response = JSON.parse(textContent.text);
-            this.emit('response', response);
+          this.emitEvent('response', { raw: parsedResponse });
 
-            if (this.config.agentType === 'cards') {
-              this.emit('card', response);
-            } else {
-              const factsArray = Array.isArray(response)
-                ? response
-                : response.facts || [];
-              this.emit('facts', factsArray);
+          if (this.config.agentType === 'cards') {
+            const card = mapCardPayload(parsedResponse);
+            if (card) {
+              this.emitEvent('card', card);
+            }
+          } else {
+            const factsArray = mapFactsPayload(parsedResponse);
+            if (factsArray.length > 0) {
+              this.emitEvent('facts', factsArray);
             }
           }
         }
-      } catch (error: any) {
-        console.error(
-          `[realtime] Error processing response.done: ${error.message}`
-        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[realtime] Error processing response.done: ${message}`);
       } finally {
         this.pendingResponse = false;
         this.currentMessage = null;
@@ -1036,27 +1130,9 @@ export class RealtimeSession {
   }
 
   /**
-   * Emit event to registered handlers
-   */
-  private emit(event: string, data: any): void {
-    const handlers = this.eventHandlers.get(event);
-    if (handlers) {
-      for (const handler of handlers) {
-        try {
-          handler(data);
-        } catch (error: any) {
-          console.error(
-            `[realtime] Error in event handler: ${error.message}`
-          );
-        }
-      }
-    }
-  }
-
-  /**
    * Send a message to the Realtime session
    */
-  async sendMessage(message: string, context?: any): Promise<void> {
+  async sendMessage(message: string, context?: RealtimeMessageContext): Promise<void> {
     if (!this.isActive || !this.session) {
       throw new Error('Session not connected');
     }
@@ -1123,9 +1199,11 @@ export class RealtimeSession {
   /**
    * Format message for the agent type
    */
-  private formatMessage(message: string, context?: any): any {
+  private formatMessage(
+    message: string,
+    context?: RealtimeMessageContext
+  ): ConversationItemCreateEvent {
     if (this.config.agentType === 'cards') {
-      // Cards agent: send transcript delta + context (no vector - agent uses retrieve() tool)
       return {
         type: 'conversation.item.create',
         item: {
@@ -1136,8 +1214,8 @@ export class RealtimeSession {
               type: 'input_text',
               text: createRealtimeCardsUserPrompt(
                 message,
-                context?.bullets || [],
-                context?.glossaryContext
+                (context?.bullets ?? []).join('\n'),
+                context?.glossaryContext ?? ''
               ),
             },
           ],
@@ -1158,7 +1236,6 @@ export class RealtimeSession {
         },
       };
     } else {
-      // Facts agent: send condensed context (no vector - agent uses retrieve() tool)
       return {
         type: 'conversation.item.create',
         item: {
@@ -1170,7 +1247,7 @@ export class RealtimeSession {
               text: createRealtimeFactsUserPrompt(
                 context?.recentText || message,
                 JSON.stringify(context?.facts || {}, null, 2),
-                context?.glossaryContext
+                context?.glossaryContext ?? ''
               ),
             },
           ],
@@ -1216,14 +1293,63 @@ export class RealtimeSession {
     }
   }
 
+  private async sendToolResult(callId: string, output: Record<string, unknown>): Promise<void> {
+    if (!this.isActive || !this.session) {
+      this.onLog?.('warn', 'Skipping tool output - session inactive');
+      return;
+    }
+
+    try {
+      this.session.send({
+        type: 'conversation.item.create',
+        item: {
+          type: 'function_call_output',
+          call_id: callId,
+          output: JSON.stringify(output),
+        },
+      } as RealtimeClientEvent);
+    } catch (error) {
+      if (isInvalidToolCallError(error)) {
+        console.warn('[realtime] Ignoring tool output for expired call_id', {
+          eventId: this.config.eventId,
+          agentType: this.config.agentType,
+          callId,
+        });
+        return;
+      }
+      throw error;
+    }
+  }
+
+  private emitEvent<K extends RealtimeSessionEvent>(
+    event: K,
+    data: RealtimeSessionEventPayloads[K]
+  ): void {
+    const handlers = this.eventHandlers[event];
+    if (!handlers) {
+      return;
+    }
+    handlers.forEach((handler) => {
+      try {
+        handler(data);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[realtime] Error in event handler for ${event}: ${message}`);
+      }
+    });
+  }
+
   /**
    * Register event handler
    */
-  on(event: string, handler: (data: any) => void): void {
-    if (!this.eventHandlers.has(event)) {
-      this.eventHandlers.set(event, []);
+  on<K extends RealtimeSessionEvent>(
+    event: K,
+    handler: (data: RealtimeSessionEventPayloads[K]) => void
+  ): void {
+    if (!this.eventHandlers[event]) {
+      this.eventHandlers[event] = [];
     }
-    this.eventHandlers.get(event)!.push(handler);
+    this.eventHandlers[event]!.push(handler);
   }
 
   /**
@@ -1259,8 +1385,8 @@ export class RealtimeSession {
           else if (readyState === 3) websocketState = 'CLOSED';
           
           // Get connection timestamp if available
-          if (readyState === 1 && (underlyingSocket as any).__connectedAt) {
-            connectedAt = (underlyingSocket as any).__connectedAt;
+          if (readyState === 1 && (underlyingSocket).__connectedAt) {
+            connectedAt = (underlyingSocket).__connectedAt;
           }
         }
       } catch (error) {
@@ -1459,7 +1585,7 @@ export class RealtimeSession {
       this.stopPingPong();
       
       // Emit error event for orchestrator to handle reconnection
-      this.emit('error', new Error(`Connection dead - ${this.missedPongs} missed pongs`));
+      this.emitEvent('error', new Error(`Connection dead - ${this.missedPongs} missed pongs`));
     }
   }
 

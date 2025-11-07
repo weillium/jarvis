@@ -1,10 +1,10 @@
-import { EventRuntime } from '../types';
-import { CardsProcessor } from '../processing/cards-processor';
-import { FactsProcessor } from '../processing/facts-processor';
-import { TranscriptProcessor } from '../processing/transcript-processor';
+import type { EventRuntime } from '../types';
+import type { CardsProcessor } from '../processing/cards-processor';
+import type { FactsProcessor } from '../processing/facts-processor';
+import type { TranscriptProcessor } from '../processing/transcript-processor';
 import type { TranscriptChunk } from '../types';
-import { AgentOutputsRepository } from '../services/supabase/agent-outputs-repository';
-import { FactsRepository } from '../services/supabase/facts-repository';
+import type { AgentOutputsRepository } from '../services/supabase/agent-outputs-repository';
+import type { FactsRepository } from '../services/supabase/facts-repository';
 
 type DetermineCardTypeFn = (card: any, transcriptText: string) => 'text' | 'text_visual' | 'visual';
 

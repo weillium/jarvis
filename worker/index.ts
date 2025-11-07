@@ -1,7 +1,8 @@
 import 'dotenv/config';
 import http from 'http';
 import { URL } from 'url';
-import { Orchestrator, OrchestratorConfig } from './core/orchestrator';
+import type { OrchestratorConfig } from './core/orchestrator';
+import { Orchestrator } from './core/orchestrator';
 import { ModelSelectionService } from './services/model-selection-service';
 import { OpenAIService } from './services/openai-service';
 import { SSEService } from './services/sse-service';

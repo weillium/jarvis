@@ -10,7 +10,7 @@
  */
 
 import { BaseEnricher } from './base-enricher';
-import { EnrichmentResult } from '../types';
+import type { EnrichmentResult } from '../types';
 
 export class WikipediaEnricher extends BaseEnricher {
   name = 'wikipedia';

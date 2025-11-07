@@ -1,5 +1,5 @@
-import { EventRuntime } from '../types';
-import { GlossaryManager } from './glossary-manager';
+import type { EventRuntime } from '../types';
+import type { GlossaryManager } from './glossary-manager';
 import { countTokens } from '../utils/token-counter';
 
 export interface AgentContext {

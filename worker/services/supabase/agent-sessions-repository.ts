@@ -5,6 +5,11 @@ import type {
   AgentSessionUpsert,
   AgentSessionHistoryParams,
 } from './types';
+import {
+  mapAgentSessionRecords,
+  mapConnectionCountInfo,
+  mapSingleId
+} from './dto-mappers';
 
 export class AgentSessionsRepository {
   constructor(private readonly client: SupabaseClient) {}
@@ -16,7 +21,7 @@ export class AgentSessionsRepository {
       .eq('event_id', eventId);
 
     if (error) throw error;
-    return (data as AgentSessionRecord[]) || [];
+    return mapAgentSessionRecords(data);
   }
 
   async getSessionsForAgent(
@@ -38,7 +43,7 @@ export class AgentSessionsRepository {
 
     const { data, error } = await query;
     if (error) throw error;
-    return (data as AgentSessionRecord[]) || [];
+    return mapAgentSessionRecords(data);
   }
 
   async deleteSessions(eventId: string, agentId: string): Promise<void> {
@@ -62,7 +67,7 @@ export class AgentSessionsRepository {
       .select('*');
 
     if (error) throw error;
-    return (data as AgentSessionRecord[]) || [];
+    return mapAgentSessionRecords(data);
   }
 
   async upsertSessions(sessions: AgentSessionUpsert[]): Promise<void> {
@@ -140,7 +145,8 @@ export class AgentSessionsRepository {
       throw new Error(`Failed to find session for increment: ${fetchError?.message || 'not found'}`);
     }
 
-    const currentCount = session.connection_count || 0;
+    const sessionInfo = mapConnectionCountInfo(session);
+    const currentCount = sessionInfo.connection_count || 0;
     const newCount = currentCount + 1;
 
     const { error: updateError } = await this.client
@@ -157,7 +163,7 @@ export class AgentSessionsRepository {
 
     return {
       connection_count: newCount,
-      session_id: session.id,
+      session_id: sessionInfo.id,
     };
   }
 
@@ -173,7 +179,7 @@ export class AgentSessionsRepository {
       return null;
     }
 
-    return data.id;
+    return mapSingleId(data);
   }
 
   async logHistory(params: AgentSessionHistoryParams): Promise<void> {

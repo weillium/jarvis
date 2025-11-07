@@ -1,8 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AgentType, EventRuntime } from '../types';
-import { RealtimeSession } from './realtime-session';
-import { SessionFactory } from './session-factory';
-import { Logger } from '../monitoring/logger';
+import type { RealtimeSession } from './realtime-session';
+import type { SessionFactory } from './session-factory';
+import type { Logger } from '../monitoring/logger';
 
 export interface TranscriptAudioOptions {
   audioBase64: string;

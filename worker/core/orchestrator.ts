@@ -1,24 +1,24 @@
 import type OpenAI from 'openai';
-import { RuntimeManager } from './runtime-manager';
-import { EventProcessor } from './event-processor';
-import { SSEService } from '../services/sse-service';
-import { Logger } from '../monitoring/logger';
-import { MetricsCollector } from '../monitoring/metrics-collector';
-import { StatusUpdater } from '../monitoring/status-updater';
-import { CheckpointManager } from '../monitoring/checkpoint-manager';
-import { GlossaryManager } from '../context/glossary-manager';
-import { ModelSelectionService } from '../services/model-selection-service';
+import type { RuntimeManager } from './runtime-manager';
+import type { EventProcessor } from './event-processor';
+import type { SSEService } from '../services/sse-service';
+import type { Logger } from '../monitoring/logger';
+import type { MetricsCollector } from '../monitoring/metrics-collector';
+import type { StatusUpdater } from '../monitoring/status-updater';
+import type { CheckpointManager } from '../monitoring/checkpoint-manager';
+import type { GlossaryManager } from '../context/glossary-manager';
+import type { ModelSelectionService } from '../services/model-selection-service';
 import type { AgentSessionStatus, AgentType, EventRuntime } from '../types';
-import { SessionLifecycle } from './session-lifecycle';
-import { RuntimeService } from './runtime-service';
-import {
+import type { SessionLifecycle } from './session-lifecycle';
+import type { RuntimeService } from './runtime-service';
+import type {
   TranscriptAudioChunk,
   TranscriptIngestionService,
 } from './transcript-ingestion-service';
 import type { AgentSessionRecord } from '../services/supabase/types';
-import { AgentsRepository } from '../services/supabase/agents-repository';
-import { AgentSessionsRepository } from '../services/supabase/agent-sessions-repository';
-import { TranscriptsRepository } from '../services/supabase/transcripts-repository';
+import type { AgentsRepository } from '../services/supabase/agents-repository';
+import type { AgentSessionsRepository } from '../services/supabase/agent-sessions-repository';
+import type { TranscriptsRepository } from '../services/supabase/transcripts-repository';
 
 export interface OrchestratorConfig {
   openai: OpenAI;

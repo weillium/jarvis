@@ -1,4 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { VectorMatchRecord } from '../../types';
+import { mapVectorMatchRecords } from './dto-mappers';
 
 export class VectorSearchGateway {
   constructor(private readonly client: SupabaseClient) {}
@@ -7,7 +9,7 @@ export class VectorSearchGateway {
     eventId: string,
     queryEmbedding: number[],
     topK: number
-  ): Promise<Array<{ id: string; chunk: string; similarity: number }>> {
+  ): Promise<VectorMatchRecord[]> {
     const { data, error } = await this.client.rpc('match_context', {
       p_event: eventId,
       p_query: queryEmbedding,
@@ -15,6 +17,6 @@ export class VectorSearchGateway {
     });
 
     if (error) throw error;
-    return (data || []) as Array<{ id: string; chunk: string; similarity: number }>;
+    return mapVectorMatchRecords(data);
   }
 }

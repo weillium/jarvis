@@ -3,13 +3,13 @@ import type {
   SessionCreationOptions,
   TranscriptAudioOptions,
 } from '../sessions/session-manager';
-import { SessionManager } from '../sessions/session-manager';
-import { OpenAIService } from '../services/openai-service';
-import { VectorSearchService } from '../context/vector-search';
-import { ModelSelectionService } from '../services/model-selection-service';
-import { StatusUpdater } from '../monitoring/status-updater';
-import { AgentsRepository } from '../services/supabase/agents-repository';
-import { AgentSessionsRepository } from '../services/supabase/agent-sessions-repository';
+import type { SessionManager } from '../sessions/session-manager';
+import type { OpenAIService } from '../services/openai-service';
+import type { VectorSearchService } from '../context/vector-search';
+import type { ModelSelectionService } from '../services/model-selection-service';
+import type { StatusUpdater } from '../monitoring/status-updater';
+import type { AgentsRepository } from '../services/supabase/agents-repository';
+import type { AgentSessionsRepository } from '../services/supabase/agent-sessions-repository';
 
 type TranscriptPayload = { text: string; isFinal?: boolean; receivedAt?: string };
 type TranscriptListener = (payload: TranscriptPayload) => Promise<void>;

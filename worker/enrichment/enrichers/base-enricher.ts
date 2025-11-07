@@ -3,7 +3,7 @@
  * All enrichers must extend this class
  */
 
-import { EnrichmentResult } from '../types';
+import type { EnrichmentResult } from '../types';
 
 export abstract class BaseEnricher {
   abstract name: string;

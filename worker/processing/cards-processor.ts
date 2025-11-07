@@ -1,16 +1,29 @@
-import { EventRuntime, TranscriptChunk } from '../types';
-import { ContextBuilder, AgentContext } from '../context/context-builder';
-import { OpenAIService } from '../services/openai-service';
-import { Logger } from '../monitoring/logger';
-import { MetricsCollector } from '../monitoring/metrics-collector';
-import { CheckpointManager } from '../monitoring/checkpoint-manager';
-import { RealtimeSession } from '../sessions/realtime-session';
+import type { EventRuntime, TranscriptChunk } from '../types';
+import type { ContextBuilder, AgentContext } from '../context/context-builder';
+import type { OpenAIService } from '../services/openai-service';
+import type { Logger } from '../monitoring/logger';
+import type { MetricsCollector } from '../monitoring/metrics-collector';
+import type { CheckpointManager } from '../monitoring/checkpoint-manager';
+import type { RealtimeSession } from '../sessions/realtime-session';
 import { getPolicy } from '../policies';
 import { createCardGenerationUserPrompt } from '../prompts';
 import { checkBudgetStatus, formatTokenBreakdown } from '../utils/token-counter';
-import { AgentOutputsRepository } from '../services/supabase/agent-outputs-repository';
+import type { AgentOutputsRepository } from '../services/supabase/agent-outputs-repository';
 
-type DetermineCardTypeFn = (card: any, transcriptText: string) => 'text' | 'text_visual' | 'visual';
+interface GeneratedCardPayload {
+  card_type?: 'text' | 'text_visual' | 'visual';
+  title?: string;
+  body?: string | null;
+  label?: string;
+  image_url?: string | null;
+  source_seq?: number;
+  [key: string]: unknown;
+}
+
+type DetermineCardTypeFn = (
+  card: GeneratedCardPayload,
+  transcriptText: string
+) => 'text' | 'text_visual' | 'visual';
 
 export class CardsProcessor {
   constructor(
@@ -71,8 +84,10 @@ export class CardsProcessor {
         'cards',
         runtime.cardsLastSeq
       );
-    } catch (error: any) {
-      this.logger.log(runtime.eventId, 'cards', 'error', `Error processing chunk: ${error.message}`, { seq: chunk.seq });
+    // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.log(runtime.eventId, 'cards', 'error', `Error processing chunk: ${message}`, { seq: chunk.seq });
     }
   }
 
@@ -83,9 +98,11 @@ export class CardsProcessor {
   ): Promise<void> {
     const policy = getPolicy('cards', 1);
 
+    const joinedBullets = context.bullets.join('\n');
+
     const userPrompt = createCardGenerationUserPrompt(
       chunk.text,
-      context.bullets,
+      joinedBullets,
       JSON.stringify(context.facts, null, 2),
       context.glossaryContext
     );
@@ -105,7 +122,7 @@ export class CardsProcessor {
       const cardJson = response.choices[0]?.message?.content;
       if (!cardJson) return;
 
-      const card = JSON.parse(cardJson);
+      const card = JSON.parse(cardJson) as GeneratedCardPayload;
       card.source_seq = chunk.seq;
 
       if (!card.card_type || !['text', 'text_visual', 'visual'].includes(card.card_type)) {
@@ -138,8 +155,10 @@ export class CardsProcessor {
         `Generated card for seq ${chunk.seq} (event: ${runtime.eventId}, type: ${card.card_type})`,
         { seq: chunk.seq }
       );
-    } catch (error: any) {
-      this.logger.log(runtime.eventId, 'cards', 'error', `Error generating card: ${error.message}`, { seq: chunk.seq });
+    // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.log(runtime.eventId, 'cards', 'error', `Error generating card: ${message}`, { seq: chunk.seq });
     }
   }
 }

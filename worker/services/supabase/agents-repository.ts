@@ -1,5 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AgentStatusRecord, AgentSummaryRecord, AgentRecord } from './types';
+import {
+  mapAgentRecords,
+  mapAgentStatusRecord,
+  mapAgentSummaryRecords
+} from './dto-mappers';
 
 export class AgentsRepository {
   constructor(private readonly client: SupabaseClient) {}
@@ -11,8 +16,8 @@ export class AgentsRepository {
       .eq('id', agentId)
       .single();
 
-    if (error) return null;
-    return data as AgentStatusRecord;
+    if (error || !data) return null;
+    return mapAgentStatusRecord(data);
   }
 
   async getAgentForEvent(
@@ -37,11 +42,8 @@ export class AgentsRepository {
 
     const { data, error } = await query;
     if (error) throw error;
-    if (!data || data.length === 0) {
-      return null;
-    }
-
-    return (data as AgentSummaryRecord[])[0];
+    const summaries = mapAgentSummaryRecords(data);
+    return summaries[0] ?? null;
   }
 
   async updateAgentStatus(agentId: string, status: string, stage?: string | null): Promise<void> {
@@ -66,6 +68,6 @@ export class AgentsRepository {
       .limit(limit);
 
     if (error) throw error;
-    return (data as AgentRecord[]) || [];
+    return mapAgentRecords(data);
   }
 }

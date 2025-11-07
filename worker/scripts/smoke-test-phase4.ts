@@ -49,7 +49,7 @@ async function smokeTest() {
     }
     
     if (data && data.length > 0 && data[0].metadata) {
-      const metadata = data[0].metadata as any;
+      const metadata = data[0].metadata;
       const hasSource = metadata.source !== undefined || metadata.enrichment_source !== undefined;
       console.log('✅ PASS: Metadata structure valid (has source fields)');
       passed++;
