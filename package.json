@@ -7,7 +7,7 @@
   "scripts": {
     "lint:file": "node ./node_modules/eslint/bin/eslint.js --max-warnings=0",
     "lint": "node ./node_modules/eslint/bin/eslint.js .",
-    "typecheck:worker": "pnpm -C worker tsc --noEmit"
+    "typecheck:worker": "pnpm -C worker tsc --noEmit" 
   },
   "devDependencies": {
     "eslint": "^9.17.0",

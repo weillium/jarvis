@@ -53,13 +53,13 @@ export class SessionManager {
     private readonly logger: Logger
   ) {}
 
-  async createTranscriptSession(
+  createTranscriptSession(
     runtime: EventRuntime,
     onStatusChange: SessionStatusHandler,
     transcriptModel: string,
     options: AgentSessionOptions = {},
     apiKey?: string
-  ): Promise<RealtimeSession> {
+  ): RealtimeSession {
     return this.sessionFactory.createTranscriptSession(
       runtime,
       {
@@ -85,7 +85,7 @@ export class SessionManager {
     await session.appendAudioChunk(chunk);
   }
 
-  async createSessions(
+  createSessions(
     runtime: EventRuntime,
     onStatusChange: SessionStatusHandler,
     transcriptModel: string,
@@ -93,7 +93,7 @@ export class SessionManager {
     factsModel: string,
     options: SessionCreationOptions = {},
     apiKey?: string
-  ): Promise<{ transcriptSession: RealtimeSession; cardsSession: RealtimeSession; factsSession: RealtimeSession }> {
+  ): { transcriptSession: RealtimeSession; cardsSession: RealtimeSession; factsSession: RealtimeSession } {
     const transcriptSession = this.sessionFactory.createTranscriptSession(runtime, {
       supabaseClient: this.supabaseClient,
       onStatusChange: (status, sessionId) => onStatusChange('transcript', status, sessionId),

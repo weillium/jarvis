@@ -19,11 +19,11 @@ export class WikipediaEnricher extends BaseEnricher {
     super();
   }
 
-  async enrich(
+  enrich(
     eventId: string,
     eventTitle: string,
     eventTopic: string | null
-  ): Promise<EnrichmentResult[]> {
+  ): EnrichmentResult[] {
     const query = eventTopic || eventTitle;
     console.log(`[enrichment/${this.name}] Fetching Wikipedia articles for: ${query}`);
 

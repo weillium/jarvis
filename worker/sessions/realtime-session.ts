@@ -28,6 +28,15 @@ import type {
   RealtimeTranscriptDTO,
   VectorMatchRecord
 } from '../types';
+import {
+  extractErrorField,
+  extractErrorMessage,
+  isRecord,
+  mapCardPayload,
+  mapFactsPayload,
+  mapToolCallArguments,
+  safeJsonParse,
+} from './realtime-session/payload-utils';
 
 export type AgentType = 'transcript' | 'cards' | 'facts';
 
@@ -55,17 +64,6 @@ const CARD_TYPES: ReadonlySet<RealtimeCardDTO['card_type']> = new Set([
   'text_visual',
   'visual',
 ]);
-
-const safeJsonParse = <T>(raw: string): T | null => {
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
-};
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
 
 const clampTopK = (value: number): number => {
   const normalized = Number.isFinite(value) ? Math.floor(value) : 5;
@@ -167,37 +165,6 @@ const mapFactCandidate = (value: unknown): RealtimeFactDTO | null => {
   }
 
   return fact;
-};
-
-const extractErrorField = (
-  value: unknown,
-  field: 'message' | 'code' | 'type'
-): string => {
-  if (value instanceof Error && field === 'message') {
-    return value.message;
-  }
-  if (isRecord(value)) {
-    const fieldValue = value[field];
-    if (typeof fieldValue === 'string') {
-      return fieldValue;
-    }
-  }
-  return '';
-};
-
-const extractErrorMessage = (value: unknown): string => {
-  const message = extractErrorField(value, 'message');
-  if (message) {
-    return message;
-  }
-  if (typeof value === 'string') {
-    return value;
-  }
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return 'Unknown error';
-  }
 };
 
 const getLowercaseErrorField = (

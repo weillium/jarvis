@@ -26,11 +26,21 @@ export class DocumentExtractor extends BaseEnricher {
   ): Promise<EnrichmentResult[]> {
     console.log(`[enrichment/${this.name}] Starting document extraction for event ${eventId}`);
 
-    // TODO: Fetch documents from event_docs table
-    // const { data: docs } = await this.supabase
-    //   .from('event_docs')
-    //   .select('id, path, file_type')
-    //   .eq('event_id', eventId);
+    // TODO: Handle pagination when large numbers of documents exist
+    try {
+      const { data: docs, error } = await this.supabase
+        .from('event_docs')
+        .select('id, path, file_type')
+        .eq('event_id', eventId);
+
+      if (error) {
+        console.error(`[enrichment/${this.name}] error:`, String(error));
+      } else if (docs) {
+        console.log(`[enrichment/${this.name}] Retrieved ${docs.length} document(s)`);
+      }
+    } catch (err: unknown) {
+      console.error(`[enrichment/${this.name}] error:`, String(err));
+    }
 
     // TODO: Download files from Supabase Storage
     // for (const doc of docs) {
