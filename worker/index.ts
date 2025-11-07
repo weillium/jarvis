@@ -42,6 +42,7 @@ const EXA_API_KEY   = process.env.EXA_API_KEY; // Optional - fallback to stub if
 // Clean SSE_ENDPOINT - remove backticks and other invalid characters
 const SSE_ENDPOINT_RAW = process.env.SSE_ENDPOINT || 'http://localhost:3000';
 const SSE_ENDPOINT = SSE_ENDPOINT_RAW.trim().replace(/[`'"]/g, ''); // Base URL for SSE push endpoint
+const TRANSCRIPT_ONLY = process.env.TRANSCRIPT_AGENT_ONLY !== 'false';
 
 /** ---------- services ---------- **/
 const supabaseService = new SupabaseService(SUPABASE_URL, SERVICE_ROLE);
@@ -180,6 +181,7 @@ const orchestratorConfig: OrchestratorConfig = {
   genModel: CONTEXT_GEN_MODEL,
   realtimeModel: REALTIME_MODEL,
   sseEndpoint: SSE_ENDPOINT,
+  transcriptOnly: TRANSCRIPT_ONLY,
 };
 
 const orchestrator = new Orchestrator(
@@ -437,6 +439,7 @@ function createWorkerServer() {
     log(`[worker-server]   GET /health - Health check`);
     log(`[worker-server]   GET /websocket-state?event_id=<eventId> - Get WebSocket connection state`);
     log(`[worker-server]   POST /sessions/create - Create agent sessions for an event`);
+    log(`[worker-server] Transcript agent only mode: ${TRANSCRIPT_ONLY}`);
   });
 
   return server;

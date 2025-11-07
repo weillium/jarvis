@@ -44,6 +44,33 @@ export class SessionManager {
     private readonly logger: Logger
   ) {}
 
+  async createTranscriptSession(
+    runtime: EventRuntime,
+    onStatusChange: SessionStatusHandler,
+    transcriptModel: string,
+    options: AgentSessionOptions = {},
+    apiKey?: string
+  ): Promise<RealtimeSession> {
+    const supabaseClient = this.supabase.getClient();
+
+    return this.sessionFactory.createTranscriptSession(
+      runtime,
+      {
+        supabaseClient,
+        onStatusChange: (status, sessionId) => onStatusChange('transcript', status, sessionId),
+        onLog:
+          options.onLog ??
+          ((level, message, context) => {
+            this.logger.log(runtime.eventId, 'transcript', level, message, context);
+          }),
+        onRetrieve: options.onRetrieve,
+        embedText: options.embedText,
+      },
+      transcriptModel,
+      apiKey
+    );
+  }
+
   async createSessions(
     runtime: EventRuntime,
     onStatusChange: SessionStatusHandler,
