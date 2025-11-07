@@ -14,7 +14,7 @@ import OpenAI from 'openai';
 import {
   BLUEPRINT_GENERATION_SYSTEM_PROMPT,
   createBlueprintUserPrompt,
-} from './prompts';
+} from '../../prompts';
 import {
   calculateOpenAICost,
   getPricingVersion,

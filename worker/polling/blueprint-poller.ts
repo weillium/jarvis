@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { Poller } from './base-poller';
-import { generateContextBlueprint } from '../blueprint-generator';
+import { generateContextBlueprint } from '../context/pipeline/blueprint-generator';
 
 type LoggerFn = (...args: any[]) => void;
 

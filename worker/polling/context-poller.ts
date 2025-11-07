@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { Poller } from './base-poller';
-import { executeContextGeneration } from '../context-generation-orchestrator';
+import { executeContextGeneration } from '../context/pipeline/context-generation-orchestrator';
 
 type LoggerFn = (...args: any[]) => void;
 

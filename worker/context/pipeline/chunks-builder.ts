@@ -11,7 +11,7 @@ import { ResearchResults } from './glossary-builder';
 import {
   CONTEXT_CHUNKS_GENERATION_SYSTEM_PROMPT,
   createContextChunksUserPrompt,
-} from './prompts';
+} from '../../prompts';
 import {
   calculateOpenAICost,
   getPricingVersion,

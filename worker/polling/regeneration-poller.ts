@@ -4,7 +4,7 @@ import {
   regenerateResearchStage,
   regenerateGlossaryStage,
   regenerateChunksStage,
-} from '../context-generation-orchestrator';
+} from '../context/pipeline/context-generation-orchestrator';
 
 type LoggerFn = (...args: any[]) => void;
 

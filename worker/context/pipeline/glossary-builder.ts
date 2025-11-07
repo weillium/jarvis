@@ -19,7 +19,7 @@ import {
   createGlossaryDefinitionUserPrompt,
   EXA_ANSWER_TRANSFORM_SYSTEM_PROMPT,
   createExaAnswerTransformUserPrompt,
-} from './prompts';
+} from '../../prompts';
 
 export interface GlossaryBuilderOptions {
   supabase: ReturnType<typeof createClient>;

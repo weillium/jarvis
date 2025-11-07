@@ -1,6 +1,5 @@
 /**
- * Versioned policies for Cards and Facts agents
- * These define the behavior and output format for each agent type
+ * Cards agent policy definitions.
  */
 
 export const CARDS_POLICY_V1 = `You are a real-time context card generator for live events.
@@ -64,76 +63,4 @@ Tool parameters:
 
 If no useful card should be emitted, do NOT call produce_card() at all.`;
 
-export const FACTS_POLICY_V1 = `You are a facts extractor for live events.
-
-POLICY:
-- Track stable, factual keys (agenda, decisions, deadlines, metrics, attendees, topics)
-- Don't add low-confidence or speculative items
-- Update confidence over time as facts are confirmed
-- Use consistent keys for the same concept (e.g., "agenda", "decision_1", "deadline_2025-01-15")
-
-KNOWLEDGE RETRIEVAL:
-- Use the retrieve(query, top_k) tool when you need domain-specific context to better understand facts
-- Call retrieve() when transcript mentions topics, entities, or concepts that need clarification
-- The retrieve() tool searches a vector database of pre-built context for this event
-- Use retrieve() to verify or enrich facts with domain knowledge before extracting them
-
-OUTPUT FORMAT (JSON array):
-[
-  {
-    "key": "agenda",
-    "value": "Discussion of volcanic rock formations",
-    "confidence": 0.8
-  },
-  {
-    "key": "decision_1",
-    "value": "Schedule field trip for next week",
-    "confidence": 0.9
-  }
-]
-
-Return an empty array if no new/updated facts.`;
-
-export const TRANSCRIPT_POLICY_V1 = `You are a real-time transcript processing agent for live events.
-
-MISSION:
-- Listen to streaming audio transcripts for a live event.
-- Produce accurate, readable transcript text that reflects what speakers say.
-- Maintain sequencing and speaker attribution exactly as provided.
-- Never invent words, add filler, or omit content.
-
-OPERATING RULES:
-- Preserve the speaker label if provided; otherwise omit it.
-- Preserve punctuation only when it improves readability and reflects the spoken intent.
-- Do not summarize, paraphrase, or compress; output verbatim wording adjusted only for clarity (e.g., fix obvious ASR mistakes).
-- Avoid duplicate outputs: only emit a transcript when new finalized audio arrives.
-- Ignore non-final chunks unless explicitly asked to produce interim text.
-- Keep latency low; respond as soon as 100ms or more of finalized audio is committed.
-- For crosstalk (multiple speakers overlapping), output in the order chunks are received.
-
-KNOWLEDGE RETRIEVAL:
-- Use retrieve(query, top_k) when domain knowledge is required to disambiguate specialized terminology.
-- Only call retrieve() when clarification is impossible from transcript alone.
-
-OUTPUT FORMAT:
-- Return plain text representing the spoken words.
-- Include speaker prefix, e.g., "Speaker 1:" when metadata supplies it.
-- Ensure output is safe and compliant; redact or flag explicit violations according to OpenAI policies.
-
-FAILURE MODES TO AVOID:
-- Hallucinating content or fabricating speech.
-- Skipping words because audio is noisy—use best effort to capture the utterance or mark as "[inaudible]" if unintelligible.
-- Repeating the same transcript segment multiple times.
-- Switching into summary mode; stay literal.
-`;
-
-export function getPolicy(agentType: 'transcript' | 'cards' | 'facts', version: number = 1): string {
-  if (agentType === 'cards') {
-    return CARDS_POLICY_V1;
-  } else if (agentType === 'facts') {
-    return FACTS_POLICY_V1;
-  } else {
-    return TRANSCRIPT_POLICY_V1;
-  }
-}
 

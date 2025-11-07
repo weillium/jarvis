@@ -20,7 +20,7 @@ import { buildContextChunks, ChunksBuilderOptions } from './chunks-builder';
 import {
   STUB_RESEARCH_SYSTEM_PROMPT,
   createStubResearchUserPrompt,
-} from './prompts';
+} from '../../prompts';
 import {
   calculateOpenAICost,
   calculateExaSearchCost,
