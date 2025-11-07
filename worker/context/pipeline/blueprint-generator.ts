@@ -108,6 +108,15 @@ type GenerationCycleRecord = { id: string };
 type ChatCompletionRequest = Parameters<OpenAI['chat']['completions']['create']>[0];
 const asDbPayload = <T>(payload: T) => payload as unknown as never;
 
+const parseBlueprintResponse = (rawContent: string): unknown => {
+  try {
+    return JSON.parse(rawContent) as unknown;
+  } catch (err: unknown) {
+    console.error("[blueprint-generator] error:", String(err));
+    throw err;
+  }
+};
+
 // ============================================================================
 // Document Extraction (Stubbed for MVP)
 // ============================================================================
@@ -150,7 +159,7 @@ async function extractDocumentsText(
     return `[${docs.length} document(s) uploaded - text extraction will be available in full implementation]`;
     // TODO: narrow unknown -> PostgrestError | Error after upstream callsite analysis
   } catch (err: unknown) {
-    console.error("[worker] error:", String(err));
+    console.error("[blueprint-generator] error:", String(err));
   }
 
   return '';
@@ -265,7 +274,7 @@ export async function generateContextBlueprint(
       }
       // TODO: narrow unknown -> PostgrestError after upstream callsite analysis
     } catch (err: unknown) {
-      console.error("[worker] error:", String(err));
+      console.error("[blueprint-generator] error:", String(err));
     }
 
     // 6. Generate blueprint using LLM
@@ -361,7 +370,7 @@ export async function generateContextBlueprint(
         }
         // TODO: narrow unknown -> PostgrestError after upstream callsite analysis
       } catch (err: unknown) {
-        console.error("[worker] error:", String(err));
+        console.error("[blueprint-generator] error:", String(err));
       }
     }
 
@@ -437,7 +446,7 @@ export async function generateContextBlueprint(
     return blueprintId;
     // TODO: narrow unknown -> PostgrestError | Error after upstream callsite analysis
   } catch (err: unknown) {
-    console.error("[worker] error:", String(err));
+    console.error("[blueprint-generator] error:", String(err));
   }
 
   return '';
@@ -541,7 +550,7 @@ IMPORTANT: This is a retry attempt. The previous response had empty or insuffici
         }
       }
 
-      const parsedJson = JSON.parse(content) as unknown;
+      const parsedJson = parseBlueprintResponse(content);
       const ensuredBlueprint = ensureBlueprintShape(parsedJson);
       parsedBlueprint = ensuredBlueprint;
 
@@ -601,7 +610,7 @@ IMPORTANT: This is a retry attempt. The previous response had empty or insuffici
       }
       // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
     } catch (err: unknown) {
-      console.error("[worker] error:", String(err));
+      console.error("[blueprint-generator] error:", String(err));
     }
   }
 
@@ -684,58 +693,70 @@ IMPORTANT: This is a retry attempt. The previous response had empty or insuffici
     console.error(`[blueprint] CRITICAL: Chunks plan sources empty after all retries, using minimal fallback`);
   }
 
-    // Ensure quality_tier is valid
-    if (blueprint.chunks_plan.quality_tier !== 'basic' && blueprint.chunks_plan.quality_tier !== 'comprehensive') {
-      blueprint.chunks_plan.quality_tier = blueprint.chunks_plan.target_count >= 1000 ? 'comprehensive' : 'basic';
-    }
+  // Ensure quality_tier is valid
+  if (
+    blueprint.chunks_plan.quality_tier !== 'basic' &&
+    blueprint.chunks_plan.quality_tier !== 'comprehensive'
+  ) {
+    blueprint.chunks_plan.quality_tier =
+      blueprint.chunks_plan.target_count >= 1000 ? 'comprehensive' : 'basic';
+  }
 
-    // Ensure target_count matches quality_tier
-    if (blueprint.chunks_plan.quality_tier === 'comprehensive' && blueprint.chunks_plan.target_count < 1000) {
-      blueprint.chunks_plan.target_count = 1000;
-    } else if (blueprint.chunks_plan.quality_tier === 'basic' && blueprint.chunks_plan.target_count > 500) {
-      blueprint.chunks_plan.target_count = 500;
-    }
+  // Ensure target_count matches quality_tier
+  if (
+    blueprint.chunks_plan.quality_tier === 'comprehensive' &&
+    blueprint.chunks_plan.target_count < 1000
+  ) {
+    blueprint.chunks_plan.target_count = 1000;
+  } else if (
+    blueprint.chunks_plan.quality_tier === 'basic' &&
+    blueprint.chunks_plan.target_count > 500
+  ) {
+    blueprint.chunks_plan.target_count = 500;
+  }
 
-    // Validate and normalize research_plan queries
-    if (blueprint.research_plan.queries) {
-      blueprint.research_plan.queries = blueprint.research_plan.queries.map(q => ({
-        query: q.query || '',
-        api: (q.api === 'exa' || q.api === 'wikipedia') ? q.api : 'exa',
-        priority: q.priority || 5,
-        estimated_cost: q.estimated_cost || (q.api === 'exa' ? 0.03 : 0.001),
-      }));
-      blueprint.research_plan.total_searches = blueprint.research_plan.queries.length;
-      blueprint.research_plan.estimated_total_cost = blueprint.research_plan.queries.reduce(
-        (sum, q) => sum + (q.estimated_cost || 0),
-        0
-      );
-    }
+  // Validate and normalize research_plan queries
+  if (blueprint.research_plan.queries) {
+    blueprint.research_plan.queries = blueprint.research_plan.queries.map((queryPlan) => ({
+      query: queryPlan.query || '',
+      api: queryPlan.api === 'exa' || queryPlan.api === 'wikipedia' ? queryPlan.api : 'exa',
+      priority: queryPlan.priority || 5,
+      estimated_cost: queryPlan.estimated_cost || (queryPlan.api === 'exa' ? 0.03 : 0.001),
+    }));
+    blueprint.research_plan.total_searches = blueprint.research_plan.queries.length;
+    blueprint.research_plan.estimated_total_cost = blueprint.research_plan.queries.reduce(
+      (sum, queryPlan) => sum + (queryPlan.estimated_cost || 0),
+      0
+    );
+  }
 
-    // Validate glossary_plan terms
-    if (blueprint.glossary_plan.terms) {
-      blueprint.glossary_plan.terms = blueprint.glossary_plan.terms.map(t => ({
-        term: t.term || '',
-        is_acronym: t.is_acronym || false,
-        category: t.category || 'general',
-        priority: t.priority || 5,
-      }));
-      blueprint.glossary_plan.estimated_count = blueprint.glossary_plan.terms.length;
-    }
+  // Validate glossary_plan terms
+  if (blueprint.glossary_plan.terms) {
+    blueprint.glossary_plan.terms = blueprint.glossary_plan.terms.map((termPlan) => ({
+      term: termPlan.term || '',
+      is_acronym: termPlan.is_acronym || false,
+      category: termPlan.category || 'general',
+      priority: termPlan.priority || 5,
+    }));
+    blueprint.glossary_plan.estimated_count = blueprint.glossary_plan.terms.length;
+  }
 
-    // Ensure cost_breakdown is calculated
-    if (blueprint.cost_breakdown.total === 0) {
-      blueprint.cost_breakdown.total = 
-        blueprint.cost_breakdown.research +
-        blueprint.cost_breakdown.glossary +
-        blueprint.cost_breakdown.chunks;
-    }
+  // Ensure cost_breakdown is calculated
+  if (blueprint.cost_breakdown.total === 0) {
+    blueprint.cost_breakdown.total =
+      blueprint.cost_breakdown.research +
+      blueprint.cost_breakdown.glossary +
+      blueprint.cost_breakdown.chunks;
+  }
 
-    console.log(`[blueprint] LLM generated blueprint with ${blueprint.important_details.length} important details, ${blueprint.inferred_topics.length} inferred topics, ${blueprint.key_terms.length} key terms, ${blueprint.research_plan.queries.length} research queries, ${blueprint.glossary_plan.terms.length} glossary terms, target ${blueprint.chunks_plan.target_count} chunks`);
-    
-    // Attach actual usage for cost calculation (will be removed before storing in DB)
-    if (totalUsage) {
-      blueprint.__actualUsage = totalUsage;
-    }
-    
-    return blueprint;
+  console.log(
+    `[blueprint] LLM generated blueprint with ${blueprint.important_details.length} important details, ${blueprint.inferred_topics.length} inferred topics, ${blueprint.key_terms.length} key terms, ${blueprint.research_plan.queries.length} research queries, ${blueprint.glossary_plan.terms.length} glossary terms, target ${blueprint.chunks_plan.target_count} chunks`
+  );
+
+  // Attach actual usage for cost calculation (will be removed before storing in DB)
+  if (totalUsage) {
+    blueprint.__actualUsage = totalUsage;
+  }
+
+  return blueprint;
 }

@@ -1,8 +1,36 @@
+import type { PostgrestResponse, PostgrestSingleResponse } from '@supabase/supabase-js';
 import type OpenAI from 'openai';
 import type { Poller } from './base-poller';
 import { executeContextGeneration } from '../context/pipeline/context-generation-orchestrator';
 
-type LoggerFn = (...args: any[]) => void;
+type LoggerFn = (...args: unknown[]) => void;
+
+interface AgentRecord {
+  id: string;
+  event_id: string;
+  status?: string;
+  stage?: string;
+}
+
+interface ContextBlueprintRecord {
+  id: string;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const isAgentRecord = (value: unknown): value is AgentRecord =>
+  isRecord(value) &&
+  typeof value.id === 'string' &&
+  typeof value.event_id === 'string' &&
+  (value.status === undefined || typeof value.status === 'string') &&
+  (value.stage === undefined || typeof value.stage === 'string');
+
+const isAgentArray = (value: unknown): value is AgentRecord[] =>
+  Array.isArray(value) && value.every(isAgentRecord);
+
+const isContextBlueprintRecord = (value: unknown): value is ContextBlueprintRecord =>
+  isRecord(value) && typeof value.id === 'string';
 
 export class ContextPoller implements Poller {
   private processingAgents: Set<string>;
@@ -20,19 +48,26 @@ export class ContextPoller implements Poller {
   }
 
   async tick(): Promise<void> {
-    const { data: approvedAgents, error } = await this.supabase
+    const agentsResult: PostgrestResponse<AgentRecord> = await this.supabase
       .from('agents')
       .select('id,event_id,status,stage')
       .eq('status', 'idle')
       .eq('stage', 'blueprint')
       .limit(20);
 
+    const { data: approvedAgents, error } = agentsResult;
+
     if (error) {
-      this.log('[context-gen] fetch error:', error.message);
+      this.log('[context-gen] fetch error:', error.message ?? 'Unknown error');
       return;
     }
 
     if (!approvedAgents || approvedAgents.length === 0) {
+      return;
+    }
+
+    if (!isAgentArray(approvedAgents)) {
+      console.error("[context-poller] error:", 'Invalid agent payload received');
       return;
     }
 
@@ -42,15 +77,17 @@ export class ContextPoller implements Poller {
         continue;
       }
 
-      const { data: blueprint, error: blueprintError } = (await (this.supabase
+      const blueprintResult: PostgrestSingleResponse<ContextBlueprintRecord> = await this.supabase
         .from('context_blueprints')
         .select('id')
         .eq('agent_id', agent.id)
         .eq('status', 'approved')
         .limit(1)
-        .single())) as { data: { id: string } | null; error: any };
+        .single();
 
-      if (blueprintError || !blueprint) {
+      const { data: blueprint, error: blueprintError } = blueprintResult;
+
+      if (blueprintError || !blueprint || !isContextBlueprintRecord(blueprint)) {
         this.log('[context-gen] No approved blueprint found for agent', agent.id);
         continue;
       }
@@ -75,7 +112,7 @@ export class ContextPoller implements Poller {
         });
         this.log('[context-gen] context generation complete for agent', agent.id);
       } catch (err: unknown) {
-        console.error("[worker] error:", String(err));
+        console.error("[context-poller] error:", String(err));
       } finally {
         this.processingAgents.delete(agent.id);
       }

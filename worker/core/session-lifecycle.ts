@@ -107,12 +107,10 @@ export class SessionLifecycle {
       return;
     }
 
-    runtime.transcriptSession.on('transcript', async (payload: TranscriptPayload) => {
-      try {
-        await handler(payload);
-      } catch (err: unknown) {
-        console.error("[worker] error:", String(err));
-      }
+    runtime.transcriptSession.on('transcript', (payload: TranscriptPayload) => {
+      handler(payload).catch((err: unknown) => {
+        console.error('[worker] error:', String(err));
+      });
     });
 
     runtime.transcriptHandlerSession = runtime.transcriptSession;
