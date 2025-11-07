@@ -3,14 +3,15 @@ import {
   STUB_RESEARCH_SYSTEM_PROMPT,
   createStubResearchUserPrompt,
 } from '../../../prompts';
-import { calculateOpenAICost } from '../pricing-config';
+import { calculateOpenAICost, type OpenAIUsage } from '../pricing-config';
+import { isRecord } from '../../../lib/context-normalization';
 
 export async function generateStubResearchChunks(
   query: string,
   openai: OpenAI,
   genModel: string,
   costBreakdown?: {
-    openai: { total: number; chat_completions: Array<{ cost: number; usage: any; model: string }> };
+    openai: { total: number; chat_completions: Array<{ cost: number; usage: OpenAIUsage; model: string }> };
   }
 ): Promise<string[]> {
   try {
@@ -20,32 +21,39 @@ export async function generateStubResearchChunks(
     const onlySupportsDefaultTemp = isO1Model || isGpt5Model;
     const supportsCustomTemperature = !onlySupportsDefaultTemp;
 
-    const requestOptions: any = {
+    const requestOptions: Parameters<OpenAI['chat']['completions']['create']>[0] = {
       model: genModel,
       messages: [
         { role: 'system', content: STUB_RESEARCH_SYSTEM_PROMPT },
         { role: 'user', content: createStubResearchUserPrompt(query) },
       ],
       response_format: { type: 'json_object' },
+      stream: false,
     };
 
     if (supportsCustomTemperature) {
       requestOptions.temperature = 0.7;
     }
 
-    const response = await openai.chat.completions.create(requestOptions);
+    const rawResponse = await openai.chat.completions.create(requestOptions);
+    if (!isRecord(rawResponse) || !Array.isArray(rawResponse.choices)) {
+      throw new Error('Stub research received streaming response, which is not supported');
+    }
+    const response = rawResponse as OpenAI.Chat.Completions.ChatCompletion;
 
     if (costBreakdown && response.usage) {
       const usage = response.usage;
-      const cost = calculateOpenAICost(usage, genModel, false);
+      const usageForCost: OpenAIUsage = {
+        prompt_tokens: usage.prompt_tokens,
+        completion_tokens: usage.completion_tokens ?? 0,
+        total_tokens:
+          usage.total_tokens ?? usage.prompt_tokens + (usage.completion_tokens ?? 0),
+      };
+      const cost = calculateOpenAICost(usageForCost, genModel, false);
       costBreakdown.openai.total += cost;
       costBreakdown.openai.chat_completions.push({
         cost,
-        usage: {
-          prompt_tokens: usage.prompt_tokens,
-          completion_tokens: usage.completion_tokens,
-          total_tokens: usage.total_tokens,
-        },
+        usage: usageForCost,
         model: genModel,
       });
     }
@@ -55,10 +63,30 @@ export async function generateStubResearchChunks(
       return [];
     }
 
-    const parsed = JSON.parse(content);
-    return parsed.chunks || [];
-  } catch (error: any) {
-    console.error(`[research] Error generating stub chunks: ${error.message}`);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      console.warn('[research] Stub research response is not valid JSON');
+      return [];
+    }
+
+    if (!isRecord(parsed)) {
+      console.warn('[research] Stub research response missing object payload');
+      return [];
+    }
+
+    const chunkCandidates = parsed.chunks;
+    if (!Array.isArray(chunkCandidates)) {
+      return [];
+    }
+
+    return chunkCandidates.filter(
+      (chunk): chunk is string => typeof chunk === 'string' && chunk.trim().length > 0
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[research] Error generating stub chunks: ${message}`);
     return [];
   }
 }

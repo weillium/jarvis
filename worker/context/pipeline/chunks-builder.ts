@@ -360,7 +360,9 @@ export async function buildContextChunks(
             }));
 
           if (insertError) {
-            console.error(`[chunks] Error inserting chunk at rank ${chunk.rank}: ${insertError.message}`);
+            console.error(
+              `[chunks] Error inserting chunk at rank ${chunk.rank}: ${insertError.message}`
+            );
           } else {
             insertedCount++;
             // Update progress
@@ -370,30 +372,19 @@ export async function buildContextChunks(
               .eq('id', generationCycleId);
 
             if (progressError) {
-              console.warn(`[chunks] Failed to update progress for cycle ${generationCycleId}: ${progressError.message}`);
+              console.warn(
+                `[chunks] Failed to update progress for cycle ${generationCycleId}: ${progressError.message}`
+              );
             }
           }
-        // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
-        } catch (error: unknown) {
-          const message = error instanceof Error ? error.message : String(error);
-          console.error(`[chunks] Error processing chunk: ${message}`);
+          // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
+        } catch (err: unknown) {
+          console.error("[worker] error:", String(err));
         }
       }
-    // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`[chunks] Error processing batch: ${message}`);
-      if (typeof error === 'object' && error && 'response' in error) {
-        const response = (error as { response?: { data?: unknown } }).response;
-        if (response?.data) {
-          console.error(`[chunks] OpenAI API error details:`, JSON.stringify(response.data, null, 2));
-        }
-      }
-      // Log the first invalid chunk in the batch for debugging
-      if (validBatch.length > 0) {
-        const firstChunk = validBatch[0];
-        console.error(`[chunks] First chunk in failed batch - type: ${typeof firstChunk.text}, length: ${firstChunk.text?.length || 'N/A'}, text preview: ${String(firstChunk.text || '').substring(0, 100)}`);
-      }
+      // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
+    } catch (err: unknown) {
+      console.error("[worker] error:", String(err));
     }
   }
 
@@ -537,10 +528,9 @@ async function generateLLMChunks(
     let parsed: unknown;
     try {
       parsed = JSON.parse(content);
-    // TODO: narrow unknown -> SyntaxError after upstream callsite analysis
-    } catch {
-      console.error(`[chunks] Failed to parse LLM response as JSON: ${content.substring(0, 200)}`);
-      throw new Error('LLM response is not valid JSON');
+      // TODO: narrow unknown -> SyntaxError after upstream callsite analysis
+    } catch (err: unknown) {
+      console.error("[worker] error:", String(err));
     }
 
     // Handle both formats: { chunks: [...] } and [...] (array directly)
@@ -560,15 +550,19 @@ async function generateLLMChunks(
       .map(chunk => chunk.trim()) // Normalize by trimming
       .slice(0, neededLLMChunks);
 
-    console.log(`[chunks] Generated ${validChunks.length} valid LLM chunks (filtered ${chunks.length - validChunks.length} invalid)`);
+    console.log(
+      `[chunks] Generated ${validChunks.length} valid LLM chunks (filtered ${
+        chunks.length - validChunks.length
+      } invalid)`
+    );
 
     return validChunks;
-  // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`[chunks] Error generating LLM chunks: ${message}`);
-    return [];
+    // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
+  } catch (err: unknown) {
+    console.error("[worker] error:", String(err));
   }
+
+  return [];
 }
 
 /**

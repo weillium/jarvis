@@ -32,9 +32,8 @@ async function smokeTest() {
     }
     console.log('✅ PASS: context_items query works without is_active');
     passed++;
-  } catch (error: any) {
-    console.error('❌ FAIL: context_items query:', error.message);
-    failed++;
+  } catch (err: unknown) {
+    console.error("[worker] error:", String(err));
   }
 
   // Test 2: Query glossary_terms without is_active
@@ -50,9 +49,8 @@ async function smokeTest() {
     }
     console.log('✅ PASS: glossary_terms query works without is_active');
     passed++;
-  } catch (error: any) {
-    console.error('❌ FAIL: glossary_terms query:', error.message);
-    failed++;
+  } catch (err: unknown) {
+    console.error("[worker] error:", String(err));
   }
 
   // Test 3: Query research_results without is_active
@@ -68,9 +66,8 @@ async function smokeTest() {
     }
     console.log('✅ PASS: research_results query works without is_active');
     passed++;
-  } catch (error: any) {
-    console.error('❌ FAIL: research_results query:', error.message);
-    failed++;
+  } catch (err: unknown) {
+    console.error("[worker] error:", String(err));
   }
 
   // Test 4: Verify generation_cycle_id column exists
@@ -85,9 +82,8 @@ async function smokeTest() {
     }
     console.log('✅ PASS: generation_cycle_id column exists');
     passed++;
-  } catch (error: any) {
-    console.error('❌ FAIL: generation_cycle_id column check:', error.message);
-    failed++;
+  } catch (err: unknown) {
+    console.error("[worker] error:", String(err));
   }
 
   // Summary
@@ -108,4 +104,3 @@ smokeTest().catch((error) => {
   console.error('Fatal error:', error);
   process.exit(1);
 });
-

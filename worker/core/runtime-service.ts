@@ -58,10 +58,8 @@ export class RuntimeService {
     for (const agentType of ['transcript', 'cards', 'facts'] as const) {
       try {
         await this.statusUpdater.recordMetricsOnSessionClose(runtime, agentType);
-      } catch (error: any) {
-        console.warn(
-          `[runtime-service] Failed to record ${agentType} metrics on reset: ${error?.message || error}`
-        );
+      } catch (err: unknown) {
+        console.error("[worker] error:", String(err));
       }
     }
 
@@ -69,10 +67,8 @@ export class RuntimeService {
 
     try {
       await this.sessionLifecycle.closeSessions(runtime);
-    } catch (error: any) {
-      console.error(
-        `[runtime-service] Error closing sessions during reset: ${error?.message || error}`
-      );
+    } catch (err: unknown) {
+      console.error("[worker] error:", String(err));
     }
 
     runtime.transcriptSession = undefined;

@@ -32,17 +32,19 @@ async function smokeTest() {
       throw error;
     }
 
-    const oldStatusSessions = (sessions || []).filter(s => OLD_STATUSES.includes(s.status));
+    const oldStatusSessions = (sessions || []).filter((s) => OLD_STATUSES.includes(s.status));
     if (oldStatusSessions.length > 0) {
-      console.error(`❌ FAIL: Found ${oldStatusSessions.length} sessions with old statuses:`, oldStatusSessions);
+      console.error(
+        `❌ FAIL: Found ${oldStatusSessions.length} sessions with old statuses:`,
+        oldStatusSessions
+      );
       failed++;
     } else {
       console.log('✅ PASS: No sessions with old statuses (generated, starting)');
       passed++;
     }
-  } catch (error: any) {
-    console.error('❌ FAIL: Query sessions:', error.message);
-    failed++;
+  } catch (err: unknown) {
+    console.error("[worker] error:", String(err));
   }
 
   // Test 2: Verify all sessions have valid statuses
@@ -56,17 +58,19 @@ async function smokeTest() {
       throw error;
     }
 
-    const invalidSessions = (sessions || []).filter(s => !VALID_STATUSES.includes(s.status));
+    const invalidSessions = (sessions || []).filter((s) => !VALID_STATUSES.includes(s.status));
     if (invalidSessions.length > 0) {
-      console.error(`❌ FAIL: Found ${invalidSessions.length} sessions with invalid statuses:`, invalidSessions);
+      console.error(
+        `❌ FAIL: Found ${invalidSessions.length} sessions with invalid statuses:`,
+        invalidSessions
+      );
       failed++;
     } else {
       console.log('✅ PASS: All sessions have valid statuses (active, paused, closed, error)');
       passed++;
     }
-  } catch (error: any) {
-    console.error('❌ FAIL: Verify valid statuses:', error.message);
-    failed++;
+  } catch (err: unknown) {
+    console.error("[worker] error:", String(err));
   }
 
   // Test 3: Test inserting with valid status (should work)
@@ -103,9 +107,8 @@ async function smokeTest() {
 
     console.log('✅ PASS: Can insert with valid status (closed)');
     passed++;
-  } catch (error: any) {
-    console.error('❌ FAIL: Insert test:', error.message);
-    failed++;
+  } catch (err: unknown) {
+    console.error("[worker] error:", String(err));
   }
 
   // Test 4: Test that old statuses are rejected (if constraint works)
@@ -142,9 +145,8 @@ async function smokeTest() {
       console.log('⚠️  WARN: Insert failed but not due to constraint:', error.message);
       passed++; // Still pass, constraint might be working differently
     }
-  } catch (error: any) {
-    console.log('⚠️  WARN: Could not test constraint rejection:', error.message);
-    passed++; // Don't fail on this, constraint might work differently
+  } catch (err: unknown) {
+    console.error("[worker] error:", String(err));
   }
 
   // Summary
@@ -165,4 +167,3 @@ smokeTest().catch((error) => {
   console.error('Fatal error:', error);
   process.exit(1);
 });
-

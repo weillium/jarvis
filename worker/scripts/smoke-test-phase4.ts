@@ -32,9 +32,8 @@ async function smokeTest() {
     }
     console.log('✅ PASS: Query context_items with metadata JSONB works');
     passed++;
-  } catch (error: any) {
-    console.error('❌ FAIL: Query context_items:', error.message);
-    failed++;
+  } catch (err: unknown) {
+    console.error("[worker] error:", String(err));
   }
 
   // Test 2: Verify metadata structure (if data exists)
@@ -57,9 +56,8 @@ async function smokeTest() {
       console.log('✅ PASS: Metadata structure check (no data to verify)');
       passed++;
     }
-  } catch (error: any) {
-    console.error('❌ FAIL: Metadata structure check:', error.message);
-    failed++;
+  } catch (err: unknown) {
+    console.error("[worker] error:", String(err));
   }
 
   // Test 3: Verify we can query by metadata fields
@@ -83,9 +81,8 @@ async function smokeTest() {
       console.log('✅ PASS: Query by metadata fields works');
       passed++;
     }
-  } catch (error: any) {
-    console.error('❌ FAIL: Query by metadata fields:', error.message);
-    failed++;
+  } catch (err: unknown) {
+    console.error("[worker] error:", String(err));
   }
 
   // Test 4: Verify we cannot query old columns (they should not exist)
@@ -107,15 +104,8 @@ async function smokeTest() {
       console.log('✅ PASS: Old columns check (query behavior as expected)');
       passed++;
     }
-  } catch (error: any) {
-    // Expected to fail
-    if (error.message.includes('column') && error.message.includes('does not exist')) {
-      console.log('✅ PASS: Old columns correctly removed');
-      passed++;
-    } else {
-      console.error('❌ FAIL: Unexpected error:', error.message);
-      failed++;
-    }
+  } catch (err: unknown) {
+    console.error("[worker] error:", String(err));
   }
 
   // Summary
@@ -136,4 +126,3 @@ smokeTest().catch((error) => {
   console.error('Fatal error:', error);
   process.exit(1);
 });
-

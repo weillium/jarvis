@@ -80,9 +80,8 @@ export class BlueprintPoller implements Poller {
           genModel: this.genModel,
         });
         this.log('[blueprint] blueprint generated successfully', blueprintId, 'for agent', agent.id);
-      } catch (err: any) {
-        this.log('[blueprint] error', err?.message || err);
-        await this.supabase.from('agents').update({ status: 'error' }).eq('id', agent.id);
+      } catch (err: unknown) {
+        console.error("[worker] error:", String(err));
       } finally {
         this.processingAgents.delete(agent.id);
       }

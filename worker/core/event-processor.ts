@@ -128,8 +128,8 @@ export class EventProcessor {
       console.log(
         `[cards] Card received from Realtime API (seq: ${card.source_seq || runtime.cardsLastSeq}, type: ${card.card_type})`
       );
-    } catch (error: any) {
-      console.error(`[event-processor] Error storing card: ${error.message}`);
+    } catch (err: unknown) {
+      console.error("[worker] error:", String(err));
     }
   }
 
@@ -178,12 +178,14 @@ export class EventProcessor {
       // Mark evicted facts as inactive in database
       if (evictedKeys.length > 0) {
         await this.factsRepository.updateFactActiveStatus(runtime.eventId, evictedKeys, false);
-        console.log(`[event-processor] Marked ${evictedKeys.length} evicted facts as inactive for event ${runtime.eventId}`);
+        console.log(
+          `[event-processor] Marked ${evictedKeys.length} evicted facts as inactive for event ${runtime.eventId}`
+        );
       }
 
       console.log(`[facts] ${facts.length} facts updated from Realtime API`);
-    } catch (error: any) {
-      console.error(`[event-processor] Error storing facts: ${error.message}`);
+    } catch (err: unknown) {
+      console.error("[worker] error:", String(err));
     }
   }
 }

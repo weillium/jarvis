@@ -87,9 +87,8 @@ export class RegenerationPoller implements Poller {
         }
 
         this.log('[regeneration] regeneration complete for agent', agent.id);
-      } catch (err: any) {
-        this.log('[regeneration] error', err?.message || err);
-        await this.supabase.from('agents').update({ status: 'error' }).eq('id', agent.id);
+      } catch (err: unknown) {
+        console.error("[worker] error:", String(err));
       } finally {
         this.processingAgents.delete(agent.id);
       }

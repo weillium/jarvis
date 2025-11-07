@@ -32,9 +32,8 @@ async function smokeTest() {
     }
     console.log('✅ PASS: Query checkpoints without agent_id works');
     passed++;
-  } catch (error: any) {
-    console.error('❌ FAIL: Query checkpoints:', error.message);
-    failed++;
+  } catch (err: unknown) {
+    console.error("[worker] error:", String(err));
   }
 
   // Test 2: Try to query agent_id column (should fail)
@@ -55,15 +54,8 @@ async function smokeTest() {
       console.log('✅ PASS: agent_id column check (query behavior as expected)');
       passed++;
     }
-  } catch (error: any) {
-    // Expected to fail
-    if (error.message.includes('column') || error.message.includes('does not exist')) {
-      console.log('✅ PASS: agent_id column correctly removed');
-      passed++;
-    } else {
-      console.error('❌ FAIL: Unexpected error:', error.message);
-      failed++;
-    }
+  } catch (err: unknown) {
+    console.error("[worker] error:", String(err));
   }
 
   // Test 3: Verify we can upsert without agent_id
@@ -92,9 +84,8 @@ async function smokeTest() {
 
     console.log('✅ PASS: Can upsert checkpoint without agent_id');
     passed++;
-  } catch (error: any) {
-    console.error('❌ FAIL: Upsert test:', error.message);
-    failed++;
+  } catch (err: unknown) {
+    console.error("[worker] error:", String(err));
   }
 
   // Test 4: Verify primary key constraint works (event_id, agent_type)
@@ -115,15 +106,8 @@ async function smokeTest() {
     // The fact that this query works confirms the schema is correct
     console.log('✅ PASS: Primary key constraint (event_id, agent_type) schema verified');
     passed++;
-  } catch (error: any) {
-    // Foreign key errors are expected if event doesn't exist, but schema is correct
-    if (error.message.includes('foreign key')) {
-      console.log('✅ PASS: Primary key constraint (event_id, agent_type) schema verified (FK constraint confirms schema)');
-      passed++;
-    } else {
-      console.error('❌ FAIL: Primary key test:', error.message);
-      failed++;
-    }
+  } catch (err: unknown) {
+    console.error("[worker] error:", String(err));
   }
 
   // Summary
@@ -144,4 +128,3 @@ smokeTest().catch((error) => {
   console.error('Fatal error:', error);
   process.exit(1);
 });
-

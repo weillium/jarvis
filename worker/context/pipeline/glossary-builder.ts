@@ -256,19 +256,19 @@ export async function buildGlossary(
               .eq('id', generationCycleId);
 
             if (progressError) {
-              console.warn(`[glossary] Failed to update cycle progress for ${generationCycleId}: ${progressError.message}`);
+              console.warn(
+                `[glossary] Failed to update cycle progress for ${generationCycleId}: ${progressError.message}`
+              );
             }
           }
-        // TODO: narrow unknown -> PostgrestError after upstream callsite analysis
-        } catch (error: unknown) {
-          const message = error instanceof Error ? error.message : String(error);
-          console.error(`[glossary] Error processing term "${def.term}": ${message}`);
+          // TODO: narrow unknown -> PostgrestError after upstream callsite analysis
+        } catch (err: unknown) {
+          console.error("[worker] error:", String(err));
         }
       }
-    // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`[glossary] Error processing batch: ${message}`);
+      // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
+    } catch (err: unknown) {
+      console.error("[worker] error:", String(err));
     }
   }
 
@@ -391,11 +391,9 @@ async function generateTermDefinitions(
             // Fall through to LLM generation
           }
         }
-      // TODO: narrow unknown -> ExaAPIError after upstream callsite analysis
-      } catch (exaError: unknown) {
-        const message = exaError instanceof Error ? exaError.message : String(exaError);
-        console.warn(`[glossary] Exa /answer failed for term "${term.term}": ${message}. Falling back to LLM.`);
-        // Fall through to LLM generation
+        // TODO: narrow unknown -> ExaAPIError after upstream callsite analysis
+      } catch (err: unknown) {
+        console.error("[worker] error:", String(err));
       }
     }
 
@@ -486,19 +484,9 @@ async function generateTermDefinitions(
       const normalizedLLMDefinitions = normalizeGlossaryDefinitions(llmDefinitions);
 
       definitions.push(...normalizedLLMDefinitions);
-    // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`[glossary] Error generating LLM definitions: ${message}`);
-      // Return basic definitions on error
-      const fallbackDefinitions = termsForLLM.map((term: GlossaryPlanTerm) => ({
-        term: term.term,
-        definition: `Term: ${term.term}. Definition to be completed.`,
-        category: term.category,
-        confidence_score: 0.5,
-        source: 'llm_generation',
-      }));
-      definitions.push(...fallbackDefinitions);
+      // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
+    } catch (err: unknown) {
+      console.error("[worker] error:", String(err));
     }
   }
 
@@ -573,7 +561,9 @@ async function transformExaAnswerToGlossary(
       };
 
       if (!parsed.definition || !parsed.definition.trim()) {
-        console.warn(`[glossary] Missing definition in transformed Exa answer for "${term}"`);
+        console.warn(
+          `[glossary] Missing definition in transformed Exa answer for "${term}"`
+        );
         return null;
       }
 
@@ -588,16 +578,14 @@ async function transformExaAnswerToGlossary(
         source: 'exa',
         source_url: sourceUrl,
       };
-    // TODO: narrow unknown -> SyntaxError after upstream callsite analysis
-    } catch (parseError: unknown) {
-      const message = parseError instanceof Error ? parseError.message : String(parseError);
-      console.warn(`[glossary] Failed to parse transformed Exa answer for "${term}": ${message}`);
-      return null;
+      // TODO: narrow unknown -> SyntaxError after upstream callsite analysis
+    } catch (err: unknown) {
+      console.error("[worker] error:", String(err));
     }
-  // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[glossary] Error transforming Exa answer for "${term}": ${message}`);
     return null;
+    // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
+  } catch (err: unknown) {
+    console.error("[worker] error:", String(err));
   }
+  return null;
 }

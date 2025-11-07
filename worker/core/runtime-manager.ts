@@ -131,10 +131,8 @@ export class RuntimeManager {
         const runtime = await this.createRuntime(agent.event_id, agent.id);
         await this.replayTranscripts(runtime);
         runtimes.push(runtime);
-      } catch (error: any) {
-        console.error(
-          `[runtime-manager] Error resuming event ${agent.event_id}: ${error.message}`
-        );
+      } catch (err: unknown) {
+        console.error("[worker] error:", String(err));
       }
     }
 

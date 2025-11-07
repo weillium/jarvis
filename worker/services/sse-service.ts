@@ -39,12 +39,8 @@ export class SSEService {
           `[sse] Failed to push status for event ${eventId}: ${errorBody.error || response.statusText} (status: ${response.status})`
         );
       }
-    } catch (error: any) {
-      if (error.name === 'AbortError' || error.name === 'TimeoutError') {
-        console.warn(`[sse] Timeout pushing status to ${this.baseUrl} (event ${eventId})`);
-      } else {
-        console.error(`[sse] Error pushing status for event ${eventId}: ${error.message}`);
-      }
+    } catch (err: unknown) {
+      console.error("[worker] error:", String(err));
     }
   }
 }

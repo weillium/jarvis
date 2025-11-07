@@ -86,10 +86,9 @@ export class CardsProcessor {
         'cards',
         runtime.cardsLastSeq
       );
-    // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.log(runtime.eventId, 'cards', 'error', `Error processing chunk: ${message}`, { seq: chunk.seq });
+      // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
+    } catch (err: unknown) {
+      console.error("[worker] error:", String(err));
     }
   }
 
@@ -166,10 +165,9 @@ export class CardsProcessor {
         `Generated card for seq ${chunk.seq} (event: ${runtime.eventId}, type: ${card.card_type})`,
         { seq: chunk.seq }
       );
-    // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.log(runtime.eventId, 'cards', 'error', `Error generating card: ${message}`, { seq: chunk.seq });
+      // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
+    } catch (err: unknown) {
+      console.error("[worker] error:", String(err));
     }
   }
 }

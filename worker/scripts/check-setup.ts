@@ -63,10 +63,11 @@ async function testSupabaseConnection(): Promise<boolean> {
     
     console.log('✓ Supabase connection: OK');
     return true;
-  } catch (error: any) {
-    console.error(`❌ Supabase connection error: ${error.message}`);
-    return false;
+  } catch (err: unknown) {
+    console.error("[worker] error:", String(err));
   }
+
+  return false;
 }
 
 async function testOpenAIConnection(): Promise<boolean> {
@@ -90,10 +91,11 @@ async function testOpenAIConnection(): Promise<boolean> {
     
     console.log('✓ OpenAI connection: OK');
     return true;
-  } catch (error: any) {
-    console.error(`❌ OpenAI connection error: ${error.message}`);
-    return false;
+  } catch (err: unknown) {
+    console.error("[worker] error:", String(err));
   }
+
+  return false;
 }
 
 async function main() {
@@ -146,5 +148,3 @@ main().catch((error) => {
   console.error('Fatal error:', error);
   process.exit(1);
 });
-
-

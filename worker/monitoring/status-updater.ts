@@ -99,10 +99,11 @@ export class StatusUpdater {
         tokenMetrics,
         runtimeStats
       );
-      console.log(`[StatusUpdater] Recorded metrics for ${agentType} session (event: ${runtime.eventId})`);
-    } catch (error) {
-      console.error(`[StatusUpdater] Failed to record metrics for ${agentType} session:`, error);
-      // Don't throw - metrics recording failure shouldn't break session closure
+      console.log(
+        `[StatusUpdater] Recorded metrics for ${agentType} session (event: ${runtime.eventId})`
+      );
+    } catch (err: unknown) {
+      console.error("[worker] error:", String(err));
     }
   }
 

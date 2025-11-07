@@ -74,9 +74,8 @@ export class ContextPoller implements Poller {
           exaApiKey: this.exaApiKey,
         });
         this.log('[context-gen] context generation complete for agent', agent.id);
-      } catch (err: any) {
-        this.log('[context-gen] error', err?.message || err);
-        await this.supabase.from('agents').update({ status: 'error' }).eq('id', agent.id);
+      } catch (err: unknown) {
+        console.error("[worker] error:", String(err));
       } finally {
         this.processingAgents.delete(agent.id);
       }

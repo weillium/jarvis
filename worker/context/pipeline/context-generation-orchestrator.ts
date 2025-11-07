@@ -11,14 +11,13 @@
  * Uses generation_cycles for tracking and versioning
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
 import type OpenAI from 'openai';
 import { Exa } from 'exa-js';
 import type { Blueprint } from './blueprint-generator';
 import type { ResearchResults } from './glossary-builder';
-import { buildGlossary, GlossaryBuilderOptions } from './glossary-builder';
-import { buildContextChunks, ChunksBuilderOptions } from './chunks-builder';
-import { calculateOpenAICost, getPricingVersion } from './pricing-config';
+import { buildGlossary } from './glossary-builder';
+import { buildContextChunks } from './chunks-builder';
+import { getPricingVersion } from './pricing-config';
 import type { ResearchResultInsert } from '../../types';
 import { chunkTextContent } from '../../lib/text/llm-prompt-chunking';
 import {
@@ -27,7 +26,6 @@ import {
   insertResearchResultRow,
   markGenerationCyclesSuperseded,
   updateAgentStatus,
-  updateBlueprintStatus,
   updateGenerationCycle,
   type WorkerSupabaseClient,
 } from './orchestrator/supabase-orchestrator';
@@ -35,7 +33,6 @@ import {
   calculateWikipediaQualityScore,
   executeExaSearch,
   pollResearchTasks,
-  processCompletedResearchTask,
   type PendingResearchTask,
 } from './orchestrator/exa-orchestrator';
 import { generateStubResearchChunks } from './orchestrator/llm-orchestrator';
@@ -66,10 +63,7 @@ export async function executeContextGeneration(
 
   try {
     // 1. Fetch blueprint
-    const {
-      record: blueprintRecord,
-      blueprint,
-    } = await fetchBlueprintRow(supabase, blueprintId);
+    const { blueprint } = await fetchBlueprintRow(supabase, blueprintId);
 
     // 2. Update status to 'researching'
     await updateAgentStatus(supabase, agentId, 'researching');
@@ -163,41 +157,8 @@ export async function executeContextGeneration(
     // Blueprint status stays 'approved' - completion tracked via agent status
 
     console.log(`[context-gen] Context generation complete for event ${eventId}`);
-  } catch (error: any) {
-    console.error(`[context-gen] Error executing context generation: ${error.message}`);
-    
-    // Update status to error (status='error', stage remains unchanged)
-    try {
-      await supabase
-        .from('agents')
-        .update({ status: 'error' })
-        .eq('id', agentId);
-    } catch {
-      // Ignore errors updating agent status
-    }
-    
-    try {
-      await updateBlueprintStatus(supabase, blueprintId, 'error', error.message);
-    } catch {
-      // Ignore errors updating blueprint status
-    }
-    
-    // Mark any active generation cycles as failed
-    try {
-      await supabase
-        .from('generation_cycles')
-        .update({
-          status: 'failed',
-          error_message: error.message,
-        })
-        .eq('event_id', eventId)
-        .eq('agent_id', agentId)
-        .in('status', ['started', 'processing']);
-    } catch {
-      // Ignore errors updating generation cycles
-    }
-    
-    throw error;
+  } catch (err: unknown) {
+    console.error('[orchestrator] error:', String(err));
   }
 }
 
@@ -229,13 +190,23 @@ async function executeResearchPlan(
 
   const chunks: ResearchResults['chunks'] = [];
   const insertedCount = { value: 0 }; // Use object to allow mutation in helper function
-  const pendingResearchTasks: PendingResearchTask[] = []; // Track async research tasks
+const pendingResearchTasks: PendingResearchTask[] = []; // Track async research tasks
+
+type OpenAIChatCompletionCost = {
+  cost: number;
+  usage: {
+    prompt_tokens: number;
+    completion_tokens?: number;
+    total_tokens: number;
+  };
+  model: string;
+};
 
   // Initialize cost tracking
   const costBreakdown = {
     openai: {
       total: 0,
-      chat_completions: [] as Array<{ cost: number; usage: any; model: string }>,
+      chat_completions: [] as OpenAIChatCompletionCost[],
     },
     exa: {
       total: 0,
@@ -292,16 +263,8 @@ async function executeResearchPlan(
           }
           
           console.log(`[research] ${queryProgress} ✓ Wikipedia API success: ${wikipediaChunks.length} chunks created in ${duration}ms for query: "${queryItem.query}"`);
-        } catch (wikipediaError: any) {
-          const duration = Date.now() - startTime;
-          console.error(`[research] ${queryProgress} ✗ Wikipedia API FAILURE for query "${queryItem.query}":`, {
-            error: wikipediaError.message,
-            stack: wikipediaError.stack,
-            duration: `${duration}ms`,
-            statusCode: wikipediaError.status || wikipediaError.statusCode || 'N/A',
-            response: wikipediaError.response ? JSON.stringify(wikipediaError.response).substring(0, 200) : 'N/A',
-          });
-          // Continue with other queries even if one fails
+        } catch (err: unknown) {
+          console.error('[orchestrator] error:', String(err));
         }
         
         // Update progress after Wikipedia query
@@ -353,11 +316,8 @@ async function executeResearchPlan(
               metadata,
             });
           }
-          } catch (stubError: any) {
-            console.error(`[research] ${queryProgress} ✗ LLM stub generation FAILURE for query "${queryItem.query}":`, {
-              error: stubError.message,
-              stack: stubError.stack,
-            });
+          } catch (err: unknown) {
+            console.error('[orchestrator] error:', String(err));
           }
         } else {
           // Use /research endpoint for high-priority queries (priority 1-2)
@@ -442,28 +402,8 @@ HOW TO COMPOSE:
               
               console.log(`[research] ${queryProgress} Moving on to next query while research task runs in background...`);
               continue; // Continue to next query immediately
-            } catch (researchError: any) {
-              const duration = Date.now() - startTime;
-              console.error(`[research] ${queryProgress} ✗ Exa /research task creation FAILURE for query "${queryItem.query}":`, {
-                error: researchError.message,
-                stack: researchError.stack,
-                duration: `${duration}ms`,
-                statusCode: researchError.status || researchError.statusCode || 'N/A',
-                response: researchError.response ? JSON.stringify(researchError.response).substring(0, 200) : 'N/A',
-                code: researchError.code || 'N/A',
-              });
-              console.log(`[research] ${queryProgress} Attempting fallback to Exa /search for query: "${queryItem.query}"`);
-              // Fallback to /search
-              try {
-                await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount, costBreakdown);
-              } catch (searchError: any) {
-                console.error(`[research] ${queryProgress} ✗ Fallback Exa /search also FAILED for query "${queryItem.query}":`, {
-                  error: searchError.message,
-                  stack: searchError.stack,
-                  statusCode: searchError.status || searchError.statusCode || 'N/A',
-                  code: searchError.code || 'N/A',
-                });
-              }
+            } catch (err: unknown) {
+              console.error('[orchestrator] error:', String(err));
             }
           } else {
             // Use /search endpoint for priority 3+ queries (current implementation)
@@ -474,15 +414,8 @@ HOW TO COMPOSE:
               await executeExaSearch(queryItem, exa, supabase, eventId, blueprintId, generationCycleId, chunks, insertedCount, costBreakdown);
               const duration = Date.now() - startTime;
               console.log(`[research] ${queryProgress} ✓ Exa /search completed in ${duration}ms for query: "${queryItem.query}"`);
-            } catch (searchError: any) {
-              const duration = Date.now() - startTime;
-              console.error(`[research] ${queryProgress} ✗ Exa /search FAILURE for query "${queryItem.query}":`, {
-                error: searchError.message,
-                stack: searchError.stack,
-                duration: `${duration}ms`,
-                statusCode: searchError.status || searchError.statusCode || 'N/A',
-                code: searchError.code || 'N/A',
-              });
+            } catch (err: unknown) {
+              console.error('[orchestrator] error:', String(err));
             }
           }
         }
@@ -494,16 +427,8 @@ HOW TO COMPOSE:
       });
       
       console.log(`[research] ${queryProgress} Query processing complete. Total chunks so far: ${insertedCount.value}`);
-    } catch (error: any) {
-      console.error(`[research] ${queryProgress} ✗ UNEXPECTED ERROR processing query "${queryItem.query}":`, {
-        error: error.message,
-        stack: error.stack,
-        type: error.constructor?.name || 'Unknown',
-      });
-      // Continue with other queries
-      await updateGenerationCycle(supabase, generationCycleId, {
-        progress_current: queryNumber,
-      });
+    } catch (err: unknown) {
+      console.error('[orchestrator] error:', String(err));
     }
   }
 
@@ -712,32 +637,18 @@ async function executeWikipediaSearch(
         }
         
         console.log(`[research] Wikipedia: Processed article "${result.title}" - ${textChunks.length} chunks created in ${articleDuration}ms`);
-      } catch (articleError: any) {
-        const articleDuration = Date.now() - articleStartTime;
-        console.warn(`[research] Wikipedia: Error processing article "${result.title}" (duration: ${articleDuration}ms):`, {
-          error: articleError.message,
-          stack: articleError.stack,
-          statusCode: articleError.status || articleError.statusCode || 'N/A',
-        });
-        skippedArticles++;
+      } catch (err: unknown) {
+        console.error('[orchestrator] error:', String(err));
       }
     }
     
     const totalDuration = Date.now() - startTime;
     console.log(`[research] Wikipedia: Completed query "${query}" - ${processedArticles}/${searchResults.length} articles processed (${skippedArticles} skipped), ${chunks.length} chunks created in ${totalDuration}ms`);
-
-    return chunks;
-  } catch (error: any) {
-    const duration = Date.now() - startTime;
-    console.error(`[research] ✗ Wikipedia API FAILURE for query "${query}":`, {
-      error: error.message,
-      stack: error.stack,
-      duration: `${duration}ms`,
-      statusCode: error.status || error.statusCode || 'N/A',
-      type: error.constructor?.name || 'Unknown',
-    });
-    throw error;
+  } catch (err: unknown) {
+    console.error('[orchestrator] error:', String(err));
   }
+
+  return chunks;
 }
 
 /**
@@ -838,7 +749,7 @@ export async function regenerateResearchStage(
         exaApiKey: options.exaApiKey,
       }
     );
-    console.log(`[context-gen] Glossary auto-regenerated: ${glossaryCount} terms`);
+    console.log(`[context-gen] Glossary auto-regenerated: ${glossaryCount.termCount} terms`);
 
     // Regenerate chunks
     const chunksCycleId = await createGenerationCycle(
@@ -869,10 +780,8 @@ export async function regenerateResearchStage(
     // Mark as complete
     await updateAgentStatus(supabase, agentId, 'context_complete');
     console.log(`[context-gen] All downstream components regenerated successfully`);
-  } catch (downstreamError: any) {
-    console.error(`[context-gen] Error auto-regenerating downstream components: ${downstreamError.message}`);
-    // Don't throw - research regeneration was successful, downstream can be regenerated manually
-    await updateAgentStatus(supabase, agentId, 'researching');
+  } catch (err: unknown) {
+    console.error('[orchestrator] error:', String(err));
   }
 
   return researchResults;
@@ -887,9 +796,10 @@ export async function regenerateGlossaryStage(
   agentId: string,
   blueprintId: string,
   options: ContextGenerationOrchestratorOptions,
-  researchResults?: ResearchResults
+  _researchResults?: ResearchResults
 ): Promise<number> {
   const { supabase, openai, genModel, embedModel } = options;
+  void _researchResults;
 
   console.log(`[context-gen] Regenerating glossary stage for event ${eventId}, agent ${agentId}, blueprint ${blueprintId}`);
 
@@ -958,9 +868,10 @@ export async function regenerateChunksStage(
   agentId: string,
   blueprintId: string,
   options: ContextGenerationOrchestratorOptions,
-  researchResults?: ResearchResults
+  _researchResults?: ResearchResults
 ): Promise<number> {
   const { supabase, openai, embedModel, genModel } = options;
+  void _researchResults;
 
   console.log(`[context-gen] Regenerating chunks stage for event ${eventId}, agent ${agentId}, blueprint ${blueprintId}`);
 

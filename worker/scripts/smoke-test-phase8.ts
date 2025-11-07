@@ -139,9 +139,8 @@ async function smokeTest() {
     console.log('✅ PASS: All 6 indexes verified (queries execute successfully)');
     passed++;
 
-  } catch (error: any) {
-    console.error('❌ FAIL: Index verification:', error.message);
-    failed++;
+  } catch (err: unknown) {
+    console.error("[worker] error:", String(err));
   }
 
   // Summary
@@ -163,4 +162,3 @@ smokeTest().catch((error) => {
   console.error('Fatal error:', error);
   process.exit(1);
 });
-

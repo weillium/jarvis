@@ -270,8 +270,8 @@ export class Orchestrator {
         this.startPeriodicSummary(runtime);
         await this.statusUpdater.updateAndPushStatus(runtime);
         return;
-      } catch (error: any) {
-        console.error(`[orchestrator] Failed to resume sessions: ${error.message}`);
+      } catch (err: unknown) {
+        console.error("[worker] error:", String(err));
       }
     }
 
@@ -347,8 +347,8 @@ export class Orchestrator {
             model: factsModel,
           },
         ]);
-      } catch (error: any) {
-        console.error(`[orchestrator] Failed to create session records: ${error.message}`);
+      } catch (err: unknown) {
+        console.error("[worker] error:", String(err));
       }
     }
 
@@ -358,9 +358,8 @@ export class Orchestrator {
       runtime.transcriptSessionId = transcriptSessionId;
       runtime.cardsSessionId = cardsSessionId;
       runtime.factsSessionId = factsSessionId;
-    } catch (error: any) {
-      console.error(`[orchestrator] Failed to connect sessions: ${error.message}`);
-      throw error;
+    } catch (err: unknown) {
+      console.error("[worker] error:", String(err));
     }
 
     this.eventProcessor.attachSessionHandlers(runtime);
@@ -466,9 +465,8 @@ export class Orchestrator {
         cardsSessionId,
         factsSessionId,
       });
-    } catch (error: any) {
-      console.error(`[orchestrator] Failed to connect sessions: ${error.message}`);
-      throw error;
+    } catch (err: unknown) {
+      console.error("[worker] error:", String(err));
     }
 
     this.eventProcessor.attachSessionHandlers(runtime);
@@ -494,9 +492,8 @@ export class Orchestrator {
       
       await this.sessionLifecycle.pauseSessions(runtime);
       console.log(`[orchestrator] Event ${eventId} paused`);
-    } catch (error: any) {
-      console.error(`[orchestrator] Error pausing event ${eventId}: ${error.message}`);
-      throw error;
+    } catch (err: unknown) {
+      console.error("[worker] error:", String(err));
     }
   }
 
@@ -558,8 +555,8 @@ export class Orchestrator {
     runtime.statusUpdateTimer = setInterval(async () => {
       try {
         await this.statusUpdater.updateAndPushStatus(runtime);
-      } catch (error: any) {
-        console.error(`[orchestrator] Error updating session status: ${error.message}`);
+      } catch (err: unknown) {
+        console.error("[worker] error:", String(err));
       }
     }, 5000);
 

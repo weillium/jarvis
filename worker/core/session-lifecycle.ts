@@ -110,10 +110,8 @@ export class SessionLifecycle {
     runtime.transcriptSession.on('transcript', async (payload: TranscriptPayload) => {
       try {
         await handler(payload);
-      } catch (error: any) {
-        console.error(
-          `[session-lifecycle] Failed to process realtime transcript: ${error?.message || error}`
-        );
+      } catch (err: unknown) {
+        console.error("[worker] error:", String(err));
       }
     });
 
@@ -221,10 +219,8 @@ export class SessionLifecycle {
       }
 
       await this.statusUpdater.updateAndPushStatus(runtime);
-    } catch (error: any) {
-      console.error(
-        `[session-lifecycle] Error updating session status after change: ${error?.message || error}`
-      );
+    } catch (err: unknown) {
+      console.error("[worker] error:", String(err));
     }
   }
 
@@ -267,10 +263,8 @@ export class SessionLifecycle {
           websocket_state: this.getWebsocketState(runtime, agentType),
         },
       });
-    } catch (error: any) {
-      console.error(
-        `[session-lifecycle] Error tracking connection for ${agentType}: ${error?.message || error}`
-      );
+    } catch (err: unknown) {
+      console.error("[worker] error:", String(err));
     }
   }
 
@@ -359,10 +353,11 @@ export class SessionLifecycle {
       const results = await this.vectorSearch.search(runtime.eventId, query, topK);
       console.log(`[rag] retrieve() returned ${results.length} chunks`);
       return results;
-    } catch (error: any) {
-      console.error(`[rag] Error executing retrieve(): ${error?.message || error}`);
-      return [];
+    } catch (err: unknown) {
+      console.error("[worker] error:", String(err));
     }
+
+    return [];
   }
 
   private async resetNonTranscriptSessions(eventId: string): Promise<void> {
@@ -373,10 +368,8 @@ export class SessionLifecycle {
             status: 'closed',
             updated_at: new Date().toISOString(),
           });
-        } catch (error: any) {
-          console.warn(
-            `[session-lifecycle] Failed to reset ${agentType} session status in transcript-only mode: ${error?.message || error}`
-          );
+        } catch (err: unknown) {
+          console.error("[worker] error:", String(err));
         }
       })
     );

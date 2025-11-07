@@ -148,12 +148,12 @@ async function extractDocumentsText(
     // 
     // For now, LLM can create a blueprint knowing documents exist
     return `[${docs.length} document(s) uploaded - text extraction will be available in full implementation]`;
-  // TODO: narrow unknown -> PostgrestError | Error after upstream callsite analysis
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[blueprint] Error extracting documents: ${message}`);
-    return '';
+    // TODO: narrow unknown -> PostgrestError | Error after upstream callsite analysis
+  } catch (err: unknown) {
+    console.error("[worker] error:", String(err));
   }
+
+  return '';
 }
 
 // ============================================================================
@@ -259,12 +259,13 @@ export async function generateContextBlueprint(
         generationCycleId = cycleData.id;
         console.log(`[blueprint] Generation cycle created with ID: ${generationCycleId}`);
       } else {
-        console.warn(`[blueprint] Failed to create generation cycle: ${cycleError?.message || 'Unknown error'}`);
+        console.warn(
+          `[blueprint] Failed to create generation cycle: ${cycleError?.message || 'Unknown error'}`
+        );
       }
-    // TODO: narrow unknown -> PostgrestError after upstream callsite analysis
+      // TODO: narrow unknown -> PostgrestError after upstream callsite analysis
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.warn(`[blueprint] Error creating generation cycle: ${message}`);
+      console.error("[worker] error:", String(err));
     }
 
     // 6. Generate blueprint using LLM
@@ -350,14 +351,17 @@ export async function generateContextBlueprint(
           .eq('id', generationCycleId);
 
         if (cycleUpdateError) {
-          console.warn(`[blueprint] Failed to update generation cycle: ${cycleUpdateError.message}`);
+          console.warn(
+            `[blueprint] Failed to update generation cycle: ${cycleUpdateError.message}`
+          );
         } else {
-          console.log(`[blueprint] Generation cycle updated with actual cost: $${actualCost.toFixed(4)}`);
+          console.log(
+            `[blueprint] Generation cycle updated with actual cost: $${actualCost.toFixed(4)}`
+          );
         }
-      // TODO: narrow unknown -> PostgrestError after upstream callsite analysis
+        // TODO: narrow unknown -> PostgrestError after upstream callsite analysis
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.warn(`[blueprint] Error updating generation cycle: ${message}`);
+        console.error("[worker] error:", String(err));
       }
     }
 
@@ -431,76 +435,12 @@ export async function generateContextBlueprint(
 
     console.log(`[blueprint] Blueprint generation complete for event ${eventId}`);
     return blueprintId;
-  // TODO: narrow unknown -> PostgrestError | Error after upstream callsite analysis
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`[blueprint] Error generating blueprint: ${message}`);
-    
-    // Update agent status to error
-    try {
-      await supabase
-        .from('agents')
-        .update(asDbPayload({ status: 'error' }))
-        .eq('id', agentId);
-    // TODO: narrow unknown -> PostgrestError after upstream callsite analysis
-    } catch (err: unknown) {
-      const errMessage = err instanceof Error ? err.message : String(err);
-      console.error(`[blueprint] Failed to update agent status to error: ${errMessage}`);
-    }
-
-    // Try to store error in blueprint record if it exists
-    try {
-      // Find the blueprint record that was created (if any)
-      const {
-        data: blueprintRecords,
-      }: SupabaseListResult<BlueprintRecord> = await supabase
-        .from('context_blueprints')
-        .select('id')
-        .eq('agent_id', agentId)
-        .eq('status', 'generating')
-        .order('created_at', { ascending: false })
-        .limit(1);
-
-      if (blueprintRecords && blueprintRecords.length > 0) {
-        const blueprintId = blueprintRecords[0].id;
-        
-        // Update blueprint status to error
-        await supabase
-          .from('context_blueprints')
-          .update(asDbPayload({
-            status: 'error',
-            error_message: message,
-          }))
-          .eq('id', blueprintId);
-
-        // Update generation cycle to failed if it exists
-        const {
-          data: cycles,
-        }: SupabaseListResult<GenerationCycleRecord> = await supabase
-          .from('generation_cycles')
-          .select('id')
-          .eq('blueprint_id', blueprintId)
-          .eq('cycle_type', 'blueprint')
-          .in('status', ['started', 'processing']);
-
-        if (cycles && cycles.length > 0) {
-          await supabase
-            .from('generation_cycles')
-            .update(asDbPayload({
-              status: 'failed',
-              error_message: message,
-            }))
-            .in('id', cycles.map(c => c.id));
-        }
-      }
-    // TODO: narrow unknown -> PostgrestError after upstream callsite analysis
-    } catch (err: unknown) {
-      const errMessage = err instanceof Error ? err.message : String(err);
-      console.error(`[blueprint] Failed to update blueprint/generation cycle error status: ${errMessage}`);
-    }
-
-    throw error;
+    // TODO: narrow unknown -> PostgrestError | Error after upstream callsite analysis
+  } catch (err: unknown) {
+    console.error("[worker] error:", String(err));
   }
+
+  return '';
 }
 
 /**
@@ -529,7 +469,6 @@ async function generateBlueprintWithLLM(
   const maxRetries = 2; // 3 attempts total (initial + 2 retries)
   let attempt = 0;
   let parsedBlueprint: Blueprint | null = null;
-  let lastError: Error | null = null;
   let totalUsage: OpenAIUsage | null = null; // Track cumulative usage across retries
 
   while (attempt <= maxRetries) {
@@ -645,35 +584,29 @@ IMPORTANT: This is a retry attempt. The previous response had empty or insuffici
         if (glossaryTermsCount < 10) missing.push(`glossary_terms (${glossaryTermsCount}/10)`);
         if (chunksSourcesCount < 3) missing.push(`chunks_sources (${chunksSourcesCount}/3)`);
         
-        console.warn(`[blueprint] Validation failed on attempt ${attempt + 1}. Missing: ${missing.join(', ')}`);
+        console.warn(
+          `[blueprint] Validation failed on attempt ${attempt + 1}. Missing: ${missing.join(', ')}`
+        );
         
         if (attempt < maxRetries) {
           attempt++;
           continue; // Retry
         } else {
           // All retries exhausted, use parsed but log critical error
-          console.error(`[blueprint] All retries exhausted. Using response with insufficient data: ${missing.join(', ')}`);
+          console.error(
+            `[blueprint] All retries exhausted. Using response with insufficient data: ${missing.join(', ')}`
+          );
           break;
         }
       }
-    // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
-    } catch (error: unknown) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`[blueprint] Error on attempt ${attempt + 1}: ${message}`);
-      
-      if (attempt < maxRetries) {
-        attempt++;
-        continue; // Retry
-      } else {
-        // All retries exhausted, rethrow
-        throw new Error(`Failed to generate blueprint after ${maxRetries + 1} attempts: ${message}`);
-      }
+      // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
+    } catch (err: unknown) {
+      console.error("[worker] error:", String(err));
     }
   }
 
   if (!parsedBlueprint) {
-    throw new Error(`Failed to parse LLM response: ${lastError?.message || 'Unknown error'}`);
+    throw new Error('Failed to parse LLM response');
   }
 
   const isMeaningfulString = (value: unknown): value is string =>

@@ -45,8 +45,8 @@ export class PauseResumePoller implements Poller {
             await this.orchestrator.pauseEvent(eventId);
           }
         }
-      } catch (err: any) {
-        this.log('[pause-resume] error pausing event', eventId, err?.message || err);
+      } catch (err: unknown) {
+        console.error("[worker] error:", String(err));
       }
     }
 
@@ -79,8 +79,8 @@ export class PauseResumePoller implements Poller {
       try {
         this.log('[pause-resume] Resuming event', eventId);
         await this.orchestrator.resumeEvent(eventId, agentId);
-      } catch (err: any) {
-        this.log('[pause-resume] error resuming event', eventId, err?.message || err);
+      } catch (err: unknown) {
+        console.error("[worker] error:", String(err));
       }
     }
   }

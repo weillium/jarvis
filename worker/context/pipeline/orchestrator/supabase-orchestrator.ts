@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { PostgrestResponse, PostgrestSingleResponse, SupabaseClient } from '@supabase/supabase-js';
 import type { Blueprint } from '../blueprint-generator';
 import type { ContextBlueprintRecord, ResearchResultInsert } from '../../../types';
 import {
@@ -9,7 +9,7 @@ import {
   mapGenerationCycleMetadata,
 } from '../../../lib/context-normalization';
 
-export type WorkerSupabaseClient = SupabaseClient<any, any, any>;
+export type WorkerSupabaseClient = SupabaseClient;
 
 export type GenerationCycleType =
   | 'blueprint'
@@ -63,16 +63,19 @@ export const markGenerationCyclesSuperseded = async (
   }
 };
 
+type IdRow = { id: string };
+
 export async function fetchBlueprintRow(
   supabase: WorkerSupabaseClient,
   blueprintId: string
 ): Promise<{ record: ContextBlueprintRecord; blueprint: Blueprint }> {
-  const { data, error } = await supabase
+  const response: PostgrestSingleResponse<ContextBlueprintRecord> = await supabase
     .from('context_blueprints')
     .select('*')
     .eq('id', blueprintId)
     .single();
 
+  const { data, error } = response;
   if (error || !data) {
     throw new Error(`Failed to fetch blueprint: ${error?.message || 'Blueprint not found'}`);
   }
@@ -92,7 +95,7 @@ export async function createGenerationCycle(
   cycleType: GenerationCycleType,
   component?: string
 ): Promise<string> {
-  const { data, error } = await supabase
+  const response: PostgrestSingleResponse<IdRow> = await supabase
     .from('generation_cycles')
     .insert({
       event_id: eventId,
@@ -107,6 +110,7 @@ export async function createGenerationCycle(
     .select('id')
     .single();
 
+  const { data, error } = response;
   if (error || !data) {
     throw new Error(`Failed to create generation cycle: ${error?.message || 'Unknown error'}`);
   }
@@ -138,12 +142,14 @@ export async function updateGenerationCycle(
   }
 
   if (updates.metadata !== undefined) {
-    const { data: existingCycle } = await supabase
-      .from('generation_cycles')
-      .select('metadata')
-      .eq('id', cycleId)
-      .single();
+    const metadataResponse: PostgrestSingleResponse<{ metadata: Record<string, unknown> | null }> =
+      await supabase
+        .from('generation_cycles')
+        .select('metadata')
+        .eq('id', cycleId)
+        .single();
 
+    const existingCycle = metadataResponse.data;
     const mergedMetadata =
       existingCycle !== null && existingCycle !== undefined
         ? mapGenerationCycleMetadata(existingCycle).metadata ?? {}
@@ -154,12 +160,13 @@ export async function updateGenerationCycle(
     };
   }
 
-  const { error, data } = await supabase
+  const updateResponse: PostgrestResponse<IdRow> = await supabase
     .from('generation_cycles')
     .update(updateData)
     .eq('id', cycleId)
     .select('id');
 
+  const { error, data } = updateResponse;
   if (error) {
     console.error(`[context-gen] ERROR: Failed to update generation cycle ${cycleId}: ${error.message}`);
     throw new Error(`Failed to update generation cycle: ${error.message}`);

@@ -102,10 +102,9 @@ export class FactsProcessor {
         runtime.factsLastSeq
       );
       runtime.factsLastUpdate = Date.now();
-    // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.log(runtime.eventId, 'facts', 'error', `Error processing: ${message}`, { seq: runtime.factsLastSeq });
+      // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
+    } catch (err: unknown) {
+      console.error("[worker] error:", String(err));
     }
   }
 
@@ -200,10 +199,9 @@ export class FactsProcessor {
         `Updated ${newFacts.length} facts (event: ${runtime.eventId})`,
         { seq: runtime.factsLastSeq }
       );
-    // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.log(runtime.eventId, 'facts', 'error', `Error generating facts: ${message}`, { seq: runtime.factsLastSeq });
+      // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
+    } catch (err: unknown) {
+      console.error("[worker] error:", String(err));
     }
   }
 }

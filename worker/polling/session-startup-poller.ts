@@ -71,8 +71,8 @@ export class SessionStartupPoller implements Poller {
           this.log('[start-generated] Starting event', eventId, 'with generated sessions');
           await this.orchestrator.startEvent(eventId, agentId);
         }
-      } catch (err: any) {
-        this.log('[start-generated] error starting event', eventId, err?.message || err);
+      } catch (err: unknown) {
+        console.error("[worker] error:", String(err));
       }
     }
   }

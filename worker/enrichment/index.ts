@@ -76,10 +76,11 @@ export class EnrichmentOrchestrator {
         const results = await enricher.enrich(eventId, eventTitle, eventTopic);
         console.log(`[enrichment] ${enricherName} produced ${results.length} result(s)`);
         return results;
-      } catch (error: any) {
-        console.error(`[enrichment] Error in ${enricherName}: ${error.message}`);
-        return [];
+      } catch (err: unknown) {
+        console.error("[worker] error:", String(err));
       }
+
+      return [];
     });
 
     const results = await Promise.all(enricherPromises);
@@ -125,8 +126,8 @@ export class EnrichmentOrchestrator {
         } else {
           insertedCount++;
         }
-      } catch (error: any) {
-        console.error(`[enrichment] Error processing chunk: ${error.message}`);
+      } catch (err: unknown) {
+        console.error("[worker] error:", String(err));
       }
     }
 

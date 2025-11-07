@@ -1,9 +1,10 @@
-import { Exa } from 'exa-js';
+import type { Exa } from 'exa-js';
 import type { ResearchResults } from '../glossary-builder';
 import type { ResearchResultInsert } from '../../../types';
 import { insertResearchResultRow, type WorkerSupabaseClient } from './supabase-orchestrator';
 import { calculateExaResearchCost, calculateExaSearchCost } from '../pricing-config';
 import { chunkTextContent } from '../../../lib/text/llm-prompt-chunking';
+import { isRecord } from '../../../lib/context-normalization';
 
 export type ExaCostUsage = {
   searches: number;
@@ -20,6 +21,106 @@ export type ExaCostBreakdown = {
 
 export type ResearchCostTracker = {
   exa: ExaCostBreakdown;
+};
+
+interface ExaResearchTaskStatus {
+  status: string;
+  output?: unknown;
+  error?: unknown;
+}
+
+type ExaResearchRetriever = {
+  retrieve: (taskId: string) => Promise<unknown>;
+};
+
+interface NormalizedResearchOutput {
+  summary: string;
+  keyPoints: string[];
+}
+
+interface ExaSearchMetadata {
+  title?: string;
+  author?: string;
+  publishedDate?: string;
+}
+
+interface WikipediaSummaryData {
+  title?: string;
+  extract?: string;
+  extract_html?: string;
+  thumbnail?: { source?: string };
+  coordinates?: { lat?: number; lon?: number };
+}
+
+const isExaResearchTaskStatus = (value: unknown): value is ExaResearchTaskStatus =>
+  isRecord(value) && typeof value.status === 'string';
+
+const normalizeResearchOutput = (output: unknown): NormalizedResearchOutput | null => {
+  if (typeof output === 'string') {
+    const trimmed = output.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (isRecord(parsed)) {
+        return normalizeResearchOutput(parsed);
+      }
+    } catch {
+      // Treat as plain text
+    }
+
+    return { summary: trimmed, keyPoints: [] };
+  }
+
+  if (!isRecord(output)) {
+    return null;
+  }
+
+  const record = output;
+  const summarySources = ['summary', 'content', 'text'];
+  const summary = summarySources
+    .map((key) => record[key])
+    .find((value): value is string => typeof value === 'string' && value.trim().length > 0);
+
+  if (!summary) {
+    return null;
+  }
+
+  const keyPointsValue = record.keyPoints;
+  const keyPoints = Array.isArray(keyPointsValue)
+    ? keyPointsValue.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : [];
+
+  return {
+    summary: summary.trim(),
+    keyPoints,
+  };
+};
+
+const getStringField = (record: Record<string, unknown>, key: string): string | undefined => {
+  const value = record[key];
+  return typeof value === 'string' ? value : undefined;
+};
+
+const toErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+const getResearchClient = (research: unknown): ExaResearchRetriever | null => {
+  if (!isRecord(research)) {
+    return null;
+  }
+
+  const retrieveValue = research.retrieve;
+  if (typeof retrieveValue !== 'function') {
+    return null;
+  }
+
+  return {
+    retrieve: (taskId: string) =>
+      Promise.resolve<unknown>(retrieveValue.call(research, taskId)),
+  };
 };
 
 export interface PendingResearchTask {
@@ -58,12 +159,42 @@ export const pollResearchTasks = async (
         console.warn(
           `[research-poll] ${task.queryProgress} Task ${task.researchId} exceeded max poll time, falling back to /search`
         );
+        try {
+          await executeExaSearch(
+            task.queryItem,
+            exa,
+            supabase,
+            eventId,
+            blueprintId,
+            generationCycleId,
+            chunks,
+            insertedCount,
+            costBreakdown
+          );
+        } catch (fallbackError) {
+          console.error(
+            `[research-poll] ${task.queryProgress} Fallback /search error: ${toErrorMessage(fallbackError)}`
+          );
+        }
         activeTasks.splice(i, 1);
         continue;
       }
 
       try {
-        const taskStatus = await (exa.research as any).retrieve(task.researchId);
+        const researchClient = getResearchClient(exa.research);
+        if (!researchClient) {
+          console.error('[research-poll] Research client unavailable, aborting task polling');
+          return;
+        }
+        const taskStatus = await researchClient.retrieve(task.researchId);
+        if (!isExaResearchTaskStatus(taskStatus)) {
+          console.error(
+            `[research-poll] ${task.queryProgress} Unexpected task status shape for ${task.researchId}`
+          );
+          activeTasks.splice(i, 1);
+          continue;
+        }
+
         if (taskStatus.status === 'completed') {
           await processCompletedResearchTask(
             task,
@@ -80,13 +211,12 @@ export const pollResearchTasks = async (
           activeTasks.splice(i, 1);
         } else if (taskStatus.status === 'failed') {
           console.error(
-            `[research-poll] ${task.queryProgress} Task ${task.researchId} failed: ${taskStatus.error || 'unknown error'}`
+            `[research-poll] ${task.queryProgress} Task ${task.researchId} failed: ${typeof taskStatus.error === 'string' ? taskStatus.error : 'unknown error'}`
           );
           activeTasks.splice(i, 1);
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.error(`[research-poll] ${task.queryProgress} Error polling task: ${message}`);
+        console.error(`[research-poll] ${task.queryProgress} Error polling task: ${toErrorMessage(error)}`);
       }
     }
 
@@ -101,7 +231,7 @@ export const pollResearchTasks = async (
 
 export const processCompletedResearchTask = async (
   task: PendingResearchTask,
-  taskStatus: any,
+  taskStatus: ExaResearchTaskStatus,
   exa: Exa,
   supabase: WorkerSupabaseClient,
   eventId: string,
@@ -113,31 +243,36 @@ export const processCompletedResearchTask = async (
 ): Promise<void> => {
   const { queryItem, queryProgress } = task;
 
-  let researchData: any;
-  if (typeof taskStatus.output === 'string') {
-    try {
-      researchData = JSON.parse(taskStatus.output);
-    } catch {
-      researchData = { summary: taskStatus.output, keyPoints: [] };
-    }
-  } else {
-    researchData = taskStatus.output;
-  }
+  const normalizedOutput = normalizeResearchOutput(taskStatus.output);
 
-  const summary = researchData.summary || researchData.content || researchData.text || '';
-  const keyPoints = researchData.keyPoints || [];
-
-  if (!summary || summary.length < 50) {
+  if (!normalizedOutput || normalizedOutput.summary.length < 50) {
     console.warn(
       `[research-poll] ${queryProgress} Exa /research output is empty or too short for query: "${queryItem.query}"`
     );
+    try {
+      await executeExaSearch(
+        queryItem,
+        exa,
+        supabase,
+        eventId,
+        blueprintId,
+        generationCycleId,
+        chunks,
+        insertedCount,
+        costBreakdown
+      );
+    } catch (fallbackError) {
+      console.error(
+        `[research-poll] ${queryProgress} Fallback /search error: ${toErrorMessage(fallbackError)}`
+      );
+    }
     return;
   }
 
   const researchText =
-    summary +
-    (keyPoints.length > 0
-      ? '\n\nKey Points:\n' + keyPoints.map((kp: string, i: number) => `${i + 1}. ${kp}`).join('\n')
+    normalizedOutput.summary +
+    (normalizedOutput.keyPoints.length > 0
+      ? '\n\nKey Points:\n' + normalizedOutput.keyPoints.map((kp, i) => `${i + 1}. ${kp}`).join('\n')
       : '');
 
   const textChunks = chunkTextContent(researchText, 200, 400);
@@ -222,7 +357,9 @@ export const executeExaSearch = async (
 
     const searchDuration = Date.now() - startTime;
 
-    if (!searchResults.results || searchResults.results.length === 0) {
+    const rawResults = Array.isArray(searchResults.results) ? searchResults.results : [];
+
+    if (rawResults.length === 0) {
       console.warn(
         `[research] Exa /search: No results found for query "${queryItem.query}" (duration: ${searchDuration}ms)`
       );
@@ -230,31 +367,45 @@ export const executeExaSearch = async (
     }
 
     console.log(
-      `[research] Exa /search: Received ${searchResults.results.length} results in ${searchDuration}ms for query: "${queryItem.query}"`
+      `[research] Exa /search: Received ${rawResults.length} results in ${searchDuration}ms for query: "${queryItem.query}"`
     );
 
     let processedResults = 0;
     let skippedResults = 0;
 
-    for (const result of searchResults.results) {
-      if (!result.text) {
-        console.warn(`[research] Exa /search: Result missing text content for URL: ${result.url}`);
+    for (const result of rawResults) {
+      if (!isRecord(result)) {
+        skippedResults++;
+        continue;
+      }
+
+      const text = getStringField(result, 'text');
+      if (!text) {
+        console.warn(
+          `[research] Exa /search: Result missing text content for URL: ${getStringField(result, 'url') || 'unknown'}`
+        );
         skippedResults++;
         continue;
       }
 
       processedResults++;
-      const textChunks = chunkTextContent(result.text, 200, 400);
+      const textChunks = chunkTextContent(text, 200, 400);
+      const url = getStringField(result, 'url');
+      const metadataFields: ExaSearchMetadata = {
+        title: getStringField(result, 'title'),
+        author: getStringField(result, 'author'),
+        publishedDate: getStringField(result, 'publishedDate'),
+      };
 
       for (const chunkText of textChunks) {
-        const qualityScore = calculateQualityScore(result, chunkText);
+        const qualityScore = calculateQualityScore(metadataFields, chunkText);
         const metadata: ResearchResultInsert['metadata'] = {
           api: 'exa',
           query: queryItem.query,
-          url: result.url,
-          title: result.title || null,
-          author: result.author || null,
-          published_date: result.publishedDate || null,
+          url,
+          title: metadataFields.title || null,
+          author: metadataFields.author || null,
+          published_date: metadataFields.publishedDate || null,
           quality_score: qualityScore,
         };
 
@@ -265,7 +416,7 @@ export const executeExaSearch = async (
           query: queryItem.query,
           api: 'exa',
           content: chunkText,
-          source_url: result.url,
+          source_url: url,
           quality_score: qualityScore,
           metadata,
         });
@@ -288,24 +439,22 @@ export const executeExaSearch = async (
 
     const totalDuration = Date.now() - startTime;
     console.log(
-      `[research] Exa /search: Processed ${processedResults}/${searchResults.results.length} results (${skippedResults} skipped), created ${insertedCount.value} chunks in ${totalDuration}ms for query: "${queryItem.query}"`
+      `[research] Exa /search: Processed ${processedResults}/${rawResults.length} results (${skippedResults} skipped), created ${insertedCount.value} chunks in ${totalDuration}ms for query: "${queryItem.query}"`
     );
-  } catch (error: any) {
+  } catch (error) {
     const duration = Date.now() - startTime;
     console.error(`[research] ✗ Exa /search API FAILURE for query "${queryItem.query}":`, {
-      error: error.message,
-      stack: error.stack,
+      error: toErrorMessage(error),
       duration: `${duration}ms`,
-      statusCode: error.status || error.statusCode || 'N/A',
-      code: error.code || 'N/A',
-      response: error.response ? JSON.stringify(error.response).substring(0, 300) : 'N/A',
-      type: error.constructor?.name || 'Unknown',
     });
     throw error;
   }
 };
 
-export const calculateWikipediaQualityScore = (articleData: any, chunkText: string): number => {
+export const calculateWikipediaQualityScore = (
+  articleData: WikipediaSummaryData,
+  chunkText: string
+): number => {
   let score = 0.5;
   if (articleData.title && articleData.title.length > 20) {
     score += 0.1;
@@ -326,7 +475,10 @@ export const calculateWikipediaQualityScore = (articleData: any, chunkText: stri
   return Math.min(score, 1.0);
 };
 
-export const calculateQualityScore = (result: any, chunkText: string): number => {
+export const calculateQualityScore = (
+  result: ExaSearchMetadata,
+  chunkText: string
+): number => {
   let score = 0.5;
   if (result.title && result.title.length > 10) {
     score += 0.1;

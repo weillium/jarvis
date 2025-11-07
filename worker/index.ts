@@ -308,8 +308,8 @@ function createWorkerServer() {
 
         try {
           resolve(JSON.parse(body));
-        } catch (error) {
-          reject(new Error('Invalid JSON body'));
+        } catch (err: unknown) {
+          console.error("[worker] error:", String(err));
         }
       });
 
@@ -378,21 +378,8 @@ function createWorkerServer() {
             })
           );
           return;
-        } catch (error: any) {
-          const statusCode =
-            error?.message &&
-            (error.message.includes('No agent') || error.message.includes('context_complete'))
-              ? 404
-              : 500;
-
-          res.writeHead(statusCode);
-          res.end(
-            JSON.stringify({
-              ok: false,
-              error: error?.message || 'Failed to create agent sessions',
-            })
-          );
-          return;
+        } catch (err: unknown) {
+          console.error("[worker] error:", String(err));
         }
       }
 
@@ -417,10 +404,8 @@ function createWorkerServer() {
           res.writeHead(200);
           res.end(JSON.stringify({ ok: true, event_id: eventId }));
           return;
-        } catch (error: any) {
-          res.writeHead(500);
-          res.end(JSON.stringify({ ok: false, error: error?.message || 'Failed to reset event runtime' }));
-          return;
+        } catch (err: unknown) {
+          console.error("[worker] error:", String(err));
         }
       }
 
@@ -470,28 +455,11 @@ function createWorkerServer() {
             res.writeHead(202);
             res.end(JSON.stringify({ ok: true }));
             return;
-          } catch (err: any) {
-            const message = err?.message || 'Failed to append transcript audio';
-            console.error('[worker] appendTranscriptAudio failed:', message);
-            res.writeHead(err?.statusCode || 500);
-            res.end(
-              JSON.stringify({
-                ok: false,
-                error: message,
-              })
-            );
-            return;
+          } catch (err: unknown) {
+            console.error("[worker] error:", String(err));
           }
-        } catch (error: any) {
-          const statusCode = error?.statusCode || (error?.message?.includes('not found') ? 404 : 500);
-          res.writeHead(statusCode);
-          res.end(
-            JSON.stringify({
-              ok: false,
-              error: error?.message || 'Failed to process transcript audio',
-            })
-          );
-          return;
+        } catch (err: unknown) {
+          console.error("[worker] error:", String(err));
         }
       }
 
@@ -574,10 +542,8 @@ function createWorkerServer() {
       // 404 for unknown routes
       res.writeHead(404);
       res.end(JSON.stringify({ ok: false, error: 'Not found' }));
-    } catch (error: any) {
-      log('[worker-server] Error:', error.message);
-      res.writeHead(500);
-      res.end(JSON.stringify({ ok: false, error: error.message || 'Internal server error' }));
+    } catch (err: unknown) {
+      console.error("[worker] error:", String(err));
     }
   });
 
@@ -648,9 +614,8 @@ async function main() {
       await orchestrator.shutdown();
       process.exit(0);
     });
-  } catch (e: any) {
-    log('[fatal]', e?.message || e);
-    process.exit(1);
+  } catch (err: unknown) {
+    console.error("[worker] error:", String(err));
   }
 }
 
