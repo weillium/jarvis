@@ -218,14 +218,6 @@ export class Orchestrator {
       },
     ]);
 
-    try {
-      await this.supabaseService.updateAgentStatus(agentId, 'active', 'testing');
-    } catch (error: any) {
-      console.warn(
-        `[orchestrator] Sessions created for event ${eventId} but failed to update agent status: ${error.message}`
-      );
-    }
-
     console.log(
       `[orchestrator] Created agent sessions for event ${eventId} using model_set=${modelSet}`,
       {

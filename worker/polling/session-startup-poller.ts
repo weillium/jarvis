@@ -16,9 +16,8 @@ export class SessionStartupPoller implements Poller {
     const { data: pendingSessions, error } = await this.supabase
       .from('agent_sessions')
       .select('event_id, agent_id, status, created_at, updated_at, provider_session_id')
-      .or(
-        `and(status.eq.closed,created_at.gte.${oneMinuteAgo}),and(status.eq.active,provider_session_id.eq.pending)`
-      )
+      .eq('status', 'active')
+      .eq('provider_session_id', 'pending')
       .limit(50);
 
     if (error) {
