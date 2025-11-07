@@ -6,7 +6,6 @@
 import type OpenAI from 'openai';
 import { OpenAIRealtimeWebSocket } from 'openai/realtime/websocket';
 import type {
-  ConversationItemCreateEvent,
   RealtimeClientEvent,
   RealtimeServerEvent,
   ResponseDoneEvent,
@@ -15,223 +14,35 @@ import type {
 } from 'openai/resources/realtime/realtime';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getPolicy } from '../policies';
-import {
-  createRealtimeCardsUserPrompt,
-  createRealtimeFactsUserPrompt,
-} from '../prompts';
-import type {
-  Fact,
-  RealtimeCardDTO,
-  RealtimeFactDTO,
-  RealtimeModelResponseDTO,
-  RealtimeToolCallDTO,
-  RealtimeTranscriptDTO,
-  VectorMatchRecord
-} from '../types';
+import type { VectorMatchRecord } from '../types';
 import {
   extractErrorField,
   extractErrorMessage,
+  getLowercaseErrorField,
   isRecord,
   mapCardPayload,
   mapFactsPayload,
   mapToolCallArguments,
   safeJsonParse,
 } from './realtime-session/payload-utils';
+import type {
+  RealtimeMessageContext,
+  RealtimeSessionConfig,
+  RealtimeSessionEvent,
+  RealtimeSessionEventPayloads,
+  RealtimeSessionStatus,
+} from './realtime-session/types';
+import { MessageQueueManager } from './realtime-session/message-queue';
+import { buildStatusSnapshot } from './realtime-session/status-tracker';
+import { getSessionInternals, getUnderlyingSocket } from './realtime-session/transport-utils';
+import { HeartbeatManager } from './realtime-session/heartbeat-manager';
+import type { AgentHandler } from './realtime-session/types';
+import { createAgentHandler } from './realtime-session/handlers';
 
-export type AgentType = 'transcript' | 'cards' | 'facts';
-
-export interface RealtimeSessionConfig {
-  eventId: string;
-  agentType: 'transcript' | 'cards' | 'facts';
-  model?: string;
-  onStatusChange?: (
-    status: 'active' | 'paused' | 'closed' | 'error',
-    sessionId?: string
-  ) => void;
-  onLog?: (
-    level: 'log' | 'warn' | 'error',
-    message: string,
-    context?: { seq?: number }
-  ) => void;
-  supabase?: SupabaseClient; // Supabase client for database updates
-  // Callbacks for tool execution
-  onRetrieve?: (query: string, topK: number) => Promise<VectorMatchRecord[]>;
-  embedText?: (text: string) => Promise<number[]>;
-}
-
-const CARD_TYPES: ReadonlySet<RealtimeCardDTO['card_type']> = new Set([
-  'text',
-  'text_visual',
-  'visual',
-]);
-
-const clampTopK = (value: number): number => {
-  const normalized = Number.isFinite(value) ? Math.floor(value) : 5;
-  return Math.min(10, Math.max(1, normalized));
-};
-
-const mapToolCallArguments = (
-  args: unknown,
-  callId: string
-): RealtimeToolCallDTO | null => {
-  if (!isRecord(args)) {
-    return null;
-  }
-
-  if (typeof args.query === 'string') {
-    const topKValue = typeof args.top_k === 'number' ? clampTopK(args.top_k) : 5;
-    return {
-      type: 'retrieve',
-      callId,
-      query: args.query,
-      topK: topKValue,
-    };
-  }
-
-  const card = mapCardFromRecord(args);
-  if (card) {
-    return {
-      type: 'produce_card',
-      callId,
-      card,
-    };
-  }
-
-  return null;
-};
-
-const mapCardFromRecord = (record: Record<string, unknown>): RealtimeCardDTO | null => {
-  if (
-    typeof record.kind !== 'string' ||
-    typeof record.card_type !== 'string' ||
-    typeof record.title !== 'string'
-  ) {
-    return null;
-  }
-
-  const cardType = CARD_TYPES.has(record.card_type as RealtimeCardDTO['card_type'])
-    ? (record.card_type as RealtimeCardDTO['card_type'])
-    : 'text';
-
-  const sourceSeq =
-    typeof record.source_seq === 'number' ? record.source_seq : 0;
-
-  return {
-    kind: record.kind,
-    card_type: cardType,
-    title: record.title,
-    body: typeof record.body === 'string' ? record.body : null,
-    label: typeof record.label === 'string' ? record.label : null,
-    image_url: typeof record.image_url === 'string' ? record.image_url : null,
-    source_seq: sourceSeq,
-  };
-};
-
-const mapCardPayload = (payload: unknown): RealtimeCardDTO | null => {
-  if (!isRecord(payload)) {
-    return null;
-  }
-  return mapCardFromRecord(payload);
-};
-
-const mapFactsPayload = (payload: unknown): RealtimeFactDTO[] => {
-  if (Array.isArray(payload)) {
-    return payload
-      .map(mapFactCandidate)
-      .filter((fact): fact is RealtimeFactDTO => fact !== null);
-  }
-
-  if (isRecord(payload) && Array.isArray(payload.facts)) {
-    return payload.facts
-      .map(mapFactCandidate)
-      .filter((fact): fact is RealtimeFactDTO => fact !== null);
-  }
-
-  return [];
-};
-
-const mapFactCandidate = (value: unknown): RealtimeFactDTO | null => {
-  if (!isRecord(value) || typeof value.key !== 'string' || !('value' in value)) {
-    return null;
-  }
-
-  const fact: RealtimeFactDTO = {
-    key: value.key,
-    value: value.value,
-  };
-
-  if (typeof value.confidence === 'number') {
-    fact.confidence = value.confidence;
-  }
-
-  return fact;
-};
-
-const getLowercaseErrorField = (
-  value: unknown,
-  field: 'message' | 'code' | 'type'
-): string => extractErrorField(value, field).toLowerCase();
+export type { AgentType, RealtimeSessionConfig } from './realtime-session/types';
 
 const isInvalidToolCallError = (error: unknown): boolean =>
   getLowercaseErrorField(error, 'message').includes('invalid_tool_call_id');
-
-interface SocketLike {
-  readyState?: number;
-  on?: (event: string, handler: (...args: unknown[]) => void) => void;
-  off?: (event: string, handler: (...args: unknown[]) => void) => void;
-  addEventListener?: (event: string, handler: (...args: unknown[]) => void) => void;
-  removeEventListener?: (event: string, handler: (...args: unknown[]) => void) => void;
-  removeListener?: (event: string, handler: (...args: unknown[]) => void) => void;
-  OPEN?: number;
-  __connectedAt?: string;
-  ping?: () => void;
-}
-
-interface TransportLike {
-  state?: string;
-  readyState?: string | number;
-  addEventListener?: (event: string, handler: (...args: unknown[]) => void) => void;
-  removeEventListener?: (event: string, handler: (...args: unknown[]) => void) => void;
-}
-
-const isSocketLike = (value: unknown): value is SocketLike =>
-  isRecord(value) &&
-  (typeof value.readyState === 'number' ||
-    typeof value.on === 'function' ||
-    typeof value.addEventListener === 'function' ||
-    typeof value.ping === 'function');
-
-const isTransportLike = (value: unknown): value is TransportLike =>
-  isRecord(value) &&
-  (typeof value.state === 'string' ||
-    typeof value.readyState === 'string' ||
-    typeof value.readyState === 'number');
-
-const getSessionInternals = (
-  session: OpenAIRealtimeWebSocket | undefined
-): { transport?: TransportLike; socket?: SocketLike } => {
-  if (!session) {
-    return {};
-  }
-
-  const candidate = session as unknown;
-  if (!isRecord(candidate)) {
-    return {};
-  }
-
-  const transport = isTransportLike(candidate.transport) ? candidate.transport : undefined;
-  const socketCandidate =
-    isSocketLike(candidate.socket) ? candidate.socket : isSocketLike(candidate.ws) ? candidate.ws : undefined;
-
-  return {
-    transport,
-    socket: socketCandidate,
-  };
-};
-
-const getUnderlyingSocket = (
-  session: OpenAIRealtimeWebSocket | undefined
-): SocketLike | undefined => getSessionInternals(session).socket;
 
 const extractAssistantText = (event: ResponseDoneEvent): string | null => {
   const items = event.response.output;
@@ -262,49 +73,14 @@ const extractAssistantText = (event: ResponseDoneEvent): string | null => {
   return null;
 };
 
-export interface RealtimeSessionStatus {
-  isActive: boolean;
-  queueLength: number;
-  websocketState?: 'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED';
-  connectionUrl?: string;
-  sessionId?: string;
-  connectedAt?: string;
-  pingPong?: {
-    enabled: boolean;
-    missedPongs: number;
-    lastPongReceived?: string;
-    pingIntervalMs: number;
-    pongTimeoutMs: number;
-    maxMissedPongs: number;
-  };
-}
-
-interface RealtimeMessageContext {
-  bullets?: string[];
-  glossaryContext?: string;
-  recentText?: string;
-  facts?: Fact[] | Record<string, unknown>;
-}
-
-type RealtimeSessionEvent = 'card' | 'response' | 'facts' | 'transcript' | 'error';
-
-type RealtimeSessionEventPayloads = {
-  card: RealtimeCardDTO;
-  response: RealtimeModelResponseDTO;
-  facts: RealtimeFactDTO[];
-  transcript: RealtimeTranscriptDTO;
-  error: Error;
-};
-
 export class RealtimeSession {
   private openai: OpenAI;
   private session?: OpenAIRealtimeWebSocket;
   private config: RealtimeSessionConfig;
   private isActive: boolean = false;
-  private messageQueue: Array<{ message: string; context?: RealtimeMessageContext }> = [];
-  private currentMessage: { message: string; context?: RealtimeMessageContext } | null = null;
-  private pendingResponse: boolean = false;
-  private pendingAudioBytes: number = 0;
+  private readonly messageQueue: MessageQueueManager;
+  private readonly heartbeat: HeartbeatManager;
+  private readonly agentHandler: AgentHandler;
   private eventHandlers: { [K in RealtimeSessionEvent]?: Array<(data: RealtimeSessionEventPayloads[K]) => void> } = {};
   private onStatusChange?: (
     status: 'active' | 'paused' | 'closed' | 'error',
@@ -318,16 +94,6 @@ export class RealtimeSession {
   private supabase?: SupabaseClient;
   private onRetrieve?: (query: string, topK: number) => Promise<VectorMatchRecord[]>;
   private embedText?: (text: string) => Promise<number[]>;
-  
-  // Ping-pong heartbeat tracking
-  private pingInterval?: NodeJS.Timeout;
-  private pongTimeout?: NodeJS.Timeout;
-  private missedPongs: number = 0;
-  private lastPongReceived?: Date;
-  private pingStartTime?: number; // Track ping start time for latency calculation
-  private readonly PING_INTERVAL_MS = parseInt(process.env.REALTIME_PING_INTERVAL_MS || '25000', 10); // Default 25 seconds
-  private readonly PONG_TIMEOUT_MS = parseInt(process.env.REALTIME_PONG_TIMEOUT_MS || '10000', 10); // Default 10 seconds
-  private readonly MAX_MISSED_PONGS = parseInt(process.env.REALTIME_MAX_MISSED_PONGS || '3', 10); // Reconnect after 3 missed pongs
   private reconnectTimer?: NodeJS.Timeout;
   private errorRetryAttempts = 0;
   private readonly MAX_ERROR_RETRIES = parseInt(process.env.REALTIME_MAX_ERROR_RETRIES || '5', 10);
@@ -342,6 +108,52 @@ export class RealtimeSession {
     this.supabase = config.supabase;
     this.onRetrieve = config.onRetrieve;
     this.embedText = config.embedText;
+    this.messageQueue = new MessageQueueManager({
+      config,
+      getSession: () => this.session,
+      isActive: () => this.isActive,
+      onLog: this.onLog,
+    });
+
+    const heartbeatConfig = {
+      pingIntervalMs: parseInt(process.env.REALTIME_PING_INTERVAL_MS || '25000', 10),
+      pongTimeoutMs: parseInt(process.env.REALTIME_PONG_TIMEOUT_MS || '10000', 10),
+      maxMissedPongs: parseInt(process.env.REALTIME_MAX_MISSED_PONGS || '3', 10),
+    };
+
+    this.heartbeat = new HeartbeatManager(
+      {
+        agentType: this.config.agentType,
+        eventId: this.config.eventId,
+        getSession: () => this.session,
+        isActive: () => this.isActive,
+        setActive: (active) => {
+          this.isActive = active;
+        },
+        log: (level, message, context) => this.onLog?.(level, message, context),
+        notifyStatus: (status, sessionId) => this.onStatusChange?.(status, sessionId),
+        updateDatabaseStatus: (status, sessionId) => this.updateDatabaseStatus(status, sessionId),
+        emitError: (error) => this.emitEvent('error', error),
+      },
+      heartbeatConfig
+    );
+
+    this.agentHandler = createAgentHandler({
+      context: {
+        eventId: this.config.eventId,
+        agentType: this.config.agentType,
+        model: this.config.model,
+      },
+      onLog: (level, message, meta) => this.onLog?.(level, message, meta),
+      emitEvent: <K extends RealtimeSessionEvent>(
+        event: K,
+        payload: RealtimeSessionEventPayloads[K]
+      ) => this.emitEvent(event, payload),
+      sendToolResult: (callId, output) => this.sendToolResult(callId, output),
+      onRetrieve: this.onRetrieve,
+      embedText: this.embedText,
+      tokenBudget: this.config.tokenBudget,
+    });
   }
 
   private clearReconnectTimer(): void {
@@ -420,15 +232,12 @@ export class RealtimeSession {
   }
 
   private transitionToErrorState(error: unknown, contextMessage?: string): void {
-    this.stopPingPong();
+    this.heartbeat.stop();
     this.clearReconnectTimer();
     this.safeCloseSession('Fatal error - closing');
     this.isActive = false;
     this.errorRetryAttempts = 0;
-    this.pendingAudioBytes = 0;
-    this.pendingResponse = false;
-    this.currentMessage = null;
-    this.messageQueue = [];
+    this.messageQueue.reset();
 
     const message = contextMessage || extractErrorMessage(error);
     this.onLog?.('error', `Session failed: ${message}`);
@@ -459,26 +268,27 @@ export class RealtimeSession {
       `Realtime session retry scheduled in ${delay}ms (attempt ${nextAttempt}/${this.MAX_ERROR_RETRIES})`
     );
 
-    this.reconnectTimer = setTimeout(async () => {
+    this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = undefined;
       this.errorRetryAttempts = nextAttempt;
 
-      try {
-        await this.connect();
-        this.errorRetryAttempts = 0;
-      } catch (connectError: unknown) {
-        const classification = this.classifyRealtimeError(connectError);
-        const message = extractErrorMessage(connectError);
-        console.warn(`[realtime] Reconnect attempt ${this.errorRetryAttempts} failed: ${message}`);
-        this.onLog?.('warn', `Reconnect attempt ${this.errorRetryAttempts} failed: ${message}`);
+      void this.connect()
+        .then(() => {
+          this.errorRetryAttempts = 0;
+        })
+        .catch((connectError: unknown) => {
+          const classification = this.classifyRealtimeError(connectError);
+          const message = extractErrorMessage(connectError);
+          console.warn(`[realtime] Reconnect attempt ${this.errorRetryAttempts} failed: ${message}`);
+          this.onLog?.('warn', `Reconnect attempt ${this.errorRetryAttempts} failed: ${message}`);
 
-        if (classification === 'fatal' || this.errorRetryAttempts >= this.MAX_ERROR_RETRIES) {
-          this.transitionToErrorState(connectError, message);
-          return;
-        }
+          if (classification === 'fatal' || this.errorRetryAttempts >= this.MAX_ERROR_RETRIES) {
+            this.transitionToErrorState(connectError, message);
+            return;
+          }
 
-        this.scheduleReconnect();
-      }
+          this.scheduleReconnect();
+        });
     }, delay);
   }
 
@@ -677,12 +487,12 @@ export class RealtimeSession {
         if (underlyingSocket) {
           underlyingSocket.__connectedAt = new Date().toISOString();
         }
-      } catch (error: unknown) {
+      } catch {
         // Ignore if we can't access underlying socket
       }
 
       // Start ping-pong heartbeat
-      this.startPingPong();
+      this.heartbeat.start();
 
       // Notify active status
       this.onStatusChange?.('active', sessionId);
@@ -699,7 +509,7 @@ export class RealtimeSession {
       const connectMessage = `Session connected: ${sessionId} (${this.config.agentType})`;
       this.onLog?.('log', connectMessage);
 
-      void this.processQueue();
+      void this.messageQueue.processQueue();
 
       return sessionId;
     } catch (error: unknown) {
@@ -802,12 +612,12 @@ export class RealtimeSession {
     if (underlyingSocket && typeof underlyingSocket.on === 'function') {
       // Standard WebSocket 'pong' event (fires when pong frame is received)
       underlyingSocket.on('pong', () => {
-        this.handlePong();
+        this.heartbeat.handlePong();
       });
     } else {
       // Ping/pong not available on this socket - disable ping/pong mechanism
       this.onLog?.('warn', 'Ping/pong not available on socket - SDK may handle it internally');
-      this.stopPingPong();
+      this.heartbeat.stop();
     }
 
     // Handle function call arguments completion
@@ -875,7 +685,7 @@ export class RealtimeSession {
     // Handle response text completion (for JSON responses)
     this.session.on(
       'response.output_text.done',
-      async (event: ResponseTextDoneEvent) => {
+      (event: ResponseTextDoneEvent) => {
         try {
           if (this.config.agentType === 'transcript') {
             const text = event.text?.trim() ?? '';
@@ -923,7 +733,7 @@ export class RealtimeSession {
     );
 
     // Handle response completion (fallback if text.done doesn't fire)
-    this.session.on('response.done', async (event: ResponseDoneEvent) => {
+    this.session.on('response.done', (event: ResponseDoneEvent) => {
       try {
         const assistantText = extractAssistantText(event);
         if (!assistantText) {
@@ -965,9 +775,8 @@ export class RealtimeSession {
         const message = extractErrorMessage(error);
         console.error(`[realtime] Error processing response.done: ${message}`);
       } finally {
-        this.pendingResponse = false;
-        this.currentMessage = null;
-        void this.processQueue();
+        this.messageQueue.markResponseComplete();
+        void this.messageQueue.processQueue();
       }
     });
 
@@ -994,13 +803,8 @@ export class RealtimeSession {
       this.onLog?.('warn', `${baseMessage} (transient - retrying)`);
 
       this.isActive = false;
-      this.pendingAudioBytes = 0;
-      if (this.currentMessage) {
-        this.messageQueue.unshift(this.currentMessage);
-        this.currentMessage = null;
-      }
-      this.pendingResponse = false;
-      this.stopPingPong();
+      this.messageQueue.restoreCurrentMessage();
+      this.heartbeat.stop();
       this.onStatusChange?.('paused');
       void this.updateDatabaseStatus('paused');
       this.safeCloseSession('Transient error - reconnecting');
@@ -1196,120 +1000,8 @@ export class RealtimeSession {
       throw new Error('Session not connected');
     }
 
-    this.messageQueue.push({ message, context });
-
-    if (this.messageQueue.length > 1 || this.pendingResponse) {
-      console.warn(`[realtime] [${this.config.agentType}] Sending message with queue backlog`, {
-        queueLength: this.messageQueue.length,
-        eventId: this.config.eventId,
-      });
-      this.onLog?.('warn', `Message queue backlog: ${this.messageQueue.length} items`);
-    }
-
-    await this.processQueue();
-  }
-
-  /**
-   * Process queued messages
-   */
-  private async processQueue(): Promise<void> {
-    if (!this.isActive || !this.session) {
-      return;
-    }
-
-    if (this.pendingResponse) {
-      return;
-    }
-
-    if (this.messageQueue.length === 0) {
-      return;
-    }
-
-    const next = this.messageQueue.shift();
-    if (!next) {
-      return;
-    }
-
-    this.currentMessage = next;
-    const formattedMessage = this.formatMessage(next.message, next.context);
-
-    try {
-      this.pendingResponse = true;
-
-      this.session.send(formattedMessage as RealtimeClientEvent);
-
-      this.session.send({
-        type: 'response.create',
-      } as RealtimeClientEvent);
-
-      console.log(`[realtime] Message sent (${this.config.agentType})`);
-    } catch (error: unknown) {
-      this.pendingResponse = false;
-      this.messageQueue.unshift(next);
-      this.currentMessage = null;
-      console.error(`[realtime] Error sending message: ${extractErrorMessage(error)}`);
-      throw error;
-    }
-  }
-
-  /**
-   * Format message for the agent type
-   */
-  private formatMessage(
-    message: string,
-    context?: RealtimeMessageContext
-  ): ConversationItemCreateEvent {
-    if (this.config.agentType === 'cards') {
-      return {
-        type: 'conversation.item.create',
-        item: {
-          type: 'message',
-          role: 'user',
-          content: [
-            {
-              type: 'input_text',
-              text: createRealtimeCardsUserPrompt(
-                message,
-                (context?.bullets ?? []).join('\n'),
-                context?.glossaryContext ?? ''
-              ),
-            },
-          ],
-        },
-      };
-    } else if (this.config.agentType === 'transcript') {
-      return {
-        type: 'conversation.item.create',
-        item: {
-          type: 'message',
-          role: 'user',
-          content: [
-            {
-              type: 'input_text',
-              text: message,
-            },
-          ],
-        },
-      };
-    } else {
-      return {
-        type: 'conversation.item.create',
-        item: {
-          type: 'message',
-          role: 'user',
-          content: [
-            {
-              type: 'input_text',
-              text: createRealtimeFactsUserPrompt(
-                context?.recentText || message,
-                JSON.stringify(context?.facts || {}, null, 2),
-                context?.glossaryContext ?? ''
-              ),
-            },
-          ],
-        },
-      };
-    }
+    this.messageQueue.enqueue(message, context);
+    await this.messageQueue.processQueue();
   }
 
   async appendAudioChunk(chunk: {
@@ -1329,20 +1021,24 @@ export class RealtimeSession {
     }
 
     try {
-      this.session.send({
-        type: 'input_audio_buffer.append',
-        audio: chunk.audioBase64,
-      } as RealtimeClientEvent);
-
-      this.pendingAudioBytes += Math.round((chunk.audioBase64.length * 3) / 4);
-
-      if (chunk.isFinal) {
-        this.session.send({ type: 'input_audio_buffer.commit' } as RealtimeClientEvent);
-        this.session.send({
-          type: 'response.create',
+      await Promise.resolve().then(() => {
+        this.session!.send({
+          type: 'input_audio_buffer.append',
+          audio: chunk.audioBase64,
         } as RealtimeClientEvent);
-        this.pendingAudioBytes = 0;
-      }
+
+        this.messageQueue.incrementPendingAudio(
+          Math.round((chunk.audioBase64.length * 3) / 4)
+        );
+
+        if (chunk.isFinal) {
+          this.session!.send({ type: 'input_audio_buffer.commit' } as RealtimeClientEvent);
+          this.session!.send({
+            type: 'response.create',
+          } as RealtimeClientEvent);
+          this.messageQueue.resetPendingAudio();
+        }
+      });
     } catch (error: unknown) {
       console.error(`[realtime] Error appending audio chunk: ${extractErrorMessage(error)}`);
       throw error;
@@ -1356,14 +1052,16 @@ export class RealtimeSession {
     }
 
     try {
-      this.session.send({
-        type: 'conversation.item.create',
-        item: {
-          type: 'function_call_output',
-          call_id: callId,
-          output: JSON.stringify(output),
-        },
-      } as RealtimeClientEvent);
+      await Promise.resolve().then(() => {
+        this.session!.send({
+          type: 'conversation.item.create',
+          item: {
+            type: 'function_call_output',
+            call_id: callId,
+            output: JSON.stringify(output),
+          },
+        } as RealtimeClientEvent);
+      });
     } catch (error: unknown) {
       if (isInvalidToolCallError(error)) {
         console.warn('[realtime] Ignoring tool output for expired call_id', {
@@ -1413,63 +1111,13 @@ export class RealtimeSession {
    * Get session status
    */
   getStatus(): RealtimeSessionStatus {
-    let websocketState: 'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED' | undefined;
-    let connectionUrl: string | undefined;
-    let sessionId: string | undefined;
-    let connectedAt: string | undefined;
-    
-    // Check actual WebSocket connection state if available
-    if (this.session) {
-      try {
-        // Get connection URL from session
-        if (this.session.url) {
-          connectionUrl = this.session.url.toString();
-          // Extract session ID from URL if available
-          const urlParts = connectionUrl.split('/');
-          sessionId = urlParts[urlParts.length - 1] || undefined;
-        }
-        
-        // OpenAIRealtimeWebSocket wraps the underlying WebSocket
-        // Access the underlying socket if available
-        const underlyingSocket = getUnderlyingSocket(this.session);
-        if (underlyingSocket) {
-          // Standard WebSocket readyState values:
-          // 0 = CONNECTING, 1 = OPEN, 2 = CLOSING, 3 = CLOSED
-          const readyState = underlyingSocket.readyState;
-          if (readyState === 0) websocketState = 'CONNECTING';
-          else if (readyState === 1) websocketState = 'OPEN';
-          else if (readyState === 2) websocketState = 'CLOSING';
-          else if (readyState === 3) websocketState = 'CLOSED';
-          
-          // Get connection timestamp if available
-          if (readyState === 1 && (underlyingSocket).__connectedAt) {
-            connectedAt = (underlyingSocket).__connectedAt;
-          }
-        }
-      } catch (error: unknown) {
-        // If we can't access the underlying socket, fall back to isActive
-        websocketState = this.isActive ? 'OPEN' : 'CLOSED';
-      }
-    } else {
-      websocketState = 'CLOSED';
-    }
-    
-    return {
+    const heartbeatState = this.heartbeat.getState();
+    return buildStatusSnapshot({
+      session: this.session,
       isActive: this.isActive,
-      queueLength: this.messageQueue.length,
-      websocketState,
-      connectionUrl,
-      sessionId,
-      connectedAt,
-      pingPong: {
-        enabled: this.pingInterval !== undefined,
-        missedPongs: this.missedPongs,
-        lastPongReceived: this.lastPongReceived?.toISOString(),
-        pingIntervalMs: this.PING_INTERVAL_MS,
-        pongTimeoutMs: this.PONG_TIMEOUT_MS,
-        maxMissedPongs: this.MAX_MISSED_PONGS,
-      },
-    };
+      getQueueLength: () => this.messageQueue.getQueueLength(),
+      pingState: heartbeatState,
+    });
   }
 
   notifyStatus(status: 'active' | 'paused' | 'closed' | 'error', sessionId?: string): void {
@@ -1491,159 +1139,8 @@ export class RealtimeSession {
         eventId: this.config.eventId,
         ...context,
       });
-    } catch (error: unknown) {
+    } catch {
       // Ignore if we can't access state
-    }
-  }
-
-  /**
-   * Start ping-pong heartbeat to keep connection alive and detect disconnections
-   */
-  private startPingPong(): void {
-    // Clear any existing ping interval
-    this.stopPingPong();
-    
-    this.missedPongs = 0;
-    this.lastPongReceived = new Date();
-
-    // Send ping at regular intervals
-    this.pingInterval = setInterval(() => {
-      this.sendPing();
-    }, this.PING_INTERVAL_MS);
-
-    console.log(`[realtime] Ping-pong heartbeat started (interval: ${this.PING_INTERVAL_MS}ms, timeout: ${this.PONG_TIMEOUT_MS}ms) for ${this.config.agentType}`);
-  }
-
-  /**
-   * Stop ping-pong heartbeat
-   */
-  private stopPingPong(): void {
-    if (this.pingInterval) {
-      clearInterval(this.pingInterval);
-      this.pingInterval = undefined;
-    }
-    if (this.pongTimeout) {
-      clearTimeout(this.pongTimeout);
-      this.pongTimeout = undefined;
-    }
-  }
-
-  /**
-   * Send ping frame to check connection health
-   */
-  private sendPing(): void {
-    if (!this.isActive || !this.session) {
-      return;
-    }
-
-    // Phase 6: Ping-pong health monitoring
-    this.pingStartTime = Date.now();
-    
-    // Only log every 5th ping to avoid log spam (sample ~20% of pings)
-    const shouldLog = this.missedPongs === 0 && Math.random() < 0.2;
-    if (shouldLog) {
-      console.log(`[realtime] [${this.config.agentType}] Sending ping`, {
-        missedPongs: this.missedPongs,
-        lastPongReceived: this.lastPongReceived?.toISOString(),
-        eventId: this.config.eventId,
-        timestamp: new Date().toISOString(),
-      });
-      this.onLog?.('log', `Ping sent (health check)`);
-    }
-
-    try {
-      // Get underlying WebSocket to send ping frame
-      const underlyingSocket = getUnderlyingSocket(this.session);
-      if (underlyingSocket && underlyingSocket.readyState === 1 && typeof underlyingSocket.ping === 'function') {
-        // Send WebSocket ping frame (not application message)
-        underlyingSocket.ping();
-        
-        // Set timeout to wait for pong
-        this.pongTimeout = setTimeout(() => {
-          this.handlePongTimeout();
-        }, this.PONG_TIMEOUT_MS);
-      } else {
-        // Ping not available - skip ping/pong (SDK may handle it internally)
-        // Don't treat as error, just skip
-        if (underlyingSocket && typeof underlyingSocket.ping !== 'function') {
-          // Ping not supported - disable ping/pong mechanism
-          this.stopPingPong();
-          return;
-        }
-        // Socket not available or not open - connection may be dead
-        console.warn(`[realtime] [${this.config.agentType}] Cannot send ping - socket not available`, {
-          readyState: underlyingSocket?.readyState,
-          hasSocket: !!underlyingSocket,
-          eventId: this.config.eventId,
-        });
-        this.handlePongTimeout();
-      }
-    } catch (error: unknown) {
-      // If ping fails, disable ping/pong mechanism
-      const message = getLowercaseErrorField(error, 'message');
-      if (message.includes('ping is not a function') || message.includes('underlyingsocket')) {
-        console.log(`[realtime] Ping/pong not supported - disabling (${this.config.agentType})`);
-        this.stopPingPong();
-        return;
-      }
-      console.error(`[realtime] Error sending ping: ${extractErrorMessage(error)}`);
-      this.handlePongTimeout();
-    }
-  }
-
-  /**
-   * Handle pong response (connection is alive)
-   */
-  private handlePong(): void {
-    if (this.pongTimeout) {
-      clearTimeout(this.pongTimeout);
-      this.pongTimeout = undefined;
-    }
-    
-    // Phase 6: Ping-pong health monitoring - calculate latency
-    const pongLatency = this.pingStartTime ? Date.now() - this.pingStartTime : undefined;
-    this.lastPongReceived = new Date();
-    this.missedPongs = 0; // Reset missed pongs counter
-    
-    // Log pong reception (sample ~20% to avoid log spam)
-    if (pongLatency !== undefined && Math.random() < 0.2) {
-      console.log(`[realtime] [${this.config.agentType}] Pong received`, {
-        latency: `${pongLatency}ms`,
-        missedPongsReset: true,
-        eventId: this.config.eventId,
-      });
-      this.onLog?.('log', `Pong received (latency: ${pongLatency}ms)`);
-    }
-  }
-
-  /**
-   * Handle pong timeout (no response received)
-   */
-  private handlePongTimeout(): void {
-    this.missedPongs++;
-    
-    console.warn(
-      `[realtime] Pong timeout (${this.config.agentType}) - missed: ${this.missedPongs}/${this.MAX_MISSED_PONGS}`
-    );
-    this.onLog?.('warn', `Ping-pong timeout - missed ${this.missedPongs}/${this.MAX_MISSED_PONGS} pongs`);
-
-    if (this.missedPongs >= this.MAX_MISSED_PONGS) {
-      // Too many missed pongs - connection is likely dead
-      console.error(
-        `[realtime] Connection dead - ${this.missedPongs} missed pongs (${this.config.agentType})`
-      );
-      this.onLog?.('error', `Connection dead - ${this.missedPongs} missed pongs`);
-      
-      // Mark as inactive and trigger error status
-      this.isActive = false;
-      this.onStatusChange?.('error');
-      this.updateDatabaseStatus('error');
-      
-      // Stop ping-pong
-      this.stopPingPong();
-      
-      // Emit error event for orchestrator to handle reconnection
-      this.emitEvent('error', new Error(`Connection dead - ${this.missedPongs} missed pongs`));
     }
   }
 
@@ -1657,7 +1154,7 @@ export class RealtimeSession {
 
     try {
       // Stop ping-pong heartbeat
-      this.stopPingPong();
+      this.heartbeat.stop();
 
       // Log WebSocket state before pausing
       this.logWebSocketState('Before pausing');
@@ -1714,6 +1211,9 @@ export class RealtimeSession {
       // Log WebSocket state before closing
       this.logWebSocketState('Before closing');
 
+      // Stop heartbeat before closing
+      this.heartbeat.stop();
+
       // Close WebSocket if it exists
       if (this.session) {
         this.session.close({
@@ -1724,7 +1224,7 @@ export class RealtimeSession {
       }
 
       this.isActive = false;
-      this.messageQueue = [];
+      this.messageQueue.clear();
 
       // Notify closed status
       this.onStatusChange?.('closed');

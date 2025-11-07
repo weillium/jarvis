@@ -51,7 +51,8 @@ export const createWorkerServer = ({
   workerPort,
   log,
 }: WorkerServerDeps): http.Server => {
-  const server = http.createServer(async (req, res) => {
+  const server = http.createServer((req, res) => {
+    void (async () => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -274,6 +275,15 @@ export const createWorkerServer = ({
     } catch (err: unknown) {
       console.error('[worker] error:', String(err));
     }
+    })().catch((err: unknown) => {
+      console.error('[worker] Unhandled request error:', String(err));
+      if (!res.headersSent) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ ok: false, error: 'Internal server error' }));
+      } else {
+        res.end();
+      }
+    });
   });
 
   server.listen(workerPort, () => {

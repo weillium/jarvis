@@ -64,7 +64,13 @@ export class SessionFactory {
       eventId: runtime.eventId,
       agentType,
       model,
-      onStatusChange: hooks.onStatusChange,
+      onStatusChange: (status, sessionId) => {
+        void hooks.onStatusChange(status, sessionId).catch((err: unknown) => {
+          console.error(
+            `[session-factory] onStatusChange handler failed: ${err instanceof Error ? err.message : String(err)}`
+          );
+        });
+      },
       onLog: hooks.onLog,
       supabase: hooks.supabaseClient,
       onRetrieve:

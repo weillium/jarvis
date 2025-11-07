@@ -319,21 +319,39 @@ export class SessionCoordinator {
 
     const sessionOptions = {
       transcript: {
-        onRetrieve: async () => [],
-        embedText: async () => [],
+        onRetrieve: (query: string, topK: number) => {
+          void query;
+          void topK;
+          return Promise.resolve([]);
+        },
+        embedText: (text: string) => {
+          void text;
+          return Promise.resolve([]);
+        },
         onLog: (_level: 'log' | 'warn' | 'error', message: string) => {
           console.log(`[transcript-test] ${message}`);
         },
       },
       cards: {
-        onRetrieve: async () => [],
-        embedText: async () => [],
+        onRetrieve: (query: string, topK: number) => {
+          void query;
+          void topK;
+          return Promise.resolve([]);
+        },
+        embedText: (text: string) => {
+          void text;
+          return Promise.resolve([]);
+        },
         onLog: (_level: 'log' | 'warn' | 'error', message: string) => {
           console.log(`[cards-test] ${message}`);
         },
       },
       facts: {
-        onRetrieve: async () => [],
+        onRetrieve: (query: string, topK: number) => {
+          void query;
+          void topK;
+          return Promise.resolve([]);
+        },
         onLog: (_level: 'log' | 'warn' | 'error', message: string) => {
           console.log(`[facts-test] ${message}`);
         },

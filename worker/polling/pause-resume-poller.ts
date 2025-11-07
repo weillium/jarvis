@@ -1,21 +1,38 @@
+import type {
+  PostgrestResponse,
+  PostgrestSingleResponse,
+  SupabaseClient,
+} from '@supabase/supabase-js';
 import type { Poller } from './base-poller';
 import type { Orchestrator } from '../core/orchestrator';
 
-type LoggerFn = (...args: any[]) => void;
+type LoggerFn = (...args: unknown[]) => void;
+
+interface AgentSessionRow {
+  event_id: string;
+  agent_id: string;
+}
+
+interface AgentStatusRow {
+  status: string;
+}
 
 export class PauseResumePoller implements Poller {
   constructor(
-    private readonly supabase: any,
+    private readonly supabase: SupabaseClient,
     private readonly orchestrator: Orchestrator,
     private readonly log: LoggerFn = console.log
   ) {}
 
   async tick(): Promise<void> {
-    const { data: pausedSessions, error: pausedError } = await this.supabase
+    const pausedSessionsQuery = this.supabase
       .from('agent_sessions')
       .select('event_id, agent_id')
       .eq('status', 'paused')
       .limit(50);
+    const pausedSessionsResponse: PostgrestResponse<AgentSessionRow> = await pausedSessionsQuery;
+
+    const { data: pausedSessions, error: pausedError } = pausedSessionsResponse;
 
     if (pausedError) {
       this.log('[pause-resume] fetch error:', pausedError.message);
@@ -50,11 +67,14 @@ export class PauseResumePoller implements Poller {
       }
     }
 
-    const { data: pausedForResume, error: pausedError2 } = await this.supabase
+    const pausedForResumeQuery = this.supabase
       .from('agent_sessions')
       .select('event_id, agent_id')
       .eq('status', 'paused')
       .limit(50);
+    const pausedForResumeResponse: PostgrestResponse<AgentSessionRow> = await pausedForResumeQuery;
+
+    const { data: pausedForResume, error: pausedError2 } = pausedForResumeResponse;
 
     if (pausedError2 || !pausedForResume || pausedForResume.length === 0) {
       return;
@@ -62,11 +82,13 @@ export class PauseResumePoller implements Poller {
 
     const eventsToResume = new Map<string, string>();
     for (const session of pausedForResume) {
-      const { data: agent } = await this.supabase
+      const agentQuery = this.supabase
         .from('agents')
         .select('status')
         .eq('id', session.agent_id)
         .single();
+      const agentResponse: PostgrestSingleResponse<AgentStatusRow> = await agentQuery;
+      const { data: agent } = agentResponse;
 
       if (agent && agent.status === 'running') {
         if (!eventsToResume.has(session.event_id)) {

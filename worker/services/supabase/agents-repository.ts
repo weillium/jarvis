@@ -47,7 +47,7 @@ export class AgentsRepository {
   }
 
   async updateAgentStatus(agentId: string, status: string, stage?: string | null): Promise<void> {
-    const updateData: Record<string, any> = { status };
+    const updateData: { status: string; stage?: string | null } = { status };
     if (stage !== undefined) {
       updateData.stage = stage;
     }

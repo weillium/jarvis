@@ -1,14 +1,30 @@
+import type {
+  PostgrestResponse,
+  SupabaseClient,
+} from '@supabase/supabase-js';
 import type OpenAI from 'openai';
 import type { Poller } from './base-poller';
 import { generateContextBlueprint } from '../context/pipeline/blueprint-generator';
 
-type LoggerFn = (...args: any[]) => void;
+type LoggerFn = (...args: unknown[]) => void;
+
+interface AgentRow {
+  id: string;
+  event_id: string;
+  status: string;
+  stage: string;
+}
+
+interface ContextBlueprintRow {
+  id: string;
+  status: string;
+}
 
 export class BlueprintPoller implements Poller {
   private processingAgents: Set<string>;
 
   constructor(
-    private readonly supabase: any,
+    private readonly supabase: SupabaseClient,
     private readonly openai: OpenAI,
     private readonly genModel: string,
     processingAgents?: Set<string>,
@@ -18,19 +34,24 @@ export class BlueprintPoller implements Poller {
   }
 
   async tick(): Promise<void> {
-    const { data: blueprintAgents, error } = await this.supabase
+    const agentsQuery = this.supabase
       .from('agents')
       .select('id,event_id,status,stage')
       .eq('status', 'idle')
       .eq('stage', 'blueprint')
       .limit(20);
+    const agentsResponse: PostgrestResponse<AgentRow> = await agentsQuery;
+
+    const { data, error } = agentsResponse;
 
     if (error) {
       this.log('[blueprint] fetch error:', error.message);
       return;
     }
 
-    if (!blueprintAgents || blueprintAgents.length === 0) {
+    const blueprintAgents = data ?? [];
+
+    if (blueprintAgents.length === 0) {
       return;
     }
 
@@ -40,11 +61,14 @@ export class BlueprintPoller implements Poller {
     for (const agent of blueprintAgents) {
       // Check for existing blueprints in active states (generating, ready, approved)
       // These indicate a blueprint is already in progress or waiting for approval
-      const { data: existingBlueprints, error: blueprintCheckError } = await this.supabase
+      const blueprintCheckQuery = this.supabase
         .from('context_blueprints')
         .select('id, status')
         .eq('agent_id', agent.id)
         .in('status', ['generating', 'ready', 'approved']);
+      const blueprintCheckResponse: PostgrestResponse<ContextBlueprintRow> = await blueprintCheckQuery;
+
+      const { data: blueprintRows, error: blueprintCheckError } = blueprintCheckResponse;
 
       if (blueprintCheckError) {
         this.log('[blueprint] Error checking blueprints for agent', agent.id, ':', blueprintCheckError.message);
@@ -53,7 +77,8 @@ export class BlueprintPoller implements Poller {
       }
 
       // Only process if no active blueprints exist
-      if (!existingBlueprints || existingBlueprints.length === 0) {
+      const existingBlueprints = blueprintRows ?? [];
+      if (existingBlueprints.length === 0) {
         agentsNeedingBlueprints.push(agent);
       } else {
         this.log('[blueprint] Agent', agent.id, 'already has', existingBlueprints.length, 'active blueprint(s), skipping');

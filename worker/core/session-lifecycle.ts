@@ -68,7 +68,7 @@ export class SessionLifecycle {
     };
 
     if (transcriptOnly) {
-      runtime.transcriptSession = await this.sessionManager.createTranscriptSession(
+      runtime.transcriptSession = this.sessionManager.createTranscriptSession(
         runtime,
         handleStatusChange,
         transcriptModel,
@@ -78,7 +78,7 @@ export class SessionLifecycle {
       runtime.cardsSession = undefined;
       runtime.factsSession = undefined;
     } else {
-      const sessions = await this.sessionManager.createSessions(
+      const sessions = this.sessionManager.createSessions(
         runtime,
         handleStatusChange,
         transcriptModel,

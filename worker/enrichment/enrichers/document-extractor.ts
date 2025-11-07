@@ -8,14 +8,21 @@
  * TODO: Add text extraction from Supabase Storage files
  */
 
+import type { PostgrestResponse } from '@supabase/supabase-js';
 import { BaseEnricher } from './base-enricher';
 import type { EnrichmentResult } from '../types';
-import type { createClient } from '@supabase/supabase-js';
+import type { WorkerSupabaseClient } from '../../services/supabase';
+
+interface EventDocumentRow {
+  id: string;
+  path: string;
+  file_type: string | null;
+}
 
 export class DocumentExtractor extends BaseEnricher {
   name = 'document_extractor';
 
-  constructor(private supabase: ReturnType<typeof createClient>) {
+  constructor(private readonly supabase: WorkerSupabaseClient) {
     super();
   }
 
@@ -24,14 +31,17 @@ export class DocumentExtractor extends BaseEnricher {
     eventTitle: string,
     eventTopic: string | null
   ): Promise<EnrichmentResult[]> {
+    void eventTitle;
+    void eventTopic;
     console.log(`[enrichment/${this.name}] Starting document extraction for event ${eventId}`);
 
     // TODO: Handle pagination when large numbers of documents exist
     try {
-      const { data: docs, error } = await this.supabase
+      const docsResponse: PostgrestResponse<EventDocumentRow> = await this.supabase
         .from('event_docs')
         .select('id, path, file_type')
         .eq('event_id', eventId);
+      const { data: docs, error } = docsResponse;
 
       if (error) {
         console.error(`[enrichment/${this.name}] error:`, String(error));

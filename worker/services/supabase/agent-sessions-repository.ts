@@ -1,4 +1,8 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type {
+  PostgrestResponse,
+  PostgrestSingleResponse,
+  SupabaseClient,
+} from '@supabase/supabase-js';
 import type { AgentType } from '../../types';
 import type {
   AgentSessionRecord,
@@ -15,13 +19,14 @@ export class AgentSessionsRepository {
   constructor(private readonly client: SupabaseClient) {}
 
   async getSessionsByEvent(eventId: string): Promise<AgentSessionRecord[]> {
-    const { data, error } = await this.client
+    const query = this.client
       .from('agent_sessions')
       .select('*')
       .eq('event_id', eventId);
+    const response: PostgrestResponse<unknown> = await query;
 
-    if (error) throw error;
-    return mapAgentSessionRecords(data);
+    if (response.error) throw response.error;
+    return mapAgentSessionRecords(response.data);
   }
 
   async getSessionsForAgent(
@@ -41,9 +46,9 @@ export class AgentSessionsRepository {
       query = query.in('status', statuses);
     }
 
-    const { data, error } = await query;
-    if (error) throw error;
-    return mapAgentSessionRecords(data);
+    const response: PostgrestResponse<unknown> = await query;
+    if (response.error) throw response.error;
+    return mapAgentSessionRecords(response.data);
   }
 
   async deleteSessions(eventId: string, agentId: string): Promise<void> {
@@ -61,13 +66,14 @@ export class AgentSessionsRepository {
       return [];
     }
 
-    const { data, error } = await this.client
+    const response = await this.client
       .from('agent_sessions')
       .insert(sessions)
       .select('*');
+    const insertResponse: PostgrestResponse<unknown> = response;
 
-    if (error) throw error;
-    return mapAgentSessionRecords(data);
+    if (insertResponse.error) throw insertResponse.error;
+    return mapAgentSessionRecords(insertResponse.data);
   }
 
   async upsertSessions(sessions: AgentSessionUpsert[]): Promise<void> {
@@ -98,7 +104,7 @@ export class AgentSessionsRepository {
   async updateSession(
     eventId: string,
     agentType: AgentType,
-    updates: Record<string, any>
+    updates: Record<string, unknown>
   ): Promise<void> {
     const { error } = await this.client
       .from('agent_sessions')
@@ -112,8 +118,8 @@ export class AgentSessionsRepository {
   async updateSessionMetrics(
     eventId: string,
     agentType: AgentType,
-    tokenMetrics: Record<string, any>,
-    runtimeStats: Record<string, any>
+    tokenMetrics: Record<string, unknown>,
+    runtimeStats: Record<string, unknown>
   ): Promise<void> {
     const { error } = await this.client
       .from('agent_sessions')
@@ -134,12 +140,14 @@ export class AgentSessionsRepository {
     eventId: string,
     agentType: AgentType
   ): Promise<{ connection_count: number; session_id: string }> {
-    const { data: session, error: fetchError } = await this.client
+    const sessionQuery = this.client
       .from('agent_sessions')
       .select('id, connection_count')
       .eq('event_id', eventId)
       .eq('agent_type', agentType)
       .single();
+    const sessionResponse: PostgrestSingleResponse<unknown> = await sessionQuery;
+    const { data: session, error: fetchError } = sessionResponse;
 
     if (fetchError || !session) {
       throw new Error(`Failed to find session for increment: ${fetchError?.message || 'not found'}`);
@@ -155,7 +163,7 @@ export class AgentSessionsRepository {
         connection_count: newCount,
         last_connected_at: new Date().toISOString(),
       })
-      .eq('id', session.id);
+      .eq('id', sessionInfo.id);
 
     if (updateError) {
       throw new Error(`Failed to increment connection count: ${updateError.message}`);
@@ -168,12 +176,14 @@ export class AgentSessionsRepository {
   }
 
   async getSessionId(eventId: string, agentType: AgentType): Promise<string | null> {
-    const { data, error } = await this.client
+    const sessionIdQuery = this.client
       .from('agent_sessions')
       .select('id')
       .eq('event_id', eventId)
       .eq('agent_type', agentType)
       .single();
+    const sessionIdResponse: PostgrestSingleResponse<unknown> = await sessionIdQuery;
+    const { data, error } = sessionIdResponse;
 
     if (error || !data) {
       return null;

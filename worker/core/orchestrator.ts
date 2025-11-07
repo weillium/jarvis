@@ -213,12 +213,10 @@ export class Orchestrator {
       clearInterval(runtime.statusUpdateTimer);
     }
 
-    runtime.statusUpdateTimer = setInterval(async () => {
-      try {
-        await this.statusUpdater.updateAndPushStatus(runtime);
-      } catch (err: unknown) {
+    runtime.statusUpdateTimer = setInterval(() => {
+      this.statusUpdater.updateAndPushStatus(runtime).catch((err: unknown) => {
         console.error("[worker] error:", String(err));
-      }
+      });
     }, 5000);
 
     runtime.summaryTimer = setInterval(() => {

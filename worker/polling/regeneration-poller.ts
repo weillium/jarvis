@@ -1,3 +1,8 @@
+import type {
+  PostgrestResponse,
+  PostgrestSingleResponse,
+  SupabaseClient,
+} from '@supabase/supabase-js';
 import type OpenAI from 'openai';
 import type { Poller } from './base-poller';
 import {
@@ -6,7 +11,17 @@ import {
   regenerateChunksStage,
 } from '../context/pipeline/context-generation-orchestrator';
 
-type LoggerFn = (...args: any[]) => void;
+type LoggerFn = (...args: unknown[]) => void;
+
+interface AgentRow {
+  id: string;
+  event_id: string;
+  stage: string;
+}
+
+interface ContextBlueprintRow {
+  id: string;
+}
 
 export class RegenerationPoller implements Poller {
   private processingAgents: Set<string>;
@@ -17,7 +32,7 @@ export class RegenerationPoller implements Poller {
   ];
 
   constructor(
-    private readonly supabase: any,
+    private readonly supabase: SupabaseClient,
     private readonly openai: OpenAI,
     private readonly embedModel: string,
     private readonly genModel: string,
@@ -29,11 +44,14 @@ export class RegenerationPoller implements Poller {
   }
 
   async tick(): Promise<void> {
-    const { data: regeneratingAgents, error } = await this.supabase
+    const agentsQuery = this.supabase
       .from('agents')
       .select('id,event_id,stage')
       .in('stage', this.regenerationStatuses)
       .limit(20);
+    const agentsResponse: PostgrestResponse<AgentRow> = await agentsQuery;
+
+    const { data: regeneratingAgents, error } = agentsResponse;
 
     if (error) {
       this.log('[regeneration] fetch error:', error.message);
@@ -50,14 +68,16 @@ export class RegenerationPoller implements Poller {
         continue;
       }
 
-      const { data: blueprint, error: blueprintError } = (await (this.supabase
+      const blueprintQuery = this.supabase
         .from('context_blueprints')
         .select('id')
         .eq('agent_id', agent.id)
         .eq('status', 'approved')
         .order('created_at', { ascending: false })
         .limit(1)
-        .single())) as { data: { id: string } | null; error: any };
+        .single();
+      const blueprintResponse: PostgrestSingleResponse<ContextBlueprintRow> = await blueprintQuery;
+      const { data: blueprint, error: blueprintError } = blueprintResponse;
 
       if (blueprintError || !blueprint) {
         this.log('[regeneration] No approved blueprint found for agent', agent.id);

@@ -1,8 +1,12 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type {
+  PostgrestResponse,
+  PostgrestSingleResponse,
+  SupabaseClient,
+} from '@supabase/supabase-js';
 import type { InsertTranscriptParams, TranscriptRecord } from './types';
 import { mapTranscriptRecord, mapTranscriptRecords } from './dto-mappers';
 
-type TranscriptCallback = (payload: { new: any }) => void;
+type TranscriptCallback = (payload: { new: unknown }) => void;
 
 export class TranscriptsRepository {
   constructor(private readonly client: SupabaseClient) {}
@@ -33,20 +37,21 @@ export class TranscriptsRepository {
     sinceSeq: number,
     limit: number = 1000
   ): Promise<TranscriptRecord[]> {
-    const { data, error } = await this.client
+    const transcriptsQuery = this.client
       .from('transcripts')
       .select('id, seq, at_ms, speaker, text, final')
       .eq('event_id', eventId)
       .gt('seq', sinceSeq)
       .order('seq', { ascending: true })
       .limit(limit);
+    const response: PostgrestResponse<unknown> = await transcriptsQuery;
 
-    if (error) throw error;
-    return mapTranscriptRecords(data);
+    if (response.error) throw response.error;
+    return mapTranscriptRecords(response.data);
   }
 
   async insertTranscript(params: InsertTranscriptParams): Promise<TranscriptRecord> {
-    const { data, error } = await this.client
+    const insertQuery = this.client
       .from('transcripts')
       .insert({
         event_id: params.event_id,
@@ -58,11 +63,12 @@ export class TranscriptsRepository {
       })
       .select('id, event_id, seq, at_ms, speaker, text, final')
       .single();
+    const response: PostgrestSingleResponse<unknown> = await insertQuery;
 
-    if (error || !data) {
-      throw error ?? new Error('Failed to insert transcript');
+    if (response.error || !response.data) {
+      throw response.error ?? new Error('Failed to insert transcript');
     }
-    return mapTranscriptRecord(data);
+    return mapTranscriptRecord(response.data);
   }
 
   async updateTranscriptSeq(transcriptId: number, seq: number): Promise<void> {

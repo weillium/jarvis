@@ -5,20 +5,21 @@
  * Goal: Generate 45-75 high-quality chunks from multiple sources
  */
 
-import type { createClient } from '@supabase/supabase-js';
+import type { PostgrestResponse } from '@supabase/supabase-js';
 import type OpenAI from 'openai';
 import type { BaseEnricher } from './enrichers/base-enricher';
 import { WebSearchEnricher } from './enrichers/web-search';
 import { DocumentExtractor } from './enrichers/document-extractor';
 import { WikipediaEnricher } from './enrichers/wikipedia';
 import type { EnrichmentConfig, EnrichmentResult } from './types';
+import type { WorkerSupabaseClient } from '../services/supabase';
 
 export class EnrichmentOrchestrator {
   private enrichers: Map<string, BaseEnricher> = new Map();
 
   constructor(
     private config: EnrichmentConfig,
-    private supabase: ReturnType<typeof createClient>,
+    private supabase: WorkerSupabaseClient,
     private openai: OpenAI,
     private embedModel: string
   ) {
@@ -108,18 +109,23 @@ export class EnrichmentOrchestrator {
         const embedding = embeddingRes.data[0].embedding;
 
         // Store in database
-        const { error } = await (this.supabase
-          .from('context_items') as any).insert({
-            event_id: eventId,
-            source: 'enrichment',
-            chunk,
-            embedding,
-            enrichment_source: result.source,
-            metadata: result.metadata,
-            quality_score: result.qualityScore,
-            chunk_size: chunk.length,
-            enrichment_timestamp: new Date().toISOString(),
-          });
+        const payload = {
+          event_id: eventId,
+          source: 'enrichment',
+          chunk,
+          embedding,
+          enrichment_source: result.source,
+          metadata: result.metadata,
+          quality_score: result.qualityScore,
+          chunk_size: chunk.length,
+          enrichment_timestamp: new Date().toISOString(),
+        };
+
+        const insertResponse: PostgrestResponse<unknown> = await this.supabase
+          .from('context_items')
+          .insert(payload);
+
+        const { error } = insertResponse;
 
         if (error) {
           console.error(`[enrichment] Error storing chunk: ${error.message}`);

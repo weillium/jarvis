@@ -150,3 +150,8 @@ export const extractErrorMessage = (value: unknown): string => {
     return 'Unknown error';
   }
 };
+
+export const getLowercaseErrorField = (
+  value: unknown,
+  field: 'message' | 'code' | 'type'
+): string => extractErrorField(value, field).toLowerCase();

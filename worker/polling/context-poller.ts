@@ -1,4 +1,8 @@
-import type { PostgrestResponse, PostgrestSingleResponse } from '@supabase/supabase-js';
+import type {
+  PostgrestResponse,
+  PostgrestSingleResponse,
+  SupabaseClient,
+} from '@supabase/supabase-js';
 import type OpenAI from 'openai';
 import type { Poller } from './base-poller';
 import { executeContextGeneration } from '../context/pipeline/context-generation-orchestrator';
@@ -36,7 +40,7 @@ export class ContextPoller implements Poller {
   private processingAgents: Set<string>;
 
   constructor(
-    private readonly supabase: any,
+    private readonly supabase: SupabaseClient,
     private readonly openai: OpenAI,
     private readonly embedModel: string,
     private readonly genModel: string,

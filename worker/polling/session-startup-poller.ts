@@ -1,24 +1,42 @@
+import type {
+  PostgrestResponse,
+  PostgrestSingleResponse,
+  SupabaseClient,
+} from '@supabase/supabase-js';
 import type { Poller } from './base-poller';
 import type { Orchestrator } from '../core/orchestrator';
 
-type LoggerFn = (...args: any[]) => void;
+type LoggerFn = (...args: unknown[]) => void;
+
+interface AgentSessionRow {
+  event_id: string;
+  agent_id: string;
+  status: string;
+  provider_session_id: string | null;
+}
+
+interface AgentRow {
+  status: string;
+  stage: string | null;
+}
 
 export class SessionStartupPoller implements Poller {
   constructor(
-    private readonly supabase: any,
+    private readonly supabase: SupabaseClient,
     private readonly orchestrator: Orchestrator,
     private readonly log: LoggerFn = console.log
   ) {}
 
   async tick(): Promise<void> {
-    // Find closed sessions created in the last minute (new sessions ready to start)
-    const oneMinuteAgo = new Date(Date.now() - 60000).toISOString();
-    const { data: pendingSessions, error } = await this.supabase
+    const sessionsQuery = this.supabase
       .from('agent_sessions')
       .select('event_id, agent_id, status, created_at, updated_at, provider_session_id')
       .eq('status', 'active')
       .eq('provider_session_id', 'pending')
       .limit(50);
+    const response: PostgrestResponse<AgentSessionRow> = await sessionsQuery;
+
+    const { data: pendingSessions, error } = response;
 
     if (error) {
       this.log('[start-generated] fetch error:', error.message);
@@ -49,11 +67,13 @@ export class SessionStartupPoller implements Poller {
           }
         }
 
-        const { data: agent } = await this.supabase
+        const agentQuery = this.supabase
           .from('agents')
           .select('status, stage')
           .eq('id', agentId)
           .single();
+        const agentResponse: PostgrestSingleResponse<AgentRow> = await agentQuery;
+        const { data: agent } = agentResponse;
 
         if (!agent || agent.status !== 'active') {
           continue;
