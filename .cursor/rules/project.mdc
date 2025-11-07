@@ -2,278 +2,52 @@
 alwaysApply: true
 ---
 
-# Jarvis Project Rules
+# Project Rules
 
-## 1. System Architecture
+## scope
+- Work within `/worker`, `/web`, `/supabase`, and `/dev_docs` only.
+- Preserve existing in-progress changes; do not revert without explicit approval.
+- Confirm assumptions before aggressive refactors while we’re inside the active wave.
 
-Jarvis is an AI-powered real-time event assistant that processes live event transcripts and generates contextual insights in simple card formats streamed live to event participants.
+## worker
+- lint output is advisory guidance (until worker state machine refactor is complete).
+- DTO-first for all IO boundaries (Supabase / OpenAI / WebSocket).
+- `any` forbidden in worker; use `unknown` with runtime guards instead.
+- never inline `JSON.parse` directly → wrap with shared safe parse helpers.
+- caught errors log as `String(err)` only → do not read `.message`, `.stack`, etc.
+- normalization utilities → consolidate under `worker/lib/**`.
+- maintain the separation between the **cards** realtime agent, the **transcripts** realtime agent, and the **facts** stateless agent.
+- the following files are protected (no edits unless explicitly told):
+  - `worker/context/pipeline/context-generation-orchestrator.ts`
+  - `worker/context/pipeline/orchestrator/exa-orchestrator.ts`
+  - `worker/context/pipeline/orchestrator/supabase-orchestrator.ts`
+  - `worker/context/pipeline/orchestrator/llm-orchestrator.ts`
+  - `worker/sessions/realtime-session.ts`
 
-**Architecture:**
-- **Frontend (web/)**: Next.js 16 App Router with React Query (TanStack Query v5) for server state
-- **Worker (worker/)**: Node.js background service with dual-agent architecture (Cards + Facts)
-- **Backend (supabase/)**: PostgreSQL with pgvector, Supabase Realtime, Edge Functions
+## web
+- React Query is the *only* source of server state.
+- prefer **query / mutation hooks** instead of custom fetch + useState.
+- use absolute imports `@/*` in web code.
 
-**Key Patterns:**
-- Event-driven processing (Supabase Realtime subscriptions, not polling)
-- Dual-agent architecture: Cards Agent (immediate) + Facts Agent (debounced 25s)
-- React Query for all server state management (queries + mutations)
-- SSE streaming for real-time updates
-- Checkpoints for resume capability after worker restart
+## supabase
+- every DB change is done via: `supabase migration new <name>`
+- pair every migration with required **indexes** and **RLS** policies.
 
-**Data Flow:**
-```
-Events → Agents (context prep) → Transcripts (/api/ingest) → Supabase Realtime 
-→ Orchestrator (dual-agent) → Cards/Facts → SSE stream (/api/stream) → Frontend
-```
-
-**System Boundaries:**
-- Web app ↔ Supabase: Direct client/server connections
-- Worker ↔ Supabase: Service role key + Realtime subscriptions
-- Worker ↔ OpenAI: Realtime API WebSocket connections
-- Web app ↔ Worker: Database-mediated (no direct communication)
-- API routes: Bridge web/worker via database
-
-## 2. Tech Stack
-
-**Frontend:**
-- Next.js 16.0.1 (App Router, React 19.2.0)
-- React Query (TanStack Query v5.90.7) - **primary state management**
-- TypeScript 5.x (strict mode)
-- Tailwind CSS 4
-
-**Backend:**
-- Node.js 25.1.0
-- PostgreSQL 17 with pgvector (1536-dim embeddings)
-- Supabase (Auth, Realtime, Storage, Edge Functions)
-- Deno 2.x (Edge Functions)
-
-**AI Services:**
-- OpenAI API (embeddings: text-embedding-3-small, generation: gpt-5, realtime: gpt-4o-realtime-preview-2024-10-01)
-
-**Tooling:**
-- pnpm 10.20.0 (workspace manager)
-- ESLint 9 with `eslint-config-next`
-
-## 3. Directory Structure
-
-```
-web/
-├── app/                    # Next.js App Router
-│   ├── (app)/             # Authenticated routes
-│   ├── api/               # API routes (/ingest, /stream, etc.)
-│   └── layout.tsx         # Root layout with QueryProvider
-├── features/              # Feature modules (agents, cards, events, context, facts)
-├── server/                # Server actions, mappers, RPCs
-└── shared/                 # Shared code
-    ├── hooks/             # React hooks (use-*-query.ts, use-mutations.ts, use-sse-stream.ts)
-    ├── providers/         # QueryProvider
-    ├── lib/               # Supabase client
-    ├── types/             # TypeScript types
-    └── ui/                # Shared UI components
-
-worker/
-├── core/                  # Orchestrator, RuntimeManager, EventProcessor
-├── sessions/              # OpenAI Realtime API session management
-├── processing/             # CardsProcessor, FactsProcessor
-├── context/                # ContextBuilder, VectorSearch, GlossaryManager
-├── polling/               # Fallback pollers (Blueprint, Context, etc.)
-├── services/              # SupabaseService, OpenAIService, SSEService
-└── monitoring/            # Logger, MetricsCollector, CheckpointManager
-
-supabase/
-├── migrations/            # PostgreSQL schema (YYYYMMDDHHMMSS_*.sql)
-├── functions/             # Edge Functions (Deno)
-└── config.toml           # Local Supabase config
-```
-
-## 4. State Management
-
-### Frontend (React Query)
-
-**Query Hooks** (`web/shared/hooks/use-*-query.ts`):
-- `useAgentQuery(eventId)`: Agent status, context stats, blueprint (3s polling)
-- `useEventQuery(eventId)`: Event details (1min stale time)
-- `useBlueprintQuery(eventId)`: Blueprint status (3s polling)
-- `useContextVersionsQuery(eventId)`: Context generation cycles
-
-**Mutation Hooks** (`web/shared/hooks/use-mutations.ts`):
-- Context: `useApproveBlueprintMutation`, `useResetContextMutation`, `useStartContextGenerationMutation`, `useRegenerateStageMutation`
-- Sessions: `useCreateSessionsMutation`, `useStartSessionsMutation`, `usePauseSessionsMutation`, `useResumeSessionsMutation`, `useConfirmReadyMutation`
-- Events: `useUpdateEventMutation`
-
-**Pattern:**
-1. Use `useQuery` for all data fetching (never manual `fetch` + `useState`)
-2. Use `useMutation` for all mutations (never manual `fetch` handlers)
-3. Mutations automatically invalidate related queries via `queryClient.invalidateQueries()`
-4. QueryProvider wraps app in `web/app/layout.tsx`
-
-**Query Client Config:**
-- 30s stale time
-- 5min garbage collection
-- No refetch on window focus/reconnect (real-time app)
-- Retry: 1 attempt
-
-**Local State:**
-- React `useState` only for UI-specific state (modals, form inputs, toggles)
-- `useSSEStream` hook for real-time cards/facts (separate from React Query)
-
-### Worker State
-
-**In-Memory:**
-- `Map<eventId, EventRuntime>`: Runtime registry
-- Ring buffers: 5-minute rolling window of transcripts
-- Facts store: In-memory key-value (synced to DB)
-- `processingAgents` Set: Prevents duplicate processing
-
-**Persistent:**
-- Database tables: `events`, `agents`, `transcripts`, `agent_outputs`, `facts`, `checkpoints`
-- Checkpoints enable resume after restart
-
-## 5. Database Schema
-
-**Core Tables:**
-- `events`: Event records (id, owner_uid, title, topic, start_time, end_time, is_live)
-- `agents`: Per-event agents (id, event_id, status: 'idle'|'active'|'paused'|'ended'|'error', stage: 'blueprint'|'researching'|..., model)
-- `transcripts`: Real-time transcripts (id, event_id, seq, at_ms, speaker, text, final, ts)
-
-**Realtime Tables:**
-- `agent_sessions`: OpenAI Realtime sessions (event_id, agent_id, provider_session_id, agent_type: 'cards'|'facts', status)
-- `checkpoints`: Processing progress (event_id, agent_type, last_seq_processed)
-- `agent_outputs`: Agent outputs (event_id, agent_id, agent_type, for_seq, type: 'card'|'fact_update', payload JSONB)
-- `facts`: Key-value facts (event_id, fact_key, fact_value JSONB, confidence, last_seen_seq)
-
-**Context Tables:**
-- `context_items`: Vector embeddings (event_id, chunk, embedding vector(1536), rank, metadata JSONB)
-- `context_blueprints`: Blueprint definitions
-- `glossary`: Term definitions
-- `generation_cycles`: Context generation tracking
-
-**RPC Functions:**
-- `create_event_with_agent()`: Atomic event + agent creation
-- `match_context()`: Vector similarity search
-
-## 6. API Routes
-
-**Next.js API Routes:**
-- `POST /api/ingest`: Transcript ingestion (inserts into `transcripts` table)
-- `GET /api/stream?event_id=<uuid>`: SSE stream for cards, facts, session status
-- `GET /api/agent/[eventId]`: Agent information
-- `POST /api/agent-sessions/[eventId]/*`: Session management (create, start, pause, resume)
-- `GET/POST /api/context/[eventId]/*`: Context generation and management
-- `GET/PATCH /api/events/[eventId]`: Event CRUD
-
-**Edge Functions:**
-- `POST /functions/v1/orchestrator`: `{ action: "create_event_and_agent", payload: {...} }`
-
-## 7. Coding Conventions
-
-**Naming:**
-- Files: kebab-case (pages), PascalCase (components)
-- Functions: camelCase
-- Types/Interfaces: PascalCase
-- Database: snake_case
-
-**Imports:**
-- Use `@/*` alias (absolute imports)
-- Group: external → internal
-- No relative imports beyond one level
-
-**TypeScript:**
-- Strict mode enabled
-- Interfaces for object shapes, types for unions/primitives
-- Explicit return types for public APIs
-- Avoid `any`; use `unknown`
-
-**React Query:**
-- Always use hooks from `use-*-query.ts` and `use-mutations.ts`
-- Never mix manual `fetch` with React Query
-- Mutations must invalidate related queries
-- Use `enabled` option for conditional queries
-
-**Error Handling:**
-- Edge Functions: `{ ok: false, error: string }`
-- Worker: Console logging with ISO timestamps
-- Client: React Query error handling, user-friendly messages
-- API routes: Try-catch with proper status codes
-
-**Module Boundaries:**
-- `web/shared/`: Pure utilities, no Next.js-specific
-- `web/server/`: Server-only (actions, RPC wrappers)
-- `web/features/`: Feature modules with co-located logic
-- `worker/`: Self-contained, no shared web code
-
-## 8. Environment Variables
-
-**Frontend (`web/.env.local`):**
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY` (server-only)
-
-**Worker (`worker/.env`):**
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `OPENAI_API_KEY`
-- `EMBED_MODEL` (default: `text-embedding-3-small`)
-- `GEN_MODEL` (default: `gpt-5`)
-- `OPENAI_REALTIME_MODEL` (default: `gpt-4o-realtime-preview-2024-10-01`)
-- `SSE_ENDPOINT` (default: `http://localhost:3000`)
-- `WORKER_PORT` (default: `3001`)
-- `EXA_API_KEY` (optional)
-
-**Security:**
-- Never expose service role key to client
-- Use `.env.local` (not committed)
-- `NEXT_PUBLIC_*` prefix only for safe public values
-
-## 9. Migrations
-
-**CRITICAL: Always use Supabase CLI**
-```bash
-supabase migration new <descriptive_name>
-```
-- Generates correct timestamp: `YYYYMMDDHHMMSS_<name>.sql`
-- NEVER manually create with hardcoded dates
-- Migrations must be ordered correctly
-
-**Pattern:**
-- Timestamp format: `YYYYMMDDHHMMSS` (no underscores in timestamp)
-- Descriptive name: kebab-case
-- Include rollback comments
-- Add RLS policies for new tables
-- Add indexes for foreign keys and queries
-
-## 10. Testing & Validation
-
-**Current State:**
-- No test framework configured
-- Manual validation via `pnpm lint` and `tsc --noEmit`
-
-**Validation Checklist:**
-- ✅ TypeScript compiles (`tsc --noEmit`)
-- ✅ ESLint passes (`pnpm lint`)
-- ✅ Migrations apply (`supabase db reset`)
-- ✅ React Query hooks work correctly
-- ✅ Mutations invalidate queries
-- ✅ SSE streams connect
-
-## 11. Documentation
-
-**Generated Documentation:**
-- Location: `dev_docs/` at repository root
-- Format: `YYYYMMDD_HHMMSS_<descriptive_name>.md`
-- Purpose: Analysis, architecture, explanations
-- Code docs (JSDoc) stay with source files
-
-## 12. Key Design Decisions
-
-1. **Event-Driven Processing**: Supabase Realtime subscriptions (primary), pollers (fallback)
-2. **React Query**: All server state via TanStack Query (no manual fetch)
-3. **Dual-Agent Architecture**: Cards (immediate) + Facts (debounced)
-4. **Checkpoints**: Resume capability after restart
-5. **SSE Streaming**: Real-time updates to frontend
-6. **Vector Search**: pgvector for semantic context (1536-dim)
-7. **Modular Worker**: Separate processors, services, managers
+## docs
+- docs live under `/dev_docs/`
+- filename pattern: `YYYYMMDD_HHMMSS_*`
 
 ---
 
-**Last Updated:** 2025-11-05 (based on system architecture overview)
+### Command Reference
+
+These are the official repository-wide commands. All are allowed:
+
+- `split_module`
+- `harden_types`
+- `add_dto_boundaries`
+- `normalize_utils`
+- `new_migration`
+- `apply_indexes`
+- `create_query_hook`
+- `replace_fetch`
