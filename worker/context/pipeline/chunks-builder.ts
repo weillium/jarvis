@@ -4,7 +4,7 @@
  * Stores chunks in context_items table with rank and research_source
  */
 
-import type { createClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type OpenAI from 'openai';
 import type { Blueprint } from './blueprint-generator';
 import type { ResearchResults, ResearchChunkMetadata } from './glossary-builder';
@@ -17,9 +17,16 @@ import {
   getPricingVersion,
 } from './pricing-config';
 import type { OpenAIUsage } from './pricing-config';
+import {
+  formatBlueprintDetailsForPrompt,
+  formatGlossaryHighlightsForPrompt,
+  formatResearchSummaryForPrompt,
+} from '../../lib/text/llm-prompt-formatting';
+
+type WorkerSupabaseClient = SupabaseClient<any, any, any>;
 
 export interface ChunksBuilderOptions {
-  supabase: ReturnType<typeof createClient>;
+  supabase: WorkerSupabaseClient;
   openai: OpenAI;
   embedModel: string;
   genModel: string;
@@ -216,12 +223,7 @@ export async function buildContextChunks(
   console.log(`[chunks] Collected ${allChunks.length} total chunks from all sources`);
 
   // 3. Rank chunks by relevance and quality
-  const rankedChunks = await rankChunks(
-    allChunks,
-    blueprint,
-    openai,
-    genModel
-  );
+  const rankedChunks = rankChunks(allChunks);
 
   // 4. Select top N chunks based on target count
   const targetCount = blueprint.chunks_plan.target_count || 500;
@@ -461,18 +463,15 @@ async function generateLLMChunks(
 
   const systemPrompt = CONTEXT_CHUNKS_GENERATION_SYSTEM_PROMPT;
 
-  const researchSummary = researchResults.chunks
-    .map((chunk: ResearchChunk) => chunk.text)
-    .join('\n\n')
-    .substring(0, 3000);
+  const researchSummary = formatResearchSummaryForPrompt(researchResults.chunks);
 
-  const blueprintDetails = [
-    `Target chunks: ${neededLLMChunks}`,
-    `Quality tier: ${blueprint.chunks_plan.quality_tier}`,
-    `Inferred topics: ${blueprint.inferred_topics.join(', ')}`
-  ].join('\n');
+  const blueprintDetails = formatBlueprintDetailsForPrompt({
+    neededLLMChunks,
+    qualityTier: blueprint.chunks_plan.quality_tier,
+    inferredTopics: blueprint.inferred_topics,
+  });
 
-  const glossaryHighlights = blueprint.key_terms.slice(0, 10).join(', ');
+  const glossaryHighlights = formatGlossaryHighlightsForPrompt(blueprint.key_terms);
 
   const userPrompt = createContextChunksUserPrompt(
     researchSummary,
@@ -539,7 +538,7 @@ async function generateLLMChunks(
     try {
       parsed = JSON.parse(content);
     // TODO: narrow unknown -> SyntaxError after upstream callsite analysis
-    } catch (parseError: unknown) {
+    } catch {
       console.error(`[chunks] Failed to parse LLM response as JSON: ${content.substring(0, 200)}`);
       throw new Error('LLM response is not valid JSON');
     }
@@ -575,39 +574,29 @@ async function generateLLMChunks(
 /**
  * Rank chunks by relevance and quality
  */
-async function rankChunks(
-  chunks: ChunkWithRank[],
-  blueprint: Blueprint,
-  openai: OpenAI,
-  genModel: string
-): Promise<ChunkWithRank[]> {
+function rankChunks(chunks: ChunkWithRank[]): ChunkWithRank[] {
   // Simple ranking strategy: combine quality score with source priority
   // Research results get higher priority, then LLM generation
   const sourcePriority: Record<string, number> = {
-    'exa': 1.0,
-    'wikipedia': 0.9,
-    'llm_generation': 0.7,
-    'research': 0.8,
+    exa: 1.0,
+    wikipedia: 0.9,
+    llm_generation: 0.7,
+    research: 0.8,
   };
 
-  // Calculate scores for each chunk
-  const scoredChunks = chunks.map((chunk, index) => {
-    const sourceScore = sourcePriority[chunk.research_source] || 0.5;
-    const qualityScore = chunk.quality_score || 0.7;
-    const combinedScore = sourceScore * 0.6 + qualityScore * 0.4;
-
+  const scoredChunks = chunks.map((chunk) => {
+    const sourceScore = sourcePriority[chunk.research_source] ?? 0.5;
+    const qualityScore = chunk.quality_score ?? 0.7;
     return {
-      ...chunk,
-      _score: combinedScore,
+      chunk,
+      score: sourceScore * 0.6 + qualityScore * 0.4,
     };
   });
 
-  // Sort by score (descending) and assign ranks
-  scoredChunks.sort((a, b) => b._score - a._score);
+  scoredChunks.sort((a, b) => b.score - a.score);
 
-  return scoredChunks.map((chunk, index) => ({
+  return scoredChunks.map(({ chunk }, index) => ({
     ...chunk,
-    rank: index + 1, // Rank 1 = highest
-    _score: undefined, // Remove temporary score
-  } as ChunkWithRank));
+    rank: index + 1,
+  }));
 }

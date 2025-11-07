@@ -4,7 +4,7 @@
  * Stores terms, definitions, acronyms, and related metadata in glossary_terms table
  */
 
-import type { createClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type OpenAI from 'openai';
 import { Exa } from 'exa-js';
 import type { Blueprint } from './blueprint-generator';
@@ -21,9 +21,15 @@ import {
   EXA_ANSWER_TRANSFORM_SYSTEM_PROMPT,
   createExaAnswerTransformUserPrompt,
 } from '../../prompts';
+import {
+  normalizeGlossaryDefinitions,
+  type GlossaryTermDefinition,
+} from '../../lib/context-normalization';
+
+type WorkerSupabaseClient = SupabaseClient<any, any, any>;
 
 export interface GlossaryBuilderOptions {
-  supabase: ReturnType<typeof createClient>;
+  supabase: WorkerSupabaseClient;
   openai: OpenAI;
   genModel: string;
   embedModel: string;
@@ -82,7 +88,6 @@ type GlossaryPlanTerm = {
   priority: number;
 };
 const asDbPayload = <T>(payload: T) => payload as unknown as never;
-type ErrorWithResponse = Error & { response?: { data?: unknown } };
 
 export async function buildGlossary(
   eventId: string,
@@ -312,17 +317,7 @@ export async function buildGlossary(
   };
 }
 
-interface TermDefinition {
-  term: string;
-  definition: string;
-  acronym_for?: string;
-  category: string;
-  usage_examples?: string[];
-  related_terms?: string[];
-  confidence_score?: number;
-  source?: string;
-  source_url?: string;
-}
+type TermDefinition = GlossaryTermDefinition;
 
 /**
  * Generate definitions for terms using Exa /answer for high-priority terms, LLM for others
@@ -488,20 +483,7 @@ async function generateTermDefinitions(
       }
 
       // Validate and normalize definitions
-      const normalizedLLMDefinitions = llmDefinitions.map((def: unknown) => {
-        const normalized = def as Partial<TermDefinition>;
-        return {
-          term: normalized.term || '',
-          definition: normalized.definition || '',
-          acronym_for: normalized.acronym_for || undefined,
-          category: normalized.category || 'general',
-          usage_examples: normalized.usage_examples || [],
-          related_terms: normalized.related_terms || [],
-          confidence_score: normalized.confidence_score || 0.8,
-          source: normalized.source || 'llm_generation',
-          source_url: normalized.source_url || undefined,
-        };
-      });
+      const normalizedLLMDefinitions = normalizeGlossaryDefinitions(llmDefinitions);
 
       definitions.push(...normalizedLLMDefinitions);
     // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis

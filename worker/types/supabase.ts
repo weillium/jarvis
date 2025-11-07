@@ -113,3 +113,26 @@ export interface VectorMatchRecord {
   chunk: string;
   similarity: number;
 }
+
+export interface GenerationCycleMetadataRecord {
+  metadata: Record<string, unknown> | null;
+}
+
+export interface ContextBlueprintRecord {
+  id: string;
+  status: string;
+  blueprint: unknown;
+  error_message?: string | null;
+}
+
+export interface ResearchResultInsert {
+  event_id: string;
+  blueprint_id: string;
+  generation_cycle_id: string;
+  query: string;
+  api: string;
+  content: string;
+  source_url?: string | null;
+  quality_score: number;
+  metadata: Record<string, unknown>;
+}

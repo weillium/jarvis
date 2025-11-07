@@ -11,7 +11,7 @@
  * Uses generation_cycles for tracking and versioning
  */
 
-import type { createClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type OpenAI from 'openai';
 import { Exa } from 'exa-js';
 import type { Blueprint } from './blueprint-generator';
@@ -29,6 +29,20 @@ import {
   calculateExaAnswerCost,
   getPricingVersion,
 } from './pricing-config';
+import type {
+  ContextBlueprintRecord,
+  ResearchResultInsert,
+} from '../../types';
+import {
+  ensureBlueprintShape,
+  extractId,
+  extractIdList,
+  mapContextBlueprintRow,
+  mapGenerationCycleMetadata,
+} from '../../lib/context-normalization';
+import { chunkTextContent } from '../../lib/text/llm-prompt-chunking';
+
+type WorkerSupabaseClient = SupabaseClient<any, any, any>;
 
 type ExaCostUsage = {
   searches: number;
@@ -47,8 +61,81 @@ type ResearchCostTracker = {
   exa: ExaCostBreakdown;
 };
 
+type GenerationCycleType =
+  | 'blueprint'
+  | 'research'
+  | 'glossary'
+  | 'chunks'
+  | 'rankings'
+  | 'embeddings'
+  | 'full';
+
+type ResearchInsertResult =
+  | { success: true }
+  | { success: false; message: string };
+
+const insertResearchResultRow = async (
+  supabase: WorkerSupabaseClient,
+  payload: ResearchResultInsert
+): Promise<ResearchInsertResult> => {
+  const { error } = await supabase.from('research_results').insert(payload);
+  if (error) {
+    return { success: false, message: error.message };
+  }
+  return { success: true };
+};
+
+const markGenerationCyclesSuperseded = async (
+  supabase: WorkerSupabaseClient,
+  params: {
+    eventId: string;
+    cycleTypes: GenerationCycleType[];
+    logContext: string;
+    excludeCycleId?: string;
+  }
+): Promise<void> => {
+  const query = supabase
+    .from('generation_cycles')
+    .update({ status: 'superseded' })
+    .eq('event_id', params.eventId)
+    .in('cycle_type', params.cycleTypes)
+    .in('status', ['started', 'processing', 'completed']);
+
+  if (params.excludeCycleId) {
+    query.neq('id', params.excludeCycleId);
+  }
+
+  const { error } = await query;
+  if (error) {
+    console.warn(
+      `[context-gen] Warning: Failed to mark ${params.logContext} cycles as superseded: ${error.message}`
+    );
+  }
+};
+
+async function fetchBlueprintRow(
+  supabase: WorkerSupabaseClient,
+  blueprintId: string
+): Promise<{ record: ContextBlueprintRecord; blueprint: Blueprint }> {
+  const { data, error } = await supabase
+    .from('context_blueprints')
+    .select('*')
+    .eq('id', blueprintId)
+    .single();
+
+  if (error || !data) {
+    throw new Error(`Failed to fetch blueprint: ${error?.message || 'Blueprint not found'}`);
+  }
+
+  const record = mapContextBlueprintRow(data);
+  return {
+    record,
+    blueprint: ensureBlueprintShape(record.blueprint),
+  };
+}
+
 export interface ContextGenerationOrchestratorOptions {
-  supabase: ReturnType<typeof createClient>;
+  supabase: WorkerSupabaseClient;
   openai: OpenAI;
   embedModel: string;
   genModel: string;
@@ -59,15 +146,15 @@ export interface ContextGenerationOrchestratorOptions {
  * Create a generation cycle record
  */
 async function createGenerationCycle(
-  supabase: ReturnType<typeof createClient>,
+  supabase: WorkerSupabaseClient,
   eventId: string,
   agentId: string,
   blueprintId: string,
   cycleType: 'blueprint' | 'research' | 'glossary' | 'chunks' | 'rankings' | 'embeddings' | 'full',
   component?: string
 ): Promise<string> {
-  const { data, error } = await (supabase
-    .from('generation_cycles') as any)
+  const { data, error } = await supabase
+    .from('generation_cycles')
     .insert({
       event_id: eventId,
       agent_id: agentId,
@@ -85,24 +172,31 @@ async function createGenerationCycle(
     throw new Error(`Failed to create generation cycle: ${error?.message || 'Unknown error'}`);
   }
 
-  return data.id;
+  return extractId(data, 'generation cycle insert');
 }
 
 /**
  * Update generation cycle status and progress
  */
 async function updateGenerationCycle(
-  supabase: ReturnType<typeof createClient>,
+  supabase: WorkerSupabaseClient,
   cycleId: string,
   updates: {
     status?: 'started' | 'processing' | 'completed' | 'failed' | 'superseded';
     progress_current?: number;
     progress_total?: number;
     error_message?: string;
-    metadata?: any; // For storing cost data and other metadata
+    metadata?: Record<string, unknown>;
   }
 ): Promise<void> {
-  const updateData: any = { ...updates };
+  const updateData: {
+    status?: typeof updates.status;
+    progress_current?: number;
+    progress_total?: number;
+    error_message?: string;
+    metadata?: Record<string, unknown>;
+    completed_at?: string;
+  } = { ...updates };
   if (updates.status === 'completed') {
     updateData.completed_at = new Date().toISOString();
   }
@@ -110,18 +204,24 @@ async function updateGenerationCycle(
   // If metadata is provided, merge with existing metadata
   if (updates.metadata !== undefined) {
     // Fetch existing metadata first
-    const { data: existingCycle } = await (supabase
-      .from('generation_cycles') as any)
+    const { data: existingCycle } = await supabase
+      .from('generation_cycles')
       .select('metadata')
       .eq('id', cycleId)
       .single();
 
-    const existingMetadata = existingCycle?.metadata || {};
-    updateData.metadata = { ...existingMetadata, ...updates.metadata };
+    const mergedMetadata =
+      existingCycle !== null && existingCycle !== undefined
+        ? mapGenerationCycleMetadata(existingCycle).metadata ?? {}
+        : {};
+    updateData.metadata = {
+      ...mergedMetadata,
+      ...updates.metadata,
+    };
   }
 
-  const { error, data } = await (supabase
-    .from('generation_cycles') as any)
+  const { error, data } = await supabase
+    .from('generation_cycles')
     .update(updateData)
     .eq('id', cycleId)
     .select('id');
@@ -131,7 +231,9 @@ async function updateGenerationCycle(
     throw new Error(`Failed to update generation cycle: ${error.message}`);
   }
 
-  if (!data || data.length === 0) {
+  const updatedIds = data ? extractIdList(data, 'generation cycle update') : [];
+
+  if (updatedIds.length === 0) {
     console.warn(`[context-gen] WARNING: Generation cycle ${cycleId} not found or update affected 0 rows`);
   } else if (updates.status === 'completed') {
     console.log(`[context-gen] Generation cycle ${cycleId} marked as completed`);
@@ -153,17 +255,10 @@ export async function executeContextGeneration(
 
   try {
     // 1. Fetch blueprint
-    const { data: blueprintRecord, error: blueprintError } = await (supabase
-      .from('context_blueprints') as any)
-      .select('*')
-      .eq('id', blueprintId)
-      .single() as { data: any | null; error: any };
-
-    if (blueprintError || !blueprintRecord) {
-      throw new Error(`Failed to fetch blueprint: ${blueprintError?.message || 'Blueprint not found'}`);
-    }
-
-    const blueprint = blueprintRecord.blueprint as Blueprint;
+    const {
+      record: blueprintRecord,
+      blueprint,
+    } = await fetchBlueprintRow(supabase, blueprintId);
 
     // 2. Update status to 'researching'
     await updateAgentStatus(supabase, agentId, 'researching');
@@ -262,8 +357,8 @@ export async function executeContextGeneration(
     
     // Update status to error (status='error', stage remains unchanged)
     try {
-      await (supabase
-        .from('agents') as any)
+      await supabase
+        .from('agents')
         .update({ status: 'error' })
         .eq('id', agentId);
     } catch {
@@ -278,8 +373,8 @@ export async function executeContextGeneration(
     
     // Mark any active generation cycles as failed
     try {
-      await (supabase
-        .from('generation_cycles') as any)
+      await supabase
+        .from('generation_cycles')
         .update({
           status: 'failed',
           error_message: error.message,
@@ -315,7 +410,7 @@ interface PendingResearchTask {
 async function pollResearchTasks(
   exa: Exa,
   pendingTasks: PendingResearchTask[],
-  supabase: ReturnType<typeof createClient>,
+  supabase: WorkerSupabaseClient,
   eventId: string,
   blueprintId: string,
   generationCycleId: string,
@@ -448,7 +543,7 @@ async function processCompletedResearchTask(
   task: PendingResearchTask,
   taskStatus: any,
   exa: Exa,
-  supabase: ReturnType<typeof createClient>,
+  supabase: WorkerSupabaseClient,
   eventId: string,
   blueprintId: string,
   generationCycleId: string,
@@ -489,37 +584,39 @@ async function processCompletedResearchTask(
   const textChunks = chunkTextContent(researchText, 200, 400);
   
   for (const chunkText of textChunks) {
-    const metadata = {
+    const qualityScore = 0.95; // High quality for comprehensive research
+    const metadata: ResearchResultInsert['metadata'] = {
       api: 'exa',
       query: queryItem.query,
       research_id: task.researchId,
       method: 'research',
-      quality_score: 0.95, // High quality for comprehensive research
+      quality_score: qualityScore,
     };
 
-    const { error } = await (supabase
-      .from('research_results') as any)
-      .insert({
-        event_id: eventId,
-        blueprint_id: blueprintId,
-        generation_cycle_id: generationCycleId,
-        query: queryItem.query,
-        api: 'exa',
-        content: chunkText,
-        quality_score: metadata.quality_score,
-        metadata: metadata,
-      });
+    const insertResult = await insertResearchResultRow(supabase, {
+      event_id: eventId,
+      blueprint_id: blueprintId,
+      generation_cycle_id: generationCycleId,
+      query: queryItem.query,
+      api: 'exa',
+      content: chunkText,
+      quality_score: qualityScore,
+      metadata,
+    });
 
-    if (error) {
-      console.error(`[research-poll] ${queryProgress} Error storing research result: ${error.message}`);
-    } else {
-      insertedCount.value++;
-      chunks.push({
-        text: chunkText,
-        source: 'exa_research',
-        metadata,
-      });
+    if (!insertResult.success) {
+      console.error(
+        `[research-poll] ${queryProgress} Error storing research result: ${insertResult.message}`
+      );
+      continue;
     }
+
+    insertedCount.value++;
+    chunks.push({
+      text: chunkText,
+      source: 'exa_research',
+      metadata,
+    });
   }
 
   const totalDuration = Date.now() - task.startTime;
@@ -558,7 +655,7 @@ async function executeResearchPlan(
   blueprintId: string,
   blueprint: Blueprint,
   generationCycleId: string,
-  options: { supabase: ReturnType<typeof createClient>; openai: OpenAI; genModel: string; exaApiKey?: string }
+  options: { supabase: WorkerSupabaseClient; openai: OpenAI; genModel: string; exaApiKey?: string }
 ): Promise<ResearchResults> {
   const { supabase, openai, genModel, exaApiKey } = options;
   const queries = blueprint.research_plan.queries || [];
@@ -663,35 +760,37 @@ async function executeResearchPlan(
             console.log(`[research] ${queryProgress} LLM stub generated ${stubChunks.length} chunks in ${duration}ms for query: "${queryItem.query}"`);
           
           for (const chunkText of stubChunks) {
-            const metadata = {
+            const qualityScore = 0.7;
+            const metadata: ResearchResultInsert['metadata'] = {
               api: 'exa',
               query: queryItem.query,
-              quality_score: 0.7,
+              quality_score: qualityScore,
             };
 
-            const { error } = await (supabase
-              .from('research_results') as any)
-              .insert({
-                event_id: eventId,
-                blueprint_id: blueprintId,
-                generation_cycle_id: generationCycleId,
-                query: queryItem.query,
-                api: 'llm_stub',
-                content: chunkText,
-                quality_score: metadata.quality_score,
-                metadata: metadata,
-              });
+            const insertResult = await insertResearchResultRow(supabase, {
+              event_id: eventId,
+              blueprint_id: blueprintId,
+              generation_cycle_id: generationCycleId,
+              query: queryItem.query,
+              api: 'llm_stub',
+              content: chunkText,
+              quality_score: qualityScore,
+              metadata,
+            });
 
-            if (error) {
-              console.error(`[research] ${queryProgress} Database error storing stub result: ${error.message}`);
-            } else {
-              insertedCount.value++;
-              chunks.push({
-                text: chunkText,
-                source: 'research_stub',
-                metadata,
-              });
+            if (!insertResult.success) {
+              console.error(
+                `[research] ${queryProgress} Database error storing stub result: ${insertResult.message}`
+              );
+              continue;
             }
+
+            insertedCount.value++;
+            chunks.push({
+              text: chunkText,
+              source: 'research_stub',
+              metadata,
+            });
           }
           } catch (stubError: any) {
             console.error(`[research] ${queryProgress} ✗ LLM stub generation FAILURE for query "${queryItem.query}":`, {
@@ -979,47 +1078,13 @@ async function generateStubResearchChunks(
 }
 
 /**
- * Chunk text content into smaller pieces (200-400 words each)
- * Attempts to split on sentence boundaries
- */
-function chunkTextContent(text: string, minWords: number, maxWords: number): string[] {
-  const words = text.split(/\s+/);
-  const chunks: string[] = [];
-  
-  let currentChunk: string[] = [];
-  let currentWordCount = 0;
-
-  for (const word of words) {
-    currentChunk.push(word);
-    currentWordCount++;
-
-    // Check if we should finalize this chunk
-    if (currentWordCount >= minWords) {
-      // Try to end on sentence boundary if we're past min words
-      if (currentWordCount >= maxWords || word.match(/[.!?]$/)) {
-        chunks.push(currentChunk.join(' '));
-        currentChunk = [];
-        currentWordCount = 0;
-      }
-    }
-  }
-
-  // Add remaining chunk if any
-  if (currentChunk.length > 0) {
-    chunks.push(currentChunk.join(' '));
-  }
-
-  return chunks.length > 0 ? chunks : [text]; // Fallback to original text if chunking fails
-}
-
-/**
  * Execute Exa search and store results
  * Extracted as helper function for reuse
  */
 async function executeExaSearch(
   queryItem: { query: string },
   exa: Exa,
-  supabase: ReturnType<typeof createClient>,
+  supabase: WorkerSupabaseClient,
   eventId: string,
   blueprintId: string,
   generationCycleId: string,
@@ -1073,40 +1138,42 @@ async function executeExaSearch(
       const textChunks = chunkTextContent(result.text, 200, 400);
       
       for (const chunkText of textChunks) {
-        const metadata = {
+        const qualityScore = calculateQualityScore(result, chunkText);
+        const metadata: ResearchResultInsert['metadata'] = {
           api: 'exa',
           query: queryItem.query,
           url: result.url,
           title: result.title || null,
           author: result.author || null,
           published_date: result.publishedDate || null,
-          quality_score: calculateQualityScore(result, chunkText),
+          quality_score: qualityScore,
         };
 
-        const { error } = await (supabase
-          .from('research_results') as any)
-          .insert({
-            event_id: eventId,
-            blueprint_id: blueprintId,
-            generation_cycle_id: generationCycleId,
-            query: queryItem.query,
-            api: 'exa',
-            content: chunkText,
-            source_url: result.url,
-            quality_score: metadata.quality_score,
-            metadata: metadata,
-          });
+        const insertResult = await insertResearchResultRow(supabase, {
+          event_id: eventId,
+          blueprint_id: blueprintId,
+          generation_cycle_id: generationCycleId,
+          query: queryItem.query,
+          api: 'exa',
+          content: chunkText,
+          source_url: result.url,
+          quality_score: qualityScore,
+          metadata,
+        });
 
-        if (error) {
-          console.error(`[research] Exa /search: Database error storing result for "${queryItem.query}": ${error.message}`);
-        } else {
-          insertedCount.value++;
-          chunks.push({
-            text: chunkText,
-            source: 'exa',
-            metadata,
-          });
+        if (!insertResult.success) {
+          console.error(
+            `[research] Exa /search: Database error storing result for "${queryItem.query}": ${insertResult.message}`
+          );
+          continue;
         }
+
+        insertedCount.value++;
+        chunks.push({
+          text: chunkText,
+          source: 'exa',
+          metadata,
+        });
       }
     }
     
@@ -1133,7 +1200,7 @@ async function executeExaSearch(
  */
 async function executeWikipediaSearch(
   query: string,
-  supabase: ReturnType<typeof createClient>,
+  supabase: WorkerSupabaseClient,
   eventId: string,
   blueprintId: string,
   generationCycleId: string
@@ -1229,38 +1296,42 @@ async function executeWikipediaSearch(
         const textChunks = chunkTextContent(content, 200, 400);
         
         for (const chunkText of textChunks) {
-          const metadata = {
+          const qualityScore = calculateWikipediaQualityScore(summaryData, chunkText);
+          const sourceUrl =
+            summaryData.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${pageTitle}`;
+          const metadata: ResearchResultInsert['metadata'] = {
             api: 'wikipedia',
             query: query,
             title: result.title,
-            url: summaryData.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${pageTitle}`,
+            url: sourceUrl,
             page_id: result.pageid,
-            quality_score: calculateWikipediaQualityScore(summaryData, chunkText),
+            quality_score: qualityScore,
           };
           
-          const { error } = await (supabase
-            .from('research_results') as any)
-            .insert({
-              event_id: eventId,
-              blueprint_id: blueprintId,
-              generation_cycle_id: generationCycleId,
-              query: query,
-              api: 'wikipedia',
-              content: chunkText,
-              source_url: metadata.url,
-              quality_score: metadata.quality_score,
-              metadata: metadata,
-            });
+          const insertResult = await insertResearchResultRow(supabase, {
+            event_id: eventId,
+            blueprint_id: blueprintId,
+            generation_cycle_id: generationCycleId,
+            query: query,
+            api: 'wikipedia',
+            content: chunkText,
+            source_url: sourceUrl,
+            quality_score: qualityScore,
+            metadata,
+          });
           
-          if (error) {
-            console.error(`[research] Wikipedia: Database error storing result for article "${result.title}": ${error.message}`);
-          } else {
-            chunks.push({
-              text: chunkText,
-              source: 'wikipedia',
-              metadata,
-            });
+          if (!insertResult.success) {
+            console.error(
+              `[research] Wikipedia: Database error storing result for article "${result.title}": ${insertResult.message}`
+            );
+            continue;
           }
+
+          chunks.push({
+            text: chunkText,
+            source: 'wikipedia',
+            metadata,
+          });
         }
         
         console.log(`[research] Wikipedia: Processed article "${result.title}" - ${textChunks.length} chunks created in ${articleDuration}ms`);
@@ -1370,7 +1441,7 @@ function calculateQualityScore(result: any, chunkText: string): number {
  * Update agent status
  */
 async function updateAgentStatus(
-  supabase: ReturnType<typeof createClient>,
+  supabase: WorkerSupabaseClient,
   agentId: string,
   stage: string
 ): Promise<void> {
@@ -1378,8 +1449,8 @@ async function updateAgentStatus(
   // 'running' stage uses 'active' status
   const status = stage === 'running' ? 'active' : 'idle';
   
-  const { error } = await (supabase
-    .from('agents') as any)
+  const { error } = await supabase
+    .from('agents')
     .update({ status, stage })
     .eq('id', agentId);
 
@@ -1392,7 +1463,7 @@ async function updateAgentStatus(
  * Update blueprint status
  */
 async function updateBlueprintStatus(
-  supabase: ReturnType<typeof createClient>,
+  supabase: WorkerSupabaseClient,
   blueprintId: string,
   status: string,
   errorMessage?: string
@@ -1405,13 +1476,13 @@ async function updateBlueprintStatus(
     return;
   }
 
-  const update: any = { status };
+  const update: { status: string; error_message?: string } = { status };
   if (errorMessage) {
     update.error_message = errorMessage;
   }
 
-  const { error } = await (supabase
-    .from('context_blueprints') as any)
+  const { error } = await supabase
+    .from('context_blueprints')
     .update(update)
     .eq('id', blueprintId);
 
@@ -1436,17 +1507,10 @@ export async function regenerateResearchStage(
   console.log(`[context-gen] Regenerating research stage for event ${eventId}, agent ${agentId}, blueprint ${blueprintId}`);
 
   // Fetch blueprint
-  const { data: blueprintRecord, error: blueprintError } = await (supabase
-    .from('context_blueprints') as any)
-    .select('*')
-    .eq('id', blueprintId)
-    .single() as { data: any | null; error: any };
-
-  if (blueprintError || !blueprintRecord) {
-    throw new Error(`Failed to fetch blueprint: ${blueprintError?.message || 'Blueprint not found'}`);
-  }
-
-  const blueprint = blueprintRecord.blueprint as Blueprint;
+  const {
+    record: blueprintRecord,
+    blueprint,
+  } = await fetchBlueprintRow(supabase, blueprintId);
 
   if (blueprintRecord.status !== 'approved') {
     throw new Error(`Blueprint must be approved to regenerate research. Current status: ${blueprintRecord.status}`);
@@ -1477,35 +1541,20 @@ export async function regenerateResearchStage(
 
   console.log(`[context-gen] Research regeneration completed: ${researchResults.chunks.length} chunks found`);
 
-  // Mark old research generation cycles as superseded (don't delete data, just mark cycles)
-  const { error: researchCycleError } = await (supabase
-    .from('generation_cycles') as any)
-    .update({
-      status: 'superseded',
-    })
-    .eq('event_id', eventId)
-    .eq('cycle_type', 'research')
-    .neq('id', researchCycleId)
-    .in('status', ['started', 'processing', 'completed']);
-
-  if (researchCycleError) {
-    console.warn(`[context-gen] Warning: Failed to mark old research cycles as superseded: ${researchCycleError.message}`);
-  }
+  await markGenerationCyclesSuperseded(supabase, {
+    eventId,
+    cycleTypes: ['research'],
+    excludeCycleId: researchCycleId,
+    logContext: 'old research',
+  });
 
   // Mark downstream components (glossary, chunks) cycles as superseded
   // Don't delete data - only mark cycles to prevent UI visualization and downstream access
-  const { error: downstreamCycleError } = await (supabase
-    .from('generation_cycles') as any)
-    .update({
-      status: 'superseded',
-    })
-    .eq('event_id', eventId)
-    .in('cycle_type', ['glossary', 'chunks'])
-    .in('status', ['started', 'processing', 'completed']);
-
-  if (downstreamCycleError) {
-    console.warn(`[context-gen] Warning: Failed to mark downstream cycles as superseded: ${downstreamCycleError.message}`);
-  }
+  await markGenerationCyclesSuperseded(supabase, {
+    eventId,
+    cycleTypes: ['glossary', 'chunks'],
+    logContext: 'downstream glossary/chunks',
+  });
 
   console.log(`[context-gen] Downstream components (glossary, chunks) marked for regeneration`);
 
@@ -1594,17 +1643,10 @@ export async function regenerateGlossaryStage(
   console.log(`[context-gen] Regenerating glossary stage for event ${eventId}, agent ${agentId}, blueprint ${blueprintId}`);
 
   // Fetch blueprint
-  const { data: blueprintRecord, error: blueprintError } = await (supabase
-    .from('context_blueprints') as any)
-    .select('*')
-    .eq('id', blueprintId)
-    .single() as { data: any | null; error: any };
-
-  if (blueprintError || !blueprintRecord) {
-    throw new Error(`Failed to fetch blueprint: ${blueprintError?.message || 'Blueprint not found'}`);
-  }
-
-  const blueprint = blueprintRecord.blueprint as Blueprint;
+  const {
+    record: blueprintRecord,
+    blueprint,
+  } = await fetchBlueprintRow(supabase, blueprintId);
 
   if (blueprintRecord.status !== 'approved') {
     throw new Error(`Blueprint must be approved to regenerate glossary. Current status: ${blueprintRecord.status}`);
@@ -1643,19 +1685,12 @@ export async function regenerateGlossaryStage(
 
   // Mark old glossary generation cycles as superseded (don't delete data, just mark cycles)
   // Note: Glossary and chunks are independent - regenerating glossary does not invalidate chunks
-  const { error: glossaryCycleError } = await (supabase
-    .from('generation_cycles') as any)
-    .update({
-      status: 'superseded',
-    })
-    .eq('event_id', eventId)
-    .eq('cycle_type', 'glossary')
-    .neq('id', glossaryCycleId)
-    .in('status', ['started', 'processing', 'completed']);
-
-  if (glossaryCycleError) {
-    console.warn(`[context-gen] Warning: Failed to mark old glossary cycles as superseded: ${glossaryCycleError.message}`);
-  }
+  await markGenerationCyclesSuperseded(supabase, {
+    eventId,
+    cycleTypes: ['glossary'],
+    excludeCycleId: glossaryCycleId,
+    logContext: 'old glossary',
+  });
 
   // Update agent to context_complete
   await updateAgentStatus(supabase, agentId, 'context_complete');
@@ -1679,17 +1714,10 @@ export async function regenerateChunksStage(
   console.log(`[context-gen] Regenerating chunks stage for event ${eventId}, agent ${agentId}, blueprint ${blueprintId}`);
 
   // Fetch blueprint
-  const { data: blueprintRecord, error: blueprintError } = await (supabase
-    .from('context_blueprints') as any)
-    .select('*')
-    .eq('id', blueprintId)
-    .single() as { data: any | null; error: any };
-
-  if (blueprintError || !blueprintRecord) {
-    throw new Error(`Failed to fetch blueprint: ${blueprintError?.message || 'Blueprint not found'}`);
-  }
-
-  const blueprint = blueprintRecord.blueprint as Blueprint;
+  const {
+    record: blueprintRecord,
+    blueprint,
+  } = await fetchBlueprintRow(supabase, blueprintId);
 
   if (blueprintRecord.status !== 'approved') {
     throw new Error(`Blueprint must be approved to regenerate chunks. Current status: ${blueprintRecord.status}`);
@@ -1726,19 +1754,12 @@ export async function regenerateChunksStage(
   console.log(`[context-gen] Chunks regeneration completed: ${chunksResult.chunkCount} chunks (cost: $${chunksResult.costBreakdown.openai.total.toFixed(4)})`);
 
   // Mark old chunks generation cycles as superseded (don't delete data, just mark cycles)
-  const { error: chunksCycleError } = await (supabase
-    .from('generation_cycles') as any)
-    .update({
-      status: 'superseded',
-    })
-    .eq('event_id', eventId)
-    .eq('cycle_type', 'chunks')
-    .neq('id', chunksCycleId)
-    .in('status', ['started', 'processing', 'completed']);
-
-  if (chunksCycleError) {
-    console.warn(`[context-gen] Warning: Failed to mark old chunks cycles as superseded: ${chunksCycleError.message}`);
-  }
+  await markGenerationCyclesSuperseded(supabase, {
+    eventId,
+    cycleTypes: ['chunks'],
+    excludeCycleId: chunksCycleId,
+    logContext: 'old chunks',
+  });
 
   // Update to context_complete
   await updateAgentStatus(supabase, agentId, 'context_complete');

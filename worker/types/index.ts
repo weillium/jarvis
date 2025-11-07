@@ -26,7 +26,10 @@ export type {
   GlossaryRecord,
   InsertTranscriptParams,
   TranscriptRecord,
-  VectorMatchRecord
+  VectorMatchRecord,
+  GenerationCycleMetadataRecord,
+  ContextBlueprintRecord,
+  ResearchResultInsert
 } from './supabase';
 export type {
   RealtimeCardDTO,

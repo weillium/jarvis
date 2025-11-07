@@ -1,10 +1,14 @@
-import type { EventRuntime } from '../types';
+import type { EventRuntime, GlossaryEntry } from '../types';
+import type { Fact } from '../state/facts-store';
 import type { GlossaryManager } from './glossary-manager';
 import { countTokens } from '../utils/token-counter';
 
+type FactsRecord = Record<string, unknown>;
+type FactConfidenceRecord = Record<string, { value: unknown; confidence: number }>;
+
 export interface AgentContext {
   bullets: string[];
-  facts: Record<string, any>;
+  facts: FactsRecord;
   glossaryContext: string;
 }
 
@@ -13,11 +17,11 @@ export class ContextBuilder {
 
   buildCardsContext(runtime: EventRuntime, currentChunkText: string): AgentContext {
     const bullets = runtime.ringBuffer.getContextBullets(10, 2048);
-    const facts = runtime.factsStore.getContextFormat();
+    const facts = this.normalizeFactsRecord(runtime.factsStore.getContextFormat());
     const combinedText = `${currentChunkText} ${bullets.join(' ')}`;
     const glossaryTerms = this.glossaryManager.extractRelevantTerms(
       combinedText,
-      runtime.glossaryCache || new Map()
+      runtime.glossaryCache ?? new Map<string, GlossaryEntry>()
     );
     const glossaryContext = this.glossaryManager.formatGlossaryContext(glossaryTerms);
 
@@ -36,14 +40,11 @@ export class ContextBuilder {
     const currentFacts = runtime.factsStore.getAll();
     const glossaryTerms = this.glossaryManager.extractRelevantTerms(
       recentText,
-      runtime.glossaryCache || new Map()
+      runtime.glossaryCache ?? new Map<string, GlossaryEntry>()
     );
     const glossaryContext = this.glossaryManager.formatGlossaryContext(glossaryTerms);
 
-    const factsRecord = currentFacts.reduce((acc, fact) => {
-      acc[fact.key] = { value: fact.value, confidence: fact.confidence };
-      return acc;
-    }, {} as Record<string, any>);
+    const factsRecord = this.buildFactConfidenceRecord(currentFacts);
 
     return {
       context: {
@@ -93,5 +94,27 @@ export class ContextBuilder {
       total: recentTextTokens + factsTokens + glossaryTokens,
       breakdown,
     };
+  }
+
+  private normalizeFactsRecord(source: Record<string, unknown>): FactsRecord {
+    if (!source) {
+      return {};
+    }
+
+    return Object.entries(source).reduce<FactsRecord>((acc, [key, value]) => {
+      acc[key] = value;
+      return acc;
+    }, {});
+  }
+
+  private buildFactConfidenceRecord(facts: Fact[]): FactConfidenceRecord {
+    return facts.reduce<FactConfidenceRecord>((acc, fact) => {
+      const factValue: unknown = fact.value;
+      acc[fact.key] = {
+        value: factValue,
+        confidence: fact.confidence,
+      };
+      return acc;
+    }, {});
   }
 }

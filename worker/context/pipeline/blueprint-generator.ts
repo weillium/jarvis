@@ -9,7 +9,7 @@
  * 4. System executes the blueprint to build context
  */
 
-import type { createClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type OpenAI from 'openai';
 import {
   BLUEPRINT_GENERATION_SYSTEM_PROMPT,
@@ -21,12 +21,14 @@ import {
   type OpenAIUsage,
 } from './pricing-config';
 
+type WorkerSupabaseClient = SupabaseClient<any, any, any>;
+
 // ============================================================================
 // Type Definitions
 // ============================================================================
 
 export interface BlueprintGeneratorOptions {
-  supabase: ReturnType<typeof createClient>;
+  supabase: WorkerSupabaseClient;
   openai: OpenAI;
   genModel: string;
 }
@@ -157,7 +159,7 @@ const asDbPayload = <T>(payload: T) => payload as unknown as never;
  */
 async function extractDocumentsText(
   eventId: string,
-  supabase: ReturnType<typeof createClient>
+  supabase: WorkerSupabaseClient
 ): Promise<string> {
   try {
     // Fetch documents from event_docs table
