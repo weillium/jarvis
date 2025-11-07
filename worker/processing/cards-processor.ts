@@ -9,6 +9,8 @@ import { getPolicy } from '../policies';
 import { createCardGenerationUserPrompt } from '../prompts';
 import { checkBudgetStatus, formatTokenBreakdown } from '../utils/token-counter';
 import type { AgentOutputsRepository } from '../services/supabase/agent-outputs-repository';
+import { isRecord } from '../lib/context-normalization';
+import { formatResearchSummaryForPrompt } from '../lib/text/llm-prompt-formatting';
 
 interface GeneratedCardPayload {
   card_type?: 'text' | 'text_visual' | 'visual';
@@ -98,7 +100,10 @@ export class CardsProcessor {
   ): Promise<void> {
     const policy = getPolicy('cards', 1);
 
-    const joinedBullets = context.bullets.join('\n');
+    const joinedBullets = formatResearchSummaryForPrompt(
+      context.bullets.map((text) => ({ text })),
+      2048
+    );
 
     const userPrompt = createCardGenerationUserPrompt(
       chunk.text,
@@ -122,7 +127,13 @@ export class CardsProcessor {
       const cardJson = response.choices[0]?.message?.content;
       if (!cardJson) return;
 
-      const card = JSON.parse(cardJson) as GeneratedCardPayload;
+      const parsedCard: unknown = JSON.parse(cardJson);
+      if (!isRecord(parsedCard)) {
+        this.logger.log(runtime.eventId, 'cards', 'warn', 'Card payload missing expected object shape', { seq: chunk.seq });
+        return;
+      }
+
+      const card: GeneratedCardPayload = { ...parsedCard };
       card.source_seq = chunk.seq;
 
       if (!card.card_type || !['text', 'text_visual', 'visual'].includes(card.card_type)) {

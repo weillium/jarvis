@@ -20,8 +20,9 @@ import {
   getPricingVersion,
   type OpenAIUsage,
 } from './pricing-config';
+import { ensureBlueprintShape } from '../../lib/context-normalization';
 
-type WorkerSupabaseClient = SupabaseClient<any, any, any>;
+type WorkerSupabaseClient = SupabaseClient;
 
 // ============================================================================
 // Type Definitions
@@ -75,47 +76,6 @@ export interface Blueprint {
   };
   
   // Cost breakdown
-  cost_breakdown: {
-    research: number;
-    glossary: number;
-    chunks: number;
-    total: number;
-  };
-}
-
-interface LLMBlueprintResponse {
-  important_details: string[];
-  inferred_topics: string[];
-  key_terms: string[];
-  research_plan: {
-    queries: Array<{
-      query: string;
-      api: 'exa' | 'wikipedia';
-      priority: number;
-      estimated_cost?: number;
-    }>;
-    total_searches: number;
-    estimated_total_cost: number;
-  };
-  glossary_plan: {
-    terms: Array<{
-      term: string;
-      is_acronym: boolean;
-      category: string;
-      priority: number;
-    }>;
-    estimated_count: number;
-  };
-  chunks_plan: {
-    sources: Array<{
-      source: string;
-      priority: number;
-      estimated_chunks: number;
-    }>;
-    target_count: number;
-    quality_tier: 'basic' | 'comprehensive';
-    ranking_strategy: string;
-  };
   cost_breakdown: {
     research: number;
     glossary: number;
@@ -568,7 +528,7 @@ async function generateBlueprintWithLLM(
   // Retry logic with validation
   const maxRetries = 2; // 3 attempts total (initial + 2 retries)
   let attempt = 0;
-  let parsed: LLMBlueprintResponse | null = null;
+  let parsedBlueprint: Blueprint | null = null;
   let lastError: Error | null = null;
   let totalUsage: OpenAIUsage | null = null; // Track cumulative usage across retries
 
@@ -642,15 +602,17 @@ IMPORTANT: This is a retry attempt. The previous response had empty or insuffici
         }
       }
 
-      parsed = JSON.parse(content) as LLMBlueprintResponse;
+      const parsedJson = JSON.parse(content) as unknown;
+      const ensuredBlueprint = ensureBlueprintShape(parsedJson);
+      parsedBlueprint = ensuredBlueprint;
 
       // Validate array lengths
-      const importantDetailsCount = Array.isArray(parsed.important_details) ? parsed.important_details.length : 0;
-      const inferredTopicsCount = Array.isArray(parsed.inferred_topics) ? parsed.inferred_topics.length : 0;
-      const keyTermsCount = Array.isArray(parsed.key_terms) ? parsed.key_terms.length : 0;
-      const researchQueriesCount = Array.isArray(parsed.research_plan?.queries) ? parsed.research_plan.queries.length : 0;
-      const glossaryTermsCount = Array.isArray(parsed.glossary_plan?.terms) ? parsed.glossary_plan.terms.length : 0;
-      const chunksSourcesCount = Array.isArray(parsed.chunks_plan?.sources) ? parsed.chunks_plan.sources.length : 0;
+      const importantDetailsCount = parsedBlueprint.important_details.length;
+      const inferredTopicsCount = parsedBlueprint.inferred_topics.length;
+      const keyTermsCount = parsedBlueprint.key_terms.length;
+      const researchQueriesCount = parsedBlueprint.research_plan.queries.length;
+      const glossaryTermsCount = parsedBlueprint.glossary_plan.terms.length;
+      const chunksSourcesCount = parsedBlueprint.chunks_plan.sources.length;
 
       console.log(`[blueprint] LLM response validation - attempt ${attempt + 1}:`, {
         important_details: importantDetailsCount,
@@ -710,58 +672,51 @@ IMPORTANT: This is a retry attempt. The previous response had empty or insuffici
     }
   }
 
-  if (!parsed) {
+  if (!parsedBlueprint) {
     throw new Error(`Failed to parse LLM response: ${lastError?.message || 'Unknown error'}`);
   }
 
   const isMeaningfulString = (value: unknown): value is string =>
     typeof value === 'string' && value.trim().length > 0;
 
-  // Validate and normalize the blueprint
+  // Validate and normalize the blueprint using shared helpers
   const blueprint: BlueprintWithUsage = {
-    important_details: (Array.isArray(parsed.important_details) && parsed.important_details.length >= 5)
-      ? parsed.important_details.filter(isMeaningfulString)
-      : (parsed.important_details || []).length > 0
-        ? parsed.important_details
-        : [`Event focuses on ${topic} - content generation failed, please regenerate blueprint`],
-    
-    inferred_topics: (Array.isArray(parsed.inferred_topics) && parsed.inferred_topics.length >= 5)
-      ? parsed.inferred_topics.filter(isMeaningfulString)
-      : (parsed.inferred_topics || []).length > 0
-        ? parsed.inferred_topics
-        : [`${topic} Fundamentals`, `${topic} Best Practices`],
-    
-    key_terms: (Array.isArray(parsed.key_terms) && parsed.key_terms.length >= 10)
-      ? parsed.key_terms.filter(isMeaningfulString)
-      : (parsed.key_terms || []).length > 0
-        ? parsed.key_terms
-        : [topic],
-    
-    research_plan: parsed.research_plan || {
-      queries: [],
-      total_searches: 0,
-      estimated_total_cost: 0,
+    ...parsedBlueprint,
+    important_details: [...parsedBlueprint.important_details],
+    inferred_topics: [...parsedBlueprint.inferred_topics],
+    key_terms: [...parsedBlueprint.key_terms],
+    research_plan: {
+      ...parsedBlueprint.research_plan,
+      queries: [...parsedBlueprint.research_plan.queries],
     },
-    
-    glossary_plan: parsed.glossary_plan || {
-      terms: [],
-      estimated_count: 0,
+    glossary_plan: {
+      ...parsedBlueprint.glossary_plan,
+      terms: [...parsedBlueprint.glossary_plan.terms],
     },
-    
-    chunks_plan: parsed.chunks_plan || {
-      sources: [],
-      target_count: 500,
-      quality_tier: 'basic',
-      ranking_strategy: 'relevance',
+    chunks_plan: {
+      ...parsedBlueprint.chunks_plan,
+      sources: [...parsedBlueprint.chunks_plan.sources],
     },
-    
-    cost_breakdown: parsed.cost_breakdown || {
-      research: 0,
-      glossary: 0,
-      chunks: 0,
-      total: 0,
-    },
+    cost_breakdown: { ...parsedBlueprint.cost_breakdown },
   };
+
+  if (blueprint.important_details.length >= 5) {
+    blueprint.important_details = blueprint.important_details.filter(isMeaningfulString);
+  } else if (blueprint.important_details.length === 0) {
+    blueprint.important_details = [`Event focuses on ${topic} - content generation failed, please regenerate blueprint`];
+  }
+
+  if (blueprint.inferred_topics.length >= 5) {
+    blueprint.inferred_topics = blueprint.inferred_topics.filter(isMeaningfulString);
+  } else if (blueprint.inferred_topics.length === 0) {
+    blueprint.inferred_topics = [`${topic} Fundamentals`, `${topic} Best Practices`];
+  }
+
+  if (blueprint.key_terms.length >= 10) {
+    blueprint.key_terms = blueprint.key_terms.filter(isMeaningfulString);
+  } else if (blueprint.key_terms.length === 0) {
+    blueprint.key_terms = [topic];
+  }
 
   // Apply minimal fallbacks only if arrays are still empty after all retries
   if (blueprint.research_plan.queries.length === 0) {

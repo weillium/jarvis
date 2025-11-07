@@ -9,6 +9,7 @@ import { FACTS_EXTRACTION_SYSTEM_PROMPT, createFactsExtractionUserPrompt } from 
 import { checkBudgetStatus, formatTokenBreakdown } from '../utils/token-counter';
 import type { FactsRepository } from '../services/supabase/facts-repository';
 import type { AgentOutputsRepository } from '../services/supabase/agent-outputs-repository';
+import { isRecord } from '../lib/context-normalization';
 
 interface GeneratedFactCandidate {
   key?: string;
@@ -16,6 +17,26 @@ interface GeneratedFactCandidate {
   confidence?: number;
   [key: string]: unknown;
 }
+
+const isGeneratedFactCandidate = (candidate: unknown): candidate is GeneratedFactCandidate => {
+  if (!isRecord(candidate)) {
+    return false;
+  }
+
+  if (candidate.key !== undefined && typeof candidate.key !== 'string') {
+    return false;
+  }
+
+  if (candidate.value !== undefined && typeof candidate.value !== 'string') {
+    return false;
+  }
+
+  if (candidate.confidence !== undefined && typeof candidate.confidence !== 'number') {
+    return false;
+  }
+
+  return true;
+};
 
 export class FactsProcessor {
   constructor(
@@ -73,7 +94,7 @@ export class FactsProcessor {
         glossaryContext: context.glossaryContext,
       });
 
-      await this.generateFactsFallback(runtime, recentText, currentFacts, context.glossaryContext);
+      await this.generateFactsFallback(runtime, recentText, currentFacts);
 
       await this.checkpointManager.saveCheckpoint(
         runtime.eventId,
@@ -91,8 +112,7 @@ export class FactsProcessor {
   private async generateFactsFallback(
     runtime: EventRuntime,
     recentText: string,
-    currentFacts: Fact[],
-    _glossaryContext?: string
+    currentFacts: Fact[]
   ): Promise<void> {
     const policy = FACTS_EXTRACTION_SYSTEM_PROMPT;
 
@@ -116,8 +136,14 @@ export class FactsProcessor {
       const factsJson = response.choices[0]?.message?.content;
       if (!factsJson) return;
 
-      const parsed = JSON.parse(factsJson) as { facts?: GeneratedFactCandidate[] };
-      const newFacts: GeneratedFactCandidate[] = parsed.facts ?? [];
+      const parsedPayload: unknown = JSON.parse(factsJson);
+      let newFacts: GeneratedFactCandidate[] = [];
+      if (isRecord(parsedPayload)) {
+        const factsValue = parsedPayload.facts;
+        if (Array.isArray(factsValue)) {
+          newFacts = factsValue.filter(isGeneratedFactCandidate);
+        }
+      }
 
       const evictedKeys: string[] = [];
       
