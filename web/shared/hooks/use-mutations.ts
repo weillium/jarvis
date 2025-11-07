@@ -233,6 +233,30 @@ export function useStartSessionsMutation(eventId: string) {
 }
 
 /**
+ * Reset agent sessions mutation
+ */
+export function useResetSessionsMutation(eventId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/agent-sessions/${eventId}/reset`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        throw new Error(data.error || 'Failed to reset sessions');
+      }
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agent', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['agent-sessions', eventId] });
+    },
+  });
+}
+
+/**
  * Pause agent sessions mutation
  */
 export function usePauseSessionsMutation(eventId: string) {

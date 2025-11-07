@@ -15,6 +15,16 @@ import { VectorSearchService } from '../context/vector-search';
 import { ModelSelectionService } from '../services/model-selection-service';
 import type { AgentSessionStatus, AgentType, EventRuntime } from '../types';
 
+interface TranscriptAudioChunk {
+  audioBase64: string;
+  seq?: number;
+  isFinal?: boolean;
+  sampleRate?: number;
+  encoding?: string;
+  durationMs?: number;
+  speaker?: string;
+}
+
 export interface OrchestratorConfig {
   supabase: SupabaseClient;
   openai: OpenAI;
@@ -105,6 +115,47 @@ export class Orchestrator {
       transcript: statuses.transcript,
       cards: statuses.cards,
       facts: statuses.facts,
+    };
+  }
+
+  async appendTranscriptAudio(eventId: string, chunk: TranscriptAudioChunk): Promise<void> {
+    if (!chunk?.audioBase64) {
+      throw new Error('Audio payload is required');
+    }
+
+    const runtime = await this.ensureRuntime(eventId);
+
+    if (!runtime.transcriptSession) {
+      await this.createRealtimeSessions(runtime, eventId, runtime.agentId);
+    }
+
+    if (!runtime.transcriptSession) {
+      throw new Error(`Transcript session unavailable for event ${eventId}`);
+    }
+
+    console.log('[orchestrator] Received transcript audio chunk', {
+      eventId,
+      bytes: Math.round((chunk.audioBase64.length * 3) / 4),
+      seq: chunk.seq,
+      isFinal: chunk.isFinal,
+      sampleRate: chunk.sampleRate,
+      encoding: chunk.encoding,
+    });
+
+    await this.sessionManager.appendAudioToTranscriptSession(runtime.transcriptSession, {
+      audioBase64: chunk.audioBase64,
+      isFinal: chunk.isFinal,
+      sampleRate: chunk.sampleRate,
+      encoding: chunk.encoding,
+      durationMs: chunk.durationMs,
+      speaker: chunk.speaker,
+    });
+
+    runtime.pendingTranscriptChunk = {
+      speaker: chunk.speaker ?? null,
+      sampleRate: chunk.sampleRate,
+      encoding: chunk.encoding,
+      durationMs: chunk.durationMs,
     };
   }
 
@@ -240,7 +291,7 @@ export class Orchestrator {
         this.eventProcessor.attachSessionHandlers(runtime);
 
         runtime.status = 'running';
-        await this.supabaseService.updateAgentStatus(agentId, 'running');
+        await this.supabaseService.updateAgentStatus(agentId, 'active', 'running');
 
         console.log(`[orchestrator] Event ${eventId} resumed successfully`);
         this.startPeriodicSummary(runtime);
@@ -266,8 +317,8 @@ export class Orchestrator {
 
       runtime.status = 'running';
       const currentAgent = await this.supabaseService.getAgentStatus(agentId);
-      if (currentAgent && currentAgent.status !== 'testing') {
-        await this.supabaseService.updateAgentStatus(agentId, 'running');
+      if (currentAgent && currentAgent.stage !== 'testing') {
+        await this.supabaseService.updateAgentStatus(agentId, 'active', 'running');
       }
       this.startPeriodicSummary(runtime);
       return;
@@ -369,8 +420,8 @@ export class Orchestrator {
 
     runtime.status = 'running';
     const currentAgent = await this.supabaseService.getAgentStatus(agentId);
-    if (currentAgent && currentAgent.status !== 'testing') {
-      await this.supabaseService.updateAgentStatus(agentId, 'running');
+    if (currentAgent && currentAgent.stage !== 'testing') {
+      await this.supabaseService.updateAgentStatus(agentId, 'active', 'running');
     }
 
     console.log(`[orchestrator] Event ${eventId} started`);
@@ -458,6 +509,7 @@ export class Orchestrator {
     } as const;
 
     if (this.transcriptOnly) {
+      console.log('[orchestrator] Transcript-only mode enabled');
       runtime.transcriptSession = await this.sessionManager.createTranscriptSession(
         runtime,
         async (agentType, status, sessionId) => {
@@ -482,6 +534,7 @@ export class Orchestrator {
       runtime.transcriptHandlerSession = undefined;
       runtime.cardsHandlerSession = undefined;
       runtime.factsHandlerSession = undefined;
+      this.attachTranscriptHandler(runtime, eventId, agentId);
     } else {
       const { transcriptSession, cardsSession, factsSession } = await this.sessionManager.createSessions(
         runtime,
@@ -516,6 +569,7 @@ export class Orchestrator {
       runtime.transcriptHandlerSession = undefined;
       runtime.cardsHandlerSession = undefined;
       runtime.factsHandlerSession = undefined;
+      this.attachTranscriptHandler(runtime, eventId, agentId);
     }
 
     try {
@@ -523,6 +577,7 @@ export class Orchestrator {
         if (!runtime.transcriptSession) {
           throw new Error('Transcript session missing');
         }
+        console.log('[orchestrator] Connecting transcript session (transcript-only mode)');
         const transcriptSessionId = await runtime.transcriptSession.connect();
         runtime.transcriptSessionId = transcriptSessionId;
         runtime.cardsSession = undefined;
@@ -544,6 +599,8 @@ export class Orchestrator {
             }
           })
         );
+
+        console.log(`[orchestrator] Transcript session connected (id: ${transcriptSessionId})`);
       } else {
         const { transcriptSessionId, cardsSessionId, factsSessionId } = await this.sessionManager.connectSessions(
           runtime.transcriptSession!,
@@ -553,6 +610,11 @@ export class Orchestrator {
         runtime.transcriptSessionId = transcriptSessionId;
         runtime.cardsSessionId = cardsSessionId;
         runtime.factsSessionId = factsSessionId;
+        console.log('[orchestrator] Sessions connected', {
+          transcriptSessionId,
+          cardsSessionId,
+          factsSessionId,
+        });
       }
     } catch (error: any) {
       console.error(`[orchestrator] Failed to connect sessions: ${error.message}`);
@@ -638,7 +700,98 @@ export class Orchestrator {
       return;
     }
 
+    if (typeof transcript.seq === 'number' && transcript.seq <= runtime.transcriptLastSeq) {
+      return;
+    }
+
     await this.eventProcessor.handleTranscript(runtime, transcript);
+  }
+
+  private async ensureRuntime(eventId: string): Promise<EventRuntime> {
+    let runtime = this.runtimeManager.getRuntime(eventId);
+    if (runtime) {
+      runtime.updatedAt = new Date();
+      return runtime;
+    }
+
+    const agent = await this.supabaseService.getAgentForEvent(eventId);
+    if (!agent) {
+      throw new Error(`No agent found for event ${eventId}`);
+    }
+
+    runtime = await this.runtimeManager.createRuntime(eventId, agent.id);
+    return runtime;
+  }
+
+  private attachTranscriptHandler(runtime: EventRuntime, eventId: string, agentId: string): void {
+    if (!runtime.transcriptSession) {
+      return;
+    }
+
+    if (runtime.transcriptHandlerSession === runtime.transcriptSession) {
+      return;
+    }
+
+    runtime.transcriptSession.on('transcript', async (payload: { text: string; isFinal?: boolean; receivedAt?: string }) => {
+      try {
+        await this.handleRealtimeTranscript(eventId, agentId, runtime, payload);
+      } catch (error: any) {
+        console.error(`[orchestrator] Failed to process realtime transcript: ${error.message}`);
+      }
+    });
+
+    runtime.transcriptHandlerSession = runtime.transcriptSession;
+  }
+
+  private async handleRealtimeTranscript(
+    eventId: string,
+    agentId: string,
+    runtime: EventRuntime,
+    payload: { text: string; isFinal?: boolean; receivedAt?: string }
+  ): Promise<void> {
+    const text = payload.text?.trim();
+    if (!text) {
+      return;
+    }
+
+    const seq = runtime.transcriptLastSeq + 1;
+    const atMs = payload.receivedAt ? Date.parse(payload.receivedAt) || Date.now() : Date.now();
+    const final = payload.isFinal !== false;
+    const speaker = runtime.pendingTranscriptChunk?.speaker ?? null;
+
+    const record = await this.supabaseService.insertTranscript({
+      event_id: eventId,
+      seq,
+      text,
+      at_ms: atMs,
+      final,
+      speaker,
+    });
+
+    runtime.pendingTranscriptChunk = undefined;
+
+    runtime.ringBuffer.add({
+      seq,
+      at_ms: atMs,
+      speaker: speaker ?? undefined,
+      text,
+      final,
+      transcript_id: record.id,
+    });
+
+    runtime.transcriptLastSeq = seq;
+    runtime.cardsLastSeq = Math.max(runtime.cardsLastSeq, seq);
+    runtime.factsLastSeq = Math.max(runtime.factsLastSeq, seq);
+
+    await this.eventProcessor.handleTranscript(runtime, {
+      event_id: record.event_id,
+      id: record.id,
+      seq: record.seq,
+      at_ms: record.at_ms,
+      speaker: record.speaker,
+      text: record.text,
+      final: record.final,
+    });
   }
 
   private async createRealtimeSessions(runtime: EventRuntime, eventId: string, agentId: string): Promise<void> {

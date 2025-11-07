@@ -40,6 +40,12 @@ export interface EventRuntime {
   transcriptHandlerSession?: RealtimeSession;
   cardsHandlerSession?: RealtimeSession;
   factsHandlerSession?: RealtimeSession;
+  pendingTranscriptChunk?: {
+    speaker?: string | null;
+    sampleRate?: number;
+    encoding?: string;
+    durationMs?: number;
+  };
 
   // Checkpoints
   transcriptLastSeq: number;

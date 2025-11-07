@@ -347,6 +347,64 @@ function createWorkerServer() {
         }
       }
 
+      // Transcript audio ingestion endpoint
+      if (pathname === '/sessions/transcript/audio' && req.method === 'POST') {
+        try {
+          const body = await parseJsonBody(req);
+          const eventId =
+            typeof body?.event_id === 'string'
+              ? body.event_id
+              : typeof body?.eventId === 'string'
+              ? body.eventId
+              : null;
+
+          if (!eventId) {
+            res.writeHead(400);
+            res.end(JSON.stringify({ ok: false, error: 'event_id is required' }));
+            return;
+          }
+
+          const audioBase64 =
+            typeof body?.audio_base64 === 'string'
+              ? body.audio_base64
+              : typeof body?.audioBase64 === 'string'
+              ? body.audioBase64
+              : null;
+
+          if (!audioBase64) {
+            res.writeHead(400);
+            res.end(JSON.stringify({ ok: false, error: 'audio_base64 is required' }));
+            return;
+          }
+
+          const chunkMetadata = {
+            audioBase64,
+            seq: typeof body?.seq === 'number' ? body.seq : undefined,
+            isFinal: typeof body?.is_final === 'boolean' ? body.is_final : body?.isFinal,
+            sampleRate: typeof body?.sample_rate === 'number' ? body.sample_rate : body?.sampleRate,
+            encoding: typeof body?.encoding === 'string' ? body.encoding : undefined,
+            durationMs: typeof body?.duration_ms === 'number' ? body.duration_ms : body?.durationMs,
+            speaker: typeof body?.speaker === 'string' ? body.speaker : undefined,
+          } as const;
+
+          await orchestrator.appendTranscriptAudio(eventId, chunkMetadata);
+
+          res.writeHead(202);
+          res.end(JSON.stringify({ ok: true }));
+          return;
+        } catch (error: any) {
+          const statusCode = error?.statusCode || (error?.message?.includes('not found') ? 404 : 500);
+          res.writeHead(statusCode);
+          res.end(
+            JSON.stringify({
+              ok: false,
+              error: error?.message || 'Failed to process transcript audio',
+            })
+          );
+          return;
+        }
+      }
+
       // WebSocket state endpoint: GET /websocket-state?event_id=<eventId>
       if (pathname === '/websocket-state' && req.method === 'GET') {
         const eventId = url.searchParams.get('event_id');

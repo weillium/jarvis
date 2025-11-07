@@ -4,6 +4,15 @@ import { SessionFactory } from './session-factory';
 import { SupabaseService } from '../services/supabase-service';
 import { Logger } from '../monitoring/logger';
 
+interface TranscriptAudioOptions {
+  audioBase64: string;
+  isFinal?: boolean;
+  sampleRate?: number;
+  encoding?: string;
+  durationMs?: number;
+  speaker?: string;
+}
+
 type SessionStatus = 'active' | 'paused' | 'closed' | 'error';
 
 type SessionStatusHandler = (
@@ -69,6 +78,13 @@ export class SessionManager {
       transcriptModel,
       apiKey
     );
+  }
+
+  async appendAudioToTranscriptSession(
+    session: RealtimeSession,
+    chunk: TranscriptAudioOptions
+  ): Promise<void> {
+    await session.appendAudioChunk(chunk);
   }
 
   async createSessions(

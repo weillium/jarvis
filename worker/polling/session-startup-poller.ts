@@ -13,11 +13,12 @@ export class SessionStartupPoller implements Poller {
   async tick(): Promise<void> {
     // Find closed sessions created in the last minute (new sessions ready to start)
     const oneMinuteAgo = new Date(Date.now() - 60000).toISOString();
-    const { data: newSessions, error } = await this.supabase
+    const { data: pendingSessions, error } = await this.supabase
       .from('agent_sessions')
-      .select('event_id, agent_id, created_at')
-      .eq('status', 'closed')
-      .gte('created_at', oneMinuteAgo)
+      .select('event_id, agent_id, status, created_at, updated_at, provider_session_id')
+      .or(
+        `and(status.eq.closed,created_at.gte.${oneMinuteAgo}),and(status.eq.active,provider_session_id.eq.pending)`
+      )
       .limit(50);
 
     if (error) {
@@ -25,12 +26,12 @@ export class SessionStartupPoller implements Poller {
       return;
     }
 
-    if (!newSessions || newSessions.length === 0) {
+    if (!pendingSessions || pendingSessions.length === 0) {
       return;
     }
 
     const eventsToStart = new Map<string, string>();
-    for (const session of newSessions) {
+    for (const session of pendingSessions) {
       if (!eventsToStart.has(session.event_id)) {
         eventsToStart.set(session.event_id, session.agent_id);
       }
@@ -39,26 +40,32 @@ export class SessionStartupPoller implements Poller {
     for (const [eventId, agentId] of eventsToStart) {
       try {
         const runtime = this.orchestrator.getRuntime(eventId);
-        if (
-          runtime &&
-          runtime.status === 'running' &&
-          runtime.cardsSession &&
-          runtime.factsSession
-        ) {
-          continue;
+        if (runtime && runtime.status === 'running') {
+          const transcriptActive = runtime.transcriptSession?.getStatus().isActive;
+          const cardsActive = runtime.cardsSession?.getStatus().isActive;
+          const factsActive = runtime.factsSession?.getStatus().isActive;
+
+          if (transcriptActive || cardsActive || factsActive) {
+            continue;
+          }
         }
 
         const { data: agent } = await this.supabase
           .from('agents')
-          .select('status')
+          .select('status, stage')
           .eq('id', agentId)
           .single();
 
-        if (!agent || (agent.status !== 'testing' && agent.status !== 'running')) {
+        if (!agent || agent.status !== 'active') {
           continue;
         }
 
-        if (agent.status === 'testing') {
+        const allowedStages = ['testing', 'running'];
+        if (!allowedStages.includes(agent.stage)) {
+          continue;
+        }
+
+        if (agent.stage === 'testing') {
           this.log('[start-generated] Starting sessions for testing (event:', eventId, ')');
           await this.orchestrator.startSessionsForTesting(eventId, agentId);
         } else {

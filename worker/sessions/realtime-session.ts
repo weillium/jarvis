@@ -61,6 +61,7 @@ export class RealtimeSession {
   private config: RealtimeSessionConfig;
   private isActive: boolean = false;
   private messageQueue: any[] = [];
+  private pendingAudioBytes: number = 0;
   private eventHandlers: Map<string, ((data: any) => void)[]> = new Map();
   private onStatusChange?: (
     status: 'active' | 'paused' | 'closed' | 'error',
@@ -598,17 +599,27 @@ export class RealtimeSession {
       'response.output_text.done',
       async (event: ResponseTextDoneEvent) => {
         try {
-          // Parse JSON response
-          const response = JSON.parse(event.text);
+          if (this.config.agentType === 'transcript') {
+            const text = event.text?.trim() ?? '';
+            if (text.length === 0) {
+              return;
+            }
 
-          // Emit to registered handlers
+            this.emit('transcript', {
+              text,
+              isFinal: true,
+              receivedAt: new Date().toISOString(),
+            });
+            return;
+          }
+
+          // Parse JSON response for cards/facts agents
+          const response = JSON.parse(event.text);
           this.emit('response', response);
 
-          // Process based on agent type
           if (this.config.agentType === 'cards') {
             this.emit('card', response);
           } else {
-            // Facts agent expects array of facts
             const factsArray = Array.isArray(response)
               ? response
               : response.facts || [];
@@ -636,7 +647,21 @@ export class RealtimeSession {
           const textContent = textItem.content.find(
             (c: any) => c.type === 'text'
           );
-          if (textContent?.text) {
+          if (!textContent?.text) {
+            return;
+          }
+
+          if (this.config.agentType === 'transcript') {
+            const text = textContent.text.trim();
+            if (text.length === 0) {
+              return;
+            }
+            this.emit('transcript', {
+              text,
+              isFinal: true,
+              receivedAt: new Date().toISOString(),
+            });
+          } else {
             const response = JSON.parse(textContent.text);
             this.emit('response', response);
 
@@ -826,6 +851,20 @@ export class RealtimeSession {
           ],
         },
       };
+    } else if (this.config.agentType === 'transcript') {
+      return {
+        type: 'conversation.item.create',
+        item: {
+          type: 'message',
+          role: 'user',
+          content: [
+            {
+              type: 'input_text',
+              text: message,
+            },
+          ],
+        },
+      };
     } else {
       // Facts agent: send condensed context (no vector - agent uses retrieve() tool)
       return {
@@ -845,6 +884,47 @@ export class RealtimeSession {
           ],
         },
       };
+    }
+  }
+
+  async appendAudioChunk(chunk: {
+    audioBase64: string;
+    isFinal?: boolean;
+    sampleRate?: number;
+    encoding?: string;
+    durationMs?: number;
+    speaker?: string;
+  }): Promise<void> {
+    if (!this.isActive || !this.session) {
+      throw new Error('Transcript session not connected');
+    }
+
+    if (!chunk.audioBase64) {
+      throw new Error('audioBase64 is required');
+    }
+
+    try {
+      this.session.send({
+        type: 'input_audio_buffer.append',
+        audio: chunk.audioBase64,
+      } as RealtimeClientEvent);
+
+      this.pendingAudioBytes += Math.round((chunk.audioBase64.length * 3) / 4);
+
+      if (chunk.isFinal) {
+        this.session.send({ type: 'input_audio_buffer.commit' } as RealtimeClientEvent);
+        this.session.send({
+          type: 'response.create',
+          response: {
+            instructions: undefined,
+            modalities: ['text'],
+          },
+        } as RealtimeClientEvent);
+        this.pendingAudioBytes = 0;
+      }
+    } catch (error: any) {
+      console.error(`[realtime] Error appending audio chunk: ${error.message}`);
+      throw error;
     }
   }
 

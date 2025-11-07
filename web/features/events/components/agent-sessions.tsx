@@ -11,6 +11,7 @@ import {
   usePauseSessionsMutation,
   useConfirmReadyMutation,
   useSendTestTranscriptMutation,
+  useResetSessionsMutation,
 } from '@/shared/hooks/use-mutations';
 import { TestTranscriptModal } from './test-transcript-modal';
 
@@ -593,6 +594,7 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
   const pauseSessionsMutation = usePauseSessionsMutation(eventId);
   const confirmReadyMutation = useConfirmReadyMutation(eventId);
   const sendTestTranscriptMutation = useSendTestTranscriptMutation(eventId);
+  const resetSessionsMutation = useResetSessionsMutation(eventId);
 
   const handleCreateSessions = () => {
     createSessionsMutation.mutate(undefined, {
@@ -633,6 +635,14 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
     });
   };
 
+  const handleResetSessions = () => {
+    resetSessionsMutation.mutate(undefined, {
+      onSuccess: async () => {
+        await refetchSessions();
+      },
+    });
+  };
+
   const handlePauseSessions = () => {
     pauseSessionsMutation.mutate(undefined, {
       onSuccess: async () => {
@@ -642,6 +652,7 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
   };
 
   const isStartingSessions = createSessionsMutation.isPending || startSessionsMutation.isPending;
+  const isResettingSessions = resetSessionsMutation.isPending;
   const startSessionsError = createSessionsMutation.error || startSessionsMutation.error
     ? (createSessionsMutation.error instanceof Error ? createSessionsMutation.error.message : startSessionsMutation.error instanceof Error ? startSessionsMutation.error.message : 'Failed to start sessions')
     : null;
@@ -708,6 +719,35 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
               {isStartingSessions ? 'Creating...' : 'Create Sessions'}
             </button>
           )}
+
+          <button
+            onClick={handleResetSessions}
+            disabled={isResettingSessions}
+            style={{
+              padding: '8px 16px',
+              border: '1px solid #e2e8f0',
+              borderRadius: '6px',
+              fontSize: '14px',
+              fontWeight: '500',
+              color: isResettingSessions ? '#9ca3af' : '#374151',
+              background: isResettingSessions ? '#f3f4f6' : '#ffffff',
+              cursor: isResettingSessions ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              if (!isResettingSessions) {
+                e.currentTarget.style.background = '#f8fafc';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isResettingSessions) {
+                e.currentTarget.style.background = '#ffffff';
+              }
+            }}
+            title="Delete existing sessions and reset agent to context_complete"
+          >
+            {isResettingSessions ? 'Resetting...' : 'Reset Sessions'}
+          </button>
           
           {/* Start/Resume Sessions button */}
           {(() => {

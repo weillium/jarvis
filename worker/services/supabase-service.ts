@@ -47,6 +47,15 @@ export interface AgentSummaryRecord {
   model_set: string | null;
 }
 
+interface InsertTranscriptParams {
+  event_id: string;
+  seq: number;
+  text: string;
+  at_ms: number;
+  final: boolean;
+  speaker?: string | null;
+}
+
 interface TranscriptRecord {
   id: number;
   seq: number;
@@ -472,6 +481,33 @@ export class SupabaseService {
 
     if (error) throw error;
     return (data as TranscriptRecord[]) || [];
+  }
+
+  async insertTranscript(params: InsertTranscriptParams): Promise<{ id: number; event_id: string; seq: number; at_ms: number; speaker: string | null; text: string; final: boolean; }>
+  {
+    const { data, error } = await this.client
+      .from('transcripts')
+      .insert({
+        event_id: params.event_id,
+        seq: params.seq,
+        text: params.text,
+        at_ms: params.at_ms,
+        final: params.final,
+        speaker: params.speaker ?? null,
+      })
+      .select('id, event_id, seq, at_ms, speaker, text, final')
+      .single();
+
+    if (error) throw error;
+    return data as {
+      id: number;
+      event_id: string;
+      seq: number;
+      at_ms: number;
+      speaker: string | null;
+      text: string;
+      final: boolean;
+    };
   }
 
   async updateTranscriptSeq(transcriptId: number, seq: number): Promise<void> {
