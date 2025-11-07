@@ -17,12 +17,6 @@ alwaysApply: true
 - caught errors log as `String(err)` only → do not read `.message`, `.stack`, etc.
 - normalization utilities → consolidate under `worker/lib/**`.
 - maintain the separation between the **cards** realtime agent, the **transcripts** realtime agent, and the **facts** stateless agent.
-- the following files are protected (no edits unless explicitly told):
-  - `worker/context/pipeline/context-generation-orchestrator.ts`
-  - `worker/context/pipeline/orchestrator/exa-orchestrator.ts`
-  - `worker/context/pipeline/orchestrator/supabase-orchestrator.ts`
-  - `worker/context/pipeline/orchestrator/llm-orchestrator.ts`
-  - `worker/sessions/realtime-session.ts`
 
 ## web
 - React Query is the *only* source of server state.
