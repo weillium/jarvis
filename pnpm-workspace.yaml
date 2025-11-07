@@ -1,0 +1,5 @@
+packages:
+  - 'worker'
+  - 'web'
+  - 'supabase'
+  - 'dev_docs'

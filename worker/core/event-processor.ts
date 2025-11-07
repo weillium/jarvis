@@ -1,12 +1,53 @@
-import type { EventRuntime } from '../types';
+import type {
+  EventRuntime,
+  RealtimeCardDTO,
+  RealtimeFactDTO,
+  TranscriptChunk,
+} from '../types';
 import type { CardsProcessor } from '../processing/cards-processor';
 import type { FactsProcessor } from '../processing/facts-processor';
 import type { TranscriptProcessor } from '../processing/transcript-processor';
-import type { TranscriptChunk } from '../types';
 import type { AgentOutputsRepository } from '../services/supabase/agent-outputs-repository';
 import type { FactsRepository } from '../services/supabase/facts-repository';
 
-type DetermineCardTypeFn = (card: any, transcriptText: string) => 'text' | 'text_visual' | 'visual';
+type CardType = RealtimeCardDTO['card_type'];
+
+interface DetermineCardPayload extends Record<string, unknown> {
+  card_type?: unknown;
+  title?: string;
+  body?: string | null;
+  label?: string | null;
+  image_url?: string | null;
+  source_seq?: number;
+}
+
+interface MutableCardPayload extends DetermineCardPayload {
+  kind?: string;
+}
+
+interface TranscriptPayload extends Record<string, unknown> {
+  text: string;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const isTranscriptPayload = (value: unknown): value is TranscriptPayload =>
+  isRecord(value) && typeof value.text === 'string';
+
+const isRealtimeCardType = (value: unknown): value is CardType =>
+  value === 'text' || value === 'text_visual' || value === 'visual';
+
+const isMutableCardPayload = (value: unknown): value is MutableCardPayload =>
+  isRecord(value);
+
+const isRealtimeFact = (value: unknown): value is RealtimeFactDTO =>
+  isRecord(value) && typeof value.key === 'string';
+
+type DetermineCardTypeFn = (
+  card: DetermineCardPayload,
+  transcriptText: string
+) => CardType;
 
 export class EventProcessor {
   private readonly FACTS_DEBOUNCE_MS = 25000;
@@ -20,7 +61,11 @@ export class EventProcessor {
     private readonly determineCardType: DetermineCardTypeFn
   ) {}
 
-  async handleTranscript(runtime: EventRuntime, transcript: any): Promise<void> {
+  async handleTranscript(runtime: EventRuntime, transcript: unknown): Promise<void> {
+    if (!isTranscriptPayload(transcript)) {
+      throw new TypeError('Invalid transcript payload: missing text');
+    }
+
     const chunk = this.transcriptProcessor.convertToChunk(transcript);
     await this.processTranscriptChunk(runtime, chunk);
   }
@@ -30,15 +75,15 @@ export class EventProcessor {
     // For now, transcript agent may not emit events that need handling
     
     if (runtime.cardsSession && runtime.cardsSession !== runtime.cardsHandlerSession) {
-      runtime.cardsSession.on('card', async (card: any) => {
-        await this.handleCardResponse(runtime, card);
+      runtime.cardsSession.on('card', (card: RealtimeCardDTO) => {
+        void this.handleCardResponse(runtime, card);
       });
       runtime.cardsHandlerSession = runtime.cardsSession;
     }
 
     if (runtime.factsSession && runtime.factsSession !== runtime.factsHandlerSession) {
-      runtime.factsSession.on('facts', async (facts: any[]) => {
-        await this.handleFactsResponse(runtime, facts);
+      runtime.factsSession.on('facts', (facts: RealtimeFactDTO[]) => {
+        void this.handleFactsResponse(runtime, facts);
       });
       runtime.factsHandlerSession = runtime.factsSession;
     }
@@ -89,25 +134,33 @@ export class EventProcessor {
     }, this.FACTS_DEBOUNCE_MS);
   }
 
-  async handleCardResponse(runtime: EventRuntime, card: any): Promise<void> {
+  async handleCardResponse(runtime: EventRuntime, cardInput: unknown): Promise<void> {
     try {
-      if (!card) {
+      if (!cardInput) {
         return;
       }
 
-      if (!card.kind || !card.title) {
+      if (!isMutableCardPayload(cardInput)) {
+        console.warn(`[cards] Invalid card structure: payload is not an object`);
+        return;
+      }
+
+      const card = cardInput;
+
+      if (typeof card.kind !== 'string' || typeof card.title !== 'string' || card.kind.length === 0 || card.title.length === 0) {
         console.warn(`[cards] Invalid card structure: missing kind or title`);
         return;
       }
 
-      if (!card.card_type || !['text', 'text_visual', 'visual'].includes(card.card_type)) {
-        card.card_type = this.determineCardType(card, '');
-      }
+      const cardType: CardType = isRealtimeCardType(card.card_type)
+        ? card.card_type
+        : this.determineCardType(card, '');
+      card.card_type = cardType;
 
-      if (card.card_type === 'visual') {
+      if (cardType === 'visual') {
         if (!card.label) card.label = card.title || 'Image';
         if (!card.body) card.body = null;
-      } else if (card.card_type === 'text_visual') {
+      } else if (cardType === 'text_visual') {
         if (!card.body) card.body = card.title || 'Definition';
       } else {
         if (!card.body) card.body = card.title || 'Definition';
@@ -126,16 +179,21 @@ export class EventProcessor {
       // Cards are now inserted via insertAgentOutput only (no need for separate insertCard)
 
       console.log(
-        `[cards] Card received from Realtime API (seq: ${card.source_seq || runtime.cardsLastSeq}, type: ${card.card_type})`
+        `[cards] Card received from Realtime API (seq: ${card.source_seq || runtime.cardsLastSeq}, type: ${cardType})`
       );
     } catch (err: unknown) {
-      console.error("[worker] error:", String(err));
+      console.error("[event-processor] error:", String(err));
     }
   }
 
-  async handleFactsResponse(runtime: EventRuntime, facts: any[]): Promise<void> {
+  async handleFactsResponse(runtime: EventRuntime, factsInput: unknown): Promise<void> {
     try {
-      if (!facts || facts.length === 0) {
+      if (!Array.isArray(factsInput) || factsInput.length === 0) {
+        return;
+      }
+
+      const facts = factsInput.filter(isRealtimeFact);
+      if (facts.length === 0) {
         return;
       }
 
@@ -144,7 +202,8 @@ export class EventProcessor {
       for (const fact of facts) {
         if (!fact.key || fact.value === undefined) continue;
 
-        const initialConfidence = fact.confidence || 0.7;
+        const initialConfidence =
+          (typeof fact.confidence === 'number' ? fact.confidence : undefined) || 0.7;
         const keysEvicted = runtime.factsStore.upsert(fact.key, fact.value, initialConfidence, runtime.factsLastSeq, undefined);
         
         // Accumulate evicted keys to mark as inactive later
@@ -185,7 +244,7 @@ export class EventProcessor {
 
       console.log(`[facts] ${facts.length} facts updated from Realtime API`);
     } catch (err: unknown) {
-      console.error("[worker] error:", String(err));
+      console.error("[event-processor] error:", String(err));
     }
   }
 }
