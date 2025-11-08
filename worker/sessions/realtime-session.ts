@@ -19,7 +19,6 @@ import {
   extractErrorField,
   extractErrorMessage,
   getLowercaseErrorField,
-  isRecord,
 } from './realtime-session/payload-utils';
 import type {
   RealtimeMessageContext,
@@ -34,11 +33,11 @@ import { getSessionInternals, getUnderlyingSocket } from './realtime-session/tra
 import { HeartbeatManager } from './realtime-session/heartbeat-manager';
 import type { AgentHandler } from './realtime-session/types';
 import { createAgentHandler } from './realtime-session/handlers';
+import { EventRouter } from './realtime-session/event-router';
+import { RuntimeController } from './realtime-session/runtime-controller';
+import { ConnectionManager } from './realtime-session/connection-manager';
 
 export type { AgentType, RealtimeSessionConfig } from './realtime-session/types';
-
-const isInvalidToolCallError = (error: unknown): boolean =>
-  getLowercaseErrorField(error, 'message').includes('invalid_tool_call_id');
 
 type JsonSchemaProperty =
   | {
@@ -75,6 +74,9 @@ export class RealtimeSession {
   private readonly messageQueue: MessageQueueManager;
   private readonly heartbeat: HeartbeatManager;
   private readonly agentHandler: AgentHandler;
+  private readonly runtime: RuntimeController;
+  private readonly eventRouter: EventRouter;
+  private readonly connectionManager: ConnectionManager;
   private eventHandlers: { [K in RealtimeSessionEvent]?: Array<(data: RealtimeSessionEventPayloads[K]) => void> } = {};
   private onStatusChange?: (
     status: 'active' | 'paused' | 'closed' | 'error',
@@ -132,6 +134,27 @@ export class RealtimeSession {
       heartbeatConfig
     );
 
+    this.runtime = new RuntimeController({
+      config: this.config,
+      messageQueue: this.messageQueue,
+      heartbeat: this.heartbeat,
+      getSession: () => this.session,
+      isActive: () => this.isActive,
+      setActive: (active) => {
+        this.isActive = active;
+      },
+      onLog: (level, message, context) => this.onLog?.(level, message, context),
+      onStatusChange: (status, sessionId) => this.onStatusChange?.(status, sessionId),
+      updateDatabaseStatus: (status, sessionId) => this.updateDatabaseStatus(status, sessionId),
+      safeCloseSession: (reason) => this.safeCloseSession(reason),
+      scheduleReconnect: () => this.scheduleReconnect(),
+    });
+
+    this.connectionManager = new ConnectionManager({
+      openai,
+      onLog: (level, message) => this.onLog?.(level, message),
+    });
+
     this.agentHandler = createAgentHandler({
       context: {
         eventId: this.config.eventId,
@@ -143,10 +166,19 @@ export class RealtimeSession {
         event: K,
         payload: RealtimeSessionEventPayloads[K]
       ) => this.emitEvent(event, payload),
-      sendToolResult: (callId, output) => this.sendToolResult(callId, output),
+      sendToolResult: (callId, output) => this.runtime.sendToolResult(callId, output),
       onRetrieve: this.onRetrieve,
       embedText: this.embedText,
       tokenBudget: this.config.tokenBudget,
+    });
+
+    this.eventRouter = new EventRouter({
+      agentHandler: this.agentHandler,
+      messageQueue: this.messageQueue,
+      heartbeat: this.heartbeat,
+      classifyRealtimeError: (error) => this.classifyRealtimeError(error),
+      onLog: (level, message) => this.onLog?.(level, message),
+      onError: (error, classification) => this.handleSessionError(error, classification),
     });
   }
 
@@ -304,28 +336,18 @@ export class RealtimeSession {
     // Status will be updated to 'active' when connection is established
 
     try {
-
-      // Phase 2: WebSocket creation timing
-      const connectStartTime = Date.now();
       this.onLog?.('log', `Creating WebSocket connection with model: ${model}`);
+      const { session, durationMs } = await this.connectionManager.createSession(model);
+      this.session = session;
+      this.onLog?.('log', `WebSocket created in ${durationMs}ms`);
 
-      // Create actual WebSocket connection
-      this.session = await OpenAIRealtimeWebSocket.create(this.openai, {
-        model,
-        dangerouslyAllowBrowser: false,
-      });
-
-      // Log WebSocket creation success
-      const connectDuration = Date.now() - connectStartTime;
-      this.onLog?.('log', `WebSocket created in ${connectDuration}ms`);
-      
       // Log WebSocket state after creation
       this.logWebSocketState('After WebSocket.create()');
 
       // Set up event handlers BEFORE marking as active
       this.setupEventHandlers();
 
-      await this.waitForTransportReady();
+      await this.connectionManager.waitForTransportReady(this.session);
       this.logWebSocketState('After transport ready');
 
       // Define retrieve tool for RAG (available to all agents)
@@ -593,8 +615,7 @@ export class RealtimeSession {
 
     // Handle session creation
     this.session.on('session.created', () => {
-      const message = `Session created (${this.config.agentType})`;
-      this.onLog?.('log', message);
+      this.eventRouter.handleSessionCreated();
     });
 
     // Handle pong responses (WebSocket ping-pong)
@@ -604,7 +625,7 @@ export class RealtimeSession {
     if (underlyingSocket && typeof underlyingSocket.on === 'function') {
       // Standard WebSocket 'pong' event (fires when pong frame is received)
       underlyingSocket.on('pong', () => {
-        this.heartbeat.handlePong();
+        this.eventRouter.handlePong();
       });
     } else {
       // Ping/pong not available on this socket - disable ping/pong mechanism
@@ -615,63 +636,33 @@ export class RealtimeSession {
     // Handle function call arguments completion
     // When agent calls a tool, we receive the arguments and need to execute the tool
     this.session.on('response.function_call_arguments.done', (event: ResponseFunctionCallArgumentsDoneEvent) => {
-      void this.agentHandler.handleToolCall(event);
+      this.eventRouter.handleFunctionCall(event);
     });
 
     // Handle response text completion (for JSON responses)
     this.session.on('response.output_text.done', (event: ResponseTextDoneEvent) => {
-      void this.agentHandler.handleResponseText(event);
+      this.eventRouter.handleResponseText(event);
     });
 
     this.session.on('response.done', (event: ResponseDoneEvent) => {
-      void this.agentHandler.handleResponseDone(event);
-      this.messageQueue.markResponseComplete();
-      void this.messageQueue.processQueue();
+      this.eventRouter.handleResponseDone(event);
     });
 
     // Handle errors
     this.session.on('error', (error: unknown) => {
-      const baseMessage = `Session error: ${extractErrorMessage(error)}`;
       const errorMessage = getLowercaseErrorField(error, 'message');
 
       if (errorMessage.includes('could not close the connection')) {
-        console.warn(`[realtime] ${baseMessage} (ignored close failure)`);
+        console.warn(`[realtime] Session error: ${extractErrorMessage(error)} (ignored close failure)`);
         return;
       }
 
-      const classification = this.classifyRealtimeError(error);
-
-      if (classification === 'fatal') {
-        console.error(`[realtime] ${baseMessage}`);
-        this.onLog?.('error', baseMessage);
-        this.transitionToErrorState(error, baseMessage);
-        return;
-      }
-
-      console.warn(`[realtime] ${baseMessage} (transient - retrying)`);
-      this.onLog?.('warn', `${baseMessage} (transient - retrying)`);
-
-      this.isActive = false;
-      this.messageQueue.restoreCurrentMessage();
-      this.heartbeat.stop();
-      this.onStatusChange?.('paused');
-      void this.updateDatabaseStatus('paused');
-      this.safeCloseSession('Transient error - reconnecting');
-      this.scheduleReconnect();
+      this.eventRouter.handleError(error);
     });
 
     // Generic event handler for debugging
     this.session.on('event', (event: RealtimeServerEvent) => {
-      // Log all events for debugging (can be removed in production)
-      if (process.env.DEBUG_REALTIME) {
-        console.log(`[realtime] Event: ${event.type}`, event);
-      }
-      
-      // Handle session updates (session end is handled via close() method)
-      if (event.type === 'session.updated') {
-        const message = `Session updated (${this.config.agentType})`;
-        console.log(`[realtime] ${message}`);
-      }
+      this.eventRouter.handleGenericEvent(event);
     });
 
     // Phase 5: Event handler registration confirmation (after all handlers are registered)
@@ -689,168 +680,22 @@ export class RealtimeSession {
     this.onLog?.('log', 'Event handlers registered');
   }
 
-  private async waitForTransportReady(timeoutMs: number = 5000): Promise<void> {
-    if (!this.session) {
-      throw new Error('Session not initialized');
-    }
+  private handleSessionError(error: unknown, classification: 'transient' | 'fatal'): void {
+    const message = extractErrorMessage(error);
 
-    const start = Date.now();
-    const { transport, socket } = getSessionInternals(this.session);
-
-    const isOpen = (): boolean => {
-      if (transport?.state) {
-        return transport.state === 'open';
-      }
-      if (typeof transport?.readyState === 'string') {
-        return transport.readyState.toLowerCase() === 'open';
-      }
-      if (typeof transport?.readyState === 'number') {
-        return transport.readyState === 1;
-      }
-      if (socket?.readyState !== undefined) {
-        const openConst = socket.OPEN ?? 1;
-        return socket.readyState === openConst;
-      }
-      return false;
-    };
-
-    if (isOpen()) {
-      this.onLog?.('log', 'Realtime transport already open');
+    if (classification === 'fatal') {
+      this.transitionToErrorState(error, message);
       return;
     }
 
-    this.onLog?.('log', 'Waiting for realtime transport to open');
-
-    await new Promise<void>((resolve, reject) => {
-      let settled = false;
-      let pollInterval: NodeJS.Timeout | null = null;
-      const removeListeners: Array<() => void> = [];
-
-      const cleanup = () => {
-        if (pollInterval) {
-          clearInterval(pollInterval);
-          pollInterval = null;
-        }
-        removeListeners.forEach((remove) => {
-          try {
-            remove();
-          } catch (err: unknown) {
-            const message = extractErrorMessage(err);
-            console.warn('[realtime] Failed to remove transport listener', message);
-          }
-        });
-        removeListeners.length = 0;
-      };
-
-      const resolveOnce = () => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        resolve();
-      };
-
-      const rejectOnce = (error: Error) => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        reject(error);
-      };
-
-      const timeoutId = setTimeout(() => {
-        rejectOnce(new Error('Timed out waiting for realtime transport to open'));
-      }, timeoutMs);
-
-      removeListeners.push(() => clearTimeout(timeoutId));
-
-      if (transport && typeof transport.addEventListener === 'function') {
-        const handleTransportOpen = () => resolveOnce();
-        const handleTransportError = (event: unknown) => {
-          if (isOpen()) {
-            resolveOnce();
-            return;
-          }
-          const transportError =
-            (isRecord(event) && event.error instanceof Error
-              ? event.error
-              : new Error('Transport error before open'));
-          rejectOnce(transportError);
-        };
-        transport.addEventListener('open', handleTransportOpen);
-        transport.addEventListener('error', handleTransportError);
-        removeListeners.push(() => {
-          if (typeof transport.removeEventListener === 'function') {
-            transport.removeEventListener('open', handleTransportOpen);
-            transport.removeEventListener('error', handleTransportError);
-          }
-        });
-      }
-
-      if (socket) {
-        if (typeof socket.on === 'function') {
-          const handleSocketOpen = () => resolveOnce();
-          const handleSocketError = (err: unknown) => {
-            if (isOpen()) {
-              resolveOnce();
-              return;
-            }
-            rejectOnce(err instanceof Error ? err : new Error(extractErrorMessage(err)));
-          };
-          socket.on('open', handleSocketOpen);
-          socket.on('error', handleSocketError);
-          removeListeners.push(() => {
-            if (typeof socket.off === 'function') {
-              socket.off('open', handleSocketOpen);
-              socket.off('error', handleSocketError);
-            } else if (typeof socket.removeListener === 'function') {
-              socket.removeListener('open', handleSocketOpen);
-              socket.removeListener('error', handleSocketError);
-            }
-          });
-        } else if (typeof socket.addEventListener === 'function') {
-          const handleSocketOpen = () => resolveOnce();
-          const handleSocketError = (event: unknown) => {
-            if (isOpen()) {
-              resolveOnce();
-              return;
-            }
-            const socketError =
-              (isRecord(event) && event.error instanceof Error
-                ? event.error
-                : new Error('WebSocket error before open'));
-            rejectOnce(socketError);
-          };
-          socket.addEventListener('open', handleSocketOpen);
-          socket.addEventListener('error', handleSocketError);
-          removeListeners.push(() => {
-            if (typeof socket.removeEventListener === 'function') {
-              socket.removeEventListener('open', handleSocketOpen);
-              socket.removeEventListener('error', handleSocketError);
-            }
-          });
-        }
-      }
-
-      pollInterval = setInterval(() => {
-        if (isOpen()) {
-          resolveOnce();
-        }
-      }, 50);
-    });
-
-    const elapsed = Date.now() - start;
-    this.onLog?.('log', `Realtime transport opened after ${elapsed}ms`);
+    this.runtime.handleTransientError();
   }
 
   /**
    * Send a message to the Realtime session
    */
   async sendMessage(message: string, context?: RealtimeMessageContext): Promise<void> {
-    if (!this.isActive || !this.session) {
-      throw new Error('Session not connected');
-    }
-
-    this.messageQueue.enqueue(message, context);
-    await this.messageQueue.processQueue();
+    await this.runtime.sendMessage(message, context);
   }
 
   async appendAudioChunk(chunk: {
@@ -861,67 +706,7 @@ export class RealtimeSession {
     durationMs?: number;
     speaker?: string;
   }): Promise<void> {
-    if (!this.isActive || !this.session) {
-      throw new Error('Transcript session not connected');
-    }
-
-    if (!chunk.audioBase64) {
-      throw new Error('audioBase64 is required');
-    }
-
-    try {
-      await Promise.resolve().then(() => {
-        this.session!.send({
-          type: 'input_audio_buffer.append',
-          audio: chunk.audioBase64,
-        } as RealtimeClientEvent);
-
-        this.messageQueue.incrementPendingAudio(
-          Math.round((chunk.audioBase64.length * 3) / 4)
-        );
-
-        if (chunk.isFinal) {
-          this.session!.send({ type: 'input_audio_buffer.commit' } as RealtimeClientEvent);
-          this.session!.send({
-            type: 'response.create',
-          } as RealtimeClientEvent);
-          this.messageQueue.resetPendingAudio();
-        }
-      });
-    } catch (error: unknown) {
-      console.error(`[realtime] Error appending audio chunk: ${extractErrorMessage(error)}`);
-      throw error;
-    }
-  }
-
-  private async sendToolResult(callId: string, output: Record<string, unknown>): Promise<void> {
-    if (!this.isActive || !this.session) {
-      this.onLog?.('warn', 'Skipping tool output - session inactive');
-      return;
-    }
-
-    try {
-      await Promise.resolve().then(() => {
-        this.session!.send({
-          type: 'conversation.item.create',
-          item: {
-            type: 'function_call_output',
-            call_id: callId,
-            output: JSON.stringify(output),
-          },
-        } as RealtimeClientEvent);
-      });
-    } catch (error: unknown) {
-      if (isInvalidToolCallError(error)) {
-        console.warn('[realtime] Ignoring tool output for expired call_id', {
-          eventId: this.config.eventId,
-          agentType: this.config.agentType,
-          callId,
-        });
-        return;
-      }
-      throw error;
-    }
+    await this.runtime.appendAudioChunk(chunk);
   }
 
   private emitEvent<K extends RealtimeSessionEvent>(
