@@ -20,10 +20,6 @@ import {
   extractErrorMessage,
   getLowercaseErrorField,
   isRecord,
-  mapCardPayload,
-  mapFactsPayload,
-  mapToolCallArguments,
-  safeJsonParse,
 } from './realtime-session/payload-utils';
 import type {
   RealtimeMessageContext,
@@ -44,34 +40,32 @@ export type { AgentType, RealtimeSessionConfig } from './realtime-session/types'
 const isInvalidToolCallError = (error: unknown): boolean =>
   getLowercaseErrorField(error, 'message').includes('invalid_tool_call_id');
 
-const extractAssistantText = (event: ResponseDoneEvent): string | null => {
-  const items = event.response.output;
-  if (!Array.isArray(items)) {
-    return null;
-  }
-
-  for (const item of items) {
-    if (
-      isRecord(item) &&
-      item.type === 'message' &&
-      item.role === 'assistant' &&
-      Array.isArray(item.content)
-    ) {
-      const textContent = item.content.find(
-        (content) =>
-          isRecord(content) &&
-          typeof content.type === 'string' &&
-          content.type === 'text' &&
-          typeof content.text === 'string'
-      );
-      if (textContent && typeof textContent.text === 'string') {
-        return textContent.text;
-      }
+type JsonSchemaProperty =
+  | {
+      type: 'string';
+      description: string;
+      enum?: string[];
     }
-  }
+  | {
+      type: 'number';
+      description: string;
+      default?: number;
+      minimum?: number;
+      maximum?: number;
+    };
 
-  return null;
-};
+interface FunctionToolSchema {
+  type: 'object';
+  properties: Record<string, JsonSchemaProperty>;
+  required?: string[];
+}
+
+interface FunctionToolDefinition {
+  type: 'function';
+  name: string;
+  description: string;
+  parameters: FunctionToolSchema;
+}
 
 export class RealtimeSession {
   private openai: OpenAI;
@@ -335,7 +329,7 @@ export class RealtimeSession {
       this.logWebSocketState('After transport ready');
 
       // Define retrieve tool for RAG (available to all agents)
-      const retrieveTool: any = {
+      const retrieveTool: FunctionToolDefinition = {
         type: 'function',
         name: 'retrieve',
         description: 'Retrieve relevant knowledge chunks from the vector database. Use this when you need domain-specific context, definitions, or background information that is not in the current transcript context.',
@@ -359,10 +353,10 @@ export class RealtimeSession {
       };
 
       // Define produce_card tool (only for Cards agent)
-      const tools: any[] = [retrieveTool];
+      const tools: FunctionToolDefinition[] = [retrieveTool];
       
       if (this.config.agentType === 'cards') {
-        const produceCardTool: any = {
+        const produceCardTool: FunctionToolDefinition = {
           type: 'function',
           name: 'produce_card',
           description: 'Generate a context card when content is novel and user-useful. This is the ONLY way to emit cards - you MUST use this tool instead of returning JSON directly.',
@@ -381,8 +375,7 @@ export class RealtimeSession {
               },
               title: {
                 type: 'string',
-                description: 'Brief title for the card (max 60 characters)',
-                maxLength: 60,
+                description: 'Brief title for the card (aim for <= 60 characters)',
               },
               body: {
                 type: 'string',
@@ -390,8 +383,7 @@ export class RealtimeSession {
               },
               label: {
                 type: 'string',
-                description: 'Short label for image (required for visual type, max 40 characters, null for text/text_visual types)',
-                maxLength: 40,
+                description: 'Short label for image (required for visual type; aim for <= 40 characters; null for text/text_visual types)',
               },
               image_url: {
                 type: 'string',
@@ -622,162 +614,19 @@ export class RealtimeSession {
 
     // Handle function call arguments completion
     // When agent calls a tool, we receive the arguments and need to execute the tool
-    this.session.on(
-      'response.function_call_arguments.done',
-      async (event: ResponseFunctionCallArgumentsDoneEvent) => {
-        try {
-          const parsedArgs = safeJsonParse<Record<string, unknown>>(event.arguments);
-          if (parsedArgs === null) {
-            this.onLog?.('warn', 'Failed to parse function call arguments');
-            return;
-          }
-
-          const toolCall = mapToolCallArguments(parsedArgs, event.call_id);
-          if (!toolCall) {
-            this.onLog?.('warn', 'Received unsupported tool call arguments');
-            return;
-          }
-
-          if (toolCall.type === 'retrieve') {
-            const { query, topK, callId } = toolCall;
-            this.onLog?.('log', `retrieve() called: query="${query}", top_k=${topK}`);
-
-            if (!this.onRetrieve) {
-              this.onLog?.('warn', 'retrieve() called but no onRetrieve callback provided');
-              await this.sendToolResult(callId, { chunks: [] });
-              return;
-            }
-
-            try {
-              const results = await this.onRetrieve(query, topK);
-              await this.sendToolResult(callId, {
-                chunks: results.map((r) => ({
-                  id: r.id,
-                  chunk: r.chunk,
-                  similarity: r.similarity,
-                })),
-              });
-              this.onLog?.('log', `retrieve() returned ${results.length} chunks`);
-            } catch (toolError: unknown) {
-              const errorMessage = extractErrorMessage(toolError);
-              this.onLog?.('error', `Error executing retrieve(): ${errorMessage}`);
-              await this.sendToolResult(callId, { error: errorMessage, chunks: [] });
-            }
-          } else if (toolCall.type === 'produce_card') {
-            const card = toolCall.card;
-            this.onLog?.('log', `produce_card() called: kind="${card.kind}", card_type="${card.card_type}"`, {
-              seq: card.source_seq,
-            });
-            this.emitEvent('card', card);
-
-            await this.sendToolResult(toolCall.callId, {
-              success: true,
-              card_id: `card_${Date.now()}`,
-            });
-            this.onLog?.('log', `produce_card() completed: ${card.kind} card`, { seq: card.source_seq });
-          }
-        } catch (error: unknown) {
-          this.onLog?.('error', `Error handling function call: ${extractErrorMessage(error)}`);
-        }
-      }
-    );
+    this.session.on('response.function_call_arguments.done', (event: ResponseFunctionCallArgumentsDoneEvent) => {
+      void this.agentHandler.handleToolCall(event);
+    });
 
     // Handle response text completion (for JSON responses)
-    this.session.on(
-      'response.output_text.done',
-      (event: ResponseTextDoneEvent) => {
-        try {
-          if (this.config.agentType === 'transcript') {
-            const text = event.text?.trim() ?? '';
-            if (text.length === 0) {
-              return;
-            }
+    this.session.on('response.output_text.done', (event: ResponseTextDoneEvent) => {
+      void this.agentHandler.handleResponseText(event);
+    });
 
-            this.emitEvent('transcript', {
-              text,
-              isFinal: true,
-              receivedAt: new Date().toISOString(),
-            });
-            return;
-          }
-
-          if (!event.text) {
-            return;
-          }
-
-          const parsedResponse = safeJsonParse<unknown>(event.text);
-          if (parsedResponse === null) {
-            this.onLog?.('warn', 'Failed to parse response text as JSON');
-            return;
-          }
-
-          this.emitEvent('response', { raw: parsedResponse });
-
-          if (this.config.agentType === 'cards') {
-            const card = mapCardPayload(parsedResponse);
-            if (card) {
-              this.emitEvent('card', card);
-            }
-          } else {
-            const factsArray = mapFactsPayload(parsedResponse);
-            if (factsArray.length > 0) {
-              this.emitEvent('facts', factsArray);
-            }
-          }
-        } catch (error: unknown) {
-          const formatted = extractErrorMessage(error);
-          console.error(`[realtime] Error parsing response: ${formatted}`);
-          this.emitEvent('error', error instanceof Error ? error : new Error(formatted));
-        }
-      }
-    );
-
-    // Handle response completion (fallback if text.done doesn't fire)
     this.session.on('response.done', (event: ResponseDoneEvent) => {
-      try {
-        const assistantText = extractAssistantText(event);
-        if (!assistantText) {
-          return;
-        }
-
-        if (this.config.agentType === 'transcript') {
-          const text = assistantText.trim();
-          if (text.length === 0) {
-            return;
-          }
-          this.emitEvent('transcript', {
-            text,
-            isFinal: true,
-            receivedAt: new Date().toISOString(),
-          });
-        } else {
-          const parsedResponse = safeJsonParse<unknown>(assistantText);
-          if (parsedResponse === null) {
-            this.onLog?.('warn', 'Failed to parse response.done payload');
-            return;
-          }
-
-          this.emitEvent('response', { raw: parsedResponse });
-
-          if (this.config.agentType === 'cards') {
-            const card = mapCardPayload(parsedResponse);
-            if (card) {
-              this.emitEvent('card', card);
-            }
-          } else {
-            const factsArray = mapFactsPayload(parsedResponse);
-            if (factsArray.length > 0) {
-              this.emitEvent('facts', factsArray);
-            }
-          }
-        }
-      } catch (error: unknown) {
-        const message = extractErrorMessage(error);
-        console.error(`[realtime] Error processing response.done: ${message}`);
-      } finally {
-        this.messageQueue.markResponseComplete();
-        void this.messageQueue.processQueue();
-      }
+      void this.agentHandler.handleResponseDone(event);
+      this.messageQueue.markResponseComplete();
+      void this.messageQueue.processQueue();
     });
 
     // Handle errors
@@ -1127,7 +976,7 @@ export class RealtimeSession {
   /**
    * Phase 7: Log WebSocket state transitions for debugging
    */
-  private logWebSocketState(operation: string, context?: Record<string, any>): void {
+  private logWebSocketState(operation: string, context?: Record<string, unknown>): void {
     try {
       const underlyingSocket = getUnderlyingSocket(this.session);
       const readyState = underlyingSocket?.readyState;

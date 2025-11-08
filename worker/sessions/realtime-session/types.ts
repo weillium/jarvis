@@ -7,6 +7,12 @@ import type {
   VectorMatchRecord,
   Fact,
 } from '../../types';
+import type {
+  ResponseDoneEvent,
+  ResponseFunctionCallArgumentsDoneEvent,
+  ResponseTextDoneEvent,
+} from 'openai/resources/realtime/realtime';
+import type { TokenBudget } from './tokens';
 
 export type AgentType = 'transcript' | 'cards' | 'facts';
 

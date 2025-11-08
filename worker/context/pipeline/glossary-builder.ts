@@ -4,7 +4,7 @@
  * Stores terms, definitions, acronyms, and related metadata in glossary_terms table
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { PostgrestResponse } from '@supabase/supabase-js';
 import type OpenAI from 'openai';
 import { Exa } from 'exa-js';
 import type { Blueprint } from './blueprint-generator';
@@ -25,8 +25,7 @@ import {
   normalizeGlossaryDefinitions,
   type GlossaryTermDefinition,
 } from '../../lib/context-normalization';
-
-type WorkerSupabaseClient = SupabaseClient<any, any, any>;
+import type { WorkerSupabaseClient } from '../../services/supabase';
 
 export interface GlossaryBuilderOptions {
   supabase: WorkerSupabaseClient;
@@ -70,9 +69,8 @@ export interface GlossaryBuildResult {
   costBreakdown: GlossaryCostBreakdown;
 }
 
-type SupabaseErrorLike = { message: string } | null;
-type SupabaseMutationResult = { error: SupabaseErrorLike };
-type SupabaseListResult<T> = { data: T[] | null; error: SupabaseErrorLike };
+type SupabaseMutationResult = PostgrestResponse<unknown>;
+type SupabaseListResult<T> = PostgrestResponse<T>;
 type IdRow = { id: string };
 type ResearchResultRecord = {
   content: string;

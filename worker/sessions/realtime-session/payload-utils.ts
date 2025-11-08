@@ -1,4 +1,5 @@
 import type { RealtimeCardDTO, RealtimeFactDTO, RealtimeToolCallDTO } from '../../types';
+import type { ResponseDoneEvent } from 'openai/resources/realtime/realtime';
 
 const CARD_TYPES: ReadonlySet<RealtimeCardDTO['card_type']> = new Set([
   'text',
@@ -81,10 +82,17 @@ export const mapCardFromRecord = (
 };
 
 export const mapCardPayload = (payload: unknown): RealtimeCardDTO | null => {
-  if (!isRecord(payload)) {
+  if (!payload) {
     return null;
   }
-  return mapCardFromRecord(payload);
+  if (typeof payload === 'string') {
+    const parsed = safeJsonParse<unknown>(payload);
+    return parsed && isRecord(parsed) ? mapCardFromRecord(parsed) : null;
+  }
+  if (isRecord(payload)) {
+    return mapCardFromRecord(payload);
+  }
+  return null;
 };
 
 const mapFactCandidate = (value: unknown): RealtimeFactDTO | null => {
@@ -105,6 +113,14 @@ const mapFactCandidate = (value: unknown): RealtimeFactDTO | null => {
 };
 
 export const mapFactsPayload = (payload: unknown): RealtimeFactDTO[] => {
+  if (!payload) {
+    return [];
+  }
+  if (typeof payload === 'string') {
+    const parsed = safeJsonParse<unknown>(payload);
+    return mapFactsPayload(parsed);
+  }
+
   if (Array.isArray(payload)) {
     return payload
       .map(mapFactCandidate)
@@ -155,3 +171,32 @@ export const getLowercaseErrorField = (
   value: unknown,
   field: 'message' | 'code' | 'type'
 ): string => extractErrorField(value, field).toLowerCase();
+
+export const extractAssistantText = (event: ResponseDoneEvent): string | null => {
+  const items = event.response.output;
+  if (!Array.isArray(items)) {
+    return null;
+  }
+
+  for (const item of items) {
+    if (
+      isRecord(item) &&
+      item.type === 'message' &&
+      item.role === 'assistant' &&
+      Array.isArray(item.content)
+    ) {
+      const textContent = item.content.find(
+        (content) =>
+          isRecord(content) &&
+          typeof content.type === 'string' &&
+          content.type === 'text' &&
+          typeof content.text === 'string'
+      );
+      if (textContent && typeof textContent.text === 'string') {
+        return textContent.text;
+      }
+    }
+  }
+
+  return null;
+};

@@ -4,7 +4,7 @@
  * Stores chunks in context_items table with rank and research_source
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { PostgrestResponse } from '@supabase/supabase-js';
 import type OpenAI from 'openai';
 import type { Blueprint } from './blueprint-generator';
 import type { ResearchResults, ResearchChunkMetadata } from './glossary-builder';
@@ -22,8 +22,7 @@ import {
   formatGlossaryHighlightsForPrompt,
   formatResearchSummaryForPrompt,
 } from '../../lib/text/llm-prompt-formatting';
-
-type WorkerSupabaseClient = SupabaseClient<any, any, any>;
+import type { WorkerSupabaseClient } from '../../services/supabase';
 
 export interface ChunksBuilderOptions {
   supabase: WorkerSupabaseClient;
@@ -42,7 +41,6 @@ export interface ChunkWithRank {
 }
 
 type ChunkMetadata = ResearchChunkMetadata;
-type ResearchChunk = ResearchResults['chunks'][number];
 
 /**
  * Build context chunks from blueprint plan, research results, and documents
@@ -62,9 +60,8 @@ export interface ChunksBuildResult {
   costBreakdown: ChunksCostBreakdown;
 }
 
-type SupabaseErrorLike = { message: string } | null;
-type SupabaseMutationResult = { error: SupabaseErrorLike };
-type SupabaseListResult<T> = { data: T[] | null; error: SupabaseErrorLike };
+type SupabaseMutationResult = PostgrestResponse<unknown>;
+type SupabaseListResult<T> = PostgrestResponse<T>;
 type IdRow = { id: string };
 type ResearchResultRecord = {
   content: string;
@@ -73,7 +70,23 @@ type ResearchResultRecord = {
   api: string | null;
 };
 type ChatCompletionRequest = Parameters<OpenAI['chat']['completions']['create']>[0];
-const asDbPayload = <T>(payload: T) => payload as unknown as never;
+
+interface ContextItemInsert {
+  event_id: string;
+  generation_cycle_id: string;
+  chunk: string;
+  embedding: number[];
+  rank: number;
+  metadata: Record<string, unknown>;
+}
+
+type GenerationCycleUpdate = Partial<{
+  status: string;
+  progress_current: number;
+  progress_total: number;
+  completed_at: string;
+  metadata: Record<string, unknown>;
+}>;
 
 export async function buildContextChunks(
   eventId: string,
@@ -163,10 +176,10 @@ export async function buildContextChunks(
   // Update generation cycle to processing
   const { error: processingError }: SupabaseMutationResult = await supabase
     .from('generation_cycles')
-    .update(asDbPayload({
+    .update<GenerationCycleUpdate>({
       status: 'processing',
       progress_total: blueprint.chunks_plan.target_count || 500,
-    }))
+    })
     .eq('id', generationCycleId);
 
   if (processingError) {
@@ -337,7 +350,7 @@ export async function buildContextChunks(
             : chunk.rank ? 'ranked' : 'research';
 
           // Build metadata JSONB with all metadata fields
-          const itemMetadata = {
+          const itemMetadata: Record<string, unknown> = {
             ...(chunk.metadata || {}),
             source: chunk.source,
             enrichment_source: chunk.research_source,
@@ -350,14 +363,14 @@ export async function buildContextChunks(
 
           const { error: insertError }: SupabaseMutationResult = await supabase
             .from('context_items')
-            .insert(asDbPayload({
+            .insert<ContextItemInsert>({
               event_id: eventId,
               generation_cycle_id: generationCycleId,
               chunk: chunk.text,
-              embedding: embedding,
+              embedding,
               rank: chunk.rank,
               metadata: itemMetadata,
-            }));
+            });
 
           if (insertError) {
             console.error(
@@ -368,7 +381,7 @@ export async function buildContextChunks(
             // Update progress
             const { error: progressError }: SupabaseMutationResult = await supabase
               .from('generation_cycles')
-              .update(asDbPayload({ progress_current: insertedCount }))
+              .update<GenerationCycleUpdate>({ progress_current: insertedCount })
               .eq('id', generationCycleId);
 
             if (progressError) {
@@ -409,12 +422,12 @@ export async function buildContextChunks(
   // Mark cycle as completed with cost metadata
   const { error: cycleUpdateError }: SupabaseMutationResult = await supabase
     .from('generation_cycles')
-    .update(asDbPayload({
+    .update<GenerationCycleUpdate>({
       status: 'completed',
       progress_current: insertedCount,
       completed_at: new Date().toISOString(),
       metadata: costMetadata,
-    }))
+    })
     .eq('id', generationCycleId);
 
   if (cycleUpdateError) {

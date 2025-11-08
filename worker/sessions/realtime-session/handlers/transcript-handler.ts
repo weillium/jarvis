@@ -1,6 +1,10 @@
-import type { ResponseDoneEvent, ResponseFunctionCallArgumentsDoneEvent, ResponseTextDoneEvent } from 'openai/resources/realtime/realtime';
+import type {
+  ResponseDoneEvent,
+  ResponseFunctionCallArgumentsDoneEvent,
+  ResponseTextDoneEvent,
+} from 'openai/resources/realtime/realtime';
 import { BaseAgentHandler } from './base-handler';
-import { extractAssistantText, safeJsonParse } from '../utils';
+import { extractAssistantText } from '../utils';
 
 export class TranscriptAgentHandler extends BaseAgentHandler {
   handleResponseText(payload: ResponseTextDoneEvent): void {
@@ -9,7 +13,7 @@ export class TranscriptAgentHandler extends BaseAgentHandler {
       return;
     }
 
-    this.emitEvent('transcript', {
+    this.emit('transcript', {
       text,
       isFinal: true,
       receivedAt: new Date().toISOString(),
@@ -27,14 +31,15 @@ export class TranscriptAgentHandler extends BaseAgentHandler {
       return;
     }
 
-    this.emitEvent('transcript', {
+    this.emit('transcript', {
       text,
       isFinal: true,
       receivedAt: new Date().toISOString(),
     });
   }
 
-  handleToolCall(_payload: ResponseFunctionCallArgumentsDoneEvent): void {
+  handleToolCall(payload: ResponseFunctionCallArgumentsDoneEvent): void {
+    void payload;
     // Transcript agent currently does not support tool calls.
   }
 }

@@ -3,18 +3,18 @@ import { CardsAgentHandler } from './cards-handler';
 import { FactsAgentHandler } from './facts-handler';
 import { TranscriptAgentHandler } from './transcript-handler';
 
+type AgentTypeKey = AgentHandlerOptions['context']['agentType'];
+
+const handlerFactories: Record<AgentTypeKey, (options: AgentHandlerOptions) => AgentHandler> =
+  {
+    cards: (opts: AgentHandlerOptions): AgentHandler => new CardsAgentHandler(opts),
+    facts: (opts: AgentHandlerOptions): AgentHandler => new FactsAgentHandler(opts),
+    transcript: (opts: AgentHandlerOptions): AgentHandler =>
+      new TranscriptAgentHandler(opts),
+  };
+
 export const createAgentHandler = (options: AgentHandlerOptions): AgentHandler => {
-  switch (options.context.agentType) {
-    case 'cards':
-      return new CardsAgentHandler(options);
-    case 'facts':
-      return new FactsAgentHandler(options);
-    case 'transcript':
-      return new TranscriptAgentHandler(options);
-    default: {
-      const exhaustiveCheck: never = options.context.agentType;
-      throw new Error(`Unsupported agent type: ${exhaustiveCheck}`);
-    }
-  }
+  const factory = handlerFactories[options.context.agentType];
+  return factory(options);
 };
 
