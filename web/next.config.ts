@@ -1,11 +1,11 @@
 import type { NextConfig } from "next";
-import { fileURLToPath } from "node:url";
+const workspaceRoot = process.cwd();
 
 const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
   turbopack: {
-    root: fileURLToPath(new URL(".", import.meta.url)),
+    root: workspaceRoot,
   },
   images: {
     remotePatterns: [
