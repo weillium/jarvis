@@ -8,3 +8,4 @@ This directory implements the realtime session controller that streams updates t
 - **types.ts** defines the payload and transport contracts used throughout the realtime stack.
 
 Modify this module when you need to adjust websocket behavior, payload formats, or agent event routing.
+

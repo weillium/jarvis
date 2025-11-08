@@ -7,3 +7,4 @@ This module provides pre-context data gathering before the pipeline runs.
 - **index.ts** exposes the entry points used by context builders and pollers.
 
 Extend this module when you want to add or adjust external knowledge sources feeding the context pipeline.
+

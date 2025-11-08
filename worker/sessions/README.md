@@ -7,3 +7,4 @@ Coordinates user sessions end-to-end, including realtime streaming.
 - **realtime-session.ts** bridges the session factory with the realtime stack so processors can publish events.
 
 Work in this module whenever session lifecycle rules or realtime wiring need to change.
+

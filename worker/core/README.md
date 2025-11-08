@@ -7,3 +7,4 @@ The core module hosts the runtime control loop that steers the worker during liv
 - **session-lifecycle.ts** and the subfolder `orchestrator/` coordinate status tracking and transcript routing across agents.
 
 Touch this module when you need to adjust how the worker schedules phases, responds to events, or coordinates multiple agents.
+

@@ -1,21 +1,9 @@
 {
-  "engines": {
-    "node": ">=25.1.0 <26"
-  },
+  "name": "jarvis",
   "private": true,
-  "packageManager": "pnpm@10.20.0+sha512.cf9998222162dd85864d0a8102e7892e7ba4ceadebbf5a31f9c2fce48dfce317a9c53b9f6464d1ef9042cba2e02ae02a9f7c143a2b438cd93c91840f0192b9dd",
-  "scripts": {
-    "lint:file": "node ./node_modules/eslint/bin/eslint.js --max-warnings=0",
-    "lint": "node ./node_modules/eslint/bin/eslint.js .",
-    "typecheck:worker": "pnpm -C worker tsc --noEmit" 
+  "version": "0.0.0",
+  "engines": {
+    "node": ">=22.21.0 <26"
   },
-  "devDependencies": {
-    "eslint": "^9.17.0",
-    "@eslint/js": "^9.17.0",
-    "@typescript-eslint/parser": "^8.18.0",
-    "@typescript-eslint/eslint-plugin": "^8.18.0"
-  },
-  "dependencies": {
-    "@tanstack/react-query-devtools": "^5.90.2"
-  }
+  "packageManager": "pnpm@10.20.0"
 }

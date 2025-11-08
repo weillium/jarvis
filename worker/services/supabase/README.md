@@ -8,3 +8,4 @@ This module wraps Supabase access for the worker.
 - **vector-search-gateway.ts** provides the interface to Supabase vector search for context retrieval.
 
 Use this module when you need to evolve database interactions or add new persistence surfaces for the worker.
+

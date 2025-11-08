@@ -7,3 +7,4 @@ Provides observability utilities for the worker runtime.
 - **checkpoint-manager.ts** and **status-updater.ts** keep long-running pipelines resumable and surface progress to downstream systems.
 
 Update this module when you need new telemetry hooks or to change how progress is reported.
+

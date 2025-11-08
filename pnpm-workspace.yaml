@@ -1,5 +1,5 @@
 packages:
-  - 'worker'
-  - 'web'
-  - 'supabase'
-  - 'dev_docs'
+  - "worker"
+  - "web"
+  - "supabase"
+  - "packages/*"
