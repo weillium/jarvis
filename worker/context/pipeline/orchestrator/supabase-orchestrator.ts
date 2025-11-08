@@ -1,5 +1,5 @@
 import type { PostgrestResponse, PostgrestSingleResponse, SupabaseClient } from '@supabase/supabase-js';
-import type { Blueprint } from '../blueprint-generator';
+import type { Blueprint } from '../blueprint/types';
 import type { ContextBlueprintRecord, ResearchResultInsert } from '../../../types';
 import {
   ensureBlueprintShape,

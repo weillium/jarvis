@@ -21,7 +21,7 @@ async function smokeTest() {
 
   // Test 1: Query context_items with metadata JSONB
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('context_items')
       .select('id, chunk, metadata, rank')
       .eq('event_id', testEventId)
@@ -33,6 +33,7 @@ async function smokeTest() {
     console.log('✅ PASS: Query context_items with metadata JSONB works');
     passed++;
   } catch (err: unknown) {
+    failed++;
     console.error("[worker] error:", String(err));
   }
 
@@ -47,16 +48,33 @@ async function smokeTest() {
       throw error;
     }
     
-    if (data && data.length > 0 && data[0].metadata) {
-      const metadata = data[0].metadata;
-      const hasSource = metadata.source !== undefined || metadata.enrichment_source !== undefined;
-      console.log('✅ PASS: Metadata structure valid (has source fields)');
+    type MetadataRow = { metadata: unknown };
+    const rows: MetadataRow[] = Array.isArray(data)
+      ? data.filter(
+          (row): row is MetadataRow =>
+            typeof row === 'object' && row !== null && 'metadata' in row
+        )
+      : [];
+
+    if (rows.length > 0 && rows[0]?.metadata !== undefined && rows[0]?.metadata !== null) {
+      const metadata = rows[0]?.metadata;
+      if (typeof metadata === 'object' && metadata !== null) {
+        const metaRecord = metadata as Record<string, unknown>;
+        if ('source' in metaRecord || 'enrichment_source' in metaRecord) {
+          console.log('✅ PASS: Metadata structure valid (has source fields)');
+        } else {
+          console.log('⚠️  WARN: Metadata structure present but missing expected source fields');
+        }
+      } else {
+        console.log('⚠️  WARN: Metadata structure present but not an object');
+      }
       passed++;
     } else {
       console.log('✅ PASS: Metadata structure check (no data to verify)');
       passed++;
     }
   } catch (err: unknown) {
+    failed++;
     console.error("[worker] error:", String(err));
   }
 
@@ -82,6 +100,7 @@ async function smokeTest() {
       passed++;
     }
   } catch (err: unknown) {
+    failed++;
     console.error("[worker] error:", String(err));
   }
 
@@ -105,6 +124,7 @@ async function smokeTest() {
       passed++;
     }
   } catch (err: unknown) {
+    failed++;
     console.error("[worker] error:", String(err));
   }
 

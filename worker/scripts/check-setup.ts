@@ -54,7 +54,7 @@ async function testSupabaseConnection(): Promise<boolean> {
     const supabase = createClient(url, key, { auth: { persistSession: false } });
     
     // Test connection
-    const { data, error } = await supabase.from('events').select('count').limit(1);
+    const { error } = await supabase.from('events').select('count').limit(1);
     
     if (error) {
       console.error(`❌ Supabase connection failed: ${error.message}`);

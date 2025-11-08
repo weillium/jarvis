@@ -1,4 +1,4 @@
-import type { Blueprint } from '../context/pipeline/blueprint-generator';
+import type { Blueprint } from '../context/pipeline/blueprint/types';
 import type {
   ContextBlueprintRecord,
   GenerationCycleMetadataRecord,

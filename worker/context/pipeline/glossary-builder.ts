@@ -4,10 +4,13 @@
  * Stores terms, definitions, acronyms, and related metadata in glossary_terms table
  */
 
-import type { PostgrestResponse } from '@supabase/supabase-js';
 import type OpenAI from 'openai';
 import { Exa } from 'exa-js';
-import type { Blueprint } from './blueprint-generator';
+import type { Blueprint } from './blueprint/types';
+import type {
+  SupabaseListResult,
+  SupabaseMutationResult,
+} from './blueprint/types';
 import {
   calculateOpenAICost,
   calculateExaAnswerCost,
@@ -69,8 +72,6 @@ export interface GlossaryBuildResult {
   costBreakdown: GlossaryCostBreakdown;
 }
 
-type SupabaseMutationResult = PostgrestResponse<unknown>;
-type SupabaseListResult<T> = PostgrestResponse<T>;
 type IdRow = { id: string };
 type ResearchResultRecord = {
   content: string;
@@ -85,7 +86,28 @@ type GlossaryPlanTerm = {
   category: string;
   priority: number;
 };
-const asDbPayload = <T>(payload: T) => payload as unknown as never;
+
+interface GlossaryTermInsert {
+  event_id: string;
+  generation_cycle_id: string;
+  term: string;
+  definition: string;
+  acronym_for: string | null;
+  category: string;
+  usage_examples: string[];
+  related_terms: string[];
+  confidence_score: number;
+  source: string;
+  source_url: string | null;
+}
+
+type GenerationCycleUpdate = Partial<{
+  status: string;
+  progress_total: number;
+  progress_current: number;
+  completed_at: string;
+  metadata: Record<string, unknown>;
+}>;
 
 export async function buildGlossary(
   eventId: string,
@@ -198,10 +220,10 @@ export async function buildGlossary(
   // Update generation cycle progress
   const { error: processingError }: SupabaseMutationResult = await supabase
     .from('generation_cycles')
-    .update(asDbPayload({
+    .update<GenerationCycleUpdate>({
       status: 'processing',
       progress_total: termsToBuild.length,
-    }))
+    })
     .eq('id', generationCycleId);
 
   if (processingError) {
@@ -229,19 +251,19 @@ export async function buildGlossary(
         try {
           const { error: insertError }: SupabaseMutationResult = await supabase
             .from('glossary_terms')
-            .insert(asDbPayload({
+            .insert<GlossaryTermInsert>({
               event_id: eventId,
               generation_cycle_id: generationCycleId,
               term: def.term,
               definition: def.definition,
-              acronym_for: def.acronym_for || null,
+              acronym_for: def.acronym_for ?? null,
               category: def.category || 'general',
-              usage_examples: def.usage_examples || [],
-              related_terms: def.related_terms || [],
-              confidence_score: def.confidence_score || 0.8,
+              usage_examples: def.usage_examples ?? [],
+              related_terms: def.related_terms ?? [],
+              confidence_score: def.confidence_score ?? 0.8,
               source: def.source || 'llm_generation',
-              source_url: def.source_url || null,
-            }));
+              source_url: def.source_url ?? null,
+            });
 
           if (insertError) {
             console.error(`[glossary] Error inserting term "${def.term}": ${insertError.message}`);
@@ -250,7 +272,7 @@ export async function buildGlossary(
             // Update progress
             const { error: progressError }: SupabaseMutationResult = await supabase
               .from('generation_cycles')
-              .update(asDbPayload({ progress_current: insertedCount }))
+              .update<GenerationCycleUpdate>({ progress_current: insertedCount })
               .eq('id', generationCycleId);
 
             if (progressError) {
@@ -294,12 +316,12 @@ export async function buildGlossary(
   // Mark cycle as completed with cost metadata
   const { error: cycleUpdateError }: SupabaseMutationResult = await supabase
     .from('generation_cycles')
-    .update(asDbPayload({
+    .update<GenerationCycleUpdate>({
       status: 'completed',
       progress_current: insertedCount,
       completed_at: new Date().toISOString(),
       metadata: costMetadata,
-    }))
+    })
     .eq('id', generationCycleId);
 
   if (cycleUpdateError) {

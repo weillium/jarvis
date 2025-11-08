@@ -32,13 +32,13 @@ async function smokeTest() {
   try {
     // Query each index to verify it exists
     for (const indexName of expectedIndexes) {
-      const { data, error } = await supabase.rpc('exec_sql', {
+      const { error } = await supabase.rpc('exec_sql', {
         query: `SELECT 1 FROM pg_indexes WHERE indexname = '${indexName}'`,
       });
 
-      // If RPC doesn't exist, try direct query using a workaround
-      // Since we can't directly query pg_indexes via Supabase client, we'll test queries work
-      // The fact that queries execute successfully indicates indexes are functioning
+      if (error) {
+        console.warn(`⚠️  WARN: Unable to verify index ${indexName}:`, error.message);
+      }
     }
 
     // Test queries that should benefit from indexes
@@ -140,6 +140,7 @@ async function smokeTest() {
     passed++;
 
   } catch (err: unknown) {
+    failed++;
     console.error("[worker] error:", String(err));
   }
 

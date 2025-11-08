@@ -1,5 +1,5 @@
 import { Exa } from 'exa-js';
-import type { Blueprint } from '../blueprint-generator';
+import type { Blueprint } from '../blueprint/types';
 import type { ResearchResults } from '../glossary-builder';
 import { getPricingVersion } from '../pricing-config';
 import type { ResearchResultInsert } from '../../../types';
@@ -39,7 +39,7 @@ export async function runResearchPhase(
   options: ResearchPhaseOptions
 ): Promise<ResearchResults> {
   const { supabase, openai, genModel, exaApiKey, statusManager } = options;
-  const queries = blueprint.research_plan.queries || [];
+  const queries = (blueprint.research_plan.queries ?? []) as Blueprint['research_plan']['queries'];
 
   console.log(`[research] ========================================`);
   console.log(`[research] Starting research plan execution`);

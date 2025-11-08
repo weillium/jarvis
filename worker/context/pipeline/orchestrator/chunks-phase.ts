@@ -1,8 +1,8 @@
-import type { Blueprint } from '../blueprint-generator';
+import type { Blueprint } from '../blueprint/types';
 import { buildContextChunks } from '../chunks-builder';
 import { getPricingVersion } from '../pricing-config';
 import type { GenerationContext, PhaseOptions } from './phase-context';
-import { StatusManager } from './status-manager';
+import type { StatusManager } from './status-manager';
 
 export interface ChunksPhaseOptions extends PhaseOptions {
   embedModel: string;

@@ -1,13 +1,19 @@
+export const REALTIME_CARD_KINDS = [
+  'Decision',
+  'Metric',
+  'Deadline',
+  'Topic',
+  'Entity',
+  'Action',
+  'Context',
+  'Definition',
+] as const;
+
+export type KnownRealtimeCardKind = (typeof REALTIME_CARD_KINDS)[number];
+
 export type RealtimeCardKind =
-  | 'Decision'
-  | 'Metric'
-  | 'Deadline'
-  | 'Topic'
-  | 'Entity'
-  | 'Action'
-  | 'Context'
-  | 'Definition'
-  | string;
+  | KnownRealtimeCardKind
+  | (string & { __unknownCardKind?: never });
 
 export type RealtimeCardType = 'text' | 'text_visual' | 'visual';
 

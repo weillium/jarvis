@@ -33,6 +33,7 @@ async function smokeTest() {
     console.log('✅ PASS: context_items query works without is_active');
     passed++;
   } catch (err: unknown) {
+    failed++;
     console.error("[worker] error:", String(err));
   }
 
@@ -50,6 +51,7 @@ async function smokeTest() {
     console.log('✅ PASS: glossary_terms query works without is_active');
     passed++;
   } catch (err: unknown) {
+    failed++;
     console.error("[worker] error:", String(err));
   }
 
@@ -67,12 +69,13 @@ async function smokeTest() {
     console.log('✅ PASS: research_results query works without is_active');
     passed++;
   } catch (err: unknown) {
+    failed++;
     console.error("[worker] error:", String(err));
   }
 
   // Test 4: Verify generation_cycle_id column exists
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('context_items')
       .select('generation_cycle_id')
       .limit(1);
@@ -83,6 +86,7 @@ async function smokeTest() {
     console.log('✅ PASS: generation_cycle_id column exists');
     passed++;
   } catch (err: unknown) {
+    failed++;
     console.error("[worker] error:", String(err));
   }
 

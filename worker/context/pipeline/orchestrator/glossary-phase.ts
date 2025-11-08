@@ -1,8 +1,8 @@
-import type { Blueprint } from '../blueprint-generator';
+import type { Blueprint } from '../blueprint/types';
 import { buildGlossary } from '../glossary-builder';
 import { getPricingVersion } from '../pricing-config';
 import type { GenerationContext, PhaseOptions } from './phase-context';
-import { StatusManager } from './status-manager';
+import type { StatusManager } from './status-manager';
 
 export interface GlossaryPhaseOptions extends PhaseOptions {
   embedModel: string;

@@ -21,7 +21,7 @@ async function smokeTest() {
 
   // Test 1: Query checkpoints without agent_id (should work)
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('checkpoints')
       .select('event_id, agent_type, last_seq_processed')
       .eq('event_id', testEventId)
@@ -33,12 +33,13 @@ async function smokeTest() {
     console.log('✅ PASS: Query checkpoints without agent_id works');
     passed++;
   } catch (err: unknown) {
+    failed++;
     console.error("[worker] error:", String(err));
   }
 
   // Test 2: Try to query agent_id column (should fail)
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('checkpoints')
       .select('event_id, agent_id')
       .limit(1);
@@ -55,6 +56,7 @@ async function smokeTest() {
       passed++;
     }
   } catch (err: unknown) {
+    failed++;
     console.error("[worker] error:", String(err));
   }
 
@@ -85,6 +87,7 @@ async function smokeTest() {
     console.log('✅ PASS: Can upsert checkpoint without agent_id');
     passed++;
   } catch (err: unknown) {
+    failed++;
     console.error("[worker] error:", String(err));
   }
 
@@ -92,7 +95,7 @@ async function smokeTest() {
   // Note: This test requires a valid event_id, so we'll verify the schema instead
   try {
     // Check that we can query by event_id and agent_type (primary key columns)
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('checkpoints')
       .select('event_id, agent_type, last_seq_processed')
       .eq('event_id', testEventId)
@@ -107,6 +110,7 @@ async function smokeTest() {
     console.log('✅ PASS: Primary key constraint (event_id, agent_type) schema verified');
     passed++;
   } catch (err: unknown) {
+    failed++;
     console.error("[worker] error:", String(err));
   }
 

@@ -20,7 +20,7 @@ async function smokeTest() {
 
   // Test 1: Query agent_sessions without metrics (should work)
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('agent_sessions')
       .select('id, event_id, agent_type, status, provider_session_id')
       .limit(1);
@@ -31,12 +31,13 @@ async function smokeTest() {
     console.log('✅ PASS: Query agent_sessions without metrics works');
     passed++;
   } catch (err: unknown) {
+    failed++;
     console.error("[worker] error:", String(err));
   }
 
   // Test 2: Try to query metrics column (should fail)
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('agent_sessions')
       .select('id, metrics')
       .limit(1);
@@ -53,6 +54,7 @@ async function smokeTest() {
       passed++;
     }
   } catch (err: unknown) {
+    failed++;
     console.error("[worker] error:", String(err));
   }
 
@@ -91,6 +93,7 @@ async function smokeTest() {
     console.log('✅ PASS: Can insert/update without metrics column');
     passed++;
   } catch (err: unknown) {
+    failed++;
     console.error("[worker] error:", String(err));
   }
 

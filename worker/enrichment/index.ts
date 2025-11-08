@@ -5,7 +5,6 @@
  * Goal: Generate 45-75 high-quality chunks from multiple sources
  */
 
-import type { PostgrestResponse } from '@supabase/supabase-js';
 import type OpenAI from 'openai';
 import type { BaseEnricher } from './enrichers/base-enricher';
 import { WebSearchEnricher } from './enrichers/web-search';
@@ -121,12 +120,9 @@ export class EnrichmentOrchestrator {
           enrichment_timestamp: new Date().toISOString(),
         };
 
-        const insertResponse: PostgrestResponse<unknown> = await this.supabase
+        const { error } = await this.supabase
           .from('context_items')
           .insert(payload);
-
-        const { error } = insertResponse;
-
         if (error) {
           console.error(`[enrichment] Error storing chunk: ${error.message}`);
         } else {

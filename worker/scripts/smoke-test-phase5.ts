@@ -15,6 +15,13 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
 const VALID_STATUSES = ['active', 'paused', 'closed', 'error'];
 const OLD_STATUSES = ['generated', 'starting'];
 
+type SessionRow = { status: string };
+
+const isSessionRow = (value: unknown): value is SessionRow =>
+  typeof value === 'object' &&
+  value !== null &&
+  typeof (value as { status?: unknown }).status === 'string';
+
 async function smokeTest() {
   console.log('🧪 Running Phase 5 Smoke Tests...\n');
 
@@ -23,7 +30,7 @@ async function smokeTest() {
 
   // Test 1: Query sessions and verify no old statuses
   try {
-    const { data: sessions, error } = await supabase
+    const { data: rawSessions, error } = await supabase
       .from('agent_sessions')
       .select('id, status')
       .limit(100);
@@ -32,7 +39,8 @@ async function smokeTest() {
       throw error;
     }
 
-    const oldStatusSessions = (sessions || []).filter((s) => OLD_STATUSES.includes(s.status));
+    const sessionRows: SessionRow[] = Array.isArray(rawSessions) ? rawSessions.filter(isSessionRow) : [];
+    const oldStatusSessions = sessionRows.filter((s) => OLD_STATUSES.includes(s.status));
     if (oldStatusSessions.length > 0) {
       console.error(
         `❌ FAIL: Found ${oldStatusSessions.length} sessions with old statuses:`,
@@ -44,12 +52,13 @@ async function smokeTest() {
       passed++;
     }
   } catch (err: unknown) {
+    failed++;
     console.error("[worker] error:", String(err));
   }
 
   // Test 2: Verify all sessions have valid statuses
   try {
-    const { data: sessions, error } = await supabase
+    const { data: rawSessions, error } = await supabase
       .from('agent_sessions')
       .select('id, status')
       .limit(100);
@@ -58,7 +67,8 @@ async function smokeTest() {
       throw error;
     }
 
-    const invalidSessions = (sessions || []).filter((s) => !VALID_STATUSES.includes(s.status));
+    const sessionRows: SessionRow[] = Array.isArray(rawSessions) ? rawSessions.filter(isSessionRow) : [];
+    const invalidSessions = sessionRows.filter((s) => !VALID_STATUSES.includes(s.status));
     if (invalidSessions.length > 0) {
       console.error(
         `❌ FAIL: Found ${invalidSessions.length} sessions with invalid statuses:`,
@@ -70,6 +80,7 @@ async function smokeTest() {
       passed++;
     }
   } catch (err: unknown) {
+    failed++;
     console.error("[worker] error:", String(err));
   }
 
@@ -108,6 +119,7 @@ async function smokeTest() {
     console.log('✅ PASS: Can insert with valid status (closed)');
     passed++;
   } catch (err: unknown) {
+    failed++;
     console.error("[worker] error:", String(err));
   }
 
@@ -146,6 +158,7 @@ async function smokeTest() {
       passed++; // Still pass, constraint might be working differently
     }
   } catch (err: unknown) {
+    failed++;
     console.error("[worker] error:", String(err));
   }
 

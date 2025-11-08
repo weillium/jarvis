@@ -4,9 +4,12 @@
  * Stores chunks in context_items table with rank and research_source
  */
 
-import type { PostgrestResponse } from '@supabase/supabase-js';
 import type OpenAI from 'openai';
-import type { Blueprint } from './blueprint-generator';
+import type { Blueprint } from './blueprint/types';
+import type {
+  SupabaseListResult,
+  SupabaseMutationResult,
+} from './blueprint/types';
 import type { ResearchResults, ResearchChunkMetadata } from './glossary-builder';
 import {
   CONTEXT_CHUNKS_GENERATION_SYSTEM_PROMPT,
@@ -60,8 +63,6 @@ export interface ChunksBuildResult {
   costBreakdown: ChunksCostBreakdown;
 }
 
-type SupabaseMutationResult = PostgrestResponse<unknown>;
-type SupabaseListResult<T> = PostgrestResponse<T>;
 type IdRow = { id: string };
 type ResearchResultRecord = {
   content: string;

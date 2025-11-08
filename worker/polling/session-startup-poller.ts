@@ -79,12 +79,17 @@ export class SessionStartupPoller implements Poller {
           continue;
         }
 
-        const allowedStages = ['testing', 'running'];
-        if (!allowedStages.includes(agent.stage)) {
+        const stage = agent.stage;
+        if (!stage) {
           continue;
         }
 
-        if (agent.stage === 'testing') {
+        const allowedStages = ['testing', 'running'];
+        if (!allowedStages.includes(stage)) {
+          continue;
+        }
+
+        if (stage === 'testing') {
           this.log('[start-generated] Starting sessions for testing (event:', eventId, ')');
           await this.orchestrator.startSessionsForTesting(eventId, agentId);
         } else {
