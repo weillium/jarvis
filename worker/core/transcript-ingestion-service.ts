@@ -3,6 +3,7 @@ import type { SessionLifecycle } from './session-lifecycle';
 import type { EventProcessor } from './event-processor';
 import type { EventRuntime } from '../types';
 import type { TranscriptsRepository } from '../services/supabase/transcripts-repository';
+import type { TranscriptRecord } from '../types';
 
 export interface TranscriptAudioChunk {
   audioBase64: string;
@@ -109,17 +110,65 @@ export class TranscriptIngestionService {
     });
   }
 
-  async handleTranscriptInsert(transcript: any): Promise<void> {
+  async handleTranscriptInsert(transcript: unknown): Promise<void> {
+    if (!isRealtimeTranscript(transcript)) {
+      console.warn('[transcripts] Ignoring invalid realtime transcript payload');
+      return;
+    }
+
     const eventId = transcript.event_id;
     const runtime = this.runtimeService.getRuntime(eventId);
     if (!runtime) {
       return;
     }
 
-    if (typeof transcript.seq === 'number' && transcript.seq <= runtime.transcriptLastSeq) {
+    if (transcript.seq !== undefined && transcript.seq <= runtime.transcriptLastSeq) {
       return;
     }
 
     await this.eventProcessor.handleTranscript(runtime, transcript);
   }
 }
+
+type RealtimeTranscript = Pick<
+  TranscriptRecord,
+  'event_id' | 'id' | 'seq' | 'at_ms' | 'speaker' | 'text' | 'final'
+>;
+
+const isRealtimeTranscript = (value: unknown): value is RealtimeTranscript => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  if (typeof record.event_id !== 'string') {
+    return false;
+  }
+
+  if (typeof record.text !== 'string') {
+    return false;
+  }
+
+  if (record.seq !== undefined && typeof record.seq !== 'number') {
+    return false;
+  }
+
+  if (record.at_ms !== undefined && typeof record.at_ms !== 'number') {
+    return false;
+  }
+
+  if (record.speaker !== undefined && record.speaker !== null && typeof record.speaker !== 'string') {
+    return false;
+  }
+
+  if (record.final !== undefined && typeof record.final !== 'boolean') {
+    return false;
+  }
+
+  if (record.id !== undefined && typeof record.id !== 'number') {
+    return false;
+  }
+
+  return true;
+};

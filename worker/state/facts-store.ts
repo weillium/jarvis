@@ -6,7 +6,7 @@
 
 export interface Fact {
   key: string;
-  value: any; // JSON-serializable value
+  value: unknown; // JSON-serializable value
   confidence: number; // 0-1
   lastSeenSeq: number;
   sources: number[]; // Transcript IDs that contributed
@@ -36,8 +36,8 @@ export class FactsStore {
 
     // Sort by confidence (lowest first), then by lastSeenSeq (oldest first)
     factsArray.sort((a, b) => {
-      const [aKey, aFact] = a;
-      const [bKey, bFact] = b;
+      const [, aFact] = a;
+      const [, bFact] = b;
       
       // First sort by confidence (ascending - lowest first)
       if (aFact.confidence !== bFact.confidence) {
@@ -66,7 +66,13 @@ export class FactsStore {
    * Automatically evicts facts if over capacity
    * @returns Array of fact keys that were evicted (empty if no eviction occurred)
    */
-  upsert(key: string, value: any, confidence: number, sourceSeq: number, sourceId?: number): string[] {
+  upsert(
+    key: string,
+    value: unknown,
+    confidence: number,
+    sourceSeq: number,
+    sourceId?: number
+  ): string[] {
     const existing = this.facts.get(key);
 
     if (existing) {
@@ -107,7 +113,15 @@ export class FactsStore {
    * If loading more facts than capacity, evictions will occur automatically
    * @returns Array of fact keys that were evicted (if any)
    */
-  loadFacts(facts: Array<{ key: string; value: any; confidence: number; lastSeenSeq: number; sources: number[] }>): string[] {
+  loadFacts(
+    facts: Array<{
+      key: string;
+      value: unknown;
+      confidence: number;
+      lastSeenSeq: number;
+      sources: number[];
+    }>
+  ): string[] {
     const evictedKeys: string[] = [];
     
     for (const fact of facts) {
@@ -146,9 +160,9 @@ export class FactsStore {
   /**
    * Get all facts as a compact JSON structure for context
    */
-  getContextFormat(): Record<string, any> {
+  getContextFormat(): Record<string, unknown> {
     const highConf = this.getHighConfidence(0.5);
-    const result: Record<string, any> = {};
+    const result: Record<string, unknown> = {};
     for (const fact of highConf) {
       result[fact.key] = fact.value;
     }
@@ -161,9 +175,8 @@ export class FactsStore {
   getBullets(): string[] {
     const highConf = this.getHighConfidence(0.5);
     return highConf.map((fact) => {
-      const valueStr = typeof fact.value === 'string' 
-        ? fact.value 
-        : JSON.stringify(fact.value);
+      const valueStr =
+        typeof fact.value === 'string' ? fact.value : JSON.stringify(fact.value);
       return `- ${fact.key}: ${valueStr} (confidence: ${fact.confidence.toFixed(2)})`;
     });
   }

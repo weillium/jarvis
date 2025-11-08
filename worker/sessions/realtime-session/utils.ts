@@ -1,6 +1,5 @@
 import type { ResponseDoneEvent } from 'openai/resources/realtime/realtime';
-import { isRecord, safeJsonParse } from './payload-utils';
-import type { AgentHandlerOptions } from './types';
+import { isRecord } from './payload-utils';
 
 export const extractAssistantText = (event: ResponseDoneEvent): string | null => {
   const items = event.response.output;
@@ -30,13 +29,3 @@ export const extractAssistantText = (event: ResponseDoneEvent): string | null =>
 
   return null;
 };
-
-export const logHandlerEvent = (
-  options: AgentHandlerOptions,
-  level: 'log' | 'warn' | 'error',
-  message: string,
-  meta?: Record<string, unknown>
-): void => {
-  options.onLog?.(level, message, meta);
-}
-

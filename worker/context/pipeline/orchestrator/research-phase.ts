@@ -39,7 +39,8 @@ export async function runResearchPhase(
   options: ResearchPhaseOptions
 ): Promise<ResearchResults> {
   const { supabase, openai, genModel, exaApiKey, statusManager } = options;
-  const queries = (blueprint.research_plan.queries ?? []) as Blueprint['research_plan']['queries'];
+  const queries: Blueprint['research_plan']['queries'] =
+    blueprint.research_plan.queries ?? [];
 
   console.log(`[research] ========================================`);
   console.log(`[research] Starting research plan execution`);
