@@ -1,5 +1,9 @@
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
+import { fileURLToPath } from "node:url";
+import { dirname } from "node:path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const withTypeInfo = tseslint.configs.recommendedTypeChecked.map((config) => ({
   ...config,
@@ -9,7 +13,7 @@ const withTypeInfo = tseslint.configs.recommendedTypeChecked.map((config) => ({
     parserOptions: {
       ...config.languageOptions?.parserOptions,
       project: "./tsconfig.json",
-      tsconfigRootDir: import.meta.dirname
+      tsconfigRootDir: __dirname
     }
   }
 }));

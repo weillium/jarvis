@@ -52,8 +52,6 @@ export async function buildContextChunks(
   researchResults: ResearchResults | null,
   options: ChunksBuilderOptions
 ): Promise<ChunksBuildResult> {
-  const { supabase, openai, embedModel, genModel } = options;
-
   console.log(`[chunks] Building context chunks for event ${eventId}, cycle ${generationCycleId}`);
   console.log(`[chunks] Target: ${blueprint.chunks_plan.target_count} chunks (${blueprint.chunks_plan.quality_tier} tier)`);
 
@@ -69,13 +67,20 @@ export async function buildContextChunks(
     eventId,
     blueprintId,
     researchResults,
-    supabase,
+    supabase: options.supabase,
   });
-  const research = researchResult;
 
-  await markCycleProcessing(supabase, generationCycleId, blueprint.chunks_plan.target_count || 500);
+  const research: ResearchResults = researchResult;
 
-  const llmChunks = await generateLLMChunks(blueprint, research, openai, genModel, costBreakdown);
+  await markCycleProcessing(options.supabase, generationCycleId, blueprint.chunks_plan.target_count || 500);
+
+  const llmChunks = await generateLLMChunks(
+    blueprint,
+    research,
+    options.openai,
+    options.genModel,
+    costBreakdown
+  );
 
   const candidates: ChunkCandidate[] = [
     ...buildResearchChunkCandidates(research),
@@ -111,7 +116,7 @@ export async function buildContextChunks(
     }
 
     try {
-      const embeddingBatch = validBatch
+        const embeddingBatch = validBatch
         .map((chunk) => ({
           ...chunk,
           text: typeof chunk.text === 'string' ? chunk.text.trim() : String(chunk.text ?? '').trim(),
@@ -138,8 +143,8 @@ export async function buildContextChunks(
           if (typeof chunk.text !== 'string' || chunk.text.length === 0) {
             throw new Error(`Invalid chunk text: ${typeof chunk.text}`);
           }
-          return openai.embeddings.create({
-            model: embedModel,
+          return options.openai.embeddings.create({
+            model: options.embedModel,
             input: chunk.text,
           });
         })
@@ -156,12 +161,12 @@ export async function buildContextChunks(
             completion_tokens: completionTokens,
             total_tokens: totalTokens,
           };
-          const cost = calculateOpenAICost(usageForCost, embedModel, true);
+          const cost = calculateOpenAICost(usageForCost, options.embedModel, true);
           costBreakdown.openai.total += cost;
           costBreakdown.openai.embeddings.push({
             cost,
             usage: usageForCost,
-            model: embedModel,
+            model: options.embedModel,
           });
         }
       }
@@ -194,7 +199,7 @@ export async function buildContextChunks(
           enrichment_timestamp: new Date().toISOString(),
         };
 
-        const inserted = await insertContextItem(supabase, {
+        const inserted = await insertContextItem(options.supabase, {
           event_id: eventId,
           generation_cycle_id: generationCycleId,
           chunk: chunk.text,
@@ -205,7 +210,7 @@ export async function buildContextChunks(
 
         if (inserted) {
           insertedCount++;
-          await updateCycleProgress(supabase, generationCycleId, insertedCount);
+          await updateCycleProgress(options.supabase, generationCycleId, insertedCount);
         }
       }
     } catch (err: unknown) {
@@ -230,7 +235,7 @@ export async function buildContextChunks(
     },
   };
 
-  await completeCycle(supabase, generationCycleId, costMetadata, insertedCount);
+  await completeCycle(options.supabase, generationCycleId, costMetadata, insertedCount);
 
   console.log(`[chunks] Inserted ${insertedCount} context chunks for event ${eventId} (cost: $${totalCost.toFixed(4)})`);
   console.log(`[chunks] Generation cycle ${generationCycleId} marked as completed`);
