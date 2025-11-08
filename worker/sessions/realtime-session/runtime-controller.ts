@@ -1,7 +1,5 @@
 import type { OpenAIRealtimeWebSocket } from 'openai/realtime/websocket';
-import type {
-  RealtimeClientEvent,
-} from 'openai/resources/realtime/realtime';
+import type { RealtimeClientEvent } from 'openai/resources/realtime/realtime';
 import type { RealtimeMessageContext, RealtimeSessionConfig } from './types';
 import type { MessageQueueManager } from './message-queue';
 import type { HeartbeatManager } from './heartbeat-manager';
@@ -9,6 +7,13 @@ import { extractErrorMessage, getLowercaseErrorField } from './payload-utils';
 
 const isInvalidToolCallError = (error: unknown): boolean =>
   getLowercaseErrorField(error, 'message').includes('invalid_tool_call_id');
+
+const PCM_SAMPLE_RATE = 24_000;
+const PCM_BYTES_PER_SAMPLE = 2;
+const TARGET_CHUNK_DURATION_MS = 150;
+const MIN_FLUSH_BYTES = Math.ceil(
+  (PCM_SAMPLE_RATE * PCM_BYTES_PER_SAMPLE * TARGET_CHUNK_DURATION_MS) / 1000
+);
 
 interface RuntimeControllerDeps {
   config: RealtimeSessionConfig;
@@ -30,6 +35,7 @@ interface RuntimeControllerDeps {
 
 export class RuntimeController {
   private readonly deps: RuntimeControllerDeps;
+  private transcriptPcmBuffer: Buffer = Buffer.alloc(0);
 
   constructor(deps: RuntimeControllerDeps) {
     this.deps = deps;
@@ -68,20 +74,68 @@ export class RuntimeController {
       throw new Error('audioBase64 is required');
     }
 
+    const isTranscriptAgent = this.deps.config.agentType === 'transcript';
+    if (isTranscriptAgent) {
+      const incoming = Buffer.from(chunk.audioBase64, 'base64');
+      if (incoming.length > 0) {
+        this.transcriptPcmBuffer = Buffer.concat([this.transcriptPcmBuffer, incoming]);
+      }
+    }
+
     try {
       await Promise.resolve().then(() => {
-        session.send({
-          type: 'input_audio_buffer.append',
-          audio: chunk.audioBase64,
-        } as RealtimeClientEvent);
+        if (!isTranscriptAgent) {
+          session.send({
+            type: 'input_audio_buffer.append',
+            audio: chunk.audioBase64,
+          } as RealtimeClientEvent);
 
-        this.deps.messageQueue.incrementPendingAudio(
-          Math.round((chunk.audioBase64.length * 3) / 4)
-        );
+          const appendedBytes = Math.round((chunk.audioBase64.length * 3) / 4);
+          if (appendedBytes > 0) {
+            this.deps.messageQueue.incrementPendingAudio(appendedBytes);
+          }
+
+          if (chunk.isFinal) {
+            if (this.deps.messageQueue.hasPendingAudio()) {
+              session.send({ type: 'input_audio_buffer.commit' } as RealtimeClientEvent);
+              session.send({ type: 'response.create' } as RealtimeClientEvent);
+              this.deps.messageQueue.resetPendingAudio();
+            } else {
+              this.deps.onLog?.('warn', 'Skipping audio commit: no buffered audio');
+            }
+          }
+          return;
+        }
+
+        while (this.transcriptPcmBuffer.length >= MIN_FLUSH_BYTES) {
+          const flushBuffer = this.transcriptPcmBuffer.subarray(0, MIN_FLUSH_BYTES);
+          this.transcriptPcmBuffer = this.transcriptPcmBuffer.subarray(MIN_FLUSH_BYTES);
+          session.send({
+            type: 'input_audio_buffer.append',
+            audio: flushBuffer.toString('base64'),
+          } as RealtimeClientEvent);
+          session.send({ type: 'input_audio_buffer.commit' } as RealtimeClientEvent);
+          this.deps.onLog?.(
+            'log',
+            `Flushed ${MIN_FLUSH_BYTES} bytes (~${TARGET_CHUNK_DURATION_MS} ms) to transcript session`
+          );
+        }
 
         if (chunk.isFinal) {
-          session.send({ type: 'input_audio_buffer.commit' } as RealtimeClientEvent);
-          session.send({ type: 'response.create' } as RealtimeClientEvent);
+          if (this.transcriptPcmBuffer.length > 0) {
+            session.send({
+              type: 'input_audio_buffer.append',
+              audio: this.transcriptPcmBuffer.toString('base64'),
+            } as RealtimeClientEvent);
+            session.send({ type: 'input_audio_buffer.commit' } as RealtimeClientEvent);
+            this.deps.onLog?.(
+              'log',
+              `Flushed remaining ${this.transcriptPcmBuffer.length} bytes to transcript session`
+            );
+            this.transcriptPcmBuffer = Buffer.alloc(0);
+          } else {
+            this.deps.onLog?.('warn', 'Transcript stream ended with empty buffer');
+          }
           this.deps.messageQueue.resetPendingAudio();
         }
       });
@@ -133,7 +187,9 @@ export class RuntimeController {
     this.deps.onStatusChange?.('paused');
     void this.deps.updateDatabaseStatus('paused');
     this.deps.safeCloseSession('Transient error - reconnecting');
+    this.transcriptPcmBuffer = Buffer.alloc(0);
     this.deps.scheduleReconnect();
   }
+
 }
 

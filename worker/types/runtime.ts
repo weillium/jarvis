@@ -46,6 +46,10 @@ export interface EventRuntime {
     encoding?: string;
     durationMs?: number;
   };
+  streamingTranscript?: {
+    seq: number;
+    speaker?: string | null;
+  };
 
   // Checkpoints
   transcriptLastSeq: number;

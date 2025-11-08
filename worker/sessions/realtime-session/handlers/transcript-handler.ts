@@ -7,6 +7,23 @@ import { BaseAgentHandler } from './base-handler';
 import { extractAssistantText } from '../utils';
 
 export class TranscriptAgentHandler extends BaseAgentHandler {
+  private partialBuffer = '';
+
+  handleResponseTextDelta(payload: { text: string; receivedAt: string }): void {
+    const text = payload.text;
+    if (typeof text !== 'string' || text.length === 0) {
+      return;
+    }
+
+    this.partialBuffer += text;
+
+    this.emit('transcript', {
+      text: this.partialBuffer,
+      isFinal: false,
+      receivedAt: payload.receivedAt,
+    });
+  }
+
   handleResponseText(payload: ResponseTextDoneEvent): void {
     const text = payload.text?.trim() ?? '';
     if (text.length === 0) {
@@ -18,6 +35,8 @@ export class TranscriptAgentHandler extends BaseAgentHandler {
       isFinal: true,
       receivedAt: new Date().toISOString(),
     });
+
+    this.partialBuffer = '';
   }
 
   handleResponseDone(payload: ResponseDoneEvent): void {
@@ -36,6 +55,8 @@ export class TranscriptAgentHandler extends BaseAgentHandler {
       isFinal: true,
       receivedAt: new Date().toISOString(),
     });
+
+    this.partialBuffer = '';
   }
 
   handleToolCall(payload: ResponseFunctionCallArgumentsDoneEvent): void {

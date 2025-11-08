@@ -93,4 +93,5 @@ export interface AgentHandler {
   handleResponseText: (payload: ResponseTextDoneEvent) => Promise<void> | void;
   handleResponseDone: (payload: ResponseDoneEvent) => Promise<void> | void;
   handleToolCall: (payload: ResponseFunctionCallArgumentsDoneEvent) => Promise<void> | void;
+  handleResponseTextDelta: (payload: { text: string; receivedAt: string }) => Promise<void> | void;
 }

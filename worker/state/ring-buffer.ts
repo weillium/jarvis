@@ -37,6 +37,9 @@ export class RingBuffer {
       (item) => now - item.at_ms < this.maxAgeMs
     );
 
+    // Remove existing entries with the same sequence number
+    this.buffer = this.buffer.filter((item) => item.seq !== chunk.seq);
+
     // Add new chunk
     this.buffer.push(chunk);
 

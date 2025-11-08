@@ -18,6 +18,62 @@ interface RouterDependencies {
   onError?: (error: unknown, classification: 'transient' | 'fatal') => void;
 }
 
+const extractDeltaText = (event: unknown): string | null => {
+  if (typeof event !== 'object' || event === null) {
+    return null;
+  }
+
+  const record = event as Record<string, unknown>;
+
+  const delta = record.delta;
+  if (typeof delta === 'object' && delta !== null) {
+    const deltaRecord = delta as Record<string, unknown>;
+    const deltaText = deltaRecord.text;
+    if (typeof deltaText === 'string' && deltaText.length > 0) {
+      return deltaText;
+    }
+  }
+
+  const output = record.output;
+  if (Array.isArray(output)) {
+    for (const item of output) {
+      if (typeof item !== 'object' || item === null) {
+        continue;
+      }
+      const itemRecord = item as Record<string, unknown>;
+      const content = itemRecord.content;
+      if (!Array.isArray(content)) {
+        continue;
+      }
+      for (const entry of content) {
+        if (typeof entry !== 'object' || entry === null) {
+          continue;
+        }
+        const entryRecord = entry as Record<string, unknown>;
+        const entryDelta = entryRecord.delta;
+        if (typeof entryDelta === 'object' && entryDelta !== null) {
+          const entryDeltaRecord = entryDelta as Record<string, unknown>;
+          const entryText = entryDeltaRecord.text;
+          if (typeof entryText === 'string' && entryText.length > 0) {
+            return entryText;
+          }
+        }
+        const entryText = entryRecord.text;
+        if (typeof entryText === 'string' && entryText.length > 0) {
+          return entryText;
+        }
+      }
+    }
+  }
+
+  const textField = record.text;
+  if (typeof textField === 'string' && textField.length > 0) {
+    return textField;
+  }
+
+  return null;
+};
+
 export class EventRouter {
   private readonly deps: RouterDependencies;
 
@@ -31,6 +87,23 @@ export class EventRouter {
 
   handleResponseText(event: ResponseTextDoneEvent): void {
     void this.deps.agentHandler.handleResponseText(event);
+  }
+
+  handleResponseTextDelta(event: unknown): void {
+    const text = extractDeltaText(event);
+    if (!text) {
+      return;
+    }
+
+    const receivedAt = new Date().toISOString();
+    const handler = this.deps.agentHandler.handleResponseTextDelta as (
+      payload: { text: string; receivedAt: string }
+    ) => Promise<void> | void;
+
+    void handler({
+      text,
+      receivedAt,
+    });
   }
 
   handleResponseDone(event: ResponseDoneEvent): void {

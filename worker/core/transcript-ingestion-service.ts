@@ -70,28 +70,51 @@ export class TranscriptIngestionService {
       return;
     }
 
-    const seq = runtime.transcriptLastSeq + 1;
+    const final = payload.isFinal === true;
     const atMs = payload.receivedAt ? Date.parse(payload.receivedAt) || Date.now() : Date.now();
-    const final = payload.isFinal !== false;
     const speaker = runtime.pendingTranscriptChunk?.speaker ?? null;
+
+    if (!final) {
+      const seq =
+        runtime.streamingTranscript?.seq ?? runtime.transcriptLastSeq + 1;
+
+      runtime.streamingTranscript = {
+        seq,
+        speaker,
+      };
+
+      runtime.ringBuffer.add({
+        seq,
+        at_ms: atMs,
+        speaker: speaker ?? undefined,
+        text,
+        final: false,
+      });
+
+      return;
+    }
+
+    const seq =
+      runtime.streamingTranscript?.seq ?? runtime.transcriptLastSeq + 1;
 
     const record = await this.transcriptsRepository.insertTranscript({
       event_id: eventId,
       seq,
       text,
       at_ms: atMs,
-      final,
+      final: true,
       speaker,
     });
 
     runtime.pendingTranscriptChunk = undefined;
+    runtime.streamingTranscript = undefined;
 
     runtime.ringBuffer.add({
       seq,
       at_ms: atMs,
       speaker: speaker ?? undefined,
       text,
-      final,
+      final: true,
       transcript_id: record.id,
     });
 

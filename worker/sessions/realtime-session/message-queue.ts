@@ -82,11 +82,16 @@ export class MessageQueueManager {
     this.currentMessage = next;
     const formattedMessage = this.formatMessage(next.message, next.context);
 
+    const isTranscriptAgent = this.config.agentType === 'transcript';
+
     try {
-      this.pendingResponse = true;
+      this.pendingResponse = !isTranscriptAgent;
 
       session.send(formattedMessage as RealtimeClientEvent);
-      session.send({ type: 'response.create' } as RealtimeClientEvent);
+
+      if (!isTranscriptAgent) {
+        session.send({ type: 'response.create' } as RealtimeClientEvent);
+      }
 
       console.log(`[realtime] Message sent (${this.config.agentType})`);
     } catch (error: unknown) {
@@ -129,6 +134,10 @@ export class MessageQueueManager {
 
   resetPendingAudio(): void {
     this.pendingAudioBytes = 0;
+  }
+
+  hasPendingAudio(): boolean {
+    return this.pendingAudioBytes > 0;
   }
 
   getQueueLength(): number {
@@ -175,24 +184,29 @@ export class MessageQueueManager {
       } satisfies ConversationItemCreateEvent;
     }
 
-    const factsPrompt = createRealtimeFactsUserPrompt(
-      message,
-      context?.recentText ?? '',
-      Array.isArray(context?.facts)
-        ? context?.facts
-            .map((fact) =>
-              fact && typeof fact === 'object'
-                ? JSON.stringify(fact)
-                : typeof fact === 'string'
-                ? fact
-                : ''
-            )
-            .filter((value) => value)
+      const recentText = context?.recentText ?? '';
+      const factsPayload = context?.facts;
+      const factsString = Array.isArray(factsPayload)
+        ? factsPayload
+            .map((fact) => {
+              if (!fact) {
+                return '';
+              }
+              if (typeof fact === 'string') {
+                return fact;
+              }
+              if (typeof fact === 'object') {
+                return JSON.stringify(fact);
+              }
+              return '';
+            })
+            .filter((value) => value.length > 0)
             .join('\n')
-        : typeof context?.facts === 'object' && context?.facts !== null
-        ? JSON.stringify(context.facts)
-        : ''
-    );
+        : typeof factsPayload === 'object' && factsPayload !== null
+        ? JSON.stringify(factsPayload)
+        : '';
+
+      const factsPrompt = createRealtimeFactsUserPrompt(message, recentText, factsString);
 
     return {
       type: 'conversation.item.create',

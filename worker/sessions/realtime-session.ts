@@ -74,7 +74,7 @@ export class RealtimeSession {
   private readonly messageQueue: MessageQueueManager;
   private readonly heartbeat: HeartbeatManager;
   private readonly agentHandler: AgentHandler;
-  private readonly runtime: RuntimeController;
+  private readonly runtimeController: RuntimeController;
   private readonly eventRouter: EventRouter;
   private readonly connectionManager: ConnectionManager;
   private eventHandlers: { [K in RealtimeSessionEvent]?: Array<(data: RealtimeSessionEventPayloads[K]) => void> } = {};
@@ -134,7 +134,7 @@ export class RealtimeSession {
       heartbeatConfig
     );
 
-    this.runtime = new RuntimeController({
+    this.runtimeController = new RuntimeController({
       config: this.config,
       messageQueue: this.messageQueue,
       heartbeat: this.heartbeat,
@@ -166,7 +166,10 @@ export class RealtimeSession {
         event: K,
         payload: RealtimeSessionEventPayloads[K]
       ) => this.emitEvent(event, payload),
-      sendToolResult: (callId, output) => this.runtime.sendToolResult(callId, output),
+      sendToolResult: async (callId, output) => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+        await this.runtimeController.sendToolResult(callId, output);
+      },
       onRetrieve: this.onRetrieve,
       embedText: this.embedText,
       tokenBudget: this.config.tokenBudget,
@@ -640,6 +643,10 @@ export class RealtimeSession {
     });
 
     // Handle response text completion (for JSON responses)
+    this.session.on('response.output_text.delta', (event: unknown) => {
+      this.eventRouter.handleResponseTextDelta(event);
+    });
+
     this.session.on('response.output_text.done', (event: ResponseTextDoneEvent) => {
       this.eventRouter.handleResponseText(event);
     });
@@ -688,14 +695,16 @@ export class RealtimeSession {
       return;
     }
 
-    this.runtime.handleTransientError();
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    void this.runtimeController.handleTransientError();
   }
 
   /**
    * Send a message to the Realtime session
    */
   async sendMessage(message: string, context?: RealtimeMessageContext): Promise<void> {
-    await this.runtime.sendMessage(message, context);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    await this.runtimeController.sendMessage(message, context);
   }
 
   async appendAudioChunk(chunk: {
@@ -706,7 +715,8 @@ export class RealtimeSession {
     durationMs?: number;
     speaker?: string;
   }): Promise<void> {
-    await this.runtime.appendAudioChunk(chunk);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    await this.runtimeController.appendAudioChunk(chunk);
   }
 
   private emitEvent<K extends RealtimeSessionEvent>(

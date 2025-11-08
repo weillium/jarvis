@@ -62,6 +62,10 @@ export abstract class BaseAgentHandler implements AgentHandler {
 
   abstract handleResponseDone(payload: ResponseDoneEvent): Promise<void> | void;
 
+  handleResponseTextDelta(payload: { text: string; receivedAt: string }): void {
+    void payload;
+  }
+
   abstract handleToolCall(
     payload: ResponseFunctionCallArgumentsDoneEvent
   ): Promise<void> | void;
