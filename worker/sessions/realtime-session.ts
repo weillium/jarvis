@@ -4,7 +4,7 @@
  */
 
 import type OpenAI from 'openai';
-import { OpenAIRealtimeWebSocket } from 'openai/realtime/websocket';
+import type { OpenAIRealtimeWebSocket } from 'openai/realtime/websocket';
 import type {
   RealtimeClientEvent,
   RealtimeServerEvent,

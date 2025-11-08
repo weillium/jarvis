@@ -8,27 +8,18 @@ import type OpenAI from 'openai';
 import { Exa } from 'exa-js';
 import type { Blueprint } from './blueprint/types';
 import type {
-  SupabaseListResult,
   SupabaseMutationResult,
 } from './blueprint/types';
-import {
-  calculateOpenAICost,
-  calculateExaAnswerCost,
-  getPricingVersion,
-  type OpenAIUsage,
-} from './pricing-config';
-import {
-  EXA_ANSWER_SYSTEM_PROMPT,
-  GLOSSARY_DEFINITION_SYSTEM_PROMPT,
-  createGlossaryDefinitionUserPrompt,
-  EXA_ANSWER_TRANSFORM_SYSTEM_PROMPT,
-  createExaAnswerTransformUserPrompt,
-} from '../../prompts';
-import {
-  normalizeGlossaryDefinitions,
-  type GlossaryTermDefinition,
-} from '../../lib/context-normalization';
+import { getPricingVersion } from './pricing-config';
 import type { WorkerSupabaseClient } from '../../services/supabase';
+import {
+  fetchActiveResearchResults,
+  insertGlossaryTerm,
+  updateGlossaryCycle,
+} from './glossary/persistence';
+import type { ResearchResults, GlossaryCostBreakdown, GlossaryPlanTerm } from './glossary/types';
+import { selectGlossaryTerms, buildResearchContext } from './glossary/term-selector';
+import { generateTermDefinitions } from './glossary/definition-runner';
 
 export interface GlossaryBuilderOptions {
   supabase: WorkerSupabaseClient;
@@ -38,67 +29,9 @@ export interface GlossaryBuilderOptions {
   exaApiKey?: string; // Optional Exa API key for authoritative definitions
 }
 
-export type ResearchChunkMetadata = {
-  api?: string;
-  quality_score?: number;
-} & Record<string, unknown>;
-
-export interface ResearchResults {
-  chunks: Array<{
-    text: string;
-    source: string;
-    metadata?: ResearchChunkMetadata;
-  }>;
-}
-type ResearchChunk = ResearchResults['chunks'][number];
-
-/**
- * Build glossary from blueprint plan and research results
- * Fetches research from research_results table if not provided
- */
-export interface GlossaryCostBreakdown {
-  openai: {
-    total: number;
-    chat_completions: Array<{ cost: number; usage: OpenAIUsage; model: string }>;
-  };
-  exa: {
-    total: number;
-    answer: { cost: number; queries: number };
-  };
-}
-
 export interface GlossaryBuildResult {
   termCount: number;
   costBreakdown: GlossaryCostBreakdown;
-}
-
-type IdRow = { id: string };
-type ResearchResultRecord = {
-  content: string;
-  metadata: ResearchChunkMetadata | null;
-  query: string | null;
-  api: string | null;
-};
-type ChatCompletionRequest = Parameters<OpenAI['chat']['completions']['create']>[0];
-type GlossaryPlanTerm = {
-  term: string;
-  is_acronym: boolean;
-  category: string;
-  priority: number;
-};
-
-interface GlossaryTermInsert {
-  event_id: string;
-  generation_cycle_id: string;
-  term: string;
-  definition: string;
-  acronym_for: string | null;
-  category: string;
-  usage_examples: string[];
-  related_terms: string[];
-  confidence_score: number;
-  source: string;
-  source_url: string | null;
 }
 
 type GenerationCycleUpdate = Partial<{
@@ -122,7 +55,7 @@ export async function buildGlossary(
   console.log(`[glossary] Building glossary for event ${eventId}, cycle ${generationCycleId}`);
   console.log(`[glossary] Blueprint has ${blueprint.glossary_plan.terms.length} terms planned`);
 
-  const termsToBuild = blueprint.glossary_plan.terms || [];
+  const termsToBuild: GlossaryPlanTerm[] = selectGlossaryTerms(blueprint);
   if (termsToBuild.length === 0) {
     console.log(`[glossary] No terms to build, skipping`);
     return {
@@ -150,53 +83,13 @@ export async function buildGlossary(
   // Exclude research from superseded generation cycles
   let research: ResearchResults;
   if (!researchResults) {
-    // First, get all active (non-superseded) generation cycle IDs for research
-    const {
-      data: activeCycles,
-      error: cycleError,
-    }: SupabaseListResult<IdRow> = await supabase
-      .from('generation_cycles')
-      .select('id')
-      .eq('event_id', eventId)
-      .neq('status', 'superseded')
-      .in('cycle_type', ['research']);
-
-    if (cycleError) {
-      console.warn(`[glossary] Warning: Failed to fetch active research cycles: ${cycleError.message}`);
-    }
-
-    // Build list of active cycle IDs
-    const activeCycleIds: string[] = [];
-    if (activeCycles && activeCycles.length > 0) {
-      activeCycleIds.push(...activeCycles.map((cycle: IdRow) => cycle.id));
-    }
-
-    // Fetch research results only from active cycles (or legacy items)
-    let researchQuery = supabase
-      .from('research_results')
-      .select('content, metadata, query, api')
-      .eq('event_id', eventId)
-      .eq('blueprint_id', blueprintId);
-
-    if (activeCycleIds.length > 0) {
-      // Include items with null generation_cycle_id OR items from active cycles
-      researchQuery = researchQuery.or(`generation_cycle_id.is.null,generation_cycle_id.in.(${activeCycleIds.join(',')})`);
-    } else {
-      // If no active cycles, only show legacy items (null generation_cycle_id)
-      researchQuery = researchQuery.is('generation_cycle_id', null);
-    }
-
-    const {
-      data: researchData,
-      error: researchError,
-    }: SupabaseListResult<ResearchResultRecord> = await researchQuery;
-
-    if (researchError) {
-      console.warn(`[glossary] Warning: Failed to fetch research results: ${researchError.message}`);
-    }
+    const researchData = await fetchActiveResearchResults(supabase, {
+      eventId,
+      blueprintId,
+    });
 
     research = {
-      chunks: (researchData ?? []).map((item: ResearchResultRecord) => ({
+      chunks: researchData.map((item) => ({
         text: item.content,
         source: item.api || 'research',
         metadata: item.metadata || undefined,
@@ -210,10 +103,7 @@ export async function buildGlossary(
   // Old glossary terms are marked as superseded via generation cycles, not deleted
 
   // Extract context from research results
-  const researchContext = research.chunks
-    .map((chunk: ResearchChunk) => chunk.text)
-    .join('\n\n')
-    .substring(0, 10000); // Limit context size
+  const researchContext = buildResearchContext(research);
 
   let insertedCount = 0;
 
@@ -249,39 +139,29 @@ export async function buildGlossary(
       // Store definitions in database
       for (const def of definitions) {
         try {
-          const { error: insertError }: SupabaseMutationResult = await supabase
-            .from('glossary_terms')
-            .insert<GlossaryTermInsert>({
-              event_id: eventId,
-              generation_cycle_id: generationCycleId,
-              term: def.term,
-              definition: def.definition,
-              acronym_for: def.acronym_for ?? null,
-              category: def.category || 'general',
-              usage_examples: def.usage_examples ?? [],
-              related_terms: def.related_terms ?? [],
-              confidence_score: def.confidence_score ?? 0.8,
-              source: def.source || 'llm_generation',
-              source_url: def.source_url ?? null,
-            });
+          await insertGlossaryTerm(supabase, {
+            event_id: eventId,
+            generation_cycle_id: generationCycleId,
+            term: def.term,
+            definition: def.definition,
+            acronym_for: def.acronym_for ?? null,
+            category: def.category || 'general',
+            usage_examples: def.usage_examples ?? [],
+            related_terms: def.related_terms ?? [],
+            confidence_score: def.confidence_score ?? 0.8,
+            source: def.source || 'llm_generation',
+            source_url: def.source_url ?? null,
+          });
 
-          if (insertError) {
-            console.error(`[glossary] Error inserting term "${def.term}": ${insertError.message}`);
-          } else {
-            insertedCount++;
-            // Update progress
-            const { error: progressError }: SupabaseMutationResult = await supabase
-              .from('generation_cycles')
-              .update<GenerationCycleUpdate>({ progress_current: insertedCount })
-              .eq('id', generationCycleId);
-
-            if (progressError) {
-              console.warn(
-                `[glossary] Failed to update cycle progress for ${generationCycleId}: ${progressError.message}`
-              );
-            }
+          insertedCount++;
+          const progressSuccess = await updateGlossaryCycle(supabase, generationCycleId, {
+            progress_current: insertedCount,
+          });
+          if (!progressSuccess) {
+            console.warn(
+              `[glossary] Failed to update cycle progress for ${generationCycleId}`
+            );
           }
-          // TODO: narrow unknown -> PostgrestError after upstream callsite analysis
         } catch (err: unknown) {
           console.error("[worker] error:", String(err));
         }
@@ -314,19 +194,14 @@ export async function buildGlossary(
   };
 
   // Mark cycle as completed with cost metadata
-  const { error: cycleUpdateError }: SupabaseMutationResult = await supabase
-    .from('generation_cycles')
-    .update<GenerationCycleUpdate>({
-      status: 'completed',
-      progress_current: insertedCount,
-      completed_at: new Date().toISOString(),
-      metadata: costMetadata,
-    })
-    .eq('id', generationCycleId);
-
-  if (cycleUpdateError) {
-    console.error(`[glossary] ERROR: Failed to update generation cycle to completed: ${cycleUpdateError.message}`);
-    throw new Error(`Failed to update generation cycle: ${cycleUpdateError.message}`);
+  const completionSuccess = await updateGlossaryCycle(supabase, generationCycleId, {
+    status: 'completed',
+    progress_current: insertedCount,
+    completed_at: new Date().toISOString(),
+    metadata: costMetadata,
+  });
+  if (!completionSuccess) {
+    throw new Error('Failed to mark glossary generation cycle as completed');
   }
 
   console.log(`[glossary] Inserted ${insertedCount} glossary terms for event ${eventId}`);
@@ -335,277 +210,4 @@ export async function buildGlossary(
     termCount: insertedCount,
     costBreakdown,
   };
-}
-
-type TermDefinition = GlossaryTermDefinition;
-
-/**
- * Generate definitions for terms using Exa /answer for high-priority terms, LLM for others
- */
-async function generateTermDefinitions(
-  terms: Array<{ term: string; is_acronym: boolean; category: string; priority: number }>,
-  researchContext: string,
-  importantDetails: string,
-  openai: OpenAI,
-  genModel: string,
-  exa?: Exa,
-  costBreakdown?: GlossaryCostBreakdown
-): Promise<{ definitions: TermDefinition[]; batchCostBreakdown: GlossaryCostBreakdown }> {
-  const definitions: TermDefinition[] = [];
-  const termsForLLM: Array<{ term: string; is_acronym: boolean; category: string; priority: number }> = [];
-  
-  // Initialize batch cost breakdown
-  const batchCostBreakdown: GlossaryCostBreakdown = {
-    openai: {
-      total: 0,
-      chat_completions: [],
-    },
-    exa: {
-      total: 0,
-      answer: { cost: 0, queries: 0 },
-    },
-  };
-
-  // Process high-priority terms (priority <= 3) with Exa /answer if available
-  for (const term of terms) {
-    if (term.priority <= 3 && exa) {
-      try {
-        console.log(`[glossary] Using Exa /answer for high-priority term (priority ${term.priority}): ${term.term}`);
-        
-        const answer = await exa.answer(`What is ${term.term}?`, {
-          text: true,
-          systemPrompt: EXA_ANSWER_SYSTEM_PROMPT,
-        });
-
-        const answerText = typeof answer.answer === 'string' ? answer.answer.trim() : '';
-        if (answerText) {
-          // Extract source URL from citations if available
-          const sourceUrl = Array.isArray(answer.citations) && answer.citations.length > 0
-            ? answer.citations[0]?.url 
-            : undefined;
-
-          // Transform Exa markdown answer into structured glossary format using LLM
-          const transformedDef = await transformExaAnswerToGlossary(
-            term.term,
-            term.is_acronym,
-            term.category,
-            answerText,
-            sourceUrl,
-            openai,
-            genModel
-          );
-
-          if (transformedDef) {
-            definitions.push(transformedDef);
-            console.log(`[glossary] Generated definition for "${term.term}" using Exa /answer (transformed to glossary format)`);
-            
-            // Track Exa answer cost
-            const answerCost = calculateExaAnswerCost(1);
-            batchCostBreakdown.exa.total += answerCost;
-            batchCostBreakdown.exa.answer.cost += answerCost;
-            batchCostBreakdown.exa.answer.queries += 1;
-            
-            continue; // Skip LLM generation for this term
-          } else {
-            console.warn(`[glossary] Failed to transform Exa answer for "${term.term}", falling back to LLM`);
-            // Fall through to LLM generation
-          }
-        }
-        // TODO: narrow unknown -> ExaAPIError after upstream callsite analysis
-      } catch (err: unknown) {
-        console.error("[worker] error:", String(err));
-      }
-    }
-
-    // Add to LLM batch if Exa wasn't used or failed
-    termsForLLM.push(term);
-  }
-
-  // Generate remaining terms with LLM
-  if (termsForLLM.length > 0) {
-    const systemPrompt = GLOSSARY_DEFINITION_SYSTEM_PROMPT;
-
-    const termsList = termsForLLM
-      .map((term: GlossaryPlanTerm) => `- ${term.term}${term.is_acronym ? ' (acronym)' : ''} - ${term.category}`)
-      .join('\n');
-
-    const userPrompt = createGlossaryDefinitionUserPrompt(
-      termsList,
-      researchContext,
-      importantDetails
-    );
-
-    try {
-      // Some models (like o1, o1-preview, o1-mini, gpt-5) don't support custom temperature values
-      // Only set temperature if model supports custom values
-      // Check for models that only support default temperature (1) or don't support it at all
-      const modelLower = genModel.toLowerCase();
-      const isO1Model = modelLower.startsWith('o1');
-      const isGpt5Model = modelLower.includes('gpt-5') || modelLower.startsWith('gpt5');
-      const onlySupportsDefaultTemp = isO1Model || isGpt5Model;
-      const supportsCustomTemperature = !onlySupportsDefaultTemp;
-      
-      if (onlySupportsDefaultTemp) {
-        console.log(`[glossary] Model "${genModel}" only supports default temperature (1), skipping custom temperature setting`);
-      }
-      
-      // Build request options - conditionally include temperature
-      const requestOptions: ChatCompletionRequest = {
-        model: genModel,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        response_format: { type: 'json_object' },
-      };
-      
-      // Only add temperature if model supports custom temperature values
-      if (supportsCustomTemperature) {
-        requestOptions.temperature = 0.5; // Lower temperature for more consistent definitions
-      }
-      
-      const response = await openai.chat.completions.create(
-        requestOptions
-      ) as OpenAI.Chat.Completions.ChatCompletion;
-
-      // Track OpenAI cost
-      if (response.usage) {
-        const usage = response.usage;
-        const cost = calculateOpenAICost(usage, genModel, false);
-        batchCostBreakdown.openai.total += cost;
-        batchCostBreakdown.openai.chat_completions.push({
-          cost,
-          usage: {
-            prompt_tokens: usage.prompt_tokens,
-            completion_tokens: usage.completion_tokens,
-            total_tokens: usage.total_tokens,
-          },
-          model: genModel,
-        });
-      }
-
-      const content = response.choices[0]?.message?.content;
-      if (!content) {
-        throw new Error('Empty response from LLM');
-      }
-
-      const parsed: unknown = JSON.parse(content);
-      // Handle both "definitions" and "terms" keys (json_object format always returns object)
-      const llmDefinitions =
-        (parsed as { definitions?: unknown; terms?: unknown }).definitions ??
-        (parsed as { definitions?: unknown; terms?: unknown }).terms ??
-        [];
-
-      if (!Array.isArray(llmDefinitions)) {
-        throw new Error('LLM did not return array of definitions');
-      }
-
-      // Validate and normalize definitions
-      const normalizedLLMDefinitions = normalizeGlossaryDefinitions(llmDefinitions);
-
-      definitions.push(...normalizedLLMDefinitions);
-      // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
-    } catch (err: unknown) {
-      console.error("[worker] error:", String(err));
-    }
-  }
-
-  // Merge batch costs into main cost breakdown if provided
-  if (costBreakdown) {
-    costBreakdown.openai.total += batchCostBreakdown.openai.total;
-    costBreakdown.openai.chat_completions.push(...batchCostBreakdown.openai.chat_completions);
-    costBreakdown.exa.total += batchCostBreakdown.exa.total;
-    costBreakdown.exa.answer.cost += batchCostBreakdown.exa.answer.cost;
-    costBreakdown.exa.answer.queries += batchCostBreakdown.exa.answer.queries;
-  }
-
-  return { definitions, batchCostBreakdown };
-}
-
-/**
- * Transform Exa markdown answer into structured glossary format
- * Extracts clean definition, usage examples, and related terms
- */
-async function transformExaAnswerToGlossary(
-  term: string,
-  isAcronym: boolean,
-  category: string,
-  exaAnswer: string,
-  sourceUrl: string | undefined,
-  openai: OpenAI,
-  genModel: string
-): Promise<TermDefinition | null> {
-  try {
-    const systemPrompt = EXA_ANSWER_TRANSFORM_SYSTEM_PROMPT;
-    const termDescriptor = `- ${term}${isAcronym ? ' (acronym)' : ''} - ${category}`;
-    const userPrompt = createExaAnswerTransformUserPrompt(termDescriptor, exaAnswer);
-
-    // Some models (like o1, o1-preview, o1-mini, gpt-5) don't support custom temperature values
-    const modelLower = genModel.toLowerCase();
-    const isO1Model = modelLower.startsWith('o1');
-    const isGpt5Model = modelLower.includes('gpt-5') || modelLower.startsWith('gpt5');
-    const onlySupportsDefaultTemp = isO1Model || isGpt5Model;
-    const supportsCustomTemperature = !onlySupportsDefaultTemp;
-
-    const requestOptions: ChatCompletionRequest = {
-      model: genModel,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      response_format: { type: 'json_object' },
-    };
-
-    if (supportsCustomTemperature) {
-      requestOptions.temperature = 0.3; // Low temperature for consistent transformation
-    }
-
-    const response = await openai.chat.completions.create(
-      requestOptions
-    ) as OpenAI.Chat.Completions.ChatCompletion;
-    const content = response.choices[0]?.message?.content;
-
-    if (!content) {
-      console.warn(`[glossary] Empty response when transforming Exa answer for "${term}"`);
-      return null;
-    }
-
-    try {
-      const parsed = JSON.parse(content) as {
-        term?: string;
-        definition?: string;
-        acronym_for?: string;
-        category?: string;
-        usage_examples?: string[];
-        related_terms?: string[];
-      };
-
-      if (!parsed.definition || !parsed.definition.trim()) {
-        console.warn(
-          `[glossary] Missing definition in transformed Exa answer for "${term}"`
-        );
-        return null;
-      }
-
-      return {
-        term: parsed.term || term,
-        definition: parsed.definition.trim(),
-        acronym_for: parsed.acronym_for || undefined,
-        category: parsed.category || category,
-        usage_examples: parsed.usage_examples || [],
-        related_terms: parsed.related_terms || [],
-        confidence_score: 0.9, // High confidence for Exa answers
-        source: 'exa',
-        source_url: sourceUrl,
-      };
-      // TODO: narrow unknown -> SyntaxError after upstream callsite analysis
-    } catch (err: unknown) {
-      console.error("[worker] error:", String(err));
-    }
-    return null;
-    // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
-  } catch (err: unknown) {
-    console.error("[worker] error:", String(err));
-  }
-  return null;
 }

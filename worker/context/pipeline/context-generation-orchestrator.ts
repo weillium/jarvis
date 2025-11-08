@@ -12,7 +12,7 @@
  */
 
 import type OpenAI from 'openai';
-import type { ResearchResults } from './glossary-builder';
+import type { ResearchResults } from './glossary/types';
 import { runGlossaryPhase } from './orchestrator/glossary-phase';
 import { runChunksPhase } from './orchestrator/chunks-phase';
 import { fetchBlueprintRow, type WorkerSupabaseClient } from './orchestrator/supabase-orchestrator';

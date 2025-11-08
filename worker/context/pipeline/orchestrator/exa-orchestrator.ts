@@ -1,5 +1,5 @@
 import type { Exa } from 'exa-js';
-import type { ResearchResults } from '../glossary-builder';
+import type { ResearchResults } from '../glossary/types';
 import type { ResearchResultInsert } from '../../../types';
 import { insertResearchResultRow, type WorkerSupabaseClient } from './supabase-orchestrator';
 import { calculateExaResearchCost, calculateExaSearchCost } from '../pricing-config';
