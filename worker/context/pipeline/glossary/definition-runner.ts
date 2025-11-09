@@ -222,29 +222,74 @@ async function transformExaAnswerToGlossary(
     }
 
     try {
-      const parsed = JSON.parse(content) as {
-        term?: string;
-        definition?: string;
-        acronym_for?: string;
-        category?: string;
-        usage_examples?: string[];
-        related_terms?: string[];
-      };
+      const parsed = JSON.parse(content) as unknown;
+      const isRecord = (value: unknown): value is Record<string, unknown> =>
+        typeof value === 'object' && value !== null && !Array.isArray(value);
 
-      if (!parsed.definition || !parsed.definition.trim()) {
+      const candidateEntries: unknown[] = [];
+
+      if (Array.isArray(parsed)) {
+        candidateEntries.push(...parsed);
+      } else if (isRecord(parsed)) {
+        if (Array.isArray(parsed.definitions)) {
+          candidateEntries.push(...parsed.definitions);
+        }
+        if (Array.isArray(parsed.terms)) {
+          candidateEntries.push(...parsed.terms);
+        }
+        if (candidateEntries.length === 0) {
+          candidateEntries.push(parsed);
+        }
+      }
+
+      const firstEntry = candidateEntries.find(isRecord);
+      if (!firstEntry) {
         console.warn(
           `[glossary] Missing definition in transformed Exa answer for "${term.term}"`
         );
         return null;
       }
 
+      const definitionValue =
+        typeof firstEntry['definition'] === 'string' ? firstEntry['definition'].trim() : '';
+
+      if (!definitionValue) {
+        console.warn(
+          `[glossary] Missing definition in transformed Exa answer for "${term.term}"`
+        );
+        return null;
+      }
+
+      const usageExamplesValue = Array.isArray(firstEntry['usage_examples'])
+        ? firstEntry['usage_examples'].filter((item): item is string => typeof item === 'string')
+        : [];
+
+      const relatedTermsValue = Array.isArray(firstEntry['related_terms'])
+        ? firstEntry['related_terms'].filter((item): item is string => typeof item === 'string')
+        : [];
+
+      const acronymForValue =
+        typeof firstEntry['acronym_for'] === 'string' && firstEntry['acronym_for'].trim()
+          ? firstEntry['acronym_for'].trim()
+          : undefined;
+
+      const categoryValue =
+        typeof firstEntry['category'] === 'string' && firstEntry['category'].trim()
+          ? firstEntry['category'].trim()
+          : term.category;
+
+      const termValue =
+        typeof firstEntry['term'] === 'string' && firstEntry['term'].trim()
+          ? firstEntry['term'].trim()
+          : term.term;
+
       return {
-        term: parsed.term || term.term,
-        definition: parsed.definition.trim(),
-        acronym_for: parsed.acronym_for || undefined,
-        category: parsed.category || term.category,
-        usage_examples: parsed.usage_examples || [],
-        related_terms: parsed.related_terms || [],
+        term: termValue,
+        definition: definitionValue,
+        acronym_for: acronymForValue,
+        category: categoryValue,
+        usage_examples: usageExamplesValue,
+        related_terms: relatedTermsValue,
         confidence_score: 0.9,
         source: 'exa',
         source_url: sourceUrl,

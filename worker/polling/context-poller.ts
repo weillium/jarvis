@@ -39,6 +39,7 @@ const isContextBlueprintRecord = (value: unknown): value is ContextBlueprintReco
 export class ContextPoller implements Poller {
   private processingAgents: Set<string>;
   private readonly loggedProcessingAgents: Set<string>;
+  private readonly missingBlueprintAgents: Set<string>;
 
   constructor(
     private readonly supabase: SupabaseClient,
@@ -51,6 +52,7 @@ export class ContextPoller implements Poller {
   ) {
     this.processingAgents = processingAgents ?? new Set<string>();
     this.loggedProcessingAgents = new Set<string>();
+    this.missingBlueprintAgents = new Set<string>();
   }
 
   async tick(): Promise<void> {
@@ -97,10 +99,14 @@ export class ContextPoller implements Poller {
       const { data: blueprint, error: blueprintError } = blueprintResult;
 
       if (blueprintError || !blueprint || !isContextBlueprintRecord(blueprint)) {
-        this.log('[context-gen] No approved blueprint found for agent', agent.id);
+        if (!this.missingBlueprintAgents.has(agent.id)) {
+          this.log('[context-gen] No approved blueprint found for agent', agent.id);
+          this.missingBlueprintAgents.add(agent.id);
+        }
         continue;
       }
 
+      this.missingBlueprintAgents.delete(agent.id);
       this.processingAgents.add(agent.id);
       this.loggedProcessingAgents.delete(agent.id);
 
@@ -126,6 +132,7 @@ export class ContextPoller implements Poller {
       } finally {
         this.processingAgents.delete(agent.id);
         this.loggedProcessingAgents.delete(agent.id);
+        this.missingBlueprintAgents.delete(agent.id);
       }
     }
   }

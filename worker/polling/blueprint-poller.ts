@@ -23,6 +23,7 @@ interface ContextBlueprintRow {
 export class BlueprintPoller implements Poller {
   private processingAgents: Set<string>;
   private readonly agentsWithActiveBlueprints: Set<string>;
+  private readonly loggedProcessingAgents: Set<string>;
 
   constructor(
     private readonly supabase: SupabaseClient,
@@ -33,6 +34,7 @@ export class BlueprintPoller implements Poller {
   ) {
     this.processingAgents = processingAgents ?? new Set<string>();
     this.agentsWithActiveBlueprints = new Set<string>();
+    this.loggedProcessingAgents = new Set<string>();
   }
 
   async tick(): Promise<void> {
@@ -97,11 +99,15 @@ export class BlueprintPoller implements Poller {
 
     for (const agent of agentsNeedingBlueprints) {
       if (this.processingAgents.has(agent.id)) {
-        this.log('[blueprint] Agent', agent.id, 'already being processed, skipping');
+        if (!this.loggedProcessingAgents.has(agent.id)) {
+          this.log('[blueprint] Agent', agent.id, 'already being processed, skipping');
+          this.loggedProcessingAgents.add(agent.id);
+        }
         continue;
       }
 
       this.processingAgents.add(agent.id);
+      this.loggedProcessingAgents.delete(agent.id);
 
       try {
         this.log('[blueprint] generating blueprint for agent', agent.id, 'event', agent.event_id);
@@ -115,6 +121,7 @@ export class BlueprintPoller implements Poller {
         console.error("[worker] error:", String(err));
       } finally {
         this.processingAgents.delete(agent.id);
+        this.loggedProcessingAgents.delete(agent.id);
       }
     }
   }

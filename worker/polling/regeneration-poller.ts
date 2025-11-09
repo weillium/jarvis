@@ -30,6 +30,8 @@ export class RegenerationPoller implements Poller {
     'regenerating_glossary',
     'regenerating_chunks',
   ];
+  private readonly loggedProcessingAgents: Set<string>;
+  private readonly missingBlueprintAgents: Set<string>;
 
   constructor(
     private readonly supabase: SupabaseClient,
@@ -41,6 +43,8 @@ export class RegenerationPoller implements Poller {
     private readonly log: LoggerFn = console.log
   ) {
     this.processingAgents = processingAgents ?? new Set<string>();
+    this.loggedProcessingAgents = new Set<string>();
+    this.missingBlueprintAgents = new Set<string>();
   }
 
   async tick(): Promise<void> {
@@ -64,7 +68,10 @@ export class RegenerationPoller implements Poller {
 
     for (const agent of regeneratingAgents) {
       if (this.processingAgents.has(agent.id)) {
-        this.log('[regeneration] Agent', agent.id, 'already being processed, skipping');
+        if (!this.loggedProcessingAgents.has(agent.id)) {
+          this.log('[regeneration] Agent', agent.id, 'already being processed, skipping');
+          this.loggedProcessingAgents.add(agent.id);
+        }
         continue;
       }
 
@@ -80,11 +87,16 @@ export class RegenerationPoller implements Poller {
       const { data: blueprint, error: blueprintError } = blueprintResponse;
 
       if (blueprintError || !blueprint) {
-        this.log('[regeneration] No approved blueprint found for agent', agent.id);
+        if (!this.missingBlueprintAgents.has(agent.id)) {
+          this.log('[regeneration] No approved blueprint found for agent', agent.id);
+          this.missingBlueprintAgents.add(agent.id);
+        }
         continue;
       }
 
+      this.missingBlueprintAgents.delete(agent.id);
       this.processingAgents.add(agent.id);
+      this.loggedProcessingAgents.delete(agent.id);
 
       try {
         const options = {
@@ -111,6 +123,8 @@ export class RegenerationPoller implements Poller {
         console.error("[worker] error:", String(err));
       } finally {
         this.processingAgents.delete(agent.id);
+        this.loggedProcessingAgents.delete(agent.id);
+        this.missingBlueprintAgents.delete(agent.id);
       }
     }
   }
