@@ -76,33 +76,69 @@ export interface GlossaryTermInsert {
   source_url: string | null;
 }
 
+const formatSupabaseError = (error: SupabaseMutationResult['error']): string => {
+  if (error && typeof error.message === 'string') {
+    return error.message;
+  }
+
+  try {
+    return JSON.stringify(error) ?? '[glossary] Unknown Supabase error';
+  } catch {
+    return '[glossary] Unknown Supabase error';
+  }
+};
+
 export const insertGlossaryTerm = async (
   supabase: WorkerSupabaseClient,
   payload: GlossaryTermInsert
 ): Promise<void> => {
-  const { error }: SupabaseMutationResult = await supabase
+  const normalizedTerm = payload.term.trim();
+  const updatedAt = new Date().toISOString();
+
+  const updateFields = {
+    term: normalizedTerm,
+    definition: payload.definition,
+    acronym_for: payload.acronym_for,
+    category: payload.category,
+    usage_examples: payload.usage_examples,
+    related_terms: payload.related_terms,
+    confidence_score: payload.confidence_score,
+    source: payload.source,
+    source_url: payload.source_url,
+    generation_cycle_id: payload.generation_cycle_id,
+    updated_at: updatedAt,
+  };
+
+  const {
+    data: updatedRows,
+    error: updateError,
+  }: SupabaseListResult<IdRow> = await supabase
     .from('glossary_terms')
-    .insert(payload);
+    .update(updateFields)
+    .eq('event_id', payload.event_id)
+    .ilike('term', normalizedTerm)
+    .select('id');
 
-  if (error) {
-    let errorMessage =
-      typeof error === 'object' &&
-      error !== null &&
-      'message' in error &&
-      typeof (error as { message: unknown }).message === 'string'
-        ? (error as { message: string }).message
-        : null;
+  if (updateError) {
+    const message = `[glossary] Error updating glossary term ${normalizedTerm}: ${formatSupabaseError(updateError)}`;
+    console.error(message);
+    throw new Error(message);
+  }
 
-    if (!errorMessage) {
-      try {
-        const serialized = JSON.stringify(error);
-        errorMessage = serialized ?? '[glossary] Unknown Supabase error';
-      } catch {
-        errorMessage = '[glossary] Unknown Supabase error';
-      }
-    }
+  if (updatedRows && updatedRows.length > 0) {
+    return;
+  }
 
-    const message = `[glossary] Error storing glossary term ${payload.term}: ${errorMessage}`;
+  const { error: insertError }: SupabaseMutationResult = await supabase
+    .from('glossary_terms')
+    .insert({
+      ...payload,
+      term: normalizedTerm,
+      updated_at: updatedAt,
+    });
+
+  if (insertError) {
+    const message = `[glossary] Error storing glossary term ${normalizedTerm}: ${formatSupabaseError(insertError)}`;
     console.error(message);
     throw new Error(message);
   }

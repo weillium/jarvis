@@ -74,7 +74,9 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
   };
 
   const getTypeLabel = (type: string): string => {
-    switch (type) {
+    const normalized = type?.trim().toLowerCase();
+
+    switch (normalized) {
       case 'research':
         return 'Research';
       case 'glossary':
@@ -83,9 +85,43 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
         return 'Chunks';
       case 'full':
         return 'Full Generation';
+      case 'blueprint':
+        return 'Blueprint';
       default:
         return type;
     }
+  };
+
+  const getComponentLabel = (component: string | null): string | null => {
+    if (!component) {
+      return null;
+    }
+
+    const trimmed = component.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const normalized = trimmed.toLowerCase();
+    const knownLabels: Record<string, string> = {
+      blueprint: 'Blueprint',
+      bluepirnt: 'Blueprint',
+      'context_blueprint': 'Blueprint',
+      'context-blueprint': 'Blueprint',
+    };
+
+    if (knownLabels[normalized]) {
+      return knownLabels[normalized];
+    }
+
+    const titleCased = trimmed
+      .replace(/[_-]+/g, ' ')
+      .split(' ')
+      .filter(Boolean)
+      .map((word) => word[0].toUpperCase() + word.slice(1))
+      .join(' ');
+
+    return titleCased || trimmed;
   };
 
   const filteredCycles = cycles?.filter((cycle) => {
@@ -334,7 +370,18 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                     }}>
                       {getTypeLabel(cycle.cycle_type)}
                     </span>
-                    {cycle.component && cycle.component !== cycle.cycle_type && (
+                    {(() => {
+                      const componentLabel = getComponentLabel(cycle.component);
+                      const typeLabel = getTypeLabel(cycle.cycle_type);
+                      if (!componentLabel) {
+                        return null;
+                      }
+
+                      if (componentLabel.toLowerCase() === typeLabel.toLowerCase()) {
+                        return null;
+                      }
+
+                      return (
                       <span style={{
                         fontSize: '11px',
                         padding: '2px 8px',
@@ -342,9 +389,10 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                         color: '#64748b',
                         borderRadius: '4px',
                       }}>
-                        {cycle.component}
+                        {componentLabel}
                       </span>
-                    )}
+                      );
+                    })()}
                   </div>
                   <div style={{
                     display: 'flex',
