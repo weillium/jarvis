@@ -46,6 +46,8 @@ export class ContextPoller implements Poller {
     private readonly openai: OpenAI,
     private readonly embedModel: string,
     private readonly genModel: string,
+    private readonly chunksPolishModel: string,
+    private readonly glossaryModel: string,
     private readonly exaApiKey: string | undefined,
     processingAgents?: Set<string>,
     private readonly log: LoggerFn = console.log
@@ -124,6 +126,8 @@ export class ContextPoller implements Poller {
           openai: this.openai,
           embedModel: this.embedModel,
           genModel: this.genModel,
+          chunkPolishModel: this.chunksPolishModel,
+          glossaryModel: this.glossaryModel,
           exaApiKey: this.exaApiKey,
         });
         this.log('[context-gen] context generation complete for agent', agent.id);

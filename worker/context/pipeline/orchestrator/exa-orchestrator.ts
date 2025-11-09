@@ -26,6 +26,7 @@ export type ResearchCostTracker = {
 interface ExaResearchTaskStatus {
   status: string;
   output?: unknown;
+  data?: unknown;
   error?: unknown;
 }
 
@@ -113,14 +114,22 @@ const getResearchClient = (research: unknown): ExaResearchRetriever | null => {
   }
 
   const retrieveValue = research.retrieve;
-  if (typeof retrieveValue !== 'function') {
-    return null;
+  if (typeof retrieveValue === 'function') {
+    return {
+      retrieve: (taskId: string) =>
+        Promise.resolve<unknown>(retrieveValue.call(research, taskId)),
+    };
   }
 
-  return {
-    retrieve: (taskId: string) =>
-      Promise.resolve<unknown>(retrieveValue.call(research, taskId)),
-  };
+  const getValue = research.get;
+  if (typeof getValue === 'function') {
+    return {
+      retrieve: (taskId: string) =>
+        Promise.resolve<unknown>(getValue.call(research, taskId)),
+    };
+  }
+
+  return null;
 };
 
 export interface PendingResearchTask {
@@ -186,7 +195,17 @@ export const pollResearchTasks = async (
           console.error('[research-poll] Research client unavailable, aborting task polling');
           return;
         }
-        const taskStatus = await researchClient.retrieve(task.researchId);
+        const rawTaskStatus = await researchClient.retrieve(task.researchId);
+        const taskStatus = isRecord(rawTaskStatus)
+          ? {
+              ...rawTaskStatus,
+              output:
+                rawTaskStatus.output !== undefined
+                  ? rawTaskStatus.output
+                  : rawTaskStatus.data,
+            }
+          : rawTaskStatus;
+
         if (!isExaResearchTaskStatus(taskStatus)) {
           console.error(
             `[research-poll] ${task.queryProgress} Unexpected task status shape for ${task.researchId}`
@@ -243,7 +262,9 @@ export const processCompletedResearchTask = async (
 ): Promise<void> => {
   const { queryItem, queryProgress } = task;
 
-  const normalizedOutput = normalizeResearchOutput(taskStatus.output);
+  const normalizedOutput = normalizeResearchOutput(
+    taskStatus.output ?? taskStatus.data ?? null
+  );
 
   if (!normalizedOutput || normalizedOutput.summary.length < 50) {
     console.warn(

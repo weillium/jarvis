@@ -3,7 +3,9 @@ export interface WorkerEnvConfig {
   serviceRoleKey: string;
   openaiApiKey: string;
   embedModel: string;
+  chunksPolishModel: string;
   contextGenModel: string;
+  glossaryModel: string;
   cardsModel: string;
   exaApiKey?: string;
   sseEndpoint: string;
@@ -52,7 +54,9 @@ export const loadWorkerEnv = (): WorkerEnvConfig => {
   const openaiApiKey = requireEnv('OPENAI_API_KEY');
 
   const embedModel = process.env.CONTEXT_CHUNKS_MODEL || 'text-embedding-3-small';
+  const chunksPolishModel = process.env.CONTEXT_CHUNKS_POLISHING_MODEL || 'gpt-5-mini';
   const contextGenModel = process.env.CONTEXT_BLUEPRINT_MODEL || 'gpt-5';
+  const glossaryModel = process.env.CONTEXT_GLOSSARY_MODEL || contextGenModel;
   const cardsModel = process.env.OPENAI_CARDS_MODEL || process.env.DEFAULT_CARDS_MODEL;
   if (!cardsModel) {
     throw new Error('OPENAI_CARDS_MODEL or DEFAULT_CARDS_MODEL must be set');
@@ -66,7 +70,9 @@ export const loadWorkerEnv = (): WorkerEnvConfig => {
     serviceRoleKey,
     openaiApiKey,
     embedModel,
+    chunksPolishModel,
     contextGenModel,
+    glossaryModel,
     cardsModel,
     exaApiKey: process.env.EXA_API_KEY,
     sseEndpoint,

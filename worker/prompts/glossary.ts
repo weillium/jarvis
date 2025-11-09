@@ -77,4 +77,81 @@ Requirements:
 - Ensure the output JSON matches the GlossaryTerm structure.`;
 }
 
+export const GLOSSARY_TERM_SYSTEM_PROMPT = `You are a glossary assistant creating a single, accurate definition for a technical or domain-specific term.
+
+Guidelines:
+- Produce a concise definition (1-3 sentences) grounded in the supplied research snippets
+- Expand the term if it is an acronym
+- Provide 1-2 short usage examples when helpful
+- Suggest related terms mentioned in the snippets
+- Assign a confidence score (0.9-1.0 for strong evidence, 0.7-0.9 otherwise)
+- Mark the source as "llm_generation"
+
+Return a JSON object with keys: term, definition, acronym_for, category, usage_examples, related_terms, confidence_score, source, source_url (optional).`;
+
+export function createGlossaryTermUserPrompt(params: {
+  term: string;
+  isAcronym: boolean;
+  category: string;
+  importantDetails: string;
+  snippets: string[];
+}): string {
+  const snippetsText =
+    params.snippets.length > 0
+      ? params.snippets.map((snippet, index) => `${index + 1}. ${snippet}`).join('\n')
+      : 'None available. Use general knowledge informed by the important details.';
+
+  return `Term: ${params.term}${params.isAcronym ? ' (acronym)' : ''}
+Category: ${params.category}
+
+Important Event Details:
+${params.importantDetails || 'None provided'}
+
+Relevant Research Snippets:
+${snippetsText}
+
+Instructions:
+- Use only trustworthy information from the snippets and important details
+- Stay factual; do not speculate
+- Return a single JSON object describing the term`;
+}
+
+export const EXA_ANSWER_POLISH_SYSTEM_PROMPT = `You are a glossary assistant polishing an authoritative answer into the final glossary definition.
+
+Guidelines:
+- Preserve the authoritative answer while integrating corroborating snippets
+- Keep the definition concise (1-3 sentences)
+- Add 1-2 usage examples when they reinforce understanding
+- Include related terms mentioned in the answer or snippets
+- Set confidence to 0.95 when evidence is strong, otherwise 0.85
+- Ensure the output JSON matches the GlossaryTerm structure and uses "exa" as the source`;
+
+export function createExaAnswerPolishUserPrompt(params: {
+  term: string;
+  isAcronym: boolean;
+  category: string;
+  answer: string;
+  snippets: string[];
+  importantDetails: string;
+}): string {
+  const snippetSection =
+    params.snippets.length > 0
+      ? params.snippets.map((snippet, index) => `${index + 1}. ${snippet}`).join('\n')
+      : 'None available.';
+
+  return `Term: ${params.term}${params.isAcronym ? ' (acronym)' : ''}
+Category: ${params.category}
+
+Authoritative Answer:
+${params.answer}
+
+Relevant Research Snippets:
+${snippetSection}
+
+Important Event Details:
+${params.importantDetails || 'None provided'}
+
+Create a single glossary entry as JSON with keys: term, definition, acronym_for, category, usage_examples, related_terms, confidence_score, source, source_url (optional). Use "exa" as the source and keep the tone factual and professional.`;
+}
+
 

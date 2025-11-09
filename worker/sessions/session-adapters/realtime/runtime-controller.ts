@@ -156,8 +156,7 @@ export class RuntimeController {
     message: string,
     context?: Parameters<NonNullable<RuntimeControllerDeps['onLog']>>[2]
   ): void {
-    const timestamped = `[${new Date().toISOString()}] ${message}`;
-    this.deps.onLog?.(level, timestamped, context);
+    this.deps.onLog?.(level, message, context);
   }
 
   private createHookContext(): RuntimeControllerHookContext {

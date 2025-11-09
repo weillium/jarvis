@@ -6,6 +6,7 @@ import type { StatusManager } from './status-manager';
 
 export interface ChunksPhaseOptions extends PhaseOptions {
   embedModel: string;
+  chunkModel: string;
   statusManager: StatusManager;
 }
 
@@ -15,7 +16,7 @@ export const runChunksPhase = async (
   generationCycleId: string,
   options: ChunksPhaseOptions
 ) => {
-  const { supabase, openai, embedModel, genModel, statusManager } = options;
+  const { supabase, openai, embedModel, genModel, chunkModel, statusManager } = options;
 
   await statusManager.updateCycle(generationCycleId, { status: 'processing' });
 
@@ -29,7 +30,7 @@ export const runChunksPhase = async (
       supabase,
       openai,
       embedModel,
-      genModel,
+      chunkModel,
     }
   );
 

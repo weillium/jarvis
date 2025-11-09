@@ -18,13 +18,14 @@ import {
   updateGlossaryCycle,
 } from './glossary/persistence';
 import type { ResearchResults, GlossaryCostBreakdown, GlossaryPlanTerm } from './glossary/types';
-import { selectGlossaryTerms, buildResearchContext } from './glossary/term-selector';
+import { selectGlossaryTerms } from './glossary/term-selector';
 import { generateTermDefinitions } from './glossary/definition-runner';
 
 export interface GlossaryBuilderOptions {
   supabase: WorkerSupabaseClient;
   openai: OpenAI;
   genModel: string;
+  glossaryModel: string;
   embedModel: string;
   exaApiKey?: string; // Optional Exa API key for authoritative definitions
 }
@@ -50,7 +51,7 @@ export async function buildGlossary(
   researchResults: ResearchResults | null,
   options: GlossaryBuilderOptions
 ): Promise<GlossaryBuildResult> {
-  const { supabase, openai, genModel, exaApiKey } = options;
+  const { supabase, openai, genModel, glossaryModel, exaApiKey } = options;
 
   console.log(`[glossary] Building glossary for event ${eventId}, cycle ${generationCycleId}`);
   console.log(`[glossary] Blueprint has ${blueprint.glossary_plan.terms.length} terms planned`);
@@ -75,7 +76,7 @@ export async function buildGlossary(
     },
     exa: {
       total: 0,
-      answer: { cost: 0, queries: 0 },
+      answer: { cost: 0, queries: 0, calls: [] },
     },
   };
 
@@ -102,9 +103,6 @@ export async function buildGlossary(
   // Legacy deletion code removed - we now use superseding approach
   // Old glossary terms are marked as superseded via generation cycles, not deleted
 
-  // Extract context from research results
-  const researchContext = buildResearchContext(research);
-
   let insertedCount = 0;
 
   // Update generation cycle progress
@@ -126,14 +124,24 @@ export async function buildGlossary(
     const batch = termsToBuild.slice(i, i + batchSize);
     
     try {
-      const { definitions } = await generateTermDefinitions(
+      const { definitions, batchCostBreakdown } = await generateTermDefinitions(
         batch,
-        researchContext,
+        research,
         blueprint.important_details.join('\n'),
         openai,
-        genModel,
-        exaApiKey ? new Exa(exaApiKey) : undefined,
-        costBreakdown
+        glossaryModel,
+        exaApiKey ? new Exa(exaApiKey) : undefined
+      );
+
+      costBreakdown.openai.total += batchCostBreakdown.openai.total;
+      costBreakdown.openai.chat_completions = costBreakdown.openai.chat_completions.concat(
+        batchCostBreakdown.openai.chat_completions
+      );
+      costBreakdown.exa.total += batchCostBreakdown.exa.total;
+      costBreakdown.exa.answer.cost += batchCostBreakdown.exa.answer.cost;
+      costBreakdown.exa.answer.queries += batchCostBreakdown.exa.answer.queries;
+      costBreakdown.exa.answer.calls = costBreakdown.exa.answer.calls.concat(
+        batchCostBreakdown.exa.answer.calls
       );
 
       // Store definitions in database

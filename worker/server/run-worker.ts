@@ -111,6 +111,8 @@ export const startWorker = async (env: WorkerEnvConfig): Promise<WorkerRuntime> 
     infrastructure.openai,
     env.embedModel,
     env.contextGenModel,
+    env.chunksPolishModel,
+    env.glossaryModel,
     env.exaApiKey,
     processingAgents,
     log
@@ -121,6 +123,8 @@ export const startWorker = async (env: WorkerEnvConfig): Promise<WorkerRuntime> 
     infrastructure.openai,
     env.embedModel,
     env.contextGenModel,
+    env.chunksPolishModel,
+    env.glossaryModel,
     env.exaApiKey,
     processingAgents,
     log

@@ -22,15 +22,21 @@ export const generateLLMChunks = async (
   blueprint: Blueprint,
   researchResults: ResearchResults,
   openai: OpenAI,
-  genModel: string,
+  chunkModel: string,
   costBreakdown: ChunksCostBreakdown
 ): Promise<string[]> => {
   const targetCount = blueprint.chunks_plan.target_count || 500;
   const researchChunkCount = researchResults.chunks.length;
   const neededLLMChunks = Math.max(0, targetCount - researchChunkCount);
 
-  if (neededLLMChunks === 0) {
-    console.log(`[chunks] Research results sufficient, skipping LLM chunk generation`);
+  const researchCoverageRatio = targetCount > 0 ? researchChunkCount / targetCount : 1;
+
+  if (neededLLMChunks === 0 || researchCoverageRatio >= 0.9) {
+    console.log(
+      `[chunks] Research results sufficient (coverage ${(researchCoverageRatio * 100).toFixed(
+        1
+      )}%), skipping LLM chunk generation`
+    );
     return [];
   }
 
@@ -55,12 +61,12 @@ export const generateLLMChunks = async (
   );
 
   try {
-    const isO1Model = genModel.startsWith('o1');
-    const onlySupportsDefaultTemp = isO1Model || genModel.includes('gpt-5');
+    const isO1Model = chunkModel.startsWith('o1');
+    const onlySupportsDefaultTemp = isO1Model || chunkModel.includes('gpt-5');
     const supportsCustomTemperature = !onlySupportsDefaultTemp;
 
     const requestOptions: ChatCompletionRequest = {
-      model: genModel,
+      model: chunkModel,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
@@ -86,7 +92,7 @@ export const generateLLMChunks = async (
         completion_tokens: completionTokens,
         total_tokens: totalTokens,
       };
-      const cost = calculateOpenAICost(usageForCost, genModel, false);
+      const cost = calculateOpenAICost(usageForCost, chunkModel, false);
       costBreakdown.openai.total += cost;
       costBreakdown.openai.chat_completions.push({
         cost,
@@ -95,7 +101,7 @@ export const generateLLMChunks = async (
           completion_tokens: completionTokens,
           total_tokens: totalTokens,
         },
-        model: genModel,
+        model: chunkModel,
       });
     }
 

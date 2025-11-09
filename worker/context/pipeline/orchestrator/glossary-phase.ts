@@ -6,6 +6,7 @@ import type { StatusManager } from './status-manager';
 
 export interface GlossaryPhaseOptions extends PhaseOptions {
   embedModel: string;
+  glossaryModel: string;
   statusManager: StatusManager;
 }
 
@@ -15,7 +16,7 @@ export const runGlossaryPhase = async (
   generationCycleId: string,
   options: GlossaryPhaseOptions
 ) => {
-  const { supabase, openai, genModel, embedModel, exaApiKey, statusManager } = options;
+  const { supabase, openai, genModel, embedModel, glossaryModel, exaApiKey, statusManager } = options;
 
   await statusManager.updateCycle(generationCycleId, { status: 'processing' });
 
@@ -29,6 +30,7 @@ export const runGlossaryPhase = async (
       supabase,
       openai,
       genModel,
+      glossaryModel,
       embedModel,
       exaApiKey,
     }

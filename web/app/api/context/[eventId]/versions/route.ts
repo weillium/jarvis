@@ -55,15 +55,52 @@ export async function GET(
       );
     }
 
-    // Parse cost data from metadata
+    // Parse cost data from metadata (support legacy and blueprint formats)
     const cyclesWithCost = (cycles || []).map((cycle: any) => {
-      const cost = cycle.metadata?.cost?.total || null;
-      const costBreakdown = cycle.metadata?.cost || null;
-      
+      const metadata = cycle.metadata || {};
+      const legacyCost = metadata.cost || null;
+      const blueprintCost = metadata.cost_breakdown || null;
+
+      let normalizedCost: {
+        total: number | null;
+        currency?: string;
+        breakdown?: Record<string, any>;
+        pricing_version?: string;
+      } | null = null;
+
+      if (legacyCost) {
+        const total =
+          typeof legacyCost.total === 'number'
+            ? legacyCost.total
+            : typeof legacyCost.cost?.total === 'number'
+              ? legacyCost.cost.total
+              : null;
+        normalizedCost = {
+          total,
+          currency: legacyCost.currency ?? legacyCost.cost?.currency,
+          breakdown: legacyCost.breakdown ?? legacyCost.cost?.breakdown,
+          pricing_version:
+            legacyCost.pricing_version ?? legacyCost.cost?.pricing_version,
+        };
+      } else if (blueprintCost) {
+        const openaiCost =
+          typeof blueprintCost.openai?.total === 'number'
+            ? blueprintCost.openai.total
+            : null;
+        normalizedCost = {
+          total: openaiCost,
+          currency: blueprintCost.currency ?? 'USD',
+          breakdown: {
+            openai: blueprintCost.openai,
+          },
+          pricing_version: blueprintCost.pricing_version,
+        };
+      }
+
       return {
         ...cycle,
-        cost: cost ? parseFloat(cost) : null,
-        cost_breakdown: costBreakdown || null,
+        cost: normalizedCost?.total ?? null,
+        cost_breakdown: normalizedCost,
       };
     });
 

@@ -64,7 +64,6 @@ export const buildTranscriptSessionConfiguration = (
           },
         },
       },
-      instructions: policy,
       include: ['item.input_audio_transcription.logprobs'],
     },
   } as unknown as RealtimeClientEvent;

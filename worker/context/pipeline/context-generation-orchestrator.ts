@@ -25,6 +25,8 @@ export interface ContextGenerationOrchestratorOptions {
   openai: OpenAI;
   embedModel: string;
   genModel: string;
+  chunkPolishModel: string;
+  glossaryModel: string;
   exaApiKey?: string; // Optional Exa API key for research
 }
 
@@ -40,7 +42,7 @@ export async function executeContextGeneration(
   blueprintId: string,
   options: ContextGenerationOrchestratorOptions
 ): Promise<void> {
-  const { supabase, openai, embedModel, genModel } = options;
+  const { supabase, openai, embedModel, genModel, chunkPolishModel, glossaryModel } = options;
   const statusManager = new StatusManager(supabase);
   const generationContext: GenerationContext = { eventId, agentId, blueprintId };
 
@@ -84,6 +86,7 @@ export async function executeContextGeneration(
         openai,
         genModel,
         embedModel,
+        glossaryModel,
         exaApiKey: options.exaApiKey,
         statusManager,
       }
@@ -107,6 +110,7 @@ export async function executeContextGeneration(
         openai,
         embedModel,
         genModel,
+        chunkModel: chunkPolishModel,
         statusManager,
       }
     );
@@ -191,6 +195,7 @@ export async function regenerateResearchStage(
         openai,
         genModel,
         embedModel: options.embedModel,
+        glossaryModel: options.glossaryModel,
         exaApiKey: options.exaApiKey,
         statusManager,
       }
@@ -210,6 +215,7 @@ export async function regenerateResearchStage(
         openai,
         embedModel: options.embedModel,
         genModel,
+        chunkModel: options.chunkPolishModel,
         statusManager,
       }
     );
@@ -262,6 +268,7 @@ export async function regenerateGlossaryStage(
     openai,
     genModel,
     embedModel,
+    glossaryModel: options.glossaryModel,
     exaApiKey: options.exaApiKey,
     statusManager,
   });
@@ -286,7 +293,7 @@ export async function regenerateChunksStage(
   options: ContextGenerationOrchestratorOptions,
   _researchResults?: ResearchResults
 ): Promise<number> {
-  const { supabase, openai, embedModel, genModel } = options;
+  const { supabase, openai, embedModel, genModel, chunkPolishModel } = options;
   void _researchResults;
 
   console.log(`[context-gen] Regenerating chunks stage for event ${eventId}, agent ${agentId}, blueprint ${blueprintId}`);
@@ -312,6 +319,7 @@ export async function regenerateChunksStage(
     openai,
     embedModel,
     genModel,
+    chunkModel: chunkPolishModel,
     statusManager,
   });
 

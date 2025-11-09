@@ -105,6 +105,41 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
     ? Array.from(new Set(cycles.map((c) => c.cycle_type))).sort()
     : [];
 
+  const renderChatCompletions = (
+    completions: Array<{
+      cost?: number;
+      model?: string;
+      usage?: {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        total_tokens?: number;
+      };
+    }>
+  ) => {
+    if (!completions || completions.length === 0) {
+      return null;
+    }
+
+    return (
+      <div style={{ marginTop: '6px' }}>
+        <strong>Chat Completions:</strong>
+        <ul style={{ marginTop: '4px', paddingLeft: '18px', color: '#475569' }}>
+          {completions.map((item, index) => (
+            <li key={index} style={{ marginBottom: '2px' }}>
+              {item.model ? `${item.model}` : 'Model unknown'}
+              {item.cost !== undefined
+                ? ` · $${item.cost.toFixed(4)}`
+                : null}
+              {item.usage
+                ? ` · tokens: ${item.usage.total_tokens ?? '-'} (prompt ${item.usage.prompt_tokens ?? '-'}, completion ${item.usage.completion_tokens ?? '-'})`
+                : null}
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div style={{
@@ -398,32 +433,77 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                       paddingLeft: '12px',
                       color: '#64748b',
                     }}>
-                      <div><strong>Total:</strong> ${cycle.cost_breakdown.total.toFixed(4)} {cycle.cost_breakdown.currency}</div>
-                      {cycle.cost_breakdown.breakdown?.openai && (
+                      <div>
+                        <strong>Total:</strong>{' '}
+                        ${cycle.cost_breakdown.total?.toFixed(4) ?? '0.0000'}{' '}
+                        {cycle.cost_breakdown.currency || 'USD'}
+                      </div>
+                      {cycle.cost_breakdown.breakdown?.openai && (() => {
+                        const openaiBreakdown = cycle.cost_breakdown.breakdown?.openai;
+                        const openaiTotal =
+                          openaiBreakdown && typeof openaiBreakdown.total === 'number'
+                            ? openaiBreakdown.total.toFixed(4)
+                            : '0.0000';
+                        return (
                         <div style={{ marginTop: '4px' }}>
-                          <strong>OpenAI:</strong> ${cycle.cost_breakdown.breakdown.openai.total.toFixed(4)}
-                          {cycle.cost_breakdown.breakdown.openai.chat_completions?.length > 0 && (
-                            <span> ({cycle.cost_breakdown.breakdown.openai.chat_completions.length} chat completion{cycle.cost_breakdown.breakdown.openai.chat_completions.length > 1 ? 's' : ''})</span>
+                          <strong>OpenAI:</strong> ${openaiTotal}
+                          {openaiBreakdown?.chat_completions?.length > 0 && (
+                            <span> ({openaiBreakdown.chat_completions.length} chat completion{openaiBreakdown.chat_completions.length > 1 ? 's' : ''})</span>
                           )}
-                          {cycle.cost_breakdown.breakdown.openai.embeddings?.length > 0 && (
-                            <span> ({cycle.cost_breakdown.breakdown.openai.embeddings.length} embedding{cycle.cost_breakdown.breakdown.openai.embeddings.length > 1 ? 's' : ''})</span>
+                          {openaiBreakdown?.embeddings?.length > 0 && (
+                            <span> ({openaiBreakdown.embeddings.length} embedding{openaiBreakdown.embeddings.length > 1 ? 's' : ''})</span>
+                          )}
+                          {renderChatCompletions(openaiBreakdown?.chat_completions || [])}
+                          {openaiBreakdown?.embeddings &&
+                            openaiBreakdown.embeddings.length > 0 && (
+                              <div style={{ marginTop: '6px' }}>
+                                <strong>Embeddings:</strong>
+                                <ul style={{ marginTop: '4px', paddingLeft: '18px', color: '#475569' }}>
+                                  {openaiBreakdown.embeddings.map(
+                                    (
+                                      item: {
+                                        cost?: number;
+                                        model?: string;
+                                        usage?: { total_tokens?: number };
+                                      },
+                                      index: number
+                                    ) => (
+                                      <li key={index} style={{ marginBottom: '2px' }}>
+                                        {item.model ? `${item.model}` : 'Model unknown'}
+                                        {item.cost !== undefined ? ` · $${item.cost.toFixed(4)}` : null}
+                                        {item.usage?.total_tokens !== undefined
+                                          ? ` · tokens: ${item.usage.total_tokens}`
+                                          : null}
+                                      </li>
+                                    )
+                                  )}
+                                </ul>
+                              </div>
+                            )}
+                        </div>
+                        );
+                      })()}
+                      {cycle.cost_breakdown.breakdown?.exa && (() => {
+                        const exaBreakdown = cycle.cost_breakdown.breakdown?.exa;
+                        const exaTotal =
+                          exaBreakdown && typeof exaBreakdown.total === 'number'
+                            ? exaBreakdown.total.toFixed(4)
+                            : '0.0000';
+                        return (
+                        <div style={{ marginTop: '4px' }}>
+                          <strong>Exa:</strong> ${exaTotal}
+                          {exaBreakdown?.search?.queries > 0 && (
+                            <span> ({exaBreakdown.search.queries} search{exaBreakdown.search.queries > 1 ? 'es' : ''})</span>
+                          )}
+                          {exaBreakdown?.research?.queries > 0 && (
+                            <span> ({exaBreakdown.research.queries} research task{exaBreakdown.research.queries > 1 ? 's' : ''})</span>
+                          )}
+                          {exaBreakdown?.answer?.queries > 0 && (
+                            <span> ({exaBreakdown.answer.queries} answer{exaBreakdown.answer.queries > 1 ? 's' : ''})</span>
                           )}
                         </div>
-                      )}
-                      {cycle.cost_breakdown.breakdown?.exa && (
-                        <div style={{ marginTop: '4px' }}>
-                          <strong>Exa:</strong> ${cycle.cost_breakdown.breakdown.exa.total.toFixed(4)}
-                          {cycle.cost_breakdown.breakdown.exa.search?.queries > 0 && (
-                            <span> ({cycle.cost_breakdown.breakdown.exa.search.queries} search{cycle.cost_breakdown.breakdown.exa.search.queries > 1 ? 'es' : ''})</span>
-                          )}
-                          {cycle.cost_breakdown.breakdown.exa.research?.queries > 0 && (
-                            <span> ({cycle.cost_breakdown.breakdown.exa.research.queries} research task{cycle.cost_breakdown.breakdown.exa.research.queries > 1 ? 's' : ''})</span>
-                          )}
-                          {cycle.cost_breakdown.breakdown.exa.answer?.queries > 0 && (
-                            <span> ({cycle.cost_breakdown.breakdown.exa.answer.queries} answer{cycle.cost_breakdown.breakdown.exa.answer.queries > 1 ? 's' : ''})</span>
-                          )}
-                        </div>
-                      )}
+                        );
+                      })()}
                       {cycle.cost_breakdown.pricing_version && (
                         <div style={{ marginTop: '4px', fontSize: '10px', color: '#94a3b8' }}>
                           Pricing version: {cycle.cost_breakdown.pricing_version}

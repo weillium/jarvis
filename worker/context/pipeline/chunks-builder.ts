@@ -41,7 +41,7 @@ export interface ChunksBuilderOptions {
   supabase: WorkerSupabaseClient;
   openai: OpenAI;
   embedModel: string;
-  genModel: string;
+  chunkModel: string;
 }
 
 export async function buildContextChunks(
@@ -78,7 +78,7 @@ export async function buildContextChunks(
     blueprint,
     research,
     options.openai,
-    options.genModel,
+    options.chunkModel,
     costBreakdown
   );
 

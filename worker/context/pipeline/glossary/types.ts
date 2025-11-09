@@ -25,11 +25,27 @@ export interface GlossaryPlanTerm {
 export interface GlossaryCostBreakdown {
   openai: {
     total: number;
-    chat_completions: Array<{ cost: number; usage: { prompt_tokens: number; completion_tokens?: number | null; total_tokens: number }; model: string }>;
+    chat_completions: Array<{
+      term?: string;
+      cost: number;
+      usage: {
+        prompt_tokens: number;
+        completion_tokens?: number | null;
+        total_tokens: number;
+      };
+      model: string;
+    }>;
   };
   exa: {
     total: number;
-    answer: { cost: number; queries: number };
+    answer: {
+      cost: number;
+      queries: number;
+      calls: Array<{
+        term: string;
+        cost: number;
+      }>;
+    };
   };
 }
 
