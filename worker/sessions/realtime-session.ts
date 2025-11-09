@@ -21,6 +21,8 @@ import {
   getLowercaseErrorField,
 } from './realtime-session/payload-utils';
 import type {
+  InputAudioTranscriptionCompletedEvent,
+  InputAudioTranscriptionDeltaEvent,
   RealtimeMessageContext,
   RealtimeSessionConfig,
   RealtimeSessionEvent,
@@ -29,7 +31,10 @@ import type {
 } from './realtime-session/types';
 import { MessageQueueManager } from './realtime-session/message-queue';
 import { buildStatusSnapshot } from './realtime-session/status-tracker';
-import { getSessionInternals, getUnderlyingSocket } from './realtime-session/transport-utils';
+import {
+  getSessionInternals,
+  getUnderlyingSocket,
+} from './realtime-session/transport-utils';
 import { HeartbeatManager } from './realtime-session/heartbeat-manager';
 import type { AgentHandler } from './realtime-session/types';
 import { createAgentHandler } from './realtime-session/handlers';
@@ -167,7 +172,6 @@ export class RealtimeSession {
         payload: RealtimeSessionEventPayloads[K]
       ) => this.emitEvent(event, payload),
       sendToolResult: async (callId, output) => {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call
         await this.runtimeController.sendToolResult(callId, output);
       },
       onRetrieve: this.onRetrieve,
@@ -182,6 +186,7 @@ export class RealtimeSession {
       classifyRealtimeError: (error) => this.classifyRealtimeError(error),
       onLog: (level, message) => this.onLog?.(level, message),
       onError: (error, classification) => this.handleSessionError(error, classification),
+      onSessionUpdated: () => this.runtimeController.markTranscriptReady(),
     });
   }
 
@@ -194,6 +199,7 @@ export class RealtimeSession {
 
   private safeCloseSession(reason: string): void {
     if (!this.session) {
+      this.runtimeController.handleSessionClosed(reason);
       return;
     }
 
@@ -205,6 +211,7 @@ export class RealtimeSession {
       );
     } finally {
       this.session = undefined;
+      this.runtimeController.handleSessionClosed(reason);
     }
   }
 
@@ -332,8 +339,11 @@ export class RealtimeSession {
     // Phase 1: Pre-connection validation logging
     this.onLog?.('log', 'Connection attempt started');
 
-    const model = this.config.model || 'gpt-4o-realtime-preview-2024-10-01';
-    const policy = getPolicy(this.config.agentType);
+    const isTranscriptAgent = this.config.agentType === 'transcript';
+    const model =
+      this.config.model ||
+      (isTranscriptAgent ? 'gpt-4o-transcribe' : 'gpt-4o-realtime-preview-2024-10-01');
+    const policy = isTranscriptAgent ? undefined : getPolicy(this.config.agentType);
 
     // Notify that we're connecting (but status is still 'closed' until connected)
     // Status will be updated to 'active' when connection is established
@@ -353,107 +363,146 @@ export class RealtimeSession {
       await this.connectionManager.waitForTransportReady(this.session);
       this.logWebSocketState('After transport ready');
 
-      // Define retrieve tool for RAG (available to all agents)
-      const retrieveTool: FunctionToolDefinition = {
-        type: 'function',
-        name: 'retrieve',
-        description: 'Retrieve relevant knowledge chunks from the vector database. Use this when you need domain-specific context, definitions, or background information that is not in the current transcript context.',
-        parameters: {
-          type: 'object',
-          properties: {
-            query: {
-              type: 'string',
-              description: 'The search query to find relevant context chunks. Should be a concise description of what information you need.',
-            },
-            top_k: {
-              type: 'number',
-              description: 'Number of top chunks to retrieve (default: 5, max: 10)',
-              default: 5,
-              minimum: 1,
-              maximum: 10,
-            },
-          },
-          required: ['query'],
-        },
-      };
+      let tools: FunctionToolDefinition[] | undefined;
 
-      // Define produce_card tool (only for Cards agent)
-      const tools: FunctionToolDefinition[] = [retrieveTool];
-      
-      if (this.config.agentType === 'cards') {
-        const produceCardTool: FunctionToolDefinition = {
+      if (!isTranscriptAgent) {
+        const retrieveTool: FunctionToolDefinition = {
           type: 'function',
-          name: 'produce_card',
-          description: 'Generate a context card when content is novel and user-useful. This is the ONLY way to emit cards - you MUST use this tool instead of returning JSON directly.',
+          name: 'retrieve',
+          description:
+            'Retrieve relevant knowledge chunks from the vector database. Use this when you need domain-specific context, definitions, or background information that is not in the current transcript context.',
           parameters: {
             type: 'object',
             properties: {
-              kind: {
+              query: {
                 type: 'string',
-                enum: ['Decision', 'Metric', 'Deadline', 'Topic', 'Entity', 'Action', 'Context', 'Definition'],
-                description: 'The type/category of the card',
+                description:
+                  'The search query to find relevant context chunks. Should be a concise description of what information you need.',
               },
-              card_type: {
-                type: 'string',
-                enum: ['text', 'text_visual', 'visual'],
-                description: 'The card display type: "text" for text-only, "text_visual" for text with image, "visual" for image-only',
-              },
-              title: {
-                type: 'string',
-                description: 'Brief title for the card (aim for <= 60 characters)',
-              },
-              body: {
-                type: 'string',
-                description: '1-3 bullet points with key information (required for text/text_visual types, null for visual type)',
-              },
-              label: {
-                type: 'string',
-                description: 'Short label for image (required for visual type; aim for <= 40 characters; null for text/text_visual types)',
-              },
-              image_url: {
-                type: 'string',
-                description: 'URL to supporting image (required for text_visual/visual types, null for text type)',
-              },
-              source_seq: {
+              top_k: {
                 type: 'number',
-                description: 'The sequence number of the source transcript that triggered this card',
+                description: 'Number of top chunks to retrieve (default: 5, max: 10)',
+                default: 5,
+                minimum: 1,
+                maximum: 10,
               },
             },
-            required: ['kind', 'card_type', 'title', 'source_seq'],
+            required: ['query'],
           },
         };
-        tools.push(produceCardTool);
+
+        tools = [retrieveTool];
+
+        if (this.config.agentType === 'cards') {
+          const produceCardTool: FunctionToolDefinition = {
+            type: 'function',
+            name: 'produce_card',
+            description:
+              'Generate a context card when content is novel and user-useful. This is the ONLY way to emit cards - you MUST use this tool instead of returning JSON directly.',
+            parameters: {
+              type: 'object',
+              properties: {
+                kind: {
+                  type: 'string',
+                  enum: [
+                    'Decision',
+                    'Metric',
+                    'Deadline',
+                    'Topic',
+                    'Entity',
+                    'Action',
+                    'Context',
+                    'Definition',
+                  ],
+                  description: 'The type/category of the card',
+                },
+                card_type: {
+                  type: 'string',
+                  enum: ['text', 'text_visual', 'visual'],
+                  description:
+                    'The card display type: "text" for text-only, "text_visual" for text with image, "visual" for image-only',
+                },
+                title: {
+                  type: 'string',
+                  description: 'Brief title for the card (aim for <= 60 characters)',
+                },
+                body: {
+                  type: 'string',
+                  description:
+                    '1-3 bullet points with key information (required for text/text_visual types, null for visual type)',
+                },
+                label: {
+                  type: 'string',
+                  description:
+                    'Short label for image (required for visual type; aim for <= 40 characters; null for text/text_visual types)',
+                },
+                image_url: {
+                  type: 'string',
+                  description:
+                    'URL to supporting image (required for text_visual/visual types, null for text type)',
+                },
+                source_seq: {
+                  type: 'number',
+                  description:
+                    'The sequence number of the source transcript that triggered this card',
+                },
+              },
+              required: ['kind', 'card_type', 'title', 'source_seq'],
+            },
+          };
+          tools.push(produceCardTool);
+        }
       }
 
-      // Configure session (instructions, output format, tools, etc.)
-      // Note: For Cards agent, we remove response_format requirement since output is via tool
-      // Wrap in try-catch to handle cases where connection isn't fully ready
-      
-      // Phase 4: Session configuration send logging
-      this.onLog?.('log', `Sending session config with ${tools.length} tools`);
-      
-      try {
-        this.session.send({
-          type: 'session.update',
-          session: {
-            type: 'realtime',
+      const sessionUpdatePayload = isTranscriptAgent
+        ? {
+            type: 'transcription' as const,
+            audio: {
+              input: {
+                format: {
+                  type: 'audio/pcm' as const,
+                  rate: 24000,
+                },
+                noise_reduction: {
+                  type: 'near_field' as const,
+                },
+                transcription: {
+                  model,
+                  language: 'en',
+                },
+                turn_detection: {
+                  type: 'server_vad' as const,
+                  threshold: 0.5,
+                  prefix_padding_ms: 300,
+                  silence_duration_ms: 500,
+                },
+              },
+            },
+            include: ['item.input_audio_transcription.logprobs'],
+          }
+        : {
+            type: 'realtime' as const,
             instructions: policy,
             output_modalities: ['text'],
             max_output_tokens: 4096,
             tools,
-            audio: this.config.agentType === 'transcript'
-              ? {
-                  input: {
-                    format: {
-                      type: 'audio/pcm',
-                      rate: 24000,
-                    },
-                  },
-                }
-              : undefined,
-          },
-        } as RealtimeClientEvent);
-        
+          };
+
+      const sessionUpdateEvent = {
+        type: 'session.update',
+        session: sessionUpdatePayload,
+      } as unknown as RealtimeClientEvent;
+
+      this.onLog?.(
+        'log',
+        isTranscriptAgent
+          ? 'Sending transcription session config'
+          : `Sending session config with ${tools?.length ?? 0} tools`
+      );
+
+      try {
+        this.session.send(sessionUpdateEvent);
+
         this.onLog?.('log', 'Session configuration sent');
       } catch (error: unknown) {
         // If send fails, wait a bit and retry once
@@ -461,16 +510,7 @@ export class RealtimeSession {
         if (errorMessage.includes('could not send data') || errorMessage.includes('not ready')) {
           await new Promise(resolve => setTimeout(resolve, 100));
           try {
-            this.session.send({
-              type: 'session.update',
-              session: {
-                type: 'realtime',
-                instructions: policy,
-                output_modalities: ['text'],
-                max_output_tokens: 4096,
-                tools,
-              },
-            } as RealtimeClientEvent);
+            this.session.send(sessionUpdateEvent);
           } catch (retryError: unknown) {
             // Log but don't throw - connection might still work
             const underlyingSocket = getSessionInternals(this.session).socket;
@@ -621,6 +661,22 @@ export class RealtimeSession {
       this.eventRouter.handleSessionCreated();
     });
 
+    if (this.config.agentType === 'transcript') {
+      this.session.on(
+        'conversation.item.input_audio_transcription.delta',
+        (event: InputAudioTranscriptionDeltaEvent) => {
+          this.eventRouter.handleTranscriptionDelta(event);
+        }
+      );
+
+      this.session.on(
+        'conversation.item.input_audio_transcription.completed',
+        (event: InputAudioTranscriptionCompletedEvent) => {
+          this.eventRouter.handleTranscriptionCompleted(event);
+        }
+      );
+    }
+
     // Handle pong responses (WebSocket ping-pong)
     // Note: OpenAI SDK may handle ping/pong at the WebSocket level, but we'll track it
     // Check if the underlying socket supports ping/pong events
@@ -673,17 +729,30 @@ export class RealtimeSession {
     });
 
     // Phase 5: Event handler registration confirmation (after all handlers are registered)
-    console.log(`[realtime] [${this.config.agentType}] Event handlers registered`, {
-      handlersRegistered: [
-        'session.created',
-        'response.function_call_arguments.done',
-        'response.output_text.done',
-        'response.done',
-        'error',
-        'event',
-      ],
-      eventId: this.config.eventId,
-    });
+    const handlersRegistered = [
+      'session.created',
+      'response.function_call_arguments.done',
+      'response.output_text.delta',
+      'response.output_text.done',
+      'response.done',
+      'error',
+      'event',
+    ];
+
+    if (this.config.agentType === 'transcript') {
+      handlersRegistered.push(
+        'conversation.item.input_audio_transcription.delta',
+        'conversation.item.input_audio_transcription.completed'
+      );
+    }
+
+    console.log(
+      `[${new Date().toISOString()}] [realtime] [${this.config.agentType}] Event handlers registered`,
+      {
+        handlersRegistered,
+        eventId: this.config.eventId,
+      }
+    );
     this.onLog?.('log', 'Event handlers registered');
   }
 
@@ -695,7 +764,6 @@ export class RealtimeSession {
       return;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     void this.runtimeController.handleTransientError();
   }
 
@@ -703,7 +771,6 @@ export class RealtimeSession {
    * Send a message to the Realtime session
    */
   async sendMessage(message: string, context?: RealtimeMessageContext): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     await this.runtimeController.sendMessage(message, context);
   }
 
@@ -711,11 +778,11 @@ export class RealtimeSession {
     audioBase64: string;
     isFinal?: boolean;
     sampleRate?: number;
+    bytesPerSample?: number;
     encoding?: string;
     durationMs?: number;
     speaker?: string;
   }): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     await this.runtimeController.appendAudioChunk(chunk);
   }
 
@@ -777,7 +844,7 @@ export class RealtimeSession {
       const readyState = underlyingSocket?.readyState;
       const readyStateNames = ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'];
       
-      console.log(`[realtime] [${this.config.agentType}] WebSocket state: ${operation}`, {
+      console.log(`[${new Date().toISOString()}] [realtime] [${this.config.agentType}] WebSocket state: ${operation}`, {
         readyState: readyState !== undefined ? `${readyState} (${readyStateNames[readyState]})` : 'unknown',
         isActive: this.isActive,
         eventId: this.config.eventId,
@@ -823,9 +890,9 @@ export class RealtimeSession {
         await this.updateDatabaseStatus('paused');
       }
 
-      console.log(`[realtime] Session paused (${this.config.agentType})`);
+      console.log(`[${new Date().toISOString()}] [realtime] Session paused (${this.config.agentType})`);
     } catch (error: unknown) {
-      console.error(`[realtime] Error pausing session: ${extractErrorMessage(error)}`);
+      console.error(`[${new Date().toISOString()}] [realtime] Error pausing session: ${extractErrorMessage(error)}`);
       throw error;
     }
   }
@@ -878,9 +945,9 @@ export class RealtimeSession {
         await this.updateDatabaseStatus('closed');
       }
 
-      console.log(`[realtime] Session closed (${this.config.agentType})`);
+      console.log(`[${new Date().toISOString()}] [realtime] Session closed (${this.config.agentType})`);
     } catch (error: unknown) {
-      console.error(`[realtime] Error closing session: ${extractErrorMessage(error)}`);
+      console.error(`[${new Date().toISOString()}] [realtime] Error closing session: ${extractErrorMessage(error)}`);
       throw error;
     }
   }

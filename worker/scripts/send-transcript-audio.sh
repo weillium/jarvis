@@ -133,6 +133,7 @@ cat <<JSON >"$PAYLOAD"
   "audio_base64": "$AUDIO_B64",
   "is_final": true,
   "sample_rate": $SAMPLE_RATE,
+  "bytes_per_sample": $BYTES_PER_SAMPLE,
   "encoding": "pcm_s16le",
   "duration_ms": $DURATION_MS
 }

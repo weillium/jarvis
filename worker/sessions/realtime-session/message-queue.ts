@@ -93,7 +93,7 @@ export class MessageQueueManager {
         session.send({ type: 'response.create' } as RealtimeClientEvent);
       }
 
-      console.log(`[realtime] Message sent (${this.config.agentType})`);
+      console.log(`[${new Date().toISOString()}] [realtime] Message sent (${this.config.agentType})`);
     } catch (error: unknown) {
       this.pendingResponse = false;
       this.queue.unshift(next);

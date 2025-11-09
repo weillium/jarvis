@@ -43,6 +43,7 @@ export interface EventRuntime {
   pendingTranscriptChunk?: {
     speaker?: string | null;
     sampleRate?: number;
+    bytesPerSample?: number;
     encoding?: string;
     durationMs?: number;
   };

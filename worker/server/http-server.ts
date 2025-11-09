@@ -167,6 +167,12 @@ export const createWorkerServer = ({
                 : typeof body.sampleRate === 'number'
                 ? body.sampleRate
                 : undefined,
+            bytesPerSample:
+              typeof body.bytes_per_sample === 'number'
+                ? body.bytes_per_sample
+                : typeof body.bytesPerSample === 'number'
+                ? body.bytesPerSample
+                : undefined,
             encoding: typeof body.encoding === 'string' ? body.encoding : undefined,
             durationMs:
               typeof body.duration_ms === 'number'

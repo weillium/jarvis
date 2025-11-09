@@ -69,6 +69,22 @@ export type RealtimeSessionEventPayloads = {
   error: Error;
 };
 
+export interface InputAudioTranscriptionDeltaEvent {
+  event_id?: string;
+  type: 'conversation.item.input_audio_transcription.delta';
+  item_id: string;
+  content_index?: number;
+  delta?: string;
+}
+
+export interface InputAudioTranscriptionCompletedEvent {
+  event_id?: string;
+  type: 'conversation.item.input_audio_transcription.completed';
+  item_id: string;
+  content_index?: number;
+  transcript?: string;
+}
+
 export interface RealtimeAgentContext {
   eventId: string;
   agentType: AgentType;
@@ -94,4 +110,8 @@ export interface AgentHandler {
   handleResponseDone: (payload: ResponseDoneEvent) => Promise<void> | void;
   handleToolCall: (payload: ResponseFunctionCallArgumentsDoneEvent) => Promise<void> | void;
   handleResponseTextDelta: (payload: { text: string; receivedAt: string }) => Promise<void> | void;
+  handleTranscriptionDelta: (payload: InputAudioTranscriptionDeltaEvent) => Promise<void> | void;
+  handleTranscriptionCompleted: (
+    payload: InputAudioTranscriptionCompletedEvent
+  ) => Promise<void> | void;
 }

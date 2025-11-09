@@ -4,64 +4,59 @@ import type {
   ResponseTextDoneEvent,
 } from 'openai/resources/realtime/realtime';
 import { BaseAgentHandler } from './base-handler';
-import { extractAssistantText } from '../utils';
+import type {
+  InputAudioTranscriptionCompletedEvent,
+  InputAudioTranscriptionDeltaEvent,
+} from '../types';
 
 export class TranscriptAgentHandler extends BaseAgentHandler {
   private partialBuffer = '';
 
-  handleResponseTextDelta(payload: { text: string; receivedAt: string }): void {
-    const text = payload.text;
-    if (typeof text !== 'string' || text.length === 0) {
-      return;
-    }
-
-    this.partialBuffer += text;
-
-    this.emit('transcript', {
-      text: this.partialBuffer,
-      isFinal: false,
-      receivedAt: payload.receivedAt,
-    });
-  }
-
   handleResponseText(payload: ResponseTextDoneEvent): void {
-    const text = payload.text?.trim() ?? '';
-    if (text.length === 0) {
-      return;
-    }
-
-    this.emit('transcript', {
-      text,
-      isFinal: true,
-      receivedAt: new Date().toISOString(),
-    });
-
-    this.partialBuffer = '';
+    void payload;
   }
 
   handleResponseDone(payload: ResponseDoneEvent): void {
-    const assistantText = extractAssistantText(payload);
-    if (!assistantText) {
-      return;
-    }
-
-    const text = assistantText.trim();
-    if (text.length === 0) {
-      return;
-    }
-
-    this.emit('transcript', {
-      text,
-      isFinal: true,
-      receivedAt: new Date().toISOString(),
-    });
-
-    this.partialBuffer = '';
+    void payload;
   }
 
   handleToolCall(payload: ResponseFunctionCallArgumentsDoneEvent): void {
     void payload;
     // Transcript agent currently does not support tool calls.
+  }
+
+  handleResponseTextDelta(payload: { text: string; receivedAt: string }): void {
+    void payload;
+  }
+
+  handleTranscriptionDelta(event: InputAudioTranscriptionDeltaEvent): void {
+    const delta = typeof event.delta === 'string' ? event.delta : '';
+    if (delta.length === 0) {
+      return;
+    }
+
+    this.partialBuffer += delta;
+
+    this.emit('transcript', {
+      text: this.partialBuffer,
+      isFinal: false,
+      receivedAt: new Date().toISOString(),
+    });
+  }
+
+  handleTranscriptionCompleted(event: InputAudioTranscriptionCompletedEvent): void {
+    const transcript = typeof event.transcript === 'string' ? event.transcript.trim() : '';
+    if (transcript.length === 0) {
+      return;
+    }
+
+    this.emit('transcript', {
+      text: transcript,
+      isFinal: true,
+      receivedAt: new Date().toISOString(),
+    });
+
+    this.partialBuffer = '';
   }
 }
 

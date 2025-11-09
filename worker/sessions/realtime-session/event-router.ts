@@ -7,7 +7,11 @@ import type {
 import { extractErrorMessage } from './payload-utils';
 import type { MessageQueueManager } from './message-queue';
 import type { HeartbeatManager } from './heartbeat-manager';
-import type { AgentHandler } from './types';
+import type {
+  AgentHandler,
+  InputAudioTranscriptionCompletedEvent,
+  InputAudioTranscriptionDeltaEvent,
+} from './types';
 
 interface RouterDependencies {
   agentHandler: AgentHandler;
@@ -16,6 +20,7 @@ interface RouterDependencies {
   classifyRealtimeError: (error: unknown) => 'transient' | 'fatal';
   onLog?: (level: 'log' | 'warn' | 'error', message: string) => void;
   onError?: (error: unknown, classification: 'transient' | 'fatal') => void;
+  onSessionUpdated?: () => void;
 }
 
 const extractDeltaText = (event: unknown): string | null => {
@@ -81,6 +86,11 @@ export class EventRouter {
     this.deps = deps;
   }
 
+  private log(level: 'log' | 'warn' | 'error', message: string): void {
+    const timestamped = `[${new Date().toISOString()}] ${message}`;
+    this.deps.onLog?.(level, timestamped);
+  }
+
   handleFunctionCall(event: ResponseFunctionCallArgumentsDoneEvent): void {
     void this.deps.agentHandler.handleToolCall(event);
   }
@@ -117,9 +127,9 @@ export class EventRouter {
     const baseMessage = `Session error: ${extractErrorMessage(error)}`;
 
     if (classification === 'fatal') {
-      this.deps.onLog?.('error', baseMessage);
+      this.log('error', baseMessage);
     } else {
-      this.deps.onLog?.('warn', `${baseMessage} (transient - retrying)`);
+      this.log('warn', `${baseMessage} (transient - retrying)`);
     }
 
     this.deps.onError?.(error, classification);
@@ -130,16 +140,39 @@ export class EventRouter {
       console.log(`[realtime] Event: ${event.type}`, event);
     }
     if (event.type === 'session.updated') {
-      this.deps.onLog?.('log', 'Session updated');
+      this.log('log', 'Session updated');
+      this.deps.onSessionUpdated?.();
     }
   }
 
   handleSessionCreated(): void {
-    this.deps.onLog?.('log', 'Session created');
+    this.log('log', 'Session created');
   }
 
   handlePong(): void {
     this.deps.heartbeat.handlePong();
+  }
+
+  handleTranscriptionDelta(event: InputAudioTranscriptionDeltaEvent): void {
+    if (typeof this.deps.agentHandler.handleTranscriptionDelta !== 'function') {
+      return;
+    }
+    const handler = this.deps.agentHandler
+      .handleTranscriptionDelta as (
+      payload: InputAudioTranscriptionDeltaEvent
+    ) => Promise<void> | void;
+    void handler(event);
+  }
+
+  handleTranscriptionCompleted(event: InputAudioTranscriptionCompletedEvent): void {
+    if (typeof this.deps.agentHandler.handleTranscriptionCompleted !== 'function') {
+      return;
+    }
+    const handler = this.deps.agentHandler
+      .handleTranscriptionCompleted as (
+      payload: InputAudioTranscriptionCompletedEvent
+    ) => Promise<void> | void;
+    void handler(event);
   }
 }
 

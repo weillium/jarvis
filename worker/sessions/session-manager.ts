@@ -8,6 +8,7 @@ export interface TranscriptAudioOptions {
   audioBase64: string;
   isFinal?: boolean;
   sampleRate?: number;
+  bytesPerSample?: number;
   encoding?: string;
   durationMs?: number;
   speaker?: string;

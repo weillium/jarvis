@@ -10,6 +10,7 @@ export interface TranscriptAudioChunk {
   seq?: number;
   isFinal?: boolean;
   sampleRate?: number;
+  bytesPerSample?: number;
   encoding?: string;
   durationMs?: number;
   speaker?: string;
@@ -44,6 +45,7 @@ export class TranscriptIngestionService {
       audioBase64: chunk.audioBase64,
       isFinal: chunk.isFinal,
       sampleRate: chunk.sampleRate,
+      bytesPerSample: chunk.bytesPerSample,
       encoding: chunk.encoding,
       durationMs: chunk.durationMs,
       speaker: chunk.speaker,
@@ -52,6 +54,7 @@ export class TranscriptIngestionService {
     runtime.pendingTranscriptChunk = {
       speaker: chunk.speaker ?? null,
       sampleRate: chunk.sampleRate,
+      bytesPerSample: chunk.bytesPerSample,
       encoding: chunk.encoding,
       durationMs: chunk.durationMs,
     };

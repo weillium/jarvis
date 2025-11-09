@@ -132,14 +132,15 @@ export class Orchestrator {
       throw new Error('Audio payload is required');
     }
 
-    console.log('[orchestrator] Received transcript audio chunk', {
-      eventId,
-      bytes: Math.round((chunk.audioBase64.length * 3) / 4),
-      seq: chunk.seq,
-      isFinal: chunk.isFinal,
-      sampleRate: chunk.sampleRate,
-      encoding: chunk.encoding,
-    });
+    // console.log('[orchestrator] Received transcript audio chunk', {
+    //   eventId,
+    //   bytes: Math.round((chunk.audioBase64.length * 3) / 4),
+    //   seq: chunk.seq,
+    //   isFinal: chunk.isFinal,
+    //   sampleRate: chunk.sampleRate,
+    //   bytesPerSample: chunk.bytesPerSample,
+    //   encoding: chunk.encoding,
+    // });
 
     await this.transcriptCoordinator.appendTranscriptAudio(eventId, chunk);
   }
