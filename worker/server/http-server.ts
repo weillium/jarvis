@@ -296,6 +296,8 @@ export const createWorkerServer = ({
     log('[worker-server]   GET /health - Health check');
     log('[worker-server]   GET /websocket-state?event_id=<eventId> - Get WebSocket connection state');
     log('[worker-server]   POST /sessions/create - Create agent sessions for an event');
+    log('[worker-server]   POST /sessions/reset - Reset runtime state for an event');
+    log('[worker-server]   POST /sessions/transcript/audio - Append transcript audio for an event');
   });
 
   return server;

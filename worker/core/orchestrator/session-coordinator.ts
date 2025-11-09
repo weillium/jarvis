@@ -53,11 +53,7 @@ export class SessionCoordinator {
   }> {
     this.log(`[orchestrator] Creating agent sessions (event: ${eventId})`);
 
-    const agent = await this.agentsRepository.getAgentForEvent(
-      eventId,
-      ['idle'],
-      ['context_complete']
-    );
+    const agent = await this.agentsRepository.getAgentForEvent(eventId, ['idle'], ['context_complete']);
 
     if (!agent) {
       throw new Error('No agent with context_complete stage found for this event');
@@ -69,41 +65,44 @@ export class SessionCoordinator {
     const existingSessions = await this.agentSessionsRepository.getSessionsForAgent(eventId, agentId);
     if (existingSessions.length > 0) {
       this.log(
-        `[orchestrator] Found ${existingSessions.length} existing session(s); deleting before recreation`
+        `[orchestrator] Found ${existingSessions.length} existing session(s); resetting before recreation`
       );
-      await this.agentSessionsRepository.deleteSessions(eventId, agentId);
     }
 
     const transcriptModel = this.modelSelectionService.getModelForAgentType(modelSet, 'transcript');
     const cardsModel = this.modelSelectionService.getModelForAgentType(modelSet, 'cards');
     const factsModel = this.modelSelectionService.getModelForAgentType(modelSet, 'facts');
 
-    const sessions = await this.agentSessionsRepository.insertSessions([
+    const sessionTemplates = [
       {
         event_id: eventId,
         agent_id: agentId,
-        provider_session_id: 'pending',
-        agent_type: 'transcript',
-        status: 'closed',
+        provider_session_id: 'pending' as const,
+        agent_type: 'transcript' as const,
+        status: 'closed' as const,
         model: transcriptModel,
       },
       {
         event_id: eventId,
         agent_id: agentId,
-        provider_session_id: 'pending',
-        agent_type: 'cards',
-        status: 'closed',
+        provider_session_id: 'pending' as const,
+        agent_type: 'cards' as const,
+        status: 'closed' as const,
         model: cardsModel,
       },
       {
         event_id: eventId,
         agent_id: agentId,
-        provider_session_id: 'pending',
-        agent_type: 'facts',
-        status: 'closed',
+        provider_session_id: 'pending' as const,
+        agent_type: 'facts' as const,
+        status: 'closed' as const,
         model: factsModel,
       },
-    ]);
+    ];
+
+    await this.agentSessionsRepository.upsertSessions(sessionTemplates);
+
+    const sessions = await this.agentSessionsRepository.getSessionsForAgent(eventId, agentId, ['closed']);
 
     this.log(
       `[orchestrator] Created agent sessions for event ${eventId} using model_set=${modelSet}`,
