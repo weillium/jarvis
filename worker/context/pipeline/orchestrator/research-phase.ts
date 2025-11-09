@@ -1,3 +1,10 @@
+const MIN_WIKIPEDIA_INTERVAL_MS = 300;
+const WIKIPEDIA_MAX_RETRIES = 3;
+const WIKIPEDIA_INITIAL_BACKOFF_MS = 500;
+let lastWikipediaCall = 0;
+
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
 import { Exa } from 'exa-js';
 import type { Blueprint } from '../blueprint/types';
 import type { ResearchResults } from '../glossary/types';
@@ -155,26 +162,86 @@ export async function runResearchPhase(
           } catch (err: unknown) {
             console.error('[orchestrator] error:', String(err));
           }
-        } else if (queryItem.priority <= 2) {
+        } else if (queryItem.priority === 1) {
           console.log(
-            `[research] ${queryProgress} Using Exa /research endpoint for high-priority query (priority ${queryItem.priority}): "${queryItem.query}"`
+            `[research] ${queryProgress} Using Exa /research endpoint for top-priority query (priority ${queryItem.priority}): "${queryItem.query}"`
           );
           const startTime = Date.now();
 
           try {
             const outputSchema = {
               type: 'object',
-              required: ['summary', 'keyPoints'],
+              required: ['summary', 'keyPoints', 'sources'],
               properties: {
                 summary: {
                   type: 'string',
-                  description: 'A comprehensive summary (500-1000 words) covering the main topic',
+                  description: 'A 400-600 word synthesis that references citations using bracketed IDs (e.g. [1])',
                 },
                 keyPoints: {
                   type: 'array',
-                  items: { type: 'string' },
-                  maxItems: 10,
-                  description: 'Key insights, developments, or findings (1-2 sentences each)',
+                  maxItems: 8,
+                  minItems: 5,
+                  description:
+                    'High-signal insights with citation references and confidence ratings to guide downstream generation',
+                  items: {
+                    type: 'object',
+                    additionalProperties: false,
+                    required: ['title', 'insight', 'citationId', 'confidence'],
+                    properties: {
+                      title: {
+                        type: 'string',
+                        description: 'Short label for the key point (<=8 words)',
+                      },
+                      insight: {
+                        type: 'string',
+                        description: 'One-sentence articulation of the key takeaway including a citation (e.g. "[2]")',
+                      },
+                      citationId: {
+                        type: 'integer',
+                        description: 'ID of the supporting source from the sources array',
+                      },
+                      confidence: {
+                        type: 'string',
+                        enum: ['high', 'medium', 'low'],
+                        description:
+                          'Confidence in the insight based on source quality and corroboration (enum required by Exa best practices)',
+                      },
+                    },
+                  },
+                },
+                sources: {
+                  type: 'array',
+                  maxItems: 6,
+                  description:
+                    'Unique, authoritative sources sorted by relevance with metadata for downstream citation rendering',
+                  items: {
+                    type: 'object',
+                    additionalProperties: false,
+                    required: ['id', 'title', 'url'],
+                    properties: {
+                      id: {
+                        type: 'integer',
+                        description: 'Stable identifier used in citations (starts at 1)',
+                      },
+                      title: {
+                        type: 'string',
+                        description: 'Article or publication title',
+                      },
+                      url: {
+                        type: 'string',
+                        format: 'uri',
+                        description: 'Resolvable HTTPS URL',
+                      },
+                      publisher: {
+                        type: 'string',
+                        description: 'Publisher or organization name',
+                      },
+                      publishedDate: {
+                        type: 'string',
+                        description: 'ISO-8601 date string when available',
+                      },
+                    },
+                  },
                 },
               },
               additionalProperties: false,
@@ -182,24 +249,23 @@ export async function runResearchPhase(
 
             const instructions = `Research the topic: "${queryItem.query}"
 
-OBJECTIVE: Provide a structured summary with key points suitable for AI context building.
+OBJECTIVE:
+- Produce authoritative context to brief downstream AI systems on this topic.
 
-WHAT TO FIND:
-- Latest developments and current state (2023-2025 focus)
-- Industry standards and best practices
-- Key insights and practical applications
-- Relevant technical details and methodologies
+RESEARCH GUARDRAILS:
+- Issue no more than 4 high-signal searches; avoid redundant or broad keyword sweeps.
+- Prioritize 2023+ primary sources (official docs, standards bodies, leading analysts, tier-1 reporting).
+- Stop deep crawling once you have 5-6 distinct, credible sources; decline low-quality or speculative content.
 
-HOW TO RESEARCH:
-- Use 3-5 targeted searches to find authoritative sources
-- Focus on recent, high-quality publications and official documentation
-- Prioritize comprehensive overview sources over narrow niche articles
+OUTPUT EXPECTATIONS:
+- Write a 400-600 word synthesis that references sources inline using bracketed IDs (e.g. [1]).
+- Surface 5-8 key points; each should be a single sentence, include a citation reference, and specify a confidence level (high | medium | low).
+- Return the sources array ordered by descending relevance with stable IDs starting at 1.
 
-HOW TO COMPOSE:
-- Write a concise summary (500-1000 words) synthesizing findings
-- Extract 8-10 key points as separate insights
-- Include citations for important claims
-- Focus on actionable information relevant to the topic`;
+TONE & SCOPE:
+- Keep the tone analytical and practical.
+- Focus on actionable insights, industry standards, and current developments (2024-2025 emphasis).
+- Call out major uncertainties or gaps explicitly when encountered.`;
 
             const research = await exa.research.create({
               model: 'exa-research',
@@ -354,7 +420,7 @@ async function executeWikipediaSearch(
       query
     )}&srlimit=5&format=json&origin=*`;
 
-    const searchResponse = await fetch(searchUrl);
+    const searchResponse = await fetchWithWikipediaLimits(searchUrl);
     if (!searchResponse.ok) {
       const errorText = await searchResponse.text().catch(() => 'Unable to read response');
       throw new Error(
@@ -392,7 +458,7 @@ async function executeWikipediaSearch(
         const pageTitle = encodeURIComponent(result.title.replace(/ /g, '_'));
         const summaryUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${pageTitle}`;
 
-        const summaryResponse = await fetch(summaryUrl);
+        const summaryResponse = await fetchWithWikipediaLimits(summaryUrl);
 
         if (!summaryResponse.ok) {
           const errorText = await summaryResponse.text().catch(() => 'Unable to read response');
@@ -497,5 +563,36 @@ async function executeWikipediaSearch(
   }
 
   return chunks;
+}
+
+async function fetchWithWikipediaLimits(url: string): Promise<Response> {
+  await enforceWikipediaInterval();
+
+  let attempt = 0;
+  let delay = WIKIPEDIA_INITIAL_BACKOFF_MS;
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    attempt += 1;
+    const response = await fetch(url);
+    lastWikipediaCall = Date.now();
+
+    if (response.status !== 429 || attempt >= WIKIPEDIA_MAX_RETRIES) {
+      return response;
+    }
+
+    console.warn(`[research] Wikipedia returned 429 for ${url}. Retrying in ${delay}ms (attempt ${attempt}/${WIKIPEDIA_MAX_RETRIES})`);
+    await sleep(delay);
+    delay *= 2;
+  }
+}
+
+async function enforceWikipediaInterval(): Promise<void> {
+  const now = Date.now();
+  const elapsed = now - lastWikipediaCall;
+
+  if (elapsed < MIN_WIKIPEDIA_INTERVAL_MS) {
+    await sleep(MIN_WIKIPEDIA_INTERVAL_MS - elapsed);
+  }
 }
 
