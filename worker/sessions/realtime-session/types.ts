@@ -17,12 +17,14 @@ import type { TokenBudget } from './tokens';
 
 export type AgentType = 'transcript' | 'cards' | 'facts';
 
+export type AgentSessionLifecycleStatus = 'active' | 'paused' | 'closed' | 'error';
+
 export interface RealtimeSessionConfig {
   eventId: string;
   agentType: AgentType;
   model?: string;
   onStatusChange?: (
-    status: 'active' | 'paused' | 'closed' | 'error',
+    status: AgentSessionLifecycleStatus,
     sessionId?: string
   ) => void;
   onLog?: (
@@ -127,4 +129,29 @@ export interface AgentHandler {
   handleTranscriptionCompleted: (
     payload: ParsedInputAudioTranscriptionCompletedEvent
   ) => Promise<void> | void;
+}
+
+export interface RealtimeAudioChunk {
+  audioBase64: string;
+  isFinal?: boolean;
+  sampleRate?: number;
+  bytesPerSample?: number;
+  encoding?: string;
+  durationMs?: number;
+  speaker?: string;
+}
+
+export interface AgentRealtimeSession {
+  connect(): Promise<string>;
+  pause(): Promise<void>;
+  resume(): Promise<string>;
+  close(): Promise<void>;
+  getStatus(): RealtimeSessionStatus;
+  notifyStatus(status: AgentSessionLifecycleStatus, sessionId?: string): void;
+  on<K extends RealtimeSessionEvent>(
+    event: K,
+    handler: (payload: RealtimeSessionEventPayloads[K]) => void
+  ): void;
+  sendMessage(message: string, context?: RealtimeMessageContext): Promise<void>;
+  appendAudioChunk(chunk: RealtimeAudioChunk): Promise<void>;
 }

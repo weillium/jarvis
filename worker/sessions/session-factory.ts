@@ -1,13 +1,16 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
-import type { RealtimeSessionConfig } from './realtime-session';
+import type {
+  AgentRealtimeSession,
+  AgentSessionLifecycleStatus,
+  RealtimeSessionConfig,
+} from './realtime-session';
 import { RealtimeSession } from './realtime-session';
 import type { EventRuntime } from '../types';
 import type { VectorSearchService } from '../context/vector-search';
 import type { OpenAIService } from '../services/openai-service';
 
-type SessionStatus = 'active' | 'paused' | 'closed' | 'error';
-type StatusHandler = (status: SessionStatus, sessionId?: string) => Promise<void>;
+type StatusHandler = (status: AgentSessionLifecycleStatus, sessionId?: string) => Promise<void>;
 type LogHandler = (
   level: 'log' | 'warn' | 'error',
   message: string,
@@ -35,19 +38,34 @@ export class SessionFactory {
     private readonly defaultCardsModel: string
   ) {}
 
-  createTranscriptSession(runtime: EventRuntime, hooks: SessionHooks, model: string, apiKey?: string): RealtimeSession {
+  createTranscriptSession(
+    runtime: EventRuntime,
+    hooks: SessionHooks,
+    model: string,
+    apiKey?: string
+  ): AgentRealtimeSession {
     const config = this.buildConfig('transcript', runtime, hooks, model);
     const openaiClient = apiKey ? new OpenAI({ apiKey }) : this.openai;
     return new RealtimeSession(openaiClient, config);
   }
 
-  createCardsSession(runtime: EventRuntime, hooks: SessionHooks, model: string, apiKey?: string): RealtimeSession {
+  createCardsSession(
+    runtime: EventRuntime,
+    hooks: SessionHooks,
+    model: string,
+    apiKey?: string
+  ): AgentRealtimeSession {
     const config = this.buildConfig('cards', runtime, hooks, model);
     const openaiClient = apiKey ? new OpenAI({ apiKey }) : this.openai;
     return new RealtimeSession(openaiClient, config);
   }
 
-  createFactsSession(runtime: EventRuntime, hooks: SessionHooks, model: string, apiKey?: string): RealtimeSession {
+  createFactsSession(
+    runtime: EventRuntime,
+    hooks: SessionHooks,
+    model: string,
+    apiKey?: string
+  ): AgentRealtimeSession {
     const config = this.buildConfig('facts', runtime, hooks, model);
     const openaiClient = apiKey ? new OpenAI({ apiKey }) : this.openai;
     return new RealtimeSession(openaiClient, config);

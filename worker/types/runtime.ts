@@ -1,6 +1,6 @@
 import type { RingBuffer, TranscriptChunk } from '../state/ring-buffer';
 import type { FactsStore, Fact } from '../state/facts-store';
-import type { RealtimeSession } from '../sessions/realtime-session';
+import type { AgentRealtimeSession } from '../sessions/realtime-session';
 
 export type EventRuntimeStatus =
   | 'prepping'
@@ -32,15 +32,15 @@ export interface EventRuntime {
   glossaryCache?: Map<string, GlossaryEntry>;
 
   // Realtime sessions
-  transcriptSession?: RealtimeSession;
-  cardsSession?: RealtimeSession;
-  factsSession?: RealtimeSession;
+  transcriptSession?: AgentRealtimeSession;
+  cardsSession?: AgentRealtimeSession;
+  factsSession?: AgentRealtimeSession;
   transcriptSessionId?: string;
   cardsSessionId?: string;
   factsSessionId?: string;
-  transcriptHandlerSession?: RealtimeSession;
-  cardsHandlerSession?: RealtimeSession;
-  factsHandlerSession?: RealtimeSession;
+  transcriptHandlerSession?: AgentRealtimeSession;
+  cardsHandlerSession?: AgentRealtimeSession;
+  factsHandlerSession?: AgentRealtimeSession;
   pendingTranscriptChunk?: {
     speaker?: string | null;
     sampleRate?: number;

@@ -1,6 +1,11 @@
 import type { OpenAIRealtimeWebSocket } from 'openai/realtime/websocket';
 import type { RealtimeClientEvent } from 'openai/resources/realtime/realtime';
-import type { RealtimeMessageContext, RealtimeSessionConfig } from './types';
+import type {
+  AgentSessionLifecycleStatus,
+  RealtimeAudioChunk,
+  RealtimeMessageContext,
+  RealtimeSessionConfig,
+} from './types';
 import type { MessageQueueManager } from './message-queue';
 import type { HeartbeatManager } from './heartbeat-manager';
 import { getLowercaseErrorField } from './payload-utils';
@@ -31,8 +36,11 @@ interface RuntimeControllerDeps {
     message: string,
     context?: { seq?: number }
   ) => void;
-  onStatusChange?: (status: 'active' | 'paused' | 'closed' | 'error', sessionId?: string) => void;
-  updateDatabaseStatus: (status: 'active' | 'paused' | 'closed' | 'error', sessionId?: string) => Promise<void>;
+  onStatusChange?: (status: AgentSessionLifecycleStatus, sessionId?: string) => void;
+  updateDatabaseStatus: (
+    status: AgentSessionLifecycleStatus,
+    sessionId?: string
+  ) => Promise<void>;
   safeCloseSession: (reason: string) => void;
   scheduleReconnect: () => void;
 }
@@ -71,15 +79,7 @@ export class RuntimeController {
     await this.deps.messageQueue.processQueue();
   }
 
-  async appendAudioChunk(chunk: {
-    audioBase64: string;
-    isFinal?: boolean;
-    sampleRate?: number;
-    bytesPerSample?: number;
-    encoding?: string;
-    durationMs?: number;
-    speaker?: string;
-  }): Promise<void> {
+  async appendAudioChunk(chunk: RealtimeAudioChunk): Promise<void> {
     if (!chunk.audioBase64) {
       throw new Error('audioBase64 is required');
     }
@@ -98,10 +98,7 @@ export class RuntimeController {
     await this.transcriptQueue;
   }
 
-  private processNonTranscriptChunk(chunk: {
-    audioBase64: string;
-    isFinal?: boolean;
-  }): void {
+  private processNonTranscriptChunk(chunk: RealtimeAudioChunk): void {
     const session = this.deps.getSession();
     if (!this.deps.isActive() || !session) {
       throw new Error('Session not connected');
@@ -129,13 +126,7 @@ export class RuntimeController {
     }
   }
 
-  private processTranscriptChunk(chunk: {
-    audioBase64: string;
-    isFinal?: boolean;
-    sampleRate?: number;
-    bytesPerSample?: number;
-    encoding?: string;
-  }): void {
+  private processTranscriptChunk(chunk: RealtimeAudioChunk): void {
     const session = this.deps.getSession();
     const isActive = this.deps.isActive();
 
@@ -311,7 +302,7 @@ export class RuntimeController {
   }
 
   private resolveAudioFormat(
-    chunk: { sampleRate?: number; bytesPerSample?: number; encoding?: string },
+    chunk: Pick<RealtimeAudioChunk, 'sampleRate' | 'bytesPerSample' | 'encoding'>,
     incomingLength: number
   ): { format: AudioFormat; formatChanged: boolean; previousFormat: AudioFormat } | null {
     const previousFormat = this.audioFormat;

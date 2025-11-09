@@ -1,5 +1,5 @@
 import type { OpenAIRealtimeWebSocket } from 'openai/realtime/websocket';
-import type { AgentType } from './types';
+import type { AgentSessionLifecycleStatus, AgentType } from './types';
 import {
   getLowercaseErrorField,
   extractErrorMessage,
@@ -11,12 +11,12 @@ type LogLevel = 'log' | 'warn' | 'error';
 type LogFn = (level: LogLevel, message: string, context?: { seq?: number }) => void;
 
 type NotifyStatusFn = (
-  status: 'active' | 'paused' | 'closed' | 'error',
+  status: AgentSessionLifecycleStatus,
   sessionId?: string
 ) => void;
 
 type UpdateDatabaseStatusFn = (
-  status: 'active' | 'paused' | 'closed' | 'error',
+  status: AgentSessionLifecycleStatus,
   sessionId?: string
 ) => Promise<void>;
 

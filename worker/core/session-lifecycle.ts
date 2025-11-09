@@ -1,4 +1,5 @@
 import type { AgentSelection, AgentType, EventRuntime } from '../types';
+import type { AgentSessionLifecycleStatus } from '../sessions/realtime-session';
 import type {
   SessionCreationOptions,
   TranscriptAudioOptions,
@@ -58,7 +59,7 @@ export class SessionLifecycle {
     const options = sessionOptions ?? this.buildDefaultSessionOptions(runtime);
     const handleStatusChange = async (
       agentType: AgentType,
-      status: 'generated' | 'starting' | 'active' | 'paused' | 'closed' | 'error',
+      status: 'generated' | 'starting' | AgentSessionLifecycleStatus,
       sessionId?: string
     ) => {
       await this.handleSessionStatusChange(runtime, eventId, agentId, agentType, status, sessionId);
@@ -198,7 +199,7 @@ export class SessionLifecycle {
     eventId: string,
     agentId: string,
     agentType: AgentType,
-    status: 'generated' | 'starting' | 'active' | 'paused' | 'closed' | 'error',
+    status: 'generated' | 'starting' | AgentSessionLifecycleStatus,
     sessionId?: string
   ): Promise<void> {
     try {

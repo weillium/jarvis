@@ -1,24 +1,18 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AgentType, EventRuntime } from '../types';
-import type { RealtimeSession } from './realtime-session';
+import type {
+  AgentRealtimeSession,
+  AgentSessionLifecycleStatus,
+  RealtimeAudioChunk,
+} from './realtime-session';
 import type { SessionFactory } from './session-factory';
 import type { Logger } from '../monitoring/logger';
 
-export interface TranscriptAudioOptions {
-  audioBase64: string;
-  isFinal?: boolean;
-  sampleRate?: number;
-  bytesPerSample?: number;
-  encoding?: string;
-  durationMs?: number;
-  speaker?: string;
-}
-
-type SessionStatus = 'active' | 'paused' | 'closed' | 'error';
+export type TranscriptAudioOptions = RealtimeAudioChunk;
 
 type SessionStatusHandler = (
   agentType: AgentType,
-  status: SessionStatus,
+  status: AgentSessionLifecycleStatus,
   sessionId?: string
 ) => Promise<void>;
 
@@ -60,7 +54,7 @@ export class SessionManager {
     transcriptModel: string,
     options: AgentSessionOptions = {},
     apiKey?: string
-  ): RealtimeSession {
+  ): AgentRealtimeSession {
     return this.sessionFactory.createTranscriptSession(
       runtime,
       {
@@ -85,7 +79,7 @@ export class SessionManager {
     cardsModel: string,
     options: AgentSessionOptions = {},
     apiKey?: string
-  ): RealtimeSession {
+  ): AgentRealtimeSession {
     return this.sessionFactory.createCardsSession(
       runtime,
       {
@@ -110,7 +104,7 @@ export class SessionManager {
     factsModel: string,
     options: AgentSessionOptions = {},
     apiKey?: string
-  ): RealtimeSession {
+  ): AgentRealtimeSession {
     return this.sessionFactory.createFactsSession(
       runtime,
       {
@@ -130,7 +124,7 @@ export class SessionManager {
   }
 
   async appendAudioToTranscriptSession(
-    session: RealtimeSession,
+    session: AgentRealtimeSession,
     chunk: TranscriptAudioOptions
   ): Promise<void> {
     await session.appendAudioChunk(chunk);
@@ -144,7 +138,11 @@ export class SessionManager {
     factsModel: string,
     options: SessionCreationOptions = {},
     apiKey?: string
-  ): { transcriptSession: RealtimeSession; cardsSession: RealtimeSession; factsSession: RealtimeSession } {
+  ): {
+    transcriptSession: AgentRealtimeSession;
+    cardsSession: AgentRealtimeSession;
+    factsSession: AgentRealtimeSession;
+  } {
     const transcriptSession = this.sessionFactory.createTranscriptSession(runtime, {
       supabaseClient: this.supabaseClient,
       onStatusChange: (status, sessionId) => onStatusChange('transcript', status, sessionId),
@@ -185,9 +183,9 @@ export class SessionManager {
   }
 
   async connectSessions(sessions: {
-    transcript?: RealtimeSession;
-    cards?: RealtimeSession;
-    facts?: RealtimeSession;
+    transcript?: AgentRealtimeSession;
+    cards?: AgentRealtimeSession;
+    facts?: AgentRealtimeSession;
   }): Promise<{ transcriptSessionId?: string; cardsSessionId?: string; factsSessionId?: string }> {
     const results: { transcriptSessionId?: string; cardsSessionId?: string; factsSessionId?: string } =
       {};
@@ -205,7 +203,11 @@ export class SessionManager {
     return results;
   }
 
-  async pauseSessions(transcriptSession?: RealtimeSession, cardsSession?: RealtimeSession, factsSession?: RealtimeSession): Promise<void> {
+  async pauseSessions(
+    transcriptSession?: AgentRealtimeSession,
+    cardsSession?: AgentRealtimeSession,
+    factsSession?: AgentRealtimeSession
+  ): Promise<void> {
     if (transcriptSession) {
       await transcriptSession.pause();
     }
@@ -218,9 +220,9 @@ export class SessionManager {
   }
 
   async resumeSessions(
-    transcriptSession?: RealtimeSession,
-    cardsSession?: RealtimeSession,
-    factsSession?: RealtimeSession
+    transcriptSession?: AgentRealtimeSession,
+    cardsSession?: AgentRealtimeSession,
+    factsSession?: AgentRealtimeSession
   ): Promise<{ transcriptSessionId?: string; cardsSessionId?: string; factsSessionId?: string }> {
     const transcriptSessionId = transcriptSession ? await transcriptSession.resume() : undefined;
     const cardsSessionId = cardsSession ? await cardsSession.resume() : undefined;
@@ -228,7 +230,11 @@ export class SessionManager {
     return { transcriptSessionId, cardsSessionId, factsSessionId };
   }
 
-  async closeSessions(transcriptSession?: RealtimeSession, cardsSession?: RealtimeSession, factsSession?: RealtimeSession): Promise<void> {
+  async closeSessions(
+    transcriptSession?: AgentRealtimeSession,
+    cardsSession?: AgentRealtimeSession,
+    factsSession?: AgentRealtimeSession
+  ): Promise<void> {
     if (transcriptSession) {
       await transcriptSession.close();
     }

@@ -21,7 +21,10 @@ import {
   getLowercaseErrorField,
 } from './realtime-session/payload-utils';
 import type {
+  AgentRealtimeSession,
+  AgentSessionLifecycleStatus,
   InputAudioTranscriptionDeltaEvent,
+  RealtimeAudioChunk,
   RealtimeMessageContext,
   RealtimeSessionConfig,
   RealtimeSessionEvent,
@@ -41,7 +44,13 @@ import { EventRouter } from './realtime-session/event-router';
 import { RuntimeController } from './realtime-session/runtime-controller';
 import { ConnectionManager } from './realtime-session/connection-manager';
 
-export type { AgentType, RealtimeSessionConfig } from './realtime-session/types';
+export type {
+  AgentSessionLifecycleStatus,
+  AgentRealtimeSession,
+  AgentType,
+  RealtimeAudioChunk,
+  RealtimeSessionConfig,
+} from './realtime-session/types';
 
 type JsonSchemaProperty =
   | {
@@ -70,7 +79,7 @@ interface FunctionToolDefinition {
   parameters: FunctionToolSchema;
 }
 
-export class RealtimeSession {
+export class RealtimeSession implements AgentRealtimeSession {
   private openai: OpenAI;
   private session?: OpenAIRealtimeWebSocket;
   private config: RealtimeSessionConfig;
@@ -82,10 +91,7 @@ export class RealtimeSession {
   private readonly eventRouter: EventRouter;
   private readonly connectionManager: ConnectionManager;
   private eventHandlers: { [K in RealtimeSessionEvent]?: Array<(data: RealtimeSessionEventPayloads[K]) => void> } = {};
-  private onStatusChange?: (
-    status: 'active' | 'paused' | 'closed' | 'error',
-    sessionId?: string
-  ) => void;
+  private onStatusChange?: (status: AgentSessionLifecycleStatus, sessionId?: string) => void;
   private onLog?: (
     level: 'log' | 'warn' | 'error',
     message: string,
@@ -607,7 +613,7 @@ export class RealtimeSession {
    * Update agent_sessions table status
    */
   private async updateDatabaseStatus(
-    status: 'active' | 'paused' | 'closed' | 'error',
+    status: AgentSessionLifecycleStatus,
     sessionId?: string
   ): Promise<void> {
     if (!this.supabase || !this.config.eventId) {
@@ -615,33 +621,25 @@ export class RealtimeSession {
     }
 
     try {
-      const updateData: {
-        status: typeof status;
-        updated_at: string;
-        provider_session_id?: string;
-        model?: string;
-        closed_at?: string;
-      } = {
-        status,
-        updated_at: new Date().toISOString(),
-      };
+      const updateData = new Map<string, string>();
+      updateData.set('status', status as string);
+      updateData.set('updated_at', new Date().toISOString());
 
       if (sessionId) {
-        updateData.provider_session_id = sessionId;
+        updateData.set('provider_session_id', sessionId);
       }
 
-      // Set model when connecting (uses config.model which is set from orchestrator)
       if (status === 'active' && this.config.model) {
-        updateData.model = this.config.model;
+        updateData.set('model', this.config.model);
       }
 
       if (status === 'closed') {
-        updateData.closed_at = new Date().toISOString();
+        updateData.set('closed_at', new Date().toISOString());
       }
 
       await this.supabase
         .from('agent_sessions')
-        .update(updateData)
+        .update(Object.fromEntries(updateData))
         .match({
           event_id: this.config.eventId,
           agent_type: this.config.agentType,
@@ -775,15 +773,7 @@ export class RealtimeSession {
     await this.runtimeController.sendMessage(message, context);
   }
 
-  async appendAudioChunk(chunk: {
-    audioBase64: string;
-    isFinal?: boolean;
-    sampleRate?: number;
-    bytesPerSample?: number;
-    encoding?: string;
-    durationMs?: number;
-    speaker?: string;
-  }): Promise<void> {
+  async appendAudioChunk(chunk: RealtimeAudioChunk): Promise<void> {
     await this.runtimeController.appendAudioChunk(chunk);
   }
 
@@ -832,7 +822,7 @@ export class RealtimeSession {
     });
   }
 
-  notifyStatus(status: 'active' | 'paused' | 'closed' | 'error', sessionId?: string): void {
+  notifyStatus(status: AgentSessionLifecycleStatus, sessionId?: string): void {
     this.onStatusChange?.(status, sessionId);
   }
 

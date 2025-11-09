@@ -4,7 +4,7 @@ import type { OpenAIService } from '../services/openai-service';
 import type { Logger } from '../monitoring/logger';
 import type { MetricsCollector } from '../monitoring/metrics-collector';
 import type { CheckpointManager } from '../monitoring/checkpoint-manager';
-import type { RealtimeSession } from '../sessions/realtime-session';
+import type { AgentRealtimeSession } from '../sessions/realtime-session';
 import { getPolicy } from '../policies';
 import { createCardGenerationUserPrompt } from '../prompts';
 import { checkBudgetStatus, formatTokenBreakdown } from '../utils/token-counter';
@@ -41,7 +41,7 @@ export class CardsProcessor {
   async process(
     runtime: EventRuntime,
     chunk: TranscriptChunk,
-    session: RealtimeSession | undefined,
+    session: AgentRealtimeSession | undefined,
     sessionId: string | undefined
   ): Promise<void> {
     if (!session || !sessionId) {
