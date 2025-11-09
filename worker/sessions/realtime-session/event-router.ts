@@ -4,14 +4,10 @@ import type {
   ResponseFunctionCallArgumentsDoneEvent,
   ResponseTextDoneEvent,
 } from 'openai/resources/realtime/realtime';
-import { extractErrorMessage } from './payload-utils';
+import { extractErrorMessage, isRecord } from './payload-utils';
 import type { MessageQueueManager } from './message-queue';
 import type { HeartbeatManager } from './heartbeat-manager';
-import type {
-  AgentHandler,
-  InputAudioTranscriptionCompletedEvent,
-  InputAudioTranscriptionDeltaEvent,
-} from './types';
+import type { AgentHandler } from './types';
 
 interface RouterDependencies {
   agentHandler: AgentHandler;
@@ -77,6 +73,168 @@ const extractDeltaText = (event: unknown): string | null => {
   }
 
   return null;
+};
+
+interface RawInputAudioTranscriptionDeltaEvent {
+  type?: unknown;
+  item_id?: unknown;
+  event_id?: unknown;
+  content_index?: unknown;
+  delta?: unknown;
+}
+
+interface RawInputAudioTranscriptionCompletedEvent {
+  type?: unknown;
+  item_id?: unknown;
+  event_id?: unknown;
+  content_index?: unknown;
+  transcript?: unknown;
+}
+
+type NormalizedInputAudioTranscriptionDeltaEvent = {
+  event_id?: string;
+  type: 'conversation.item.input_audio_transcription.delta';
+  item_id: string;
+  content_index?: number;
+  delta?: string;
+};
+
+type NormalizedInputAudioTranscriptionCompletedEvent = {
+  event_id?: string;
+  type: 'conversation.item.input_audio_transcription.completed';
+  item_id: string;
+  content_index?: number;
+  transcript?: string;
+};
+
+const hasTranscriptionDeltaHandler = (
+  handler: AgentHandler
+): handler is AgentHandler & {
+  handleTranscriptionDelta: (
+    payload: NormalizedInputAudioTranscriptionDeltaEvent
+  ) => Promise<void> | void;
+} => typeof (handler as { handleTranscriptionDelta?: unknown }).handleTranscriptionDelta === 'function';
+
+const hasTranscriptionCompletedHandler = (
+  handler: AgentHandler
+): handler is AgentHandler & {
+  handleTranscriptionCompleted: (
+    payload: NormalizedInputAudioTranscriptionCompletedEvent
+  ) => Promise<void> | void;
+} => typeof (handler as { handleTranscriptionCompleted?: unknown }).handleTranscriptionCompleted === 'function';
+
+const parseInputAudioTranscriptionDeltaEvent = (
+  event: unknown
+): NormalizedInputAudioTranscriptionDeltaEvent | null => {
+  if (!isRecord(event)) {
+    return null;
+  }
+
+  const record = event as RawInputAudioTranscriptionDeltaEvent;
+
+  if (record.type !== 'conversation.item.input_audio_transcription.delta') {
+    return null;
+  }
+
+  const itemId = record.item_id;
+  if (typeof itemId !== 'string' || itemId.length === 0) {
+    return null;
+  }
+
+  const eventId =
+    typeof record.event_id === 'string' && record.event_id.length > 0 ? record.event_id : undefined;
+
+  const hasContentIndex = record.content_index !== undefined;
+  if (
+    hasContentIndex &&
+    (typeof record.content_index !== 'number' || !Number.isFinite(record.content_index))
+  ) {
+    return null;
+  }
+  const contentIndex =
+    typeof record.content_index === 'number' && Number.isFinite(record.content_index)
+      ? record.content_index
+      : undefined;
+
+  const hasDelta = record.delta !== undefined;
+  if (hasDelta && typeof record.delta !== 'string') {
+    return null;
+  }
+  const delta = typeof record.delta === 'string' ? record.delta : undefined;
+
+  const parsed: NormalizedInputAudioTranscriptionDeltaEvent = {
+    type: 'conversation.item.input_audio_transcription.delta',
+    item_id: itemId,
+  };
+
+  if (eventId) {
+    parsed.event_id = eventId;
+  }
+  if (contentIndex !== undefined) {
+    parsed.content_index = contentIndex;
+  }
+  if (delta !== undefined) {
+    parsed.delta = delta;
+  }
+
+  return parsed;
+};
+
+const parseInputAudioTranscriptionCompletedEvent = (
+  event: unknown
+): NormalizedInputAudioTranscriptionCompletedEvent | null => {
+  if (!isRecord(event)) {
+    return null;
+  }
+
+  const record = event as RawInputAudioTranscriptionCompletedEvent;
+
+  if (record.type !== 'conversation.item.input_audio_transcription.completed') {
+    return null;
+  }
+
+  const itemId = record.item_id;
+  if (typeof itemId !== 'string' || itemId.length === 0) {
+    return null;
+  }
+
+  const eventId =
+    typeof record.event_id === 'string' && record.event_id.length > 0 ? record.event_id : undefined;
+
+  const hasContentIndex = record.content_index !== undefined;
+  if (
+    hasContentIndex &&
+    (typeof record.content_index !== 'number' || !Number.isFinite(record.content_index))
+  ) {
+    return null;
+  }
+  const contentIndex =
+    typeof record.content_index === 'number' && Number.isFinite(record.content_index)
+      ? record.content_index
+      : undefined;
+
+  const hasTranscript = record.transcript !== undefined;
+  if (hasTranscript && typeof record.transcript !== 'string') {
+    return null;
+  }
+  const transcript = typeof record.transcript === 'string' ? record.transcript : undefined;
+
+  const parsed: NormalizedInputAudioTranscriptionCompletedEvent = {
+    type: 'conversation.item.input_audio_transcription.completed',
+    item_id: itemId,
+  };
+
+  if (eventId) {
+    parsed.event_id = eventId;
+  }
+  if (contentIndex !== undefined) {
+    parsed.content_index = contentIndex;
+  }
+  if (transcript !== undefined) {
+    parsed.transcript = transcript;
+  }
+
+  return parsed;
 };
 
 export class EventRouter {
@@ -153,26 +311,48 @@ export class EventRouter {
     this.deps.heartbeat.handlePong();
   }
 
-  handleTranscriptionDelta(event: InputAudioTranscriptionDeltaEvent): void {
-    if (typeof this.deps.agentHandler.handleTranscriptionDelta !== 'function') {
+  handleTranscriptionDelta(event: unknown): void {
+    if (!hasTranscriptionDeltaHandler(this.deps.agentHandler)) {
       return;
     }
-    const handler = this.deps.agentHandler
-      .handleTranscriptionDelta as (
-      payload: InputAudioTranscriptionDeltaEvent
-    ) => Promise<void> | void;
-    void handler.call(this.deps.agentHandler, event);
+
+    const parsed = parseInputAudioTranscriptionDeltaEvent(event);
+    if (!parsed) {
+      this.log('warn', 'Dropping transcription delta with invalid payload');
+      return;
+    }
+
+    const snippet =
+      typeof parsed.delta === 'string' && parsed.delta.length > 0 ? parsed.delta.slice(0, 80) : '<empty>';
+    this.log(
+      'log',
+      `Transcription delta received (item=${parsed.item_id}, idx=${parsed.content_index ?? 0}): ${snippet}`
+    );
+
+    void this.deps.agentHandler.handleTranscriptionDelta(parsed);
   }
 
-  handleTranscriptionCompleted(event: InputAudioTranscriptionCompletedEvent): void {
-    if (typeof this.deps.agentHandler.handleTranscriptionCompleted !== 'function') {
+  handleTranscriptionCompleted(event: unknown): void {
+    if (!hasTranscriptionCompletedHandler(this.deps.agentHandler)) {
       return;
     }
-    const handler = this.deps.agentHandler
-      .handleTranscriptionCompleted as (
-      payload: InputAudioTranscriptionCompletedEvent
-    ) => Promise<void> | void;
-    void handler.call(this.deps.agentHandler, event);
+
+    const parsed = parseInputAudioTranscriptionCompletedEvent(event);
+    if (!parsed) {
+      this.log('warn', 'Dropping transcription completion with invalid payload');
+      return;
+    }
+
+    const snippet =
+      typeof parsed.transcript === 'string' && parsed.transcript.length > 0
+        ? parsed.transcript.slice(0, 80)
+        : '<empty>';
+    this.log(
+      'log',
+      `Transcription completed (item=${parsed.item_id}, idx=${parsed.content_index ?? 0}): ${snippet}`
+    );
+
+    void this.deps.agentHandler.handleTranscriptionCompleted(parsed);
   }
 }
 
