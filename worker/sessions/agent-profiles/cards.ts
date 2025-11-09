@@ -1,18 +1,11 @@
 import type OpenAI from 'openai';
-import type {
-  AgentRealtimeSession,
-  RealtimeSessionConfig,
-} from '../session-adapters';
-import { RealtimeAgentSession } from '../session-adapters/realtime-session';
-import { createPassthroughAudioHooks } from '../session-adapters/runtime-controller';
-import { CardsStatelessSession } from '../session-adapters/cards-stateless-session';
-import type { RealtimeSessionProfile } from '../session-adapters/realtime-profile';
-import { getPolicy } from '../../policies';
-import { getCardsRealtimeTooling } from './cards/tooling';
-import { PromptCardGenerator, type CardGeneratorFactory } from './cards/card-generator';
-import { CardsAgentHandler } from '../session-adapters/handlers/cards-handler';
+import type { AgentRealtimeSession, RealtimeSessionConfig } from '../session-adapters';
+import { RealtimeAgentSession } from '../session-adapters/realtime/driver';
+import { createStatelessAgentSession } from '../session-adapters/stateless/driver';
 import type { OpenAIService } from '../../services/openai-service';
 import type { AgentProfileTransport } from '../agent-profiles';
+import { cardsRealtimeProfile } from './cards/realtime/profile';
+import { cardsStatelessProfile } from './cards/stateless/profile';
 
 export interface CardsAgentSessionFactory {
   createRealtimeSession(
@@ -31,42 +24,21 @@ export interface CardsSessionFactoryDeps {
   openaiService: OpenAIService;
 }
 
-const createCardGenerator: CardGeneratorFactory = (generatorDeps) =>
-  new PromptCardGenerator(generatorDeps);
-
-const cardsRealtimeProfile: RealtimeSessionProfile = {
-  agentType: 'cards',
-  getConnectionIntent: (config) => {
-    if (!config.model) {
-      throw new Error('Cards realtime sessions require a realtime model');
-    }
-    return { model: config.model };
-  },
-  createSessionConfiguration: ({ config, log }) => {
-    const policy = getPolicy('cards');
-    const { tools, sessionUpdateEvent } = getCardsRealtimeTooling(policy);
-    log('log', `Sending session config with ${tools.length} tools`, {
-      toolCount: tools.length,
-      agentType: config.agentType,
-    });
-    return {
-      event: sessionUpdateEvent,
-      logContext: {
-        toolCount: tools.length,
-      },
-    };
-  },
-  createAgentHandler: (options) => new CardsAgentHandler(options),
-  createRuntimeHooks: createPassthroughAudioHooks,
-};
-
 const defaultCardsSessionFactory: CardsAgentSessionFactory = {
   createRealtimeSession: (openai, config, deps) => {
     void deps;
     return new RealtimeAgentSession(openai, config, cardsRealtimeProfile);
   },
   createStatelessSession: (openai, config, deps) =>
-    new CardsStatelessSession(openai, config, createCardGenerator, deps),
+    createStatelessAgentSession({
+      openai,
+      config,
+      profile: cardsStatelessProfile,
+      profileDeps: {
+        openaiService: deps.openaiService,
+      },
+      logLabel: 'cards',
+    }),
 };
 
 const transportOverride = (process.env.CARDS_AGENT_TRANSPORT ?? '').toLowerCase();
@@ -90,10 +62,8 @@ export const cardsAgentDefinition = {
   availableTransports: ['realtime', 'stateless'] as const,
   defaultTransport: resolvedTransport,
   sessionFactory: defaultCardsSessionFactory,
-  realtimeGenerator: createCardGenerator,
-  getRealtimeTooling: getCardsRealtimeTooling,
-  realtimeProfile: cardsRealtimeProfile,
 };
 
 export type CardsAvailableTransport = typeof cardsAgentDefinition.availableTransports[number];
+
 

@@ -1,4 +1,4 @@
-import type { RealtimeCardDTO, RealtimeFactDTO, RealtimeToolCallDTO } from '../../types';
+import type { RealtimeCardDTO, RealtimeFactDTO, RealtimeToolCallDTO } from '../../../types';
 import type { ResponseDoneEvent } from 'openai/resources/realtime/realtime';
 
 const CARD_TYPES: ReadonlySet<RealtimeCardDTO['card_type']> = new Set([

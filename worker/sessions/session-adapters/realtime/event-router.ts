@@ -4,15 +4,15 @@ import type {
   ResponseFunctionCallArgumentsDoneEvent,
   ResponseTextDoneEvent,
 } from 'openai/resources/realtime/realtime';
-import { extractErrorMessage, isRecord } from './payload-utils';
-import type { MessageQueueManager } from './message-queue';
+import { extractErrorMessage, isRecord } from '../shared/payload-utils';
+import type { MessageQueueManager } from '../shared/message-queue';
 import type { HeartbeatManager } from './heartbeat-manager';
 import type {
   AgentHandler,
   InputAudioTranscriptionDeltaEvent,
   ParsedInputAudioTranscriptionCompletedEvent,
-} from './types';
-import type { RealtimeTranscriptionUsageDTO } from '../../types';
+} from '../types';
+import type { RealtimeTranscriptionUsageDTO } from '../../../types';
 
 export interface EventRouterHooks {
   onSessionUpdated?: () => void;

@@ -1,6 +1,6 @@
 import { OpenAIRealtimeWebSocket } from 'openai/realtime/websocket';
 import type OpenAI from 'openai';
-import { extractErrorMessage, isRecord } from './payload-utils';
+import { extractErrorMessage, isRecord } from '../shared/payload-utils';
 import { getSessionInternals } from './transport-utils';
 
 export interface ConnectionManagerOptions {

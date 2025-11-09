@@ -1,6 +1,7 @@
 import type OpenAI from 'openai';
-import { FactsStatelessSession } from '../session-adapters';
 import type { RealtimeSessionConfig } from '../session-adapters';
+import { createStatelessAgentSession } from '../session-adapters/stateless/driver';
+import { factsStatelessProfile } from './facts/stateless/profile';
 
 type FactsSessionFactoryDeps = unknown;
 
@@ -13,8 +14,16 @@ export const factsAgentDefinition = {
     openai: OpenAI,
     config: RealtimeSessionConfig,
     _deps: FactsSessionFactoryDeps
-  ): FactsStatelessSession => {
+  ) => {
     void _deps;
-    return new FactsStatelessSession(openai, config);
+    return createStatelessAgentSession({
+      openai,
+      config,
+      profile: factsStatelessProfile,
+      profileDeps: undefined,
+      logLabel: 'facts',
+    });
   },
 };
+
+

@@ -1,5 +1,5 @@
 import type { OpenAIRealtimeWebSocket } from 'openai/realtime/websocket';
-import { isRecord } from './payload-utils';
+import { isRecord } from '../shared/payload-utils';
 
 interface SocketLike {
   readyState?: number;

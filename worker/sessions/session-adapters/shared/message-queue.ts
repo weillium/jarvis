@@ -5,8 +5,8 @@ import type {
 import {
   createRealtimeCardsUserPrompt,
   createRealtimeFactsUserPrompt,
-} from '../../prompts';
-import type { RealtimeMessageContext, RealtimeSessionConfig } from './types';
+} from '../../../prompts';
+import type { RealtimeMessageContext, RealtimeSessionConfig } from '../types';
 import { extractErrorMessage } from './payload-utils';
 
 interface MessageQueueDeps {

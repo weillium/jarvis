@@ -1,9 +1,12 @@
 import type { RealtimeClientEvent } from 'openai/resources/realtime/realtime';
-import type { RealtimeSessionConfig } from '../../session-adapters';
-import type { RuntimeController } from '../../session-adapters/runtime-controller';
-import type { EventRouterHooks } from '../../session-adapters/event-router';
-import type { InputAudioTranscriptionDeltaEvent } from '../../session-adapters/types';
-import type { RegisterSessionEventsParams, SessionConfiguration } from '../../session-adapters/realtime-profile';
+import type { RealtimeSessionConfig } from '../../../session-adapters';
+import type { RuntimeController } from '../../../session-adapters/realtime/runtime-controller';
+import type { EventRouterHooks } from '../../../session-adapters/realtime/event-router';
+import type { InputAudioTranscriptionDeltaEvent } from '../../../session-adapters/types';
+import type {
+  RegisterSessionEventsParams,
+  SessionConfiguration,
+} from '../../../session-adapters/realtime/profile-types';
 
 type TranscriptModel =
   | 'gpt-4o-transcribe'

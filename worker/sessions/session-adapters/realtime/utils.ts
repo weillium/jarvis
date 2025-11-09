@@ -1,4 +1,4 @@
-import { getLowercaseErrorField } from '../payload-utils';
+import { getLowercaseErrorField } from '../shared/payload-utils';
 
 const TRANSIENT_INDICATORS = [
   'not ready',

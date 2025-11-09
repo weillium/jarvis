@@ -1,11 +1,11 @@
-import type { RealtimeMessageContext, RealtimeModelResponseDTO } from '../../session-adapters/types';
-import type { RealtimeCardDTO } from '../../../types';
-import { getPolicy } from '../../../policies';
-import { createCardGenerationUserPrompt } from '../../../prompts';
-import { formatResearchSummaryForPrompt } from '../../../lib/text/llm-prompt-formatting';
-import { mapCardPayload, safeJsonParse } from '../../session-adapters/payload-utils';
-import type { OpenAIService } from '../../../services/openai-service';
-import { isRecord } from '../../../lib/context-normalization';
+import type { RealtimeMessageContext, RealtimeModelResponseDTO } from '../../../session-adapters/types';
+import type { RealtimeCardDTO } from '../../../../types';
+import { getPolicy } from '../../../../policies';
+import { createCardGenerationUserPrompt } from '../../../../prompts';
+import { formatResearchSummaryForPrompt } from '../../../../lib/text/llm-prompt-formatting';
+import { mapCardPayload, safeJsonParse } from '../../../session-adapters/shared/payload-utils';
+import type { OpenAIService } from '../../../../services/openai-service';
+import { isRecord } from '../../../../lib/context-normalization';
 
 export interface CardGenerationInput {
   recentTranscript: string;
@@ -93,14 +93,14 @@ export class PromptCardGenerator implements CardGenerator {
     const generatedCards: RealtimeCardDTO[] = [];
 
     if (Array.isArray(parsed)) {
-      parsed.forEach((item) => {
+      parsed.forEach((item: unknown) => {
         const card = mapCardPayload(item);
         if (card) {
           generatedCards.push(card);
         }
       });
     } else if (isRecord(parsed) && Array.isArray(parsed.cards)) {
-      parsed.cards.forEach((item) => {
+      parsed.cards.forEach((item: unknown) => {
         const card = mapCardPayload(item);
         if (card) {
           generatedCards.push(card);

@@ -3,13 +3,13 @@ import type {
   ResponseFunctionCallArgumentsDoneEvent,
   ResponseTextDoneEvent,
 } from 'openai/resources/realtime/realtime';
-import type { RealtimeCardDTO, RealtimeToolCallDTO } from '../../../types';
+import type { RealtimeCardDTO, RealtimeToolCallDTO } from '../../../../types';
 import {
   mapCardPayload,
   mapToolCallArguments,
   safeJsonParse,
-} from '../../session-adapters/payload-utils';
-import { extractAssistantText } from '../../session-adapters/utils';
+} from '../../../session-adapters/shared/payload-utils';
+import { extractAssistantText } from '../../../session-adapters/shared/utils';
 
 export interface CardsResponseTextInterpretation {
   cards: RealtimeCardDTO[];

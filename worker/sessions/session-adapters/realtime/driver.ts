@@ -12,7 +12,7 @@ import {
   extractErrorField,
   extractErrorMessage,
   getLowercaseErrorField,
-} from './payload-utils';
+} from '../shared/payload-utils';
 import type {
   AgentRealtimeSession,
   AgentSessionLifecycleStatus,
@@ -22,17 +22,17 @@ import type {
   RealtimeSessionEvent,
   RealtimeSessionEventPayloads,
   RealtimeSessionStatus,
-} from './types';
-import { MessageQueueManager } from './message-queue';
-import { buildStatusSnapshot } from './status-tracker';
+} from '../types';
+import { MessageQueueManager } from '../shared/message-queue';
+import { buildStatusSnapshot } from '../shared/status-tracker';
 import { getUnderlyingSocket } from './transport-utils';
 import { HeartbeatManager } from './heartbeat-manager';
-import type { AgentHandler } from './types';
+import type { AgentHandler } from '../types';
 import { EventRouter } from './event-router';
 import { RuntimeController } from './runtime-controller';
 import { ConnectionManager } from './connection-manager';
-import type { RealtimeSessionProfile, SessionConfiguration } from './realtime-profile';
-import { classifyRealtimeError } from './realtime-session/utils';
+import type { RealtimeSessionProfile, SessionConfiguration } from './profile-types';
+import { classifyRealtimeError } from './utils';
 
 type LogContext = Record<string, unknown> & { seq?: number };
 
@@ -353,14 +353,6 @@ export class RealtimeAgentSession implements AgentRealtimeSession {
     this.eventHandlers[event]!.push(handler);
   }
 
-  async sendMessage(message: string, context?: RealtimeMessageContext): Promise<void> {
-    await this.runtimeController.sendMessage(message, context);
-  }
-
-  async appendAudioChunk(chunk: RealtimeAudioChunk): Promise<void> {
-    await this.runtimeController.appendAudioChunk(chunk);
-  }
-
   private createSessionConfiguration(): SessionConfiguration {
     return this.profile.createSessionConfiguration({
       config: this.config,
@@ -622,6 +614,14 @@ export class RealtimeAgentSession implements AgentRealtimeSession {
     } catch {
       /* ignore */
     }
+  }
+
+  async sendMessage(message: string, context?: RealtimeMessageContext): Promise<void> {
+    await this.runtimeController.sendMessage(message, context);
+  }
+
+  async appendAudioChunk(chunk: RealtimeAudioChunk): Promise<void> {
+    await this.runtimeController.appendAudioChunk(chunk);
   }
 }
 

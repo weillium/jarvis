@@ -1,7 +1,11 @@
 import type { ResponseDoneEvent, ResponseFunctionCallArgumentsDoneEvent, ResponseTextDoneEvent } from 'openai/resources/realtime/realtime';
 import { BaseAgentHandler } from './base-handler';
-import { extractErrorMessage, mapFactsPayload, mapToolCallArguments } from '../payload-utils';
-import { extractAssistantText } from '../utils';
+import {
+  extractErrorMessage,
+  mapFactsPayload,
+  mapToolCallArguments,
+} from '../shared/payload-utils';
+import { extractAssistantText } from '../shared/utils';
 
 export class FactsAgentHandler extends BaseAgentHandler {
   handleResponseText(payload: ResponseTextDoneEvent): void {

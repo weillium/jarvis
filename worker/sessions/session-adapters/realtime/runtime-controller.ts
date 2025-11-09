@@ -5,10 +5,10 @@ import type {
   RealtimeAudioChunk,
   RealtimeMessageContext,
   RealtimeSessionConfig,
-} from './types';
-import type { MessageQueueManager } from './message-queue';
+} from '../types';
+import type { MessageQueueManager } from '../shared/message-queue';
 import type { HeartbeatManager } from './heartbeat-manager';
-import { getLowercaseErrorField } from './payload-utils';
+import { getLowercaseErrorField } from '../shared/payload-utils';
 
 const isInvalidToolCallError = (error: unknown): boolean =>
   getLowercaseErrorField(error, 'message').includes('invalid_tool_call_id');

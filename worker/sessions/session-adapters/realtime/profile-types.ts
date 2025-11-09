@@ -5,7 +5,7 @@ import type {
   AgentHandlerOptions,
   AgentType,
   RealtimeSessionConfig,
-} from './types';
+} from '../types';
 import type { RuntimeController, RuntimeControllerHooksFactory } from './runtime-controller';
 import type { EventRouter, EventRouterHooks } from './event-router';
 
@@ -43,6 +43,8 @@ export interface RealtimeSessionProfile {
   getConnectionIntent: (config: RealtimeSessionConfig) => RealtimeConnectionIntent;
   createSessionConfiguration: (params: SessionConfigurationFactoryParams) => SessionConfiguration;
   createAgentHandler: (options: AgentHandlerOptions) => AgentHandler;
+  resolveModel?: (hint?: string) => string;
+  defaultModel?: string;
   createRuntimeHooks?: RuntimeControllerHooksFactory;
   createEventRouterHooks?: (params: EventRouterHookFactoryParams) => EventRouterHooks | undefined;
   registerSessionEvents?: (params: RegisterSessionEventsParams) => void;

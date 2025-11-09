@@ -1,6 +1,6 @@
 import type { OpenAIRealtimeWebSocket } from 'openai/realtime/websocket';
-import type { RealtimeSessionStatus } from './types';
-import { getSessionInternals } from './transport-utils';
+import type { RealtimeSessionStatus } from '../types';
+import { getSessionInternals } from '../realtime/transport-utils';
 
 export interface StatusTrackerContext {
   session?: OpenAIRealtimeWebSocket;

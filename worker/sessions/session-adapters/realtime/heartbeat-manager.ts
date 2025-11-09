@@ -1,9 +1,9 @@
 import type { OpenAIRealtimeWebSocket } from 'openai/realtime/websocket';
-import type { AgentSessionLifecycleStatus, AgentType } from './types';
+import type { AgentSessionLifecycleStatus, AgentType } from '../types';
 import {
   getLowercaseErrorField,
   extractErrorMessage,
-} from './payload-utils';
+} from '../shared/payload-utils';
 import { getUnderlyingSocket } from './transport-utils';
 
 type LogLevel = 'log' | 'warn' | 'error';

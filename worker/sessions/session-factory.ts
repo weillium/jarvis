@@ -6,8 +6,8 @@ import type {
   AgentType,
   RealtimeSessionConfig,
 } from './session-adapters';
-import { defaultAgentProfiles } from './agent-profiles';
-import type { AgentProfileRegistry } from './agent-profiles';
+import { defaultAgentProfiles, type AgentProfileRegistry, type AgentProfileTransport } from './agent-profiles';
+import { agentTransportProfiles } from './agent-profiles/registry';
 import type { EventRuntime } from '../types';
 import type { VectorSearchService } from '../context/vector-search';
 import type { OpenAIService } from '../services/openai-service';
@@ -51,9 +51,11 @@ export class SessionFactory {
     model: string,
     apiKey?: string
   ): AgentRealtimeSession {
-    const config = this.buildConfig('transcript', runtime, hooks, model);
+    const transport = this.resolveTransport('transcript');
+    const resolvedModel = this.resolveModel('transcript', transport, model);
+    const config = this.buildConfig('transcript', runtime, hooks, resolvedModel);
     const openaiClient = apiKey ? new OpenAI({ apiKey }) : this.openai;
-    return this.createSessionFromProfile('transcript', openaiClient, config);
+    return this.createSessionFromProfile('transcript', openaiClient, config, transport);
   }
 
   createCardsSession(
@@ -62,9 +64,11 @@ export class SessionFactory {
     model: string,
     apiKey?: string
   ): AgentRealtimeSession {
-    const config = this.buildConfig('cards', runtime, hooks, model);
+    const transport = this.resolveTransport('cards');
+    const resolvedModel = this.resolveModel('cards', transport, model);
+    const config = this.buildConfig('cards', runtime, hooks, resolvedModel);
     const openaiClient = apiKey ? new OpenAI({ apiKey }) : this.openai;
-    return this.createSessionFromProfile('cards', openaiClient, config);
+    return this.createSessionFromProfile('cards', openaiClient, config, transport);
   }
 
   createFactsSession(
@@ -73,9 +77,11 @@ export class SessionFactory {
     model: string,
     apiKey?: string
   ): AgentRealtimeSession {
-    const config = this.buildConfig('facts', runtime, hooks, model);
+    const transport = this.resolveTransport('facts');
+    const resolvedModel = this.resolveModel('facts', transport, model);
+    const config = this.buildConfig('facts', runtime, hooks, resolvedModel);
     const openaiClient = apiKey ? new OpenAI({ apiKey }) : this.openai;
-    return this.createSessionFromProfile('facts', openaiClient, config);
+    return this.createSessionFromProfile('facts', openaiClient, config, transport);
   }
 
   private buildConfig(
@@ -114,7 +120,8 @@ export class SessionFactory {
   private createSessionFromProfile(
     agentType: AgentType,
     openaiClient: OpenAI,
-    config: RealtimeSessionConfig
+    config: RealtimeSessionConfig,
+    transportOverride?: AgentProfileTransport
   ): AgentRealtimeSession {
     const profile = this.agentProfiles[agentType];
     if (!profile) {
@@ -122,6 +129,43 @@ export class SessionFactory {
     }
     return profile.createSession(openaiClient, config, {
       openaiService: this.openaiService,
-    });
+    }, transportOverride);
+  }
+
+  private resolveTransport(agentType: AgentType): AgentProfileTransport {
+    const profile = this.agentProfiles[agentType];
+    if (!profile) {
+      throw new Error(`No agent profile registered for agent type '${agentType}'`);
+    }
+    return profile.defaultTransport;
+  }
+
+  private resolveModel(
+    agentType: AgentType,
+    transport: AgentProfileTransport,
+    modelHint?: string
+  ): string {
+    const transportProfiles = agentTransportProfiles[agentType];
+    if (!transportProfiles) {
+      throw new Error(`No transport profiles registered for agent type '${agentType}'`);
+    }
+
+    const profile =
+      transport === 'realtime'
+        ? transportProfiles.transports.realtime
+        : transportProfiles.transports.stateless;
+
+    if (!profile) {
+      throw new Error(`Transport '${transport}' not supported for agent '${agentType}'`);
+    }
+
+    const resolver = (profile as { resolveModel?: (hint?: string) => string }).resolveModel;
+    const defaultModel = (profile as { defaultModel?: string }).defaultModel;
+
+    const resolved = resolver ? resolver(modelHint) : modelHint ?? defaultModel;
+    if (!resolved) {
+      throw new Error(`Model required for ${agentType} (${transport})`);
+    }
+    return resolved;
   }
 }

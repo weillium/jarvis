@@ -4,62 +4,91 @@ import type {
   AgentType,
   RealtimeSessionConfig,
 } from './session-adapters';
-import { FactsStatelessSession } from './session-adapters';
-import { cardsAgentDefinition } from './agent-profiles/cards';
-import { transcriptAgentDefinition } from './agent-profiles/transcript';
 import type { OpenAIService } from '../services/openai-service';
+import { agentTransportProfiles } from './agent-profiles/registry';
+import type { AgentTransportProfiles } from './agent-profiles/registry';
+import { RealtimeAgentSession } from './session-adapters/realtime/driver';
+import { createStatelessAgentSession } from './session-adapters/stateless/driver';
 
 export type AgentProfileTransport = 'stateless' | 'realtime';
-
-export interface AgentProfile {
-  transport: AgentProfileTransport;
-  createSession: (
-    openai: OpenAI,
-    config: RealtimeSessionConfig,
-    deps: AgentProfileDeps
-  ) => AgentRealtimeSession;
-  availableTransports?: AgentProfileTransport[];
-  description?: string;
-}
-
-export type AgentProfileRegistry = Record<AgentType, AgentProfile>;
 
 export interface AgentProfileDeps {
   openaiService: OpenAIService;
 }
 
+export interface AgentProfile {
+  defaultTransport: AgentProfileTransport;
+  availableTransports: AgentProfileTransport[];
+  description?: string;
+  createSession: (
+    openai: OpenAI,
+    config: RealtimeSessionConfig,
+    deps: AgentProfileDeps,
+    transportOverride?: AgentProfileTransport
+  ) => AgentRealtimeSession;
+}
+
+export type AgentProfileRegistry = Record<AgentType, AgentProfile>;
+
+const resolveStatelessProfileDeps = (
+  agentType: AgentType,
+  deps: AgentProfileDeps
+): unknown => {
+  if (agentType === 'cards') {
+    return { openaiService: deps.openaiService };
+  }
+  return undefined;
+};
+
+const instantiateSession = (
+  agentType: AgentType,
+  profiles: AgentTransportProfiles,
+  openai: OpenAI,
+  config: RealtimeSessionConfig,
+  deps: AgentProfileDeps,
+  transportOverride?: AgentProfileTransport
+): AgentRealtimeSession => {
+  const transport =
+    transportOverride ??
+    (profiles.defaultTransport as AgentProfileTransport);
+
+  if (transport === 'realtime') {
+    const realtimeProfile = profiles.transports.realtime;
+    if (!realtimeProfile) {
+      throw new Error(`${agentType} does not support realtime transport`);
+    }
+    return new RealtimeAgentSession(openai, config, realtimeProfile);
+  }
+
+  const statelessProfile = profiles.transports.stateless;
+  if (!statelessProfile) {
+    throw new Error(`${agentType} does not support stateless transport`);
+  }
+
+  return createStatelessAgentSession({
+    openai,
+    config,
+    profile: statelessProfile,
+    profileDeps: resolveStatelessProfileDeps(agentType, deps),
+    logLabel: agentType,
+  });
+};
+
+const buildAgentProfile = (
+  agentType: AgentType,
+  transportProfiles: AgentTransportProfiles,
+  availableTransports: AgentProfileTransport[]
+): AgentProfile => ({
+  defaultTransport: transportProfiles.defaultTransport as AgentProfileTransport,
+  availableTransports,
+  description: transportProfiles.description,
+  createSession: (openai, config, deps, transportOverride) =>
+    instantiateSession(agentType, transportProfiles, openai, config, deps, transportOverride),
+});
+
 export const defaultAgentProfiles: AgentProfileRegistry = {
-  transcript: {
-    transport: 'realtime',
-    availableTransports: ['realtime'],
-    description: 'Realtime transcription agent using OpenAI Realtime API.',
-    createSession: (openai, config, deps) => {
-      void deps;
-      return transcriptAgentDefinition.createRealtimeSession(openai, config, undefined);
-    },
-  },
-  cards: {
-    transport: cardsAgentDefinition.defaultTransport,
-    availableTransports: [...cardsAgentDefinition.availableTransports],
-    description: cardsAgentDefinition.description,
-    createSession: (openai, config, deps) => {
-      if (
-        cardsAgentDefinition.defaultTransport === 'stateless' &&
-        cardsAgentDefinition.sessionFactory.createStatelessSession
-      ) {
-        return cardsAgentDefinition.sessionFactory.createStatelessSession(openai, config, deps);
-      }
-      return cardsAgentDefinition.sessionFactory.createRealtimeSession(openai, config, deps);
-    },
-  },
-  facts: {
-    transport: 'stateless',
-    availableTransports: ['stateless'],
-    description: 'Facts extractor powered by a stateless session wrapper.',
-    createSession: (openai, config, _deps) => {
-      void _deps;
-      return new FactsStatelessSession(openai, config);
-    },
-  },
+  cards: buildAgentProfile('cards', agentTransportProfiles.cards, ['realtime', 'stateless']),
+  transcript: buildAgentProfile('transcript', agentTransportProfiles.transcript, ['realtime']),
+  facts: buildAgentProfile('facts', agentTransportProfiles.facts, ['stateless']),
 };
 

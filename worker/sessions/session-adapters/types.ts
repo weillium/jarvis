@@ -14,7 +14,7 @@ import type {
   ResponseFunctionCallArgumentsDoneEvent,
   ResponseTextDoneEvent,
 } from 'openai/resources/realtime/realtime';
-import type { TokenBudget } from './tokens';
+import type { TokenBudget } from './shared/tokens';
 
 export type AgentType = 'transcript' | 'cards' | 'facts';
 
