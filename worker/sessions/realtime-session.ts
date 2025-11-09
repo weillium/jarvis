@@ -340,17 +340,20 @@ export class RealtimeSession {
     this.onLog?.('log', 'Connection attempt started');
 
     const isTranscriptAgent = this.config.agentType === 'transcript';
-    const model =
-      this.config.model ||
-      (isTranscriptAgent ? 'gpt-4o-transcribe' : 'gpt-4o-realtime-preview-2024-10-01');
+    const connectionModel = isTranscriptAgent
+      ? 'gpt-realtime'
+      : this.config.model || 'gpt-4o-realtime-preview-2024-10-01';
     const policy = isTranscriptAgent ? undefined : getPolicy(this.config.agentType);
 
     // Notify that we're connecting (but status is still 'closed' until connected)
     // Status will be updated to 'active' when connection is established
 
     try {
-      this.onLog?.('log', `Creating WebSocket connection with model: ${model}`);
-      const { session, durationMs } = await this.connectionManager.createSession(model);
+      this.onLog?.('log', `Creating WebSocket connection with model: ${connectionModel}`);
+      const { session, durationMs } = await this.connectionManager.createSession(
+        connectionModel,
+        isTranscriptAgent ? 'transcription' : undefined
+      );
       this.session = session;
       this.onLog?.('log', `WebSocket created in ${durationMs}ms`);
 
@@ -467,7 +470,7 @@ export class RealtimeSession {
                   type: 'near_field' as const,
                 },
                 transcription: {
-                  model,
+                  model: this.config.model ?? 'gpt-4o-transcribe',
                   language: 'en',
                 },
                 turn_detection: {

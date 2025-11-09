@@ -161,7 +161,7 @@ export class EventRouter {
       .handleTranscriptionDelta as (
       payload: InputAudioTranscriptionDeltaEvent
     ) => Promise<void> | void;
-    void handler(event);
+    void handler.call(this.deps.agentHandler, event);
   }
 
   handleTranscriptionCompleted(event: InputAudioTranscriptionCompletedEvent): void {
@@ -172,7 +172,7 @@ export class EventRouter {
       .handleTranscriptionCompleted as (
       payload: InputAudioTranscriptionCompletedEvent
     ) => Promise<void> | void;
-    void handler(event);
+    void handler.call(this.deps.agentHandler, event);
   }
 }
 

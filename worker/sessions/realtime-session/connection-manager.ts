@@ -17,15 +17,28 @@ export class ConnectionManager {
     this.onLog = options.onLog;
   }
 
-  async createSession(model: string): Promise<{
+  async createSession(model: string, intent?: 'transcription'): Promise<{
     session: OpenAIRealtimeWebSocket;
     durationMs: number;
   }> {
     const start = Date.now();
-    const session = await OpenAIRealtimeWebSocket.create(this.openai, {
+    const websocketOptions: {
+      model: string;
+      dangerouslyAllowBrowser: boolean;
+      onURL?: (url: URL) => void;
+    } = {
       model,
       dangerouslyAllowBrowser: false,
-    });
+    };
+
+    if (intent) {
+      websocketOptions.onURL = (url: URL) => {
+        url.searchParams.set('intent', intent);
+        url.searchParams.delete('model');
+      };
+    }
+
+    const session = await OpenAIRealtimeWebSocket.create(this.openai, websocketOptions);
     const durationMs = Date.now() - start;
     return { session, durationMs };
   }
