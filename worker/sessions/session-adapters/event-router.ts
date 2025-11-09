@@ -14,6 +14,10 @@ import type {
 } from './types';
 import type { RealtimeTranscriptionUsageDTO } from '../../types';
 
+export interface EventRouterHooks {
+  onSessionUpdated?: () => void;
+}
+
 interface RouterDependencies {
   agentHandler: AgentHandler;
   messageQueue: MessageQueueManager;
@@ -21,7 +25,7 @@ interface RouterDependencies {
   classifyRealtimeError: (error: unknown) => 'transient' | 'fatal';
   onLog?: (level: 'log' | 'warn' | 'error', message: string) => void;
   onError?: (error: unknown, classification: 'transient' | 'fatal') => void;
-  onSessionUpdated?: () => void;
+  hooks?: EventRouterHooks;
 }
 
 const extractDeltaText = (event: unknown): string | null => {
@@ -308,7 +312,7 @@ export class EventRouter {
     }
     if (event.type === 'session.updated') {
       this.log('log', 'Session updated');
-      this.deps.onSessionUpdated?.();
+      this.deps.hooks?.onSessionUpdated?.();
     }
   }
 

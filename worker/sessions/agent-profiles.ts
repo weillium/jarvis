@@ -5,8 +5,8 @@ import type {
   RealtimeSessionConfig,
 } from './session-adapters';
 import { FactsStatelessSession } from './session-adapters';
-import { TranscriptRealtimeSession } from './session-adapters/transcript-realtime-session';
 import { cardsAgentDefinition } from './agent-profiles/cards';
+import { transcriptAgentDefinition } from './agent-profiles/transcript';
 import type { OpenAIService } from '../services/openai-service';
 
 export type AgentProfileTransport = 'stateless' | 'realtime';
@@ -33,9 +33,9 @@ export const defaultAgentProfiles: AgentProfileRegistry = {
     transport: 'realtime',
     availableTransports: ['realtime'],
     description: 'Realtime transcription agent using OpenAI Realtime API.',
-    createSession: (openai, config, _deps) => {
-      void _deps;
-      return new TranscriptRealtimeSession(openai, config);
+    createSession: (openai, config, deps) => {
+      void deps;
+      return transcriptAgentDefinition.createRealtimeSession(openai, config, undefined);
     },
   },
   cards: {
