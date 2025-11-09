@@ -3,11 +3,11 @@ import OpenAI from 'openai';
 import type {
   AgentRealtimeSession,
   AgentSessionLifecycleStatus,
+  AgentType,
   RealtimeSessionConfig,
-} from './realtime-session';
-import { FactsStatelessSession } from './realtime-session';
-import { CardsRealtimeSession } from './realtime-session/cards-realtime-session';
-import { TranscriptRealtimeSession } from './realtime-session/transcript-realtime-session';
+} from './session-adapters';
+import { defaultAgentProfiles } from './agent-profiles';
+import type { AgentProfileRegistry } from './agent-profiles';
 import type { EventRuntime } from '../types';
 import type { VectorSearchService } from '../context/vector-search';
 import type { OpenAIService } from '../services/openai-service';
@@ -33,12 +33,17 @@ interface SessionHooks {
 }
 
 export class SessionFactory {
+  private readonly agentProfiles: AgentProfileRegistry;
+
   constructor(
     private readonly openai: OpenAI,
     private readonly openaiService: OpenAIService,
     private readonly vectorSearch: VectorSearchService,
-    private readonly defaultCardsModel: string
-  ) {}
+    private readonly defaultCardsModel: string,
+    agentProfiles: AgentProfileRegistry = defaultAgentProfiles
+  ) {
+    this.agentProfiles = agentProfiles;
+  }
 
   createTranscriptSession(
     runtime: EventRuntime,
@@ -48,7 +53,7 @@ export class SessionFactory {
   ): AgentRealtimeSession {
     const config = this.buildConfig('transcript', runtime, hooks, model);
     const openaiClient = apiKey ? new OpenAI({ apiKey }) : this.openai;
-    return new TranscriptRealtimeSession(openaiClient, config);
+    return this.createSessionFromProfile('transcript', openaiClient, config);
   }
 
   createCardsSession(
@@ -59,7 +64,7 @@ export class SessionFactory {
   ): AgentRealtimeSession {
     const config = this.buildConfig('cards', runtime, hooks, model);
     const openaiClient = apiKey ? new OpenAI({ apiKey }) : this.openai;
-    return new CardsRealtimeSession(openaiClient, config);
+    return this.createSessionFromProfile('cards', openaiClient, config);
   }
 
   createFactsSession(
@@ -70,11 +75,11 @@ export class SessionFactory {
   ): AgentRealtimeSession {
     const config = this.buildConfig('facts', runtime, hooks, model);
     const openaiClient = apiKey ? new OpenAI({ apiKey }) : this.openai;
-    return new FactsStatelessSession(openaiClient, config);
+    return this.createSessionFromProfile('facts', openaiClient, config);
   }
 
   private buildConfig(
-    agentType: 'transcript' | 'cards' | 'facts',
+    agentType: AgentType,
     runtime: EventRuntime,
     hooks: SessionHooks,
     model: string
@@ -104,5 +109,19 @@ export class SessionFactory {
           return await this.openaiService.createEmbedding(text);
         }),
     };
+  }
+
+  private createSessionFromProfile(
+    agentType: AgentType,
+    openaiClient: OpenAI,
+    config: RealtimeSessionConfig
+  ): AgentRealtimeSession {
+    const profile = this.agentProfiles[agentType];
+    if (!profile) {
+      throw new Error(`No agent profile registered for agent type '${agentType}'`);
+    }
+    return profile.createSession(openaiClient, config, {
+      openaiService: this.openaiService,
+    });
   }
 }

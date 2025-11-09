@@ -4,7 +4,7 @@ import type {
   AgentRealtimeSession,
   AgentSessionLifecycleStatus,
   RealtimeAudioChunk,
-} from './realtime-session';
+} from './session-adapters';
 import type { SessionFactory } from './session-factory';
 import type { Logger } from '../monitoring/logger';
 

@@ -4,7 +4,7 @@ import type { OpenAIService } from '../services/openai-service';
 import type { Logger } from '../monitoring/logger';
 import type { MetricsCollector } from '../monitoring/metrics-collector';
 import type { CheckpointManager } from '../monitoring/checkpoint-manager';
-import type { AgentRealtimeSession } from '../sessions/realtime-session';
+import type { AgentRealtimeSession } from '../sessions/session-adapters';
 import { FACTS_EXTRACTION_SYSTEM_PROMPT, createFactsExtractionUserPrompt } from '../prompts';
 import { checkBudgetStatus, formatTokenBreakdown } from '../utils/token-counter';
 import type { FactsRepository } from '../services/supabase/facts-repository';

@@ -18,9 +18,7 @@ import {
 import type {
   AgentRealtimeSession,
   AgentSessionLifecycleStatus,
-  InputAudioTranscriptionCompletedEvent,
   InputAudioTranscriptionDeltaEvent,
-  ParsedInputAudioTranscriptionCompletedEvent,
   RealtimeAudioChunk,
   RealtimeMessageContext,
   RealtimeSessionConfig,
@@ -30,10 +28,7 @@ import type {
 } from './types';
 import { MessageQueueManager } from './message-queue';
 import { buildStatusSnapshot } from './status-tracker';
-import {
-  getSessionInternals,
-  getUnderlyingSocket,
-} from './transport-utils';
+import { getUnderlyingSocket } from './transport-utils';
 import { HeartbeatManager } from './heartbeat-manager';
 import type { AgentHandler } from './types';
 import { createAgentHandler } from './handlers';
@@ -498,12 +493,9 @@ export class TranscriptRealtimeSession implements AgentRealtimeSession {
       }
     );
 
-    this.session.on(
-      'conversation.item.input_audio_transcription.completed',
-      (event: InputAudioTranscriptionCompletedEvent) => {
-        this.eventRouter.handleTranscriptionCompleted(event);
-      }
-    );
+    this.session.on('conversation.item.input_audio_transcription.completed', (event: unknown) => {
+      this.eventRouter.handleTranscriptionCompleted(event);
+    });
 
     const underlyingSocket = getUnderlyingSocket(this.session);
     if (underlyingSocket && typeof underlyingSocket.on === 'function') {

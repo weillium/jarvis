@@ -4,7 +4,7 @@ import type { OpenAIService } from '../services/openai-service';
 import type { Logger } from '../monitoring/logger';
 import type { MetricsCollector } from '../monitoring/metrics-collector';
 import type { CheckpointManager } from '../monitoring/checkpoint-manager';
-import type { AgentRealtimeSession } from '../sessions/realtime-session';
+import type { AgentRealtimeSession } from '../sessions/session-adapters';
 import { getPolicy } from '../policies';
 import { createCardGenerationUserPrompt } from '../prompts';
 import { checkBudgetStatus, formatTokenBreakdown } from '../utils/token-counter';
@@ -77,7 +77,13 @@ export class CardsProcessor {
         budgetStatus.critical
       );
 
-      await session.sendMessage(chunk.text, context);
+      const messageContext = {
+        ...context,
+        recentText: chunk.text,
+        sourceSeq: chunk.seq,
+      };
+
+      await session.sendMessage(chunk.text, messageContext);
 
       await this.generateCardFallback(runtime, chunk, context);
 

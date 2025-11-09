@@ -1,6 +1,6 @@
 import type { RingBuffer, TranscriptChunk } from '../state/ring-buffer';
 import type { FactsStore, Fact } from '../state/facts-store';
-import type { AgentRealtimeSession } from '../sessions/realtime-session';
+import type { AgentRealtimeSession } from '../sessions/session-adapters';
 
 export type EventRuntimeStatus =
   | 'prepping'

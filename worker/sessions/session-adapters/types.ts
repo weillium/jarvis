@@ -8,6 +8,7 @@ import type {
   VectorMatchRecord,
   Fact,
 } from '../../types';
+export type { RealtimeModelResponseDTO } from '../../types';
 import type {
   ResponseDoneEvent,
   ResponseFunctionCallArgumentsDoneEvent,
@@ -60,6 +61,7 @@ export interface RealtimeMessageContext {
   glossaryContext?: string;
   recentText?: string;
   facts?: Fact[] | Record<string, unknown>;
+  sourceSeq?: number;
 }
 
 export type RealtimeSessionEvent = 'card' | 'response' | 'facts' | 'transcript' | 'error';

@@ -1,5 +1,5 @@
 import type { AgentSelection, AgentType, EventRuntime } from '../types';
-import type { AgentSessionLifecycleStatus } from '../sessions/realtime-session';
+import type { AgentSessionLifecycleStatus } from '../sessions/session-adapters';
 import type {
   SessionCreationOptions,
   TranscriptAudioOptions,

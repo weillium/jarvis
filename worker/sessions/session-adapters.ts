@@ -1,35 +1,43 @@
 import type OpenAI from 'openai';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
-import { extractErrorMessage } from './realtime-session/payload-utils';
+import { extractErrorMessage } from './session-adapters/payload-utils';
 import type {
   AgentRealtimeSession,
   AgentSessionLifecycleStatus,
+  AgentType,
   RealtimeAudioChunk,
   RealtimeMessageContext,
   RealtimeSessionConfig,
   RealtimeSessionEvent,
   RealtimeSessionEventPayloads,
   RealtimeSessionStatus,
-} from './realtime-session/types';
+} from './session-adapters/types';
 
 export type {
   AgentSessionLifecycleStatus,
   AgentRealtimeSession,
   AgentType,
   RealtimeAudioChunk,
+  RealtimeMessageContext,
+  RealtimeModelResponseDTO,
   RealtimeSessionConfig,
-} from './realtime-session/types';
+} from './session-adapters/types';
 
 const nowIso = (): string => new Date().toISOString();
 
 /**
- * FactsStatelessSession
- * Lightweight AgentRealtimeSession implementation for the facts agent.
+ * StatelessAgentSession
+ * Lightweight AgentRealtimeSession implementation used by stateless agents.
  * Manages status transitions without establishing realtime WebSocket connections.
  */
-export class FactsStatelessSession implements AgentRealtimeSession {
-  private readonly config: RealtimeSessionConfig;
+interface StatelessSessionOptions {
+  agentType: AgentType;
+  logLabel?: string;
+}
+
+export class StatelessAgentSession implements AgentRealtimeSession {
+  protected readonly config: RealtimeSessionConfig;
   private readonly supabase?: SupabaseClient;
   private readonly onStatusChange?: (
     status: AgentSessionLifecycleStatus,
@@ -44,17 +52,22 @@ export class FactsStatelessSession implements AgentRealtimeSession {
     [K in RealtimeSessionEvent]?: Array<(payload: RealtimeSessionEventPayloads[K]) => void>;
   } = {};
 
+  private readonly agentType: AgentType;
+  private readonly logLabel: string;
+
   private isActive = false;
   private sessionId?: string;
   private connectedAt?: string;
 
-  constructor(_openai: OpenAI, config: RealtimeSessionConfig) {
-    if (config.agentType !== 'facts') {
+  constructor(_openai: OpenAI, config: RealtimeSessionConfig, options: StatelessSessionOptions) {
+    if (config.agentType !== options.agentType) {
       throw new Error(
-        `FactsStatelessSession expects agentType 'facts', received '${config.agentType}'`
+        `StatelessAgentSession expects agentType '${options.agentType}', received '${config.agentType}'`
       );
     }
 
+    this.agentType = options.agentType;
+    this.logLabel = options.logLabel ?? options.agentType;
     this.config = config;
     this.supabase = config.supabase;
     this.onStatusChange = config.onStatusChange;
@@ -71,7 +84,7 @@ export class FactsStatelessSession implements AgentRealtimeSession {
 
     this.onStatusChange?.('active', this.sessionId);
     await this.updateDatabaseStatus('active', this.sessionId);
-    this.onLog?.('log', `[facts] Stateless session activated (${this.sessionId})`);
+    this.log('log', `Stateless session activated (${this.sessionId})`);
 
     return this.sessionId;
   }
@@ -84,7 +97,7 @@ export class FactsStatelessSession implements AgentRealtimeSession {
     this.isActive = false;
     this.onStatusChange?.('paused', this.sessionId);
     await this.updateDatabaseStatus('paused', this.sessionId);
-    this.onLog?.('log', '[facts] Stateless session paused');
+    this.log('log', 'Stateless session paused');
   }
 
   async resume(): Promise<string> {
@@ -99,7 +112,7 @@ export class FactsStatelessSession implements AgentRealtimeSession {
     this.isActive = false;
     this.onStatusChange?.('closed', this.sessionId);
     await this.updateDatabaseStatus('closed', this.sessionId);
-    this.onLog?.('log', '[facts] Stateless session closed');
+    this.log('log', 'Stateless session closed');
     this.sessionId = undefined;
     this.connectedAt = undefined;
   }
@@ -119,15 +132,17 @@ export class FactsStatelessSession implements AgentRealtimeSession {
     this.onStatusChange?.(status, sessionId ?? this.sessionId);
   }
 
-  async sendMessage(_message: string, _context?: RealtimeMessageContext): Promise<void> {
-    this.onLog?.(
-      'log',
-      '[facts] Stateless session sendMessage invoked (no realtime transport available)'
-    );
+  async sendMessage(message: string, context?: RealtimeMessageContext): Promise<void> {
+    void message;
+    void context;
+    this.log('log', 'Stateless session sendMessage invoked (no realtime transport available)');
+    await Promise.resolve();
   }
 
-  async appendAudioChunk(_chunk: RealtimeAudioChunk): Promise<void> {
-    this.onLog?.('warn', '[facts] appendAudioChunk called on stateless session (no-op)');
+  async appendAudioChunk(chunk: RealtimeAudioChunk): Promise<void> {
+    void chunk;
+    this.log('warn', 'appendAudioChunk called on stateless session (no-op)');
+    await Promise.resolve();
   }
 
   on<K extends RealtimeSessionEvent>(
@@ -140,7 +155,7 @@ export class FactsStatelessSession implements AgentRealtimeSession {
     this.eventHandlers[event]!.push(handler);
   }
 
-  private emitEvent<K extends RealtimeSessionEvent>(
+  protected emitEvent<K extends RealtimeSessionEvent>(
     event: K,
     payload: RealtimeSessionEventPayloads[K]
   ): void {
@@ -152,7 +167,7 @@ export class FactsStatelessSession implements AgentRealtimeSession {
       try {
         handler(payload);
       } catch (error: unknown) {
-        this.onLog?.('error', `[facts] Error in event handler: ${extractErrorMessage(error)}`);
+        this.log('error', `Error in event handler: ${extractErrorMessage(error)}`);
       }
     });
   }
@@ -191,7 +206,7 @@ export class FactsStatelessSession implements AgentRealtimeSession {
           agent_type: this.config.agentType,
         });
     } catch (error: unknown) {
-      this.onLog?.('error', `[facts] Database status update failed: ${extractErrorMessage(error)}`);
+      this.log('error', `Database status update failed: ${extractErrorMessage(error)}`);
     }
   }
 
@@ -202,6 +217,20 @@ export class FactsStatelessSession implements AgentRealtimeSession {
     } catch {
       return `${base}-${Date.now()}`;
     }
+  }
+
+  protected log(
+    level: 'log' | 'warn' | 'error',
+    message: string,
+    context?: { seq?: number }
+  ): void {
+    this.onLog?.(level, `[${this.logLabel}] ${message}`, context);
+  }
+}
+
+export class FactsStatelessSession extends StatelessAgentSession {
+  constructor(openai: OpenAI, config: RealtimeSessionConfig) {
+    super(openai, config, { agentType: 'facts', logLabel: 'facts' });
   }
 }
 
