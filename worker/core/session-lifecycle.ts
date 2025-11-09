@@ -1,4 +1,4 @@
-import type { AgentType, EventRuntime } from '../types';
+import type { AgentSelection, AgentType, EventRuntime } from '../types';
 import type {
   SessionCreationOptions,
   TranscriptAudioOptions,
@@ -11,14 +11,18 @@ import type { StatusUpdater } from '../monitoring/status-updater';
 import type { AgentsRepository } from '../services/supabase/agents-repository';
 import type { AgentSessionsRepository } from '../services/supabase/agent-sessions-repository';
 
-type TranscriptPayload = { text: string; isFinal?: boolean; receivedAt?: string };
+type TranscriptPayload = {
+  text: string;
+  isFinal?: boolean;
+  receivedAt?: string;
+};
 type TranscriptListener = (payload: TranscriptPayload) => Promise<void>;
 
 interface CreateSessionsParams {
   runtime: EventRuntime;
   eventId: string;
   agentId: string;
-  transcriptOnly: boolean;
+  enabledAgents: AgentSelection;
   sessionOptions?: SessionCreationOptions;
   modelSetOverride?: string;
   apiKeyOverride?: string;
@@ -36,15 +40,8 @@ export class SessionLifecycle {
   ) {}
 
   async createRealtimeSessions(params: CreateSessionsParams): Promise<void> {
-    const {
-      runtime,
-      eventId,
-      agentId,
-      transcriptOnly,
-      sessionOptions,
-      modelSetOverride,
-      apiKeyOverride,
-    } = params;
+    const { runtime, eventId, agentId, enabledAgents, sessionOptions, modelSetOverride, apiKeyOverride } =
+      params;
 
     const agent = await this.agentsRepository.getAgentStatus(agentId);
     const modelSet = modelSetOverride ?? agent?.model_set ?? 'open_ai';
@@ -67,7 +64,9 @@ export class SessionLifecycle {
       await this.handleSessionStatusChange(runtime, eventId, agentId, agentType, status, sessionId);
     };
 
-    if (transcriptOnly) {
+    runtime.enabledAgents = enabledAgents;
+
+    if (enabledAgents.transcript) {
       runtime.transcriptSession = this.sessionManager.createTranscriptSession(
         runtime,
         handleStatusChange,
@@ -75,22 +74,35 @@ export class SessionLifecycle {
         options.transcript,
         apiKey
       );
-      runtime.cardsSession = undefined;
-      runtime.factsSession = undefined;
     } else {
-      const sessions = this.sessionManager.createSessions(
+      runtime.transcriptSession = undefined;
+      runtime.transcriptSessionId = undefined;
+    }
+
+    if (enabledAgents.cards) {
+      runtime.cardsSession = this.sessionManager.createCardsSession(
         runtime,
         handleStatusChange,
-        transcriptModel,
         cardsModel,
-        factsModel,
-        options,
+        options.cards,
         apiKey
       );
+    } else {
+      runtime.cardsSession = undefined;
+      runtime.cardsSessionId = undefined;
+    }
 
-      runtime.transcriptSession = sessions.transcriptSession;
-      runtime.cardsSession = sessions.cardsSession;
-      runtime.factsSession = sessions.factsSession;
+    if (enabledAgents.facts) {
+      runtime.factsSession = this.sessionManager.createFactsSession(
+        runtime,
+        handleStatusChange,
+        factsModel,
+        options.facts,
+        apiKey
+      );
+    } else {
+      runtime.factsSession = undefined;
+      runtime.factsSessionId = undefined;
     }
 
     runtime.transcriptHandlerSession = undefined;
@@ -127,45 +139,42 @@ export class SessionLifecycle {
   async connectSessions(
     runtime: EventRuntime,
     eventId: string,
-    transcriptOnly: boolean
+    enabledAgents: AgentSelection
   ): Promise<{ transcriptSessionId?: string; cardsSessionId?: string; factsSessionId?: string }> {
-    if (!runtime.transcriptSession) {
+    if (enabledAgents.transcript && !runtime.transcriptSession) {
       throw new Error('Transcript session missing');
     }
 
-    if (transcriptOnly) {
-      const transcriptSessionId = await runtime.transcriptSession.connect();
-      await this.resetNonTranscriptSessions(eventId);
-      return { transcriptSessionId };
-    }
+    const result = await this.sessionManager.connectSessions({
+      transcript: enabledAgents.transcript ? runtime.transcriptSession : undefined,
+      cards: enabledAgents.cards ? runtime.cardsSession : undefined,
+      facts: enabledAgents.facts ? runtime.factsSession : undefined,
+    });
 
-    if (!runtime.cardsSession || !runtime.factsSession) {
-      throw new Error('Cards or facts session missing');
-    }
-
-    return this.sessionManager.connectSessions(
-      runtime.transcriptSession,
-      runtime.cardsSession,
-      runtime.factsSession
-    );
+    await this.resetDisabledSessions(eventId, enabledAgents);
+    return result;
   }
 
   async resumeSessions(
     runtime: EventRuntime,
-    transcriptOnly: boolean
+    enabledAgents: AgentSelection
   ): Promise<{ transcriptSessionId?: string; cardsSessionId?: string; factsSessionId?: string }> {
-    if (transcriptOnly) {
-      const transcriptSessionId = runtime.transcriptSession
+    const transcriptSessionId =
+      enabledAgents.transcript && runtime.transcriptSession
         ? await runtime.transcriptSession.resume()
         : undefined;
-      return { transcriptSessionId };
-    }
+    const cardsSessionId =
+      enabledAgents.cards && runtime.cardsSession
+        ? await runtime.cardsSession.resume()
+        : undefined;
+    const factsSessionId =
+      enabledAgents.facts && runtime.factsSession
+        ? await runtime.factsSession.resume()
+        : undefined;
 
-    return this.sessionManager.resumeSessions(
-      runtime.transcriptSession,
-      runtime.cardsSession,
-      runtime.factsSession
-    );
+    await this.resetDisabledSessions(runtime.eventId, enabledAgents);
+
+    return { transcriptSessionId, cardsSessionId, factsSessionId };
   }
 
   async pauseSessions(runtime: EventRuntime): Promise<void> {
@@ -358,11 +367,26 @@ export class SessionLifecycle {
     return [];
   }
 
-  private async resetNonTranscriptSessions(eventId: string): Promise<void> {
+  private async resetDisabledSessions(eventId: string, enabledAgents: AgentSelection): Promise<void> {
+    const disabledAgentTypes: AgentType[] = [];
+    if (!enabledAgents.transcript) {
+      disabledAgentTypes.push('transcript');
+    }
+    if (!enabledAgents.cards) {
+      disabledAgentTypes.push('cards');
+    }
+    if (!enabledAgents.facts) {
+      disabledAgentTypes.push('facts');
+    }
+
+    if (!disabledAgentTypes.length) {
+      return;
+    }
+
     await Promise.all(
-      ['cards', 'facts'].map(async (agentType) => {
+      disabledAgentTypes.map(async (agentType) => {
         try {
-          await this.agentSessionsRepository.updateSession(eventId, agentType as AgentType, {
+          await this.agentSessionsRepository.updateSession(eventId, agentType, {
             status: 'closed',
             updated_at: new Date().toISOString(),
           });

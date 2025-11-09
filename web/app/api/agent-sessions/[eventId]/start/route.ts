@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const agentTypes = ['transcript', 'cards', 'facts'] as const;
+type AgentTypeSelection = (typeof agentTypes)[number];
 
 /**
  * Start or resume agent sessions for an event
@@ -20,6 +22,45 @@ export async function POST(
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { persistSession: false },
     });
+
+    const defaultSelection: Record<AgentTypeSelection, boolean> = {
+      transcript: true,
+      cards: true,
+      facts: true,
+    };
+    const parseSelection = (value: unknown): Record<AgentTypeSelection, boolean> | null => {
+      if (!value || typeof value !== 'object') {
+        return null;
+      }
+      const record = value as Record<string, unknown>;
+      const transcript = typeof record.transcript === 'boolean' ? record.transcript : null;
+      const cards = typeof record.cards === 'boolean' ? record.cards : null;
+      const facts = typeof record.facts === 'boolean' ? record.facts : null;
+      if (transcript === null && cards === null && facts === null) {
+        return null;
+      }
+      return {
+        transcript: transcript ?? true,
+        cards: cards ?? true,
+        facts: facts ?? true,
+      };
+    };
+
+    let selectionPayload: Record<AgentTypeSelection, boolean> | null = null;
+    try {
+      const body = await req.json();
+      selectionPayload = parseSelection((body as Record<string, unknown>)?.agents);
+    } catch {
+      selectionPayload = null;
+    }
+
+    const agentsSelection = selectionPayload ?? defaultSelection;
+    if (!agentsSelection.transcript && !agentsSelection.cards && !agentsSelection.facts) {
+      return NextResponse.json(
+        { ok: false, error: 'Select at least one agent to start.' },
+        { status: 400 }
+      );
+    }
 
     // Get the agent for this event - accept multiple states
     // Try active + (testing | running) first, then idle + context_complete
@@ -67,13 +108,11 @@ export async function POST(
     const agent = agents[0];
     const agentId = agent.id;
 
-    // Check for sessions that can be started: 'closed' or 'paused' (any age)
-    const { data: sessionsToStart, error: sessionsError } = await supabase
+    const { data: allSessions, error: sessionsError } = await supabase
       .from('agent_sessions')
       .select('id, agent_type, status')
       .eq('event_id', eventId)
-      .eq('agent_id', agentId)
-      .in('status', ['closed', 'paused']);
+      .eq('agent_id', agentId);
 
     if (sessionsError) {
       return NextResponse.json(
@@ -82,18 +121,39 @@ export async function POST(
       );
     }
 
-    if (!sessionsToStart || sessionsToStart.length === 0) {
+    if (!allSessions || allSessions.length === 0) {
       return NextResponse.json(
         {
           ok: false,
-          error: 'No closed or paused sessions found. Create sessions first.',
+          error: 'No sessions found for this agent. Create sessions first.',
         },
         { status: 404 }
       );
     }
 
-    const pausedCount = sessionsToStart.filter(s => s.status === 'paused').length;
-    const closedCount = sessionsToStart.filter(s => s.status === 'closed').length;
+    const targetTypes = new Set<AgentTypeSelection>();
+    agentTypes.forEach((type) => {
+      if (agentsSelection[type]) {
+        targetTypes.add(type);
+      }
+    });
+
+    const selectedSessions = allSessions.filter((s) =>
+      targetTypes.has(s.agent_type as AgentTypeSelection)
+    );
+    if (selectedSessions.length === 0) {
+      return NextResponse.json(
+        { ok: false, error: 'No sessions available for the selected agents. Create sessions first.' },
+        { status: 404 }
+      );
+    }
+
+    const sessionsToStart = selectedSessions.filter((s) =>
+      s.status === 'closed' || s.status === 'paused'
+    );
+    const pausedCount = sessionsToStart.filter((s) => s.status === 'paused').length;
+    const closedCount = sessionsToStart.filter((s) => s.status === 'closed').length;
+    const alreadyActiveCount = selectedSessions.filter((s) => s.status === 'active').length;
 
     // Update agent status to active with running stage if needed (for paused sessions or context_complete)
     if (pausedCount > 0 || agent.stage === 'context_complete') {
@@ -107,18 +167,57 @@ export async function POST(
       }
     }
 
-    // Update sessions to 'active' - worker will pick them up and connect
-    const { error: updateError } = await supabase
-      .from('agent_sessions')
-      .update({ status: 'active' })
-      .eq('event_id', eventId)
-      .eq('agent_id', agentId)
-      .in('id', sessionsToStart.map(s => s.id));
+    if (sessionsToStart.length > 0) {
+      const { error: updateError } = await supabase
+        .from('agent_sessions')
+        .update({ status: 'active' })
+        .eq('event_id', eventId)
+        .eq('agent_id', agentId)
+        .in('id', sessionsToStart.map((s) => s.id));
 
-    if (updateError) {
+      if (updateError) {
+        return NextResponse.json(
+          { ok: false, error: `Failed to update sessions: ${updateError.message}` },
+          { status: 500 }
+        );
+      }
+    }
+
+    const disabledTypes = agentTypes.filter((type) => !targetTypes.has(type));
+    if (disabledTypes.length > 0) {
+      const { error: disableError } = await supabase
+        .from('agent_sessions')
+        .update({ status: 'closed' })
+        .eq('event_id', eventId)
+        .eq('agent_id', agentId)
+        .in('agent_type', disabledTypes)
+        .neq('status', 'closed');
+
+      if (disableError) {
+        console.warn(`Failed to close disabled sessions: ${disableError.message}`);
+      }
+    }
+
+    if (sessionsToStart.length === 0 && alreadyActiveCount === selectedSessions.length) {
+      return NextResponse.json({
+        ok: true,
+        message: 'Selected agent sessions are already active.',
+        eventId,
+        agentId,
+        agents: agentsSelection,
+        sessionsUpdated: 0,
+        pausedCount: 0,
+        closedCount: 0,
+      });
+    }
+
+    if (sessionsToStart.length === 0) {
       return NextResponse.json(
-        { ok: false, error: `Failed to update sessions: ${updateError.message}` },
-        { status: 500 }
+        {
+          ok: false,
+          error: 'No closed or paused sessions found for the selected agents. Create sessions first.',
+        },
+        { status: 404 }
       );
     }
 
@@ -135,6 +234,7 @@ export async function POST(
       sessionsUpdated: sessionsToStart.length,
       pausedCount,
       closedCount,
+      agents: agentsSelection,
     });
   } catch (error: any) {
     console.error('Error starting agent sessions:', error);

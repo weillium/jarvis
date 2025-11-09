@@ -63,16 +63,17 @@ export const startWorker = async (env: WorkerEnvConfig): Promise<WorkerRuntime> 
     pipeline.sessionLifecycle,
     infrastructure.repositories.transcripts,
     eventProcessor,
-    env.transcriptOnly
+    infrastructure.metricsCollector,
+    infrastructure.logger,
+    infrastructure.statusUpdater
   );
 
   const orchestratorConfig: OrchestratorConfig = {
     openai: infrastructure.openai,
     embedModel: env.embedModel,
     genModel: env.contextGenModel,
-    realtimeModel: env.realtimeModel,
+    cardsModel: env.cardsModel,
     sseEndpoint: env.sseEndpoint,
-    transcriptOnly: env.transcriptOnly,
   };
 
   const orchestrator = new Orchestrator(
@@ -139,7 +140,6 @@ export const startWorker = async (env: WorkerEnvConfig): Promise<WorkerRuntime> 
 
   const httpServer = createWorkerServer({
     orchestrator,
-    transcriptOnly: env.transcriptOnly,
     workerPort: env.workerPort,
     log,
   });

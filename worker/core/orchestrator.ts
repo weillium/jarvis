@@ -27,10 +27,9 @@ export interface OrchestratorConfig {
   openai: OpenAI;
   embedModel: string;
   genModel: string;
-  realtimeModel: string;
+  cardsModel: string;
   sseEndpoint?: string;
   sseService?: SSEService;
-  transcriptOnly?: boolean;
 }
 
 export class Orchestrator {
@@ -45,7 +44,6 @@ export class Orchestrator {
   private readonly runtimeService: RuntimeService;
   private readonly eventProcessor: EventProcessor;
   private readonly statusUpdater: StatusUpdater;
-  private readonly transcriptOnly: boolean;
   private readonly transcriptIngestion: TranscriptIngestionService;
   private readonly sessionCoordinator: SessionCoordinator;
   private readonly transcriptCoordinator: TranscriptCoordinator;
@@ -80,7 +78,6 @@ export class Orchestrator {
     this.runtimeService = runtimeService;
     this.eventProcessor = eventProcessor;
     this.statusUpdater = statusUpdater;
-    this.transcriptOnly = config.transcriptOnly ?? false;
     this.transcriptIngestion = transcriptIngestion;
     this.transcriptCoordinator = new TranscriptCoordinator(transcriptIngestion, sessionLifecycle);
     this.statusService = new OrchestratorStatusService(runtimeManager, statusUpdater);
@@ -92,7 +89,6 @@ export class Orchestrator {
       modelSelectionService,
       eventProcessor,
       statusUpdater,
-      transcriptOnly: this.transcriptOnly,
       log: (...args: unknown[]) => {
         console.log(...args);
       },

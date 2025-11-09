@@ -118,12 +118,20 @@ export class EventProcessor {
     runtime.cardsLastSeq = Math.max(runtime.cardsLastSeq, chunk.seq);
     runtime.factsLastSeq = Math.max(runtime.factsLastSeq, chunk.seq);
 
-    await this.cardsProcessor.process(runtime, chunk, runtime.cardsSession, runtime.cardsSessionId);
+    if (runtime.enabledAgents.cards && runtime.cardsSession) {
+      await this.cardsProcessor.process(runtime, chunk, runtime.cardsSession, runtime.cardsSessionId);
+    }
 
-    this.scheduleFactsUpdate(runtime);
+    if (runtime.enabledAgents.facts) {
+      this.scheduleFactsUpdate(runtime);
+    }
   }
 
   private scheduleFactsUpdate(runtime: EventRuntime): void {
+    if (!runtime.enabledAgents.facts) {
+      return;
+    }
+
     if (runtime.factsUpdateTimer) {
       clearTimeout(runtime.factsUpdateTimer);
     }

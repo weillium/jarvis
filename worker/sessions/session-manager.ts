@@ -79,6 +79,56 @@ export class SessionManager {
     );
   }
 
+  createCardsSession(
+    runtime: EventRuntime,
+    onStatusChange: SessionStatusHandler,
+    cardsModel: string,
+    options: AgentSessionOptions = {},
+    apiKey?: string
+  ): RealtimeSession {
+    return this.sessionFactory.createCardsSession(
+      runtime,
+      {
+        supabaseClient: this.supabaseClient,
+        onStatusChange: (status, sessionId) => onStatusChange('cards', status, sessionId),
+        onLog:
+          options.onLog ??
+          ((level, message, context) => {
+            this.logger.log(runtime.eventId, 'cards', level, message, context);
+          }),
+        onRetrieve: options.onRetrieve,
+        embedText: options.embedText,
+      },
+      cardsModel,
+      apiKey
+    );
+  }
+
+  createFactsSession(
+    runtime: EventRuntime,
+    onStatusChange: SessionStatusHandler,
+    factsModel: string,
+    options: AgentSessionOptions = {},
+    apiKey?: string
+  ): RealtimeSession {
+    return this.sessionFactory.createFactsSession(
+      runtime,
+      {
+        supabaseClient: this.supabaseClient,
+        onStatusChange: (status, sessionId) => onStatusChange('facts', status, sessionId),
+        onLog:
+          options.onLog ??
+          ((level, message, context) => {
+            this.logger.log(runtime.eventId, 'facts', level, message, context);
+          }),
+        onRetrieve: options.onRetrieve,
+        embedText: options.embedText,
+      },
+      factsModel,
+      apiKey
+    );
+  }
+
   async appendAudioToTranscriptSession(
     session: RealtimeSession,
     chunk: TranscriptAudioOptions
@@ -134,15 +184,25 @@ export class SessionManager {
     return { transcriptSession, cardsSession, factsSession };
   }
 
-  async connectSessions(
-    transcriptSession: RealtimeSession,
-    cardsSession: RealtimeSession,
-    factsSession: RealtimeSession
-  ): Promise<{ transcriptSessionId: string; cardsSessionId: string; factsSessionId: string }> {
-    const transcriptSessionId = await transcriptSession.connect();
-    const cardsSessionId = await cardsSession.connect();
-    const factsSessionId = await factsSession.connect();
-    return { transcriptSessionId, cardsSessionId, factsSessionId };
+  async connectSessions(sessions: {
+    transcript?: RealtimeSession;
+    cards?: RealtimeSession;
+    facts?: RealtimeSession;
+  }): Promise<{ transcriptSessionId?: string; cardsSessionId?: string; factsSessionId?: string }> {
+    const results: { transcriptSessionId?: string; cardsSessionId?: string; factsSessionId?: string } =
+      {};
+
+    if (sessions.transcript) {
+      results.transcriptSessionId = await sessions.transcript.connect();
+    }
+    if (sessions.cards) {
+      results.cardsSessionId = await sessions.cards.connect();
+    }
+    if (sessions.facts) {
+      results.factsSessionId = await sessions.facts.connect();
+    }
+
+    return results;
   }
 
   async pauseSessions(transcriptSession?: RealtimeSession, cardsSession?: RealtimeSession, factsSession?: RealtimeSession): Promise<void> {

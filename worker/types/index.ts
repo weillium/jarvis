@@ -3,7 +3,8 @@ export type {
   EventRuntimeStatus,
   GlossaryEntry,
   TranscriptChunk,
-  Fact
+  Fact,
+  AgentSelection
 } from './runtime';
 export type { AgentSessionStatus, AgentType, LogEntry, SessionStatus } from './session';
 export type { AgentContext, ProcessingMetrics } from './processing';
@@ -36,5 +37,6 @@ export type {
   RealtimeFactDTO,
   RealtimeModelResponseDTO,
   RealtimeToolCallDTO,
-  RealtimeTranscriptDTO
+  RealtimeTranscriptDTO,
+  RealtimeTranscriptionUsageDTO
 } from './websocket';

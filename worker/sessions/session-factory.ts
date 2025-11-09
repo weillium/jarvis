@@ -32,7 +32,7 @@ export class SessionFactory {
     private readonly openai: OpenAI,
     private readonly openaiService: OpenAIService,
     private readonly vectorSearch: VectorSearchService,
-    private readonly defaultRealtimeModel: string
+    private readonly defaultCardsModel: string
   ) {}
 
   createTranscriptSession(runtime: EventRuntime, hooks: SessionHooks, model: string, apiKey?: string): RealtimeSession {

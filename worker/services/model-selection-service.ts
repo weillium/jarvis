@@ -12,6 +12,14 @@ export interface ModelConfig {
   apiKey: string;
 }
 
+const resolveCardsModel = (): string => {
+  const model = process.env.OPENAI_CARDS_MODEL || process.env.DEFAULT_CARDS_MODEL;
+  if (!model) {
+    throw new Error('OPENAI_CARDS_MODEL or DEFAULT_CARDS_MODEL must be set');
+  }
+  return model;
+};
+
 export class ModelSelectionService {
   /**
    * Get model configuration based on model_set value
@@ -23,7 +31,7 @@ export class ModelSelectionService {
     if (modelSet === 'open_ai') {
       return {
         transcriptModel: process.env.OPENAI_TRANSCRIPT_MODEL || process.env.DEFAULT_TRANSCRIPT_MODEL || 'gpt-4o-realtime-preview-2024-10-01',
-        cardsModel: process.env.OPENAI_CARDS_MODEL || process.env.DEFAULT_CARDS_MODEL || 'gpt-4o-realtime-preview-2024-10-01',
+        cardsModel: resolveCardsModel(),
         factsModel: process.env.OPENAI_FACTS_MODEL || process.env.DEFAULT_FACTS_MODEL || 'gpt-4o-mini',
         apiKey: process.env.OPENAI_API_KEY || process.env.DEFAULT_API_KEY || '',
       };
@@ -32,7 +40,7 @@ export class ModelSelectionService {
     // Default fallback for unknown model_set values
     return {
       transcriptModel: process.env.DEFAULT_TRANSCRIPT_MODEL || 'gpt-4o-realtime-preview-2024-10-01',
-      cardsModel: process.env.DEFAULT_CARDS_MODEL || 'gpt-4o-realtime-preview-2024-10-01',
+      cardsModel: resolveCardsModel(),
       factsModel: process.env.DEFAULT_FACTS_MODEL || 'gpt-4o-mini',
       apiKey: process.env.DEFAULT_API_KEY || '',
     };

@@ -21,7 +21,6 @@ import {
   getLowercaseErrorField,
 } from './realtime-session/payload-utils';
 import type {
-  InputAudioTranscriptionCompletedEvent,
   InputAudioTranscriptionDeltaEvent,
   RealtimeMessageContext,
   RealtimeSessionConfig,
@@ -340,9 +339,11 @@ export class RealtimeSession {
     this.onLog?.('log', 'Connection attempt started');
 
     const isTranscriptAgent = this.config.agentType === 'transcript';
-    const connectionModel = isTranscriptAgent
-      ? 'gpt-realtime'
-      : this.config.model || 'gpt-4o-realtime-preview-2024-10-01';
+    if (!isTranscriptAgent && !this.config.model) {
+      throw new Error(`Missing realtime model for ${this.config.agentType} agent`);
+    }
+
+    const connectionModel = isTranscriptAgent ? 'gpt-realtime' : this.config.model!;
     const policy = isTranscriptAgent ? undefined : getPolicy(this.config.agentType);
 
     // Notify that we're connecting (but status is still 'closed' until connected)
@@ -672,12 +673,9 @@ export class RealtimeSession {
         }
       );
 
-      this.session.on(
-        'conversation.item.input_audio_transcription.completed',
-        (event: InputAudioTranscriptionCompletedEvent) => {
-          this.eventRouter.handleTranscriptionCompleted(event);
-        }
-      );
+      this.session.on('conversation.item.input_audio_transcription.completed', (event: unknown) => {
+        this.eventRouter.handleTranscriptionCompleted(event);
+      });
     }
 
     // Handle pong responses (WebSocket ping-pong)

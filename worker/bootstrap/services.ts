@@ -75,7 +75,7 @@ export const createWorkerInfrastructure = (
     sseService,
     logger,
     metricsCollector,
-    env.realtimeModel
+    env.cardsModel
   );
 
   return {

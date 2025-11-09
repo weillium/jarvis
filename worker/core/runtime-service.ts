@@ -81,6 +81,11 @@ export class RuntimeService {
     runtime.cardsHandlerSession = undefined;
     runtime.factsHandlerSession = undefined;
     runtime.status = 'context_complete';
+    runtime.enabledAgents = {
+      transcript: false,
+      cards: false,
+      facts: false,
+    };
 
     this.runtimeManager.removeRuntime(eventId);
 

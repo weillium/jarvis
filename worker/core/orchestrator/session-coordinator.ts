@@ -5,7 +5,7 @@ import type { SessionLifecycle } from '../session-lifecycle';
 import type { RuntimeManager } from '../runtime-manager';
 import type { EventProcessor } from '../event-processor';
 import type { StatusUpdater } from '../../monitoring/status-updater';
-import type { EventRuntime } from '../../types';
+import type { AgentSelection, EventRuntime } from '../../types';
 import type { AgentSessionRecord } from '../../services/supabase/types';
 
 interface SessionCoordinatorDeps {
@@ -16,7 +16,6 @@ interface SessionCoordinatorDeps {
   modelSelectionService: ModelSelectionService;
   eventProcessor: EventProcessor;
   statusUpdater: StatusUpdater;
-  transcriptOnly: boolean;
   log: (...args: unknown[]) => void;
   attachTranscriptHandler: (runtime: EventRuntime, eventId: string, agentId: string) => void;
   startPeriodicSummary: (runtime: EventRuntime) => void;
@@ -30,7 +29,6 @@ export class SessionCoordinator {
   private readonly modelSelectionService: ModelSelectionService;
   private readonly eventProcessor: EventProcessor;
   private readonly statusUpdater: StatusUpdater;
-  private readonly transcriptOnly: boolean;
   private readonly log: (...args: unknown[]) => void;
   private readonly attachTranscriptHandler: (runtime: EventRuntime, eventId: string, agentId: string) => void;
   private readonly startPeriodicSummary: (runtime: EventRuntime) => void;
@@ -43,7 +41,6 @@ export class SessionCoordinator {
     this.modelSelectionService = deps.modelSelectionService;
     this.eventProcessor = deps.eventProcessor;
     this.statusUpdater = deps.statusUpdater;
-    this.transcriptOnly = deps.transcriptOnly;
     this.log = deps.log;
     this.attachTranscriptHandler = deps.attachTranscriptHandler;
     this.startPeriodicSummary = deps.startPeriodicSummary;
@@ -132,50 +129,59 @@ export class SessionCoordinator {
       runtime = await this.runtimeManager.createRuntime(eventId, agentId);
     }
 
-    if (runtime.status === 'running') {
-      if (runtime.cardsSession && runtime.factsSession) {
-        this.log(`[orchestrator] Event ${eventId} already running with active sessions`);
-        return;
-      }
-
-      this.log(
-        `[orchestrator] Event ${eventId} marked as running but sessions missing, recreating...`
-      );
-      runtime.status = 'context_complete';
-    }
-
     const existingSessions = await this.agentSessionsRepository.getSessionsForAgent(eventId, agentId, [
       'closed',
       'active',
       'paused',
     ]);
 
-    const pausedSessions = existingSessions.filter((s) => s.status === 'paused');
+    const enabledAgents = this.deriveEnabledAgents(existingSessions);
+    if (!this.hasAnyEnabledAgent(enabledAgents)) {
+      this.log(`[orchestrator] No agent sessions enabled for event ${eventId}; skipping start`);
+      return;
+    }
+
+    runtime.enabledAgents = enabledAgents;
+
+    if (runtime.status === 'running') {
+      if (this.hasRequiredSessions(runtime) && this.sessionsReady(runtime)) {
+        this.log(`[orchestrator] Event ${eventId} already running with required sessions`);
+        return;
+      }
+
+      this.log(
+        `[orchestrator] Event ${eventId} marked as running but sessions missing or outdated, recreating...`
+      );
+      runtime.status = 'context_complete';
+    }
+
+    const pausedSessions = existingSessions.filter(
+      (s) => s.status === 'paused' && this.isAgentEnabled(enabledAgents, s.agent_type)
+    );
     if (pausedSessions.length > 0) {
       this.log(
         `[orchestrator] Event ${eventId} has ${pausedSessions.length} paused session(s), resuming...`
       );
 
-      if (
-        !runtime.transcriptSession ||
-        (!this.transcriptOnly && (!runtime.cardsSession || !runtime.factsSession))
-      ) {
+      if (!this.hasRequiredSessions(runtime)) {
         await this.sessionLifecycle.createRealtimeSessions({
           runtime,
           eventId,
           agentId,
-          transcriptOnly: this.transcriptOnly,
+          enabledAgents,
         });
       }
 
       try {
         const { transcriptSessionId, cardsSessionId, factsSessionId } =
-          await this.sessionLifecycle.resumeSessions(runtime, this.transcriptOnly);
+          await this.sessionLifecycle.resumeSessions(runtime, enabledAgents);
         runtime.transcriptSessionId = transcriptSessionId;
-        runtime.cardsSessionId = this.transcriptOnly ? undefined : cardsSessionId;
-        runtime.factsSessionId = this.transcriptOnly ? undefined : factsSessionId;
+        runtime.cardsSessionId = enabledAgents.cards ? cardsSessionId : undefined;
+        runtime.factsSessionId = enabledAgents.facts ? factsSessionId : undefined;
 
-        this.attachTranscriptHandler(runtime, eventId, agentId);
+        if (enabledAgents.transcript) {
+          this.attachTranscriptHandler(runtime, eventId, agentId);
+        }
         this.eventProcessor.attachSessionHandlers(runtime);
 
         runtime.status = 'running';
@@ -190,10 +196,11 @@ export class SessionCoordinator {
       }
     }
 
-    const activeSessions = existingSessions.filter((s) => s.status === 'active');
-    const hasRequiredSessions = this.hasRequiredSessions(runtime);
+    const activeSessions = existingSessions.filter(
+      (s) => s.status === 'active' && this.isAgentEnabled(enabledAgents, s.agent_type)
+    );
 
-    if (activeSessions.length > 0 && hasRequiredSessions) {
+    if (activeSessions.length > 0 && this.hasRequiredSessions(runtime)) {
       this.log(
         `[orchestrator] Event ${eventId} already has ${activeSessions.length} active session(s)`
       );
@@ -211,9 +218,11 @@ export class SessionCoordinator {
       runtime,
       eventId,
       agentId,
-      transcriptOnly: this.transcriptOnly,
+      enabledAgents,
     });
-    this.attachTranscriptHandler(runtime, eventId, agentId);
+    if (enabledAgents.transcript) {
+      this.attachTranscriptHandler(runtime, eventId, agentId);
+    }
 
     const existingSessionRecords = await this.agentSessionsRepository.getSessionsForAgent(
       eventId,
@@ -260,10 +269,10 @@ export class SessionCoordinator {
 
     try {
       const { transcriptSessionId, cardsSessionId, factsSessionId } =
-        await this.sessionLifecycle.connectSessions(runtime, eventId, this.transcriptOnly);
+        await this.sessionLifecycle.connectSessions(runtime, eventId, enabledAgents);
       runtime.transcriptSessionId = transcriptSessionId;
-      runtime.cardsSessionId = cardsSessionId;
-      runtime.factsSessionId = factsSessionId;
+      runtime.cardsSessionId = enabledAgents.cards ? cardsSessionId : undefined;
+      runtime.factsSessionId = enabledAgents.facts ? factsSessionId : undefined;
     } catch (err: unknown) {
       console.error('[worker] error:', String(err));
     }
@@ -358,21 +367,28 @@ export class SessionCoordinator {
       },
     } as const;
 
+    const enabledAgents: AgentSelection = {
+      transcript: true,
+      cards: true,
+      facts: true,
+    };
+    runtime.enabledAgents = enabledAgents;
+
     await this.sessionLifecycle.createRealtimeSessions({
       runtime,
       eventId,
       agentId,
-      transcriptOnly: this.transcriptOnly,
+      enabledAgents,
       sessionOptions,
     });
     this.attachTranscriptHandler(runtime, eventId, agentId);
 
     try {
       const { transcriptSessionId, cardsSessionId, factsSessionId } =
-        await this.sessionLifecycle.connectSessions(runtime, eventId, this.transcriptOnly);
+        await this.sessionLifecycle.connectSessions(runtime, eventId, enabledAgents);
       runtime.transcriptSessionId = transcriptSessionId;
-      runtime.cardsSessionId = cardsSessionId;
-      runtime.factsSessionId = factsSessionId;
+      runtime.cardsSessionId = enabledAgents.cards ? cardsSessionId : undefined;
+      runtime.factsSessionId = enabledAgents.facts ? factsSessionId : undefined;
       this.log('[orchestrator] Sessions connected', {
         transcriptSessionId,
         cardsSessionId,
@@ -415,21 +431,60 @@ export class SessionCoordinator {
   }
 
   private hasRequiredSessions(runtime: EventRuntime): boolean {
-    return this.transcriptOnly
-      ? !!runtime.transcriptSession
-      : !!runtime.transcriptSession && !!runtime.cardsSession && !!runtime.factsSession;
+    const enabled = runtime.enabledAgents;
+    if (enabled.transcript && !runtime.transcriptSession) {
+      return false;
+    }
+    if (enabled.cards && !runtime.cardsSession) {
+      return false;
+    }
+    if (enabled.facts && !runtime.factsSession) {
+      return false;
+    }
+    return true;
   }
 
   private sessionsReady(runtime: EventRuntime): boolean {
-    const hasSessions = this.transcriptOnly
-      ? !!runtime.transcriptSession && !!runtime.transcriptSessionId
-      : !!runtime.transcriptSession &&
-        !!runtime.cardsSession &&
-        !!runtime.factsSession &&
-        !!runtime.transcriptSessionId &&
-        !!runtime.cardsSessionId &&
-        !!runtime.factsSessionId;
+    const enabled = runtime.enabledAgents;
+    const transcriptReady =
+      !enabled.transcript || (!!runtime.transcriptSession && !!runtime.transcriptSessionId);
+    const cardsReady =
+      !enabled.cards || (!!runtime.cardsSession && !!runtime.cardsSessionId);
+    const factsReady =
+      !enabled.facts || (!!runtime.factsSession && !!runtime.factsSessionId);
 
-    return runtime.status === 'running' && hasSessions;
+    return runtime.status === 'running' && transcriptReady && cardsReady && factsReady;
+  }
+
+  private deriveEnabledAgents(sessions: AgentSessionRecord[]): AgentSelection {
+    const isEnabled = (agentType: AgentSessionRecord['agent_type']): boolean => {
+      return sessions.some(
+        (session) =>
+          session.agent_type === agentType && (session.status === 'active' || session.status === 'paused')
+      );
+    };
+
+    return {
+      transcript: isEnabled('transcript'),
+      cards: isEnabled('cards'),
+      facts: isEnabled('facts'),
+    };
+  }
+
+  private hasAnyEnabledAgent(selection: AgentSelection): boolean {
+    return selection.transcript || selection.cards || selection.facts;
+  }
+
+  private isAgentEnabled(selection: AgentSelection, agentType: AgentSessionRecord['agent_type']): boolean {
+    if (agentType === 'transcript') {
+      return selection.transcript;
+    }
+    if (agentType === 'cards') {
+      return selection.cards;
+    }
+    if (agentType === 'facts') {
+      return selection.facts;
+    }
+    return false;
   }
 }

@@ -5,8 +5,8 @@ import type {
 } from 'openai/resources/realtime/realtime';
 import { BaseAgentHandler } from './base-handler';
 import type {
-  InputAudioTranscriptionCompletedEvent,
   InputAudioTranscriptionDeltaEvent,
+  ParsedInputAudioTranscriptionCompletedEvent,
 } from '../types';
 
 export class TranscriptAgentHandler extends BaseAgentHandler {
@@ -44,7 +44,7 @@ export class TranscriptAgentHandler extends BaseAgentHandler {
     });
   }
 
-  handleTranscriptionCompleted(event: InputAudioTranscriptionCompletedEvent): void {
+  handleTranscriptionCompleted(event: ParsedInputAudioTranscriptionCompletedEvent): void {
     const transcript = typeof event.transcript === 'string' ? event.transcript.trim() : '';
     if (transcript.length === 0) {
       return;
@@ -54,6 +54,7 @@ export class TranscriptAgentHandler extends BaseAgentHandler {
       text: transcript,
       isFinal: true,
       receivedAt: new Date().toISOString(),
+      usage: event.usage,
     });
 
     this.partialBuffer = '';

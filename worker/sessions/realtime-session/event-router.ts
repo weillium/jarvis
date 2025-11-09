@@ -7,7 +7,12 @@ import type {
 import { extractErrorMessage, isRecord } from './payload-utils';
 import type { MessageQueueManager } from './message-queue';
 import type { HeartbeatManager } from './heartbeat-manager';
-import type { AgentHandler } from './types';
+import type {
+  AgentHandler,
+  InputAudioTranscriptionDeltaEvent,
+  ParsedInputAudioTranscriptionCompletedEvent,
+} from './types';
+import type { RealtimeTranscriptionUsageDTO } from '../../types';
 
 interface RouterDependencies {
   agentHandler: AgentHandler;
@@ -20,46 +25,40 @@ interface RouterDependencies {
 }
 
 const extractDeltaText = (event: unknown): string | null => {
-  if (typeof event !== 'object' || event === null) {
+  if (!isRecord(event)) {
     return null;
   }
 
-  const record = event as Record<string, unknown>;
-
-  const delta = record.delta;
-  if (typeof delta === 'object' && delta !== null) {
-    const deltaRecord = delta as Record<string, unknown>;
-    const deltaText = deltaRecord.text;
+  const deltaValue = event['delta'];
+  if (isRecord(deltaValue)) {
+    const deltaText = deltaValue['text'];
     if (typeof deltaText === 'string' && deltaText.length > 0) {
       return deltaText;
     }
   }
 
-  const output = record.output;
-  if (Array.isArray(output)) {
-    for (const item of output) {
-      if (typeof item !== 'object' || item === null) {
+  const outputValue = event['output'];
+  if (Array.isArray(outputValue)) {
+    for (const item of outputValue) {
+      if (!isRecord(item)) {
         continue;
       }
-      const itemRecord = item as Record<string, unknown>;
-      const content = itemRecord.content;
+      const content = item['content'];
       if (!Array.isArray(content)) {
         continue;
       }
       for (const entry of content) {
-        if (typeof entry !== 'object' || entry === null) {
+        if (!isRecord(entry)) {
           continue;
         }
-        const entryRecord = entry as Record<string, unknown>;
-        const entryDelta = entryRecord.delta;
-        if (typeof entryDelta === 'object' && entryDelta !== null) {
-          const entryDeltaRecord = entryDelta as Record<string, unknown>;
-          const entryText = entryDeltaRecord.text;
+        const entryDelta = entry['delta'];
+        if (isRecord(entryDelta)) {
+          const entryText = entryDelta['text'];
           if (typeof entryText === 'string' && entryText.length > 0) {
             return entryText;
           }
         }
-        const entryText = entryRecord.text;
+        const entryText = entry['text'];
         if (typeof entryText === 'string' && entryText.length > 0) {
           return entryText;
         }
@@ -67,7 +66,7 @@ const extractDeltaText = (event: unknown): string | null => {
     }
   }
 
-  const textField = record.text;
+  const textField = event['text'];
   if (typeof textField === 'string' && textField.length > 0) {
     return textField;
   }
@@ -75,166 +74,176 @@ const extractDeltaText = (event: unknown): string | null => {
   return null;
 };
 
-interface RawInputAudioTranscriptionDeltaEvent {
-  type?: unknown;
-  item_id?: unknown;
-  event_id?: unknown;
-  content_index?: unknown;
-  delta?: unknown;
-}
-
-interface RawInputAudioTranscriptionCompletedEvent {
-  type?: unknown;
-  item_id?: unknown;
-  event_id?: unknown;
-  content_index?: unknown;
-  transcript?: unknown;
-}
-
-type NormalizedInputAudioTranscriptionDeltaEvent = {
-  event_id?: string;
-  type: 'conversation.item.input_audio_transcription.delta';
-  item_id: string;
-  content_index?: number;
-  delta?: string;
+const readString = (
+  record: Record<string, unknown>,
+  key: string,
+  { allowEmpty = false }: { allowEmpty?: boolean } = {}
+): string | undefined => {
+  const value = record[key];
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  if (!allowEmpty && value.length === 0) {
+    return undefined;
+  }
+  return value;
 };
 
-type NormalizedInputAudioTranscriptionCompletedEvent = {
-  event_id?: string;
-  type: 'conversation.item.input_audio_transcription.completed';
-  item_id: string;
-  content_index?: number;
-  transcript?: string;
+const readFiniteNumber = (
+  record: Record<string, unknown>,
+  key: string
+): number | undefined => {
+  const value = record[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 };
 
-const hasTranscriptionDeltaHandler = (
-  handler: AgentHandler
-): handler is AgentHandler & {
-  handleTranscriptionDelta: (
-    payload: NormalizedInputAudioTranscriptionDeltaEvent
-  ) => Promise<void> | void;
-} => typeof (handler as { handleTranscriptionDelta?: unknown }).handleTranscriptionDelta === 'function';
-
-const hasTranscriptionCompletedHandler = (
-  handler: AgentHandler
-): handler is AgentHandler & {
-  handleTranscriptionCompleted: (
-    payload: NormalizedInputAudioTranscriptionCompletedEvent
-  ) => Promise<void> | void;
-} => typeof (handler as { handleTranscriptionCompleted?: unknown }).handleTranscriptionCompleted === 'function';
-
-const parseInputAudioTranscriptionDeltaEvent = (
-  event: unknown
-): NormalizedInputAudioTranscriptionDeltaEvent | null => {
-  if (!isRecord(event)) {
+const normalizeTranscriptionDeltaEvent = (
+  value: unknown
+): InputAudioTranscriptionDeltaEvent | null => {
+  if (!isRecord(value)) {
     return null;
   }
 
-  const record = event as RawInputAudioTranscriptionDeltaEvent;
-
-  if (record.type !== 'conversation.item.input_audio_transcription.delta') {
+  if (value['type'] !== 'conversation.item.input_audio_transcription.delta') {
     return null;
   }
 
-  const itemId = record.item_id;
-  if (typeof itemId !== 'string' || itemId.length === 0) {
+  const itemId = readString(value, 'item_id');
+  if (!itemId) {
     return null;
   }
 
-  const eventId =
-    typeof record.event_id === 'string' && record.event_id.length > 0 ? record.event_id : undefined;
-
-  const hasContentIndex = record.content_index !== undefined;
-  if (
-    hasContentIndex &&
-    (typeof record.content_index !== 'number' || !Number.isFinite(record.content_index))
-  ) {
-    return null;
-  }
-  const contentIndex =
-    typeof record.content_index === 'number' && Number.isFinite(record.content_index)
-      ? record.content_index
-      : undefined;
-
-  const hasDelta = record.delta !== undefined;
-  if (hasDelta && typeof record.delta !== 'string') {
-    return null;
-  }
-  const delta = typeof record.delta === 'string' ? record.delta : undefined;
-
-  const parsed: NormalizedInputAudioTranscriptionDeltaEvent = {
+  const result: InputAudioTranscriptionDeltaEvent = {
     type: 'conversation.item.input_audio_transcription.delta',
     item_id: itemId,
   };
 
+  const eventId = readString(value, 'event_id');
   if (eventId) {
-    parsed.event_id = eventId;
+    result.event_id = eventId;
   }
-  if (contentIndex !== undefined) {
-    parsed.content_index = contentIndex;
+
+  if ('content_index' in value) {
+    const contentIndex = readFiniteNumber(value, 'content_index');
+    if (contentIndex === undefined) {
+      return null;
+    }
+    result.content_index = contentIndex;
   }
-  if (delta !== undefined) {
-    parsed.delta = delta;
+
+  if ('delta' in value) {
+    const deltaValue = readString(value, 'delta', { allowEmpty: true });
+    if (deltaValue === undefined) {
+      return null;
+    }
+    result.delta = deltaValue;
+  }
+
+  return result;
+};
+
+const parseUsage = (usage: unknown): RealtimeTranscriptionUsageDTO | undefined => {
+  if (!isRecord(usage)) {
+    return undefined;
+  }
+
+  if (usage['type'] !== 'tokens') {
+    return undefined;
+  }
+
+  const totalTokens = readFiniteNumber(usage, 'total_tokens');
+  if (totalTokens === undefined) {
+    return undefined;
+  }
+
+  const parsed: RealtimeTranscriptionUsageDTO = {
+    type: 'tokens',
+    total_tokens: totalTokens,
+  };
+
+  const inputTokens = readFiniteNumber(usage, 'input_tokens');
+  if (inputTokens !== undefined) {
+    parsed.input_tokens = inputTokens;
+  }
+
+  const outputTokens = readFiniteNumber(usage, 'output_tokens');
+  if (outputTokens !== undefined) {
+    parsed.output_tokens = outputTokens;
+  }
+
+  const detailsValue = usage['input_token_details'];
+  if (isRecord(detailsValue)) {
+    const detailRecord: NonNullable<RealtimeTranscriptionUsageDTO['input_token_details']> = {};
+
+    const audioTokens = readFiniteNumber(detailsValue, 'audio_tokens');
+    if (audioTokens !== undefined) {
+      detailRecord.audio_tokens = audioTokens;
+    }
+
+    const textTokens = readFiniteNumber(detailsValue, 'text_tokens');
+    if (textTokens !== undefined) {
+      detailRecord.text_tokens = textTokens;
+    }
+
+    if (Object.keys(detailRecord).length > 0) {
+      parsed.input_token_details = detailRecord;
+    }
   }
 
   return parsed;
 };
 
-const parseInputAudioTranscriptionCompletedEvent = (
-  event: unknown
-): NormalizedInputAudioTranscriptionCompletedEvent | null => {
-  if (!isRecord(event)) {
+const normalizeTranscriptionCompletedEvent = (
+  value: unknown
+): ParsedInputAudioTranscriptionCompletedEvent | null => {
+  if (!isRecord(value)) {
     return null;
   }
 
-  const record = event as RawInputAudioTranscriptionCompletedEvent;
-
-  if (record.type !== 'conversation.item.input_audio_transcription.completed') {
+  if (value['type'] !== 'conversation.item.input_audio_transcription.completed') {
     return null;
   }
 
-  const itemId = record.item_id;
-  if (typeof itemId !== 'string' || itemId.length === 0) {
+  const itemId = readString(value, 'item_id');
+  if (!itemId) {
     return null;
   }
 
-  const eventId =
-    typeof record.event_id === 'string' && record.event_id.length > 0 ? record.event_id : undefined;
-
-  const hasContentIndex = record.content_index !== undefined;
-  if (
-    hasContentIndex &&
-    (typeof record.content_index !== 'number' || !Number.isFinite(record.content_index))
-  ) {
-    return null;
-  }
-  const contentIndex =
-    typeof record.content_index === 'number' && Number.isFinite(record.content_index)
-      ? record.content_index
-      : undefined;
-
-  const hasTranscript = record.transcript !== undefined;
-  if (hasTranscript && typeof record.transcript !== 'string') {
-    return null;
-  }
-  const transcript = typeof record.transcript === 'string' ? record.transcript : undefined;
-
-  const parsed: NormalizedInputAudioTranscriptionCompletedEvent = {
+  const result: ParsedInputAudioTranscriptionCompletedEvent = {
     type: 'conversation.item.input_audio_transcription.completed',
     item_id: itemId,
   };
 
+  const eventId = readString(value, 'event_id');
   if (eventId) {
-    parsed.event_id = eventId;
-  }
-  if (contentIndex !== undefined) {
-    parsed.content_index = contentIndex;
-  }
-  if (transcript !== undefined) {
-    parsed.transcript = transcript;
+    result.event_id = eventId;
   }
 
-  return parsed;
+  if ('content_index' in value) {
+    const contentIndex = readFiniteNumber(value, 'content_index');
+    if (contentIndex === undefined) {
+      return null;
+    }
+    result.content_index = contentIndex;
+  }
+
+  if ('transcript' in value) {
+    const transcriptValue = readString(value, 'transcript', { allowEmpty: true });
+    if (transcriptValue === undefined) {
+      return null;
+    }
+    result.transcript = transcriptValue;
+  }
+
+  if ('usage' in value) {
+    const usage = parseUsage(value['usage']);
+    if (!usage) {
+      return null;
+    }
+    result.usage = usage;
+  }
+
+  return result;
 };
 
 export class EventRouter {
@@ -312,47 +321,41 @@ export class EventRouter {
   }
 
   handleTranscriptionDelta(event: unknown): void {
-    if (!hasTranscriptionDeltaHandler(this.deps.agentHandler)) {
-      return;
-    }
-
-    const parsed = parseInputAudioTranscriptionDeltaEvent(event);
-    if (!parsed) {
+    const normalized = normalizeTranscriptionDeltaEvent(event);
+    if (!normalized) {
       this.log('warn', 'Dropping transcription delta with invalid payload');
       return;
     }
 
     const snippet =
-      typeof parsed.delta === 'string' && parsed.delta.length > 0 ? parsed.delta.slice(0, 80) : '<empty>';
+      typeof normalized.delta === 'string' && normalized.delta.length > 0
+        ? normalized.delta.slice(0, 80)
+        : '<empty>';
     this.log(
       'log',
-      `Transcription delta received (item=${parsed.item_id}, idx=${parsed.content_index ?? 0}): ${snippet}`
+      `Transcription delta received (item=${normalized.item_id}, idx=${normalized.content_index ?? 0}): ${snippet}`
     );
 
-    void this.deps.agentHandler.handleTranscriptionDelta(parsed);
+    void this.deps.agentHandler.handleTranscriptionDelta(normalized);
   }
 
   handleTranscriptionCompleted(event: unknown): void {
-    if (!hasTranscriptionCompletedHandler(this.deps.agentHandler)) {
-      return;
-    }
-
-    const parsed = parseInputAudioTranscriptionCompletedEvent(event);
-    if (!parsed) {
+    const normalized = normalizeTranscriptionCompletedEvent(event);
+    if (!normalized) {
       this.log('warn', 'Dropping transcription completion with invalid payload');
       return;
     }
 
     const snippet =
-      typeof parsed.transcript === 'string' && parsed.transcript.length > 0
-        ? parsed.transcript.slice(0, 80)
+      typeof normalized.transcript === 'string' && normalized.transcript.length > 0
+        ? normalized.transcript.slice(0, 80)
         : '<empty>';
     this.log(
       'log',
-      `Transcription completed (item=${parsed.item_id}, idx=${parsed.content_index ?? 0}): ${snippet}`
+      `Transcription completed (item=${normalized.item_id}, idx=${normalized.content_index ?? 0}): ${snippet}`
     );
 
-    void this.deps.agentHandler.handleTranscriptionCompleted(parsed);
+    void this.deps.agentHandler.handleTranscriptionCompleted(normalized);
   }
 }
 

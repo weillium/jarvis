@@ -210,13 +210,19 @@ export function useCreateSessionsMutation(eventId: string) {
 /**
  * Start agent sessions mutation
  */
-export function useStartSessionsMutation(eventId: string) {
+export function useStartSessionsMutation(
+  eventId: string
+) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async (agents: { transcript: boolean; cards: boolean; facts: boolean }) => {
       const res = await fetch(`/api/agent-sessions/${eventId}/start`, {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ agents }),
       });
       const data = await res.json();
       if (!data.ok) {

@@ -24,6 +24,7 @@ export interface EventRuntime {
   eventId: string;
   agentId: string;
   status: EventRuntimeStatus;
+  enabledAgents: AgentSelection;
 
   // In-memory state
   ringBuffer: RingBuffer;
@@ -73,3 +74,9 @@ export interface EventRuntime {
 }
 
 export type { TranscriptChunk, Fact };
+
+export interface AgentSelection {
+  transcript: boolean;
+  cards: boolean;
+  facts: boolean;
+}

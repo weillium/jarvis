@@ -70,6 +70,11 @@ export class RuntimeManager {
       eventId,
       agentId,
       status: 'context_complete',
+      enabledAgents: {
+        transcript: false,
+        cards: false,
+        facts: false,
+      },
       ringBuffer: new RingBuffer(1000, 5 * 60 * 1000),
       factsStore,
       glossaryCache,

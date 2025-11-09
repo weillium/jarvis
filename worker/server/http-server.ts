@@ -4,7 +4,6 @@ import type { Orchestrator } from '../core/orchestrator';
 
 interface WorkerServerDeps {
   orchestrator: Orchestrator;
-  transcriptOnly: boolean;
   workerPort: number;
   log: (...args: unknown[]) => void;
 }
@@ -47,7 +46,6 @@ const parseJsonBody = async (req: http.IncomingMessage): Promise<Record<string, 
 
 export const createWorkerServer = ({
   orchestrator,
-  transcriptOnly,
   workerPort,
   log,
 }: WorkerServerDeps): http.Server => {
@@ -298,7 +296,6 @@ export const createWorkerServer = ({
     log('[worker-server]   GET /health - Health check');
     log('[worker-server]   GET /websocket-state?event_id=<eventId> - Get WebSocket connection state');
     log('[worker-server]   POST /sessions/create - Create agent sessions for an event');
-    log(`[worker-server] Transcript agent only mode: ${transcriptOnly}`);
   });
 
   return server;

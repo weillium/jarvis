@@ -6,8 +6,8 @@ import type {
 import type {
   AgentHandler,
   AgentHandlerOptions,
-  InputAudioTranscriptionCompletedEvent,
   InputAudioTranscriptionDeltaEvent,
+  ParsedInputAudioTranscriptionCompletedEvent,
   RealtimeSessionEvent,
   RealtimeSessionEventPayloads,
 } from '../types';
@@ -74,7 +74,7 @@ export abstract class BaseAgentHandler implements AgentHandler {
     void payload;
   }
 
-  handleTranscriptionCompleted(payload: InputAudioTranscriptionCompletedEvent): void {
+  handleTranscriptionCompleted(payload: ParsedInputAudioTranscriptionCompletedEvent): void {
     void payload;
   }
 }

@@ -4,10 +4,9 @@ export interface WorkerEnvConfig {
   openaiApiKey: string;
   embedModel: string;
   contextGenModel: string;
-  realtimeModel: string;
+  cardsModel: string;
   exaApiKey?: string;
   sseEndpoint: string;
-  transcriptOnly: boolean;
   workerPort: number;
 }
 
@@ -54,10 +53,12 @@ export const loadWorkerEnv = (): WorkerEnvConfig => {
 
   const embedModel = process.env.CONTEXT_CHUNKS_MODEL || 'text-embedding-3-small';
   const contextGenModel = process.env.CONTEXT_BLUEPRINT_MODEL || 'gpt-5';
-  const realtimeModel = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-10-01';
+  const cardsModel = process.env.OPENAI_CARDS_MODEL || process.env.DEFAULT_CARDS_MODEL;
+  if (!cardsModel) {
+    throw new Error('OPENAI_CARDS_MODEL or DEFAULT_CARDS_MODEL must be set');
+  }
   const sseEndpointRaw = process.env.SSE_ENDPOINT || 'http://localhost:3000';
   const sseEndpoint = sanitizeEndpoint(sseEndpointRaw);
-  const transcriptOnly = process.env.TRANSCRIPT_AGENT_ONLY !== 'false';
   const workerPort = parseWorkerPort(process.env.WORKER_PORT);
 
   return {
@@ -66,10 +67,9 @@ export const loadWorkerEnv = (): WorkerEnvConfig => {
     openaiApiKey,
     embedModel,
     contextGenModel,
-    realtimeModel,
+    cardsModel,
     exaApiKey: process.env.EXA_API_KEY,
     sseEndpoint,
-    transcriptOnly,
     workerPort,
   };
 };

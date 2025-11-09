@@ -10,7 +10,7 @@ export class StatusUpdater {
     private sse: SSEService,
     private logger: Logger,
     private metrics: MetricsCollector,
-    private realtimeModel: string
+    private cardsModel: string
   ) {}
 
   async updateAndPushStatus(runtime: EventRuntime): Promise<void> {
@@ -275,7 +275,7 @@ export class StatusUpdater {
         created_at: runtime.createdAt.toISOString(),
         updated_at: runtime.updatedAt.toISOString(),
         closed_at: null,
-        model: this.realtimeModel,
+        model: this.cardsModel,
       },
     };
   }

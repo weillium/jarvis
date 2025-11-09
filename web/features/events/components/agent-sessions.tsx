@@ -95,11 +95,13 @@ const formatDuration = (milliseconds: number): string => {
 };
 
 // SessionStatusCard component
+type AgentType = AgentSessionDisplay['agent_type'];
+
 interface SessionStatusCardProps {
   title: string;
   session: AgentSessionDisplay;
-  expandedLogs: { transcript: boolean; cards: boolean; facts: boolean };
-  setExpandedLogs: React.Dispatch<React.SetStateAction<{ transcript: boolean; cards: boolean; facts: boolean }>>;
+  expandedLogs: Record<AgentType, boolean>;
+  setExpandedLogs: React.Dispatch<React.SetStateAction<Record<AgentType, boolean>>>;
 }
 
 function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: SessionStatusCardProps) {
@@ -449,43 +451,6 @@ function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: Se
         </div>
       )}
 
-      {/* Runtime Stats */}
-      {session.runtime_stats && (
-        <div style={{
-          marginBottom: '16px',
-          paddingBottom: '16px',
-          borderBottom: '1px solid #e2e8f0',
-        }}>
-          <div style={{
-            fontSize: '12px',
-            fontWeight: '600',
-            color: '#64748b',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            marginBottom: '12px',
-          }}>
-            Runtime Stats
-          </div>
-          <div style={{
-            fontSize: '12px',
-            color: '#64748b',
-            lineHeight: '1.6',
-          }}>
-            {session.runtime_stats.transcript_last_seq !== undefined && (
-              <div>Transcript Last Seq: {session.runtime_stats.transcript_last_seq}</div>
-            )}
-            <div>Cards Last Seq: {session.runtime_stats.cards_last_seq}</div>
-            <div>Facts Last Seq: {session.runtime_stats.facts_last_seq}</div>
-            {session.runtime_stats.ring_buffer_stats && (
-              <div>Ring Buffer: {session.runtime_stats.ring_buffer_stats.finalized || 0} chunks</div>
-            )}
-            {session.runtime_stats.facts_store_stats && (
-              <div>Facts Store: {session.runtime_stats.facts_store_stats.capacityUsed || 'N/A'} items</div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Recent Logs */}
       {session.recent_logs && session.recent_logs.length > 0 && (
         <div>
@@ -575,6 +540,170 @@ function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: Se
   );
 }
 
+interface StartSessionsModalProps {
+  isOpen: boolean;
+  selection: { transcript: boolean; cards: boolean; facts: boolean };
+  onSelectionChange: (next: { transcript: boolean; cards: boolean; facts: boolean }) => void;
+  onConfirm: () => void;
+  onClose: () => void;
+  isSubmitting: boolean;
+}
+
+function StartSessionsModal({
+  isOpen,
+  selection,
+  onSelectionChange,
+  onConfirm,
+  onClose,
+  isSubmitting,
+}: StartSessionsModalProps) {
+  if (!isOpen) {
+    return null;
+  }
+
+  const options: Array<{
+    key: 'transcript' | 'cards' | 'facts';
+    label: string;
+    description: string;
+  }> = [
+    {
+      key: 'transcript',
+      label: 'Transcript Agent',
+      description: 'Captures live audio and produces the transcript stream.',
+    },
+    {
+      key: 'cards',
+      label: 'Cards Agent',
+      description: 'Generates realtime cards and summaries from transcript context.',
+    },
+    {
+      key: 'facts',
+      label: 'Facts Agent',
+      description: 'Maintains the structured facts store for downstream consumption.',
+    },
+  ];
+
+  const hasSelection = selection.transcript || selection.cards || selection.facts;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(15, 23, 42, 0.35)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+      }}
+    >
+      <div
+        style={{
+          width: 'min(440px, 92%)',
+          background: '#ffffff',
+          borderRadius: '14px',
+          boxShadow: '0 24px 48px rgba(15, 23, 42, 0.25)',
+          padding: '24px',
+        }}
+      >
+        <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '4px', color: '#0f172a' }}>
+          Start Agent Sessions
+        </h2>
+        <p style={{ color: '#475569', marginBottom: '20px', fontSize: '14px', lineHeight: 1.5 }}>
+          Choose which realtime agents to spin up for this event. All agents are selected by default.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+          {options.map(({ key, label, description }) => {
+            const checked = selection[key];
+            return (
+              <label
+                key={key}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '10px',
+                  padding: '12px 14px',
+                  borderRadius: '10px',
+                  border: `1px solid ${checked ? '#3b82f6' : '#e2e8f0'}`,
+                  background: checked ? 'rgba(59, 130, 246, 0.08)' : '#ffffff',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() =>
+                    onSelectionChange({
+                      ...selection,
+                      [key]: !checked,
+                    })
+                  }
+                  style={{ marginTop: '4px' }}
+                />
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '15px', color: '#0f172a' }}>{label}</div>
+                  <div style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>{description}</div>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+
+        {!hasSelection && (
+          <div
+            style={{
+              background: '#fee2e2',
+              color: '#b91c1c',
+              borderRadius: '8px',
+              padding: '10px 12px',
+              fontSize: '13px',
+              marginBottom: '16px',
+            }}
+          >
+            Select at least one agent to start.
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+          <button
+            onClick={onClose}
+            disabled={isSubmitting}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: '1px solid #cbd5f5',
+              background: '#ffffff',
+              color: '#475569',
+              fontWeight: 500,
+              cursor: isSubmitting ? 'not-allowed' : 'pointer',
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={!hasSelection || isSubmitting}
+            style={{
+              padding: '8px 18px',
+              borderRadius: '8px',
+              border: 'none',
+              background: !hasSelection || isSubmitting ? '#93c5fd' : '#3b82f6',
+              color: '#ffffff',
+              fontWeight: 600,
+              cursor: !hasSelection || isSubmitting ? 'not-allowed' : 'pointer',
+              transition: 'background 0.15s ease',
+            }}
+          >
+            {isSubmitting ? 'Starting…' : 'Start Selected Agents'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function AgentSessions({ eventId }: AgentSessionsProps) {
   const { data: agentData } = useAgentQuery(eventId);
   const { data: sessionsData, isLoading: sessionsQueryLoading, error: sessionsQueryError, refetch: refetchSessions } = useAgentSessionsQuery(eventId);
@@ -614,8 +743,18 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
     });
   })();
   
-  const [expandedLogs, setExpandedLogs] = useState<{ cards: boolean; facts: boolean }>({ cards: false, facts: false });
+  const [expandedLogs, setExpandedLogs] = useState<Record<AgentType, boolean>>({
+    transcript: false,
+    cards: false,
+    facts: false,
+  });
   const [isTestTranscriptModalOpen, setIsTestTranscriptModalOpen] = useState(false);
+  const [isStartSessionsModalOpen, setIsStartSessionsModalOpen] = useState(false);
+  const [startSessionsSelection, setStartSessionsSelection] = useState({
+    transcript: true,
+    cards: true,
+    facts: true,
+  });
 
   const createSessionsMutation = useCreateSessionsMutation(eventId);
   const startSessionsMutation = useStartSessionsMutation(eventId);
@@ -633,11 +772,17 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
   };
 
   const handleStartSessions = () => {
-    startSessionsMutation.mutate(undefined, {
+    setStartSessionsSelection({ transcript: true, cards: true, facts: true });
+    setIsStartSessionsModalOpen(true);
+  };
+
+  const handleConfirmStartSessions = (selection: { transcript: boolean; cards: boolean; facts: boolean }) => {
+    startSessionsMutation.mutate(selection, {
       onSuccess: () => {
         setTimeout(() => {
           refetchSessions();
         }, 1000);
+        setIsStartSessionsModalOpen(false);
       },
     });
   };
@@ -689,6 +834,56 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
   const pauseResumeError = pauseSessionsMutation.error || startSessionsMutation.error || confirmReadyMutation.error
     ? (pauseSessionsMutation.error instanceof Error ? pauseSessionsMutation.error.message : startSessionsMutation.error instanceof Error ? startSessionsMutation.error.message : confirmReadyMutation.error instanceof Error ? confirmReadyMutation.error.message : 'Failed to perform operation')
     : null;
+
+  const runtimeStats = React.useMemo(() => {
+    for (const session of displaySessions) {
+      if (session.runtime_stats) {
+        return session.runtime_stats;
+      }
+    }
+    return null;
+  }, [displaySessions]);
+
+  const runtimeStatsEntries = React.useMemo(() => {
+    if (!runtimeStats) {
+      return [];
+    }
+
+    const entries: Array<{ label: string; value: string }> = [];
+
+    if (typeof runtimeStats.uptime_ms === 'number') {
+      entries.push({
+        label: 'Runtime',
+        value: formatDuration(runtimeStats.uptime_ms),
+      });
+    }
+    if (runtimeStats.transcript_last_seq !== undefined) {
+      entries.push({
+        label: 'Transcript Last Seq',
+        value: runtimeStats.transcript_last_seq.toLocaleString(),
+      });
+    }
+    entries.push({
+      label: 'Cards Last Seq',
+      value: runtimeStats.cards_last_seq.toLocaleString(),
+    });
+    entries.push({
+      label: 'Facts Last Seq',
+      value: runtimeStats.facts_last_seq.toLocaleString(),
+    });
+    entries.push({
+      label: 'Ring Buffer Finalized',
+      value: (runtimeStats.ring_buffer_stats?.finalized ?? 0).toLocaleString(),
+    });
+    entries.push({
+      label: 'Facts Store Capacity Used',
+      value: runtimeStats.facts_store_stats?.capacityUsed ?? 'N/A',
+    });
+
+    return entries;
+  }, [runtimeStats]);
+
+  const hasRuntimeStats = runtimeStatsEntries.length > 0;
 
   return (
     <div>
@@ -984,6 +1179,54 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
         </div>
       )}
       
+      {hasRuntimeStats && (
+        <section
+          style={{
+            marginBottom: '24px',
+            padding: '20px',
+            background: '#ffffff',
+            borderRadius: '12px',
+            border: '1px solid #e2e8f0',
+            boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
+          }}
+        >
+          <header style={{ marginBottom: '16px' }}>
+            <h5 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#0f172a' }}>
+              Runtime Stats
+            </h5>
+            <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#64748b' }}>
+              Shared telemetry across active realtime agents.
+            </p>
+          </header>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+              gap: '12px',
+            }}
+          >
+            {runtimeStatsEntries.map(({ label, value }) => (
+              <div
+                key={label}
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: '10px',
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                }}
+              >
+                <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                  {label}
+                </div>
+                <div style={{ marginTop: '6px', fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>
+                  {value}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {sessionsQueryError && (
         <div style={{
           padding: '12px',
@@ -1140,6 +1383,17 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
             );
           })()}
         </>
+      )}
+
+      {isStartSessionsModalOpen && (
+        <StartSessionsModal
+          isOpen={isStartSessionsModalOpen}
+          selection={startSessionsSelection}
+          onSelectionChange={setStartSessionsSelection}
+          onConfirm={() => handleConfirmStartSessions(startSessionsSelection)}
+          onClose={() => setIsStartSessionsModalOpen(false)}
+          isSubmitting={startSessionsMutation.isPending}
+        />
       )}
 
       {isTestTranscriptModalOpen && (

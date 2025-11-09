@@ -55,8 +55,20 @@ export interface RealtimeTranscriptDTO {
   text: string;
   isFinal: boolean;
   receivedAt: string;
+  usage?: RealtimeTranscriptionUsageDTO;
 }
 
 export interface RealtimeModelResponseDTO {
   raw: unknown;
+}
+
+export interface RealtimeTranscriptionUsageDTO {
+  type: 'tokens';
+  total_tokens: number;
+  input_tokens?: number;
+  output_tokens?: number;
+  input_token_details?: {
+    audio_tokens?: number;
+    text_tokens?: number;
+  };
 }

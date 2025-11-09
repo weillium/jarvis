@@ -121,7 +121,7 @@ export const createWorkerProcessingPipeline = (
     infrastructure.openai,
     infrastructure.openaiService,
     vectorSearchService,
-    env.realtimeModel
+    env.cardsModel
   );
 
   const sessionManager = new SessionManager(

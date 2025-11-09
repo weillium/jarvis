@@ -4,6 +4,11 @@ import type { EventProcessor } from './event-processor';
 import type { EventRuntime } from '../types';
 import type { TranscriptsRepository } from '../services/supabase/transcripts-repository';
 import type { TranscriptRecord } from '../types';
+import type { MetricsCollector } from '../monitoring/metrics-collector';
+import type { Logger } from '../monitoring/logger';
+import type { StatusUpdater } from '../monitoring/status-updater';
+import type { RealtimeTranscriptionUsageDTO } from '../types';
+import { checkBudgetStatus, formatTokenBreakdown } from '../utils/token-counter';
 
 export interface TranscriptAudioChunk {
   audioBase64: string;
@@ -22,18 +27,25 @@ export class TranscriptIngestionService {
     private readonly sessionLifecycle: SessionLifecycle,
     private readonly transcriptsRepository: TranscriptsRepository,
     private readonly eventProcessor: EventProcessor,
-    private readonly transcriptOnly: boolean
+    private readonly metrics: MetricsCollector,
+    private readonly logger: Logger,
+    private readonly statusUpdater: StatusUpdater
   ) {}
 
   async appendAudio(eventId: string, chunk: TranscriptAudioChunk): Promise<EventRuntime> {
     const runtime = await this.runtimeService.ensureRuntime(eventId);
+    const enabledAgents = runtime.enabledAgents;
+
+    if (!enabledAgents.transcript) {
+      throw new Error(`Transcript agent disabled for event ${eventId}`);
+    }
 
     if (!runtime.transcriptSession) {
       await this.sessionLifecycle.createRealtimeSessions({
         runtime,
         eventId,
         agentId: runtime.agentId,
-        transcriptOnly: this.transcriptOnly,
+        enabledAgents,
       });
     }
 
@@ -66,7 +78,12 @@ export class TranscriptIngestionService {
     eventId: string,
     agentId: string,
     runtime: EventRuntime,
-    payload: { text: string; isFinal?: boolean; receivedAt?: string }
+    payload: {
+      text: string;
+      isFinal?: boolean;
+      receivedAt?: string;
+      usage?: RealtimeTranscriptionUsageDTO;
+    }
   ): Promise<void> {
     const text = payload.text?.trim();
     if (!text) {
@@ -97,8 +114,8 @@ export class TranscriptIngestionService {
       return;
     }
 
-    const seq =
-      runtime.streamingTranscript?.seq ?? runtime.transcriptLastSeq + 1;
+    const seq = runtime.streamingTranscript?.seq ?? runtime.transcriptLastSeq + 1;
+    const usage = payload.usage;
 
     const record = await this.transcriptsRepository.insertTranscript({
       event_id: eventId,
@@ -108,6 +125,8 @@ export class TranscriptIngestionService {
       final: true,
       speaker,
     });
+
+    this.recordTranscriptUsage(runtime, seq, usage);
 
     runtime.pendingTranscriptChunk = undefined;
     runtime.streamingTranscript = undefined;
@@ -134,6 +153,8 @@ export class TranscriptIngestionService {
       text: record.text,
       final: record.final,
     });
+
+    await this.statusUpdater.updateAndPushStatus(runtime);
   }
 
   async handleTranscriptInsert(transcript: unknown): Promise<void> {
@@ -153,6 +174,65 @@ export class TranscriptIngestionService {
     }
 
     await this.eventProcessor.handleTranscript(runtime, transcript);
+  }
+
+  private recordTranscriptUsage(
+    runtime: EventRuntime,
+    seq: number,
+    usage: RealtimeTranscriptionUsageDTO | undefined
+  ): void {
+    if (!usage || usage.type !== 'tokens') {
+      return;
+    }
+
+    const totalTokens = usage.total_tokens;
+    const budgetStatus = checkBudgetStatus(totalTokens, 2048);
+
+    const breakdown: Record<string, number> = {};
+    if (typeof usage.input_tokens === 'number' && Number.isFinite(usage.input_tokens)) {
+      breakdown.input = usage.input_tokens;
+    }
+    if (typeof usage.output_tokens === 'number' && Number.isFinite(usage.output_tokens)) {
+      breakdown.output = usage.output_tokens;
+    }
+    const details = usage.input_token_details;
+    if (details && typeof details === 'object') {
+      const detailsRecord = details as Record<string, unknown>;
+
+      const audioTokens = detailsRecord['audio_tokens'];
+      if (typeof audioTokens === 'number' && Number.isFinite(audioTokens)) {
+        breakdown.audio = audioTokens;
+      }
+
+      const textTokens = detailsRecord['text_tokens'];
+      if (typeof textTokens === 'number' && Number.isFinite(textTokens)) {
+        breakdown.text = textTokens;
+      }
+    }
+
+    const breakdownStr =
+      Object.keys(breakdown).length > 0 ? formatTokenBreakdown(breakdown) : 'none';
+
+    let logLevel: 'log' | 'warn' | 'error' = 'log';
+    let logPrefix = '[context]';
+    if (budgetStatus.critical) {
+      logLevel = 'error';
+      logPrefix = '[context] ⚠️ CRITICAL';
+    } else if (budgetStatus.warning) {
+      logLevel = 'warn';
+      logPrefix = '[context] ⚠️ WARNING';
+    }
+
+    const logMessage = `${logPrefix} Transcript Agent (seq ${seq}): ${totalTokens}/2048 tokens (${budgetStatus.percentage}%) - breakdown: ${breakdownStr}`;
+    this.logger.log(runtime.eventId, 'transcript', logLevel, logMessage, { seq });
+
+    this.metrics.recordTokens(
+      runtime.eventId,
+      'transcript',
+      totalTokens,
+      budgetStatus.warning,
+      budgetStatus.critical
+    );
   }
 }
 
