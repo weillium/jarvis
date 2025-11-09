@@ -37,7 +37,9 @@ Return a JSON object with these sections:
    - Example entries: ["Foundational concepts", "Implementation practices", "Case studies", "Tools and platforms", "Emerging trends"]
 
 3. key_terms (10-20 strings)
-   - Provide domain-specific terminology, acronyms, or jargon
+  - Anchor every list in the specific event’s subject matter, speakers, and timeframe
+  - Prefer recency and tangible event artifacts; omit filler even if counts stay below targets
+  - Provide domain-specific terminology, acronyms, or jargon
    - Example entries: ["Service-Level Objective", "Control Plane", "Zero Trust", "Customer Journey Mapping"]
 
 4. research_plan (object)
@@ -48,12 +50,14 @@ Return a JSON object with these sections:
 
 5. glossary_plan (object)
    - terms: 10-20 items, each { term, is_acronym, category, priority }
+   - Prioritize terms surfaced explicitly in this event’s content; leave the list shorter instead of fabricating jargon
    - Reflect priority-based sourcing guidance
    - estimated_count equals terms.length
 
 6. chunks_plan (object)
    - sources: ≥3 entries with { source, priority, estimated_chunks }
    - Include target_count (500 basic or 1000 comprehensive), quality_tier, and ranking_strategy
+   - Only list high-entropy segments tied to the actual agenda (keynotes, launches, panels); aim for 50-120 but stop when authentic material runs out
 
 7. cost_breakdown (object)
    - Provide { research, glossary, chunks, total } consistent with the plans above
@@ -63,7 +67,7 @@ Checklist before returning:
 - [ ] inferred_topics has ≥5 items
 - [ ] key_terms has ≥10 items
 - [ ] research_plan.queries has ≥5 items and costs add up
-- [ ] glossary_plan.terms has ≥10 items
+- [ ] glossary_plan.terms has ≥10 items (unless fewer truly exist—do not invent filler; note gaps when counts fall short)
 - [ ] chunks_plan.sources has ≥3 items
 - [ ] All arrays contain meaningful, non-empty content
 - [ ] Response is valid JSON matching the Blueprint schema`;
