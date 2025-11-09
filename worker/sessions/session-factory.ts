@@ -6,6 +6,7 @@ import type {
   RealtimeSessionConfig,
 } from './realtime-session';
 import { RealtimeSession } from './realtime-session';
+import { TranscriptRealtimeSession } from './realtime-session/transcript-realtime-session';
 import type { EventRuntime } from '../types';
 import type { VectorSearchService } from '../context/vector-search';
 import type { OpenAIService } from '../services/openai-service';
@@ -46,7 +47,7 @@ export class SessionFactory {
   ): AgentRealtimeSession {
     const config = this.buildConfig('transcript', runtime, hooks, model);
     const openaiClient = apiKey ? new OpenAI({ apiKey }) : this.openai;
-    return new RealtimeSession(openaiClient, config);
+    return new TranscriptRealtimeSession(openaiClient, config);
   }
 
   createCardsSession(

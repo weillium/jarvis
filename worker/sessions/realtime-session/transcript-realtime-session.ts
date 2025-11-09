@@ -1,8 +1,3 @@
-/**
- * OpenAI Realtime API Session Manager
- * Manages WebSocket connections to OpenAI Realtime API for Cards and Facts agents
- */
-
 import type OpenAI from 'openai';
 import type { OpenAIRealtimeWebSocket } from 'openai/realtime/websocket';
 import type {
@@ -13,84 +8,64 @@ import type {
   ResponseTextDoneEvent,
 } from 'openai/resources/realtime/realtime';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getPolicy } from '../policies';
-import type { VectorMatchRecord } from '../types';
+import { getPolicy } from '../../policies';
+import type { VectorMatchRecord } from '../../types';
 import {
   extractErrorField,
   extractErrorMessage,
   getLowercaseErrorField,
-} from './realtime-session/payload-utils';
+} from './payload-utils';
 import type {
   AgentRealtimeSession,
   AgentSessionLifecycleStatus,
+  InputAudioTranscriptionCompletedEvent,
+  InputAudioTranscriptionDeltaEvent,
+  ParsedInputAudioTranscriptionCompletedEvent,
   RealtimeAudioChunk,
   RealtimeMessageContext,
   RealtimeSessionConfig,
   RealtimeSessionEvent,
   RealtimeSessionEventPayloads,
   RealtimeSessionStatus,
-} from './realtime-session/types';
-import { MessageQueueManager } from './realtime-session/message-queue';
-import { buildStatusSnapshot } from './realtime-session/status-tracker';
+} from './types';
+import { MessageQueueManager } from './message-queue';
+import { buildStatusSnapshot } from './status-tracker';
 import {
   getSessionInternals,
   getUnderlyingSocket,
-} from './realtime-session/transport-utils';
-import { HeartbeatManager } from './realtime-session/heartbeat-manager';
-import type { AgentHandler } from './realtime-session/types';
-import { createAgentHandler } from './realtime-session/handlers';
-import { EventRouter } from './realtime-session/event-router';
-import { RuntimeController } from './realtime-session/runtime-controller';
-import { ConnectionManager } from './realtime-session/connection-manager';
+} from './transport-utils';
+import { HeartbeatManager } from './heartbeat-manager';
+import type { AgentHandler } from './types';
+import { createAgentHandler } from './handlers';
+import { EventRouter } from './event-router';
+import { RuntimeController } from './runtime-controller';
+import { ConnectionManager } from './connection-manager';
 
-export type {
-  AgentSessionLifecycleStatus,
-  AgentRealtimeSession,
-  AgentType,
-  RealtimeAudioChunk,
-  RealtimeSessionConfig,
-} from './realtime-session/types';
+const DEFAULT_TRANSCRIPTION_MODEL = 'gpt-4o-transcribe';
+const REALTIME_TRANSCRIPTION_MODEL = 'gpt-realtime';
 
-type JsonSchemaProperty =
-  | {
-      type: 'string';
-      description: string;
-      enum?: string[];
-    }
-  | {
-      type: 'number';
-      description: string;
-      default?: number;
-      minimum?: number;
-      maximum?: number;
-    };
-
-interface FunctionToolSchema {
-  type: 'object';
-  properties: Record<string, JsonSchemaProperty>;
-  required?: string[];
-}
-
-interface FunctionToolDefinition {
-  type: 'function';
-  name: string;
-  description: string;
-  parameters: FunctionToolSchema;
-}
-
-export class RealtimeSession implements AgentRealtimeSession {
+/**
+ * TranscriptRealtimeSession
+ * Dedicated manager for the transcript agent's realtime socket lifecycle.
+ */
+export class TranscriptRealtimeSession implements AgentRealtimeSession {
   private openai: OpenAI;
   private session?: OpenAIRealtimeWebSocket;
   private config: RealtimeSessionConfig;
-  private isActive: boolean = false;
+  private isActive = false;
   private readonly messageQueue: MessageQueueManager;
   private readonly heartbeat: HeartbeatManager;
   private readonly agentHandler: AgentHandler;
   private readonly runtimeController: RuntimeController;
   private readonly eventRouter: EventRouter;
   private readonly connectionManager: ConnectionManager;
-  private eventHandlers: { [K in RealtimeSessionEvent]?: Array<(data: RealtimeSessionEventPayloads[K]) => void> } = {};
-  private onStatusChange?: (status: AgentSessionLifecycleStatus, sessionId?: string) => void;
+  private eventHandlers: {
+    [K in RealtimeSessionEvent]?: Array<(data: RealtimeSessionEventPayloads[K]) => void>;
+  } = {};
+  private onStatusChange?: (
+    status: AgentSessionLifecycleStatus,
+    sessionId?: string
+  ) => void;
   private onLog?: (
     level: 'log' | 'warn' | 'error',
     message: string,
@@ -101,14 +76,23 @@ export class RealtimeSession implements AgentRealtimeSession {
   private embedText?: (text: string) => Promise<number[]>;
   private reconnectTimer?: NodeJS.Timeout;
   private errorRetryAttempts = 0;
-  private readonly MAX_ERROR_RETRIES = parseInt(process.env.REALTIME_MAX_ERROR_RETRIES || '5', 10);
-  private readonly RETRY_BACKOFF_BASE_MS = parseInt(process.env.REALTIME_RETRY_BACKOFF_MS || '1000', 10);
-  private readonly RETRY_BACKOFF_CAP_MS = parseInt(process.env.REALTIME_RETRY_BACKOFF_CAP_MS || '8000', 10);
+  private readonly MAX_ERROR_RETRIES = parseInt(
+    process.env.REALTIME_MAX_ERROR_RETRIES || '5',
+    10
+  );
+  private readonly RETRY_BACKOFF_BASE_MS = parseInt(
+    process.env.REALTIME_RETRY_BACKOFF_MS || '1000',
+    10
+  );
+  private readonly RETRY_BACKOFF_CAP_MS = parseInt(
+    process.env.REALTIME_RETRY_BACKOFF_CAP_MS || '8000',
+    10
+  );
 
   constructor(openai: OpenAI, config: RealtimeSessionConfig) {
-    if (config.agentType === 'transcript') {
+    if (config.agentType !== 'transcript') {
       throw new Error(
-        'RealtimeSession no longer supports transcript agent. Use TranscriptRealtimeSession instead.'
+        `TranscriptRealtimeSession expects agentType 'transcript', received '${config.agentType}'`
       );
     }
 
@@ -196,6 +180,7 @@ export class RealtimeSession implements AgentRealtimeSession {
       classifyRealtimeError: (error) => this.classifyRealtimeError(error),
       onLog: (level, message) => this.onLog?.(level, message),
       onError: (error, classification) => this.handleSessionError(error, classification),
+      onSessionUpdated: () => this.runtimeController.markTranscriptReady(),
     });
   }
 
@@ -272,7 +257,6 @@ export class RealtimeSession implements AgentRealtimeSession {
       return 'fatal';
     }
 
-    // Default to transient for unknown errors to allow retry, but cap by retry count
     return 'transient';
   }
 
@@ -337,215 +321,105 @@ export class RealtimeSession implements AgentRealtimeSession {
     }, delay);
   }
 
-  /**
-   * Initialize and connect to OpenAI Realtime API
-   */
   async connect(): Promise<string> {
     if (this.isActive) {
       throw new Error('Session already connected');
     }
 
-    // Phase 1: Pre-connection validation logging
     this.onLog?.('log', 'Connection attempt started');
 
-    if (!this.config.model) {
-      throw new Error(`Missing realtime model for ${this.config.agentType} agent`);
-    }
-
-    const connectionModel = this.config.model;
-    const policy = getPolicy(this.config.agentType);
-
-    // Notify that we're connecting (but status is still 'closed' until connected)
-    // Status will be updated to 'active' when connection is established
+    const sessionPolicy = getPolicy('transcript');
 
     try {
-      this.onLog?.('log', `Creating WebSocket connection with model: ${connectionModel}`);
-      const { session, durationMs } = await this.connectionManager.createSession(connectionModel);
+      this.onLog?.('log', `Creating WebSocket connection with model: ${REALTIME_TRANSCRIPTION_MODEL}`);
+      const { session, durationMs } = await this.connectionManager.createSession(
+        REALTIME_TRANSCRIPTION_MODEL,
+        'transcription'
+      );
       this.session = session;
       this.onLog?.('log', `WebSocket created in ${durationMs}ms`);
 
-      // Log WebSocket state after creation
       this.logWebSocketState('After WebSocket.create()');
-
-      // Set up event handlers BEFORE marking as active
       this.setupEventHandlers();
 
       await this.connectionManager.waitForTransportReady(this.session);
       this.logWebSocketState('After transport ready');
 
-      const retrieveTool: FunctionToolDefinition = {
-        type: 'function',
-        name: 'retrieve',
-        description:
-          'Retrieve relevant knowledge chunks from the vector database. Use this when you need domain-specific context, definitions, or background information that is not in the current transcript context.',
-        parameters: {
-          type: 'object',
-          properties: {
-            query: {
-              type: 'string',
-              description:
-                'The search query to find relevant context chunks. Should be a concise description of what information you need.',
-            },
-            top_k: {
-              type: 'number',
-              description: 'Number of top chunks to retrieve (default: 5, max: 10)',
-              default: 5,
-              minimum: 1,
-              maximum: 10,
-            },
-          },
-          required: ['query'],
-        },
-      };
-
-      const tools: FunctionToolDefinition[] = [retrieveTool];
-
-      if (this.config.agentType === 'cards') {
-        const produceCardTool: FunctionToolDefinition = {
-          type: 'function',
-          name: 'produce_card',
-          description:
-            'Generate a context card when content is novel and user-useful. This is the ONLY way to emit cards - you MUST use this tool instead of returning JSON directly.',
-          parameters: {
-            type: 'object',
-            properties: {
-              kind: {
-                type: 'string',
-                enum: [
-                  'Decision',
-                  'Metric',
-                  'Deadline',
-                  'Topic',
-                  'Entity',
-                  'Action',
-                  'Context',
-                  'Definition',
-                ],
-                description: 'The type/category of the card',
-              },
-              card_type: {
-                type: 'string',
-                enum: ['text', 'text_visual', 'visual'],
-                description:
-                  'The card display type: "text" for text-only, "text_visual" for text with image, "visual" for image-only',
-              },
-              title: {
-                type: 'string',
-                description: 'Brief title for the card (aim for <= 60 characters)',
-              },
-              body: {
-                type: 'string',
-                description:
-                  '1-3 bullet points with key information (required for text/text_visual types, null for visual type)',
-              },
-              label: {
-                type: 'string',
-                description:
-                  'Short label for image (required for visual type; aim for <= 40 characters; null for text/text_visual types)',
-              },
-              image_url: {
-                type: 'string',
-                description:
-                  'URL to supporting image (required for text_visual/visual types, null for text type)',
-              },
-              source_seq: {
-                type: 'number',
-                description:
-                  'The sequence number of the source transcript that triggered this card',
-              },
-            },
-            required: ['kind', 'card_type', 'title', 'source_seq'],
-          },
-        };
-        tools.push(produceCardTool);
-      }
-
-      const sessionUpdatePayload = {
-        type: 'realtime' as const,
-        instructions: policy,
-        output_modalities: ['text'],
-        max_output_tokens: 4096,
-        tools,
-      };
-
       const sessionUpdateEvent = {
         type: 'session.update',
-        session: sessionUpdatePayload,
+        session: {
+          type: 'transcription' as const,
+          audio: {
+            input: {
+              format: {
+                type: 'audio/pcm' as const,
+                rate: 24000,
+              },
+              noise_reduction: {
+                type: 'near_field' as const,
+              },
+              transcription: {
+                model: this.config.model ?? DEFAULT_TRANSCRIPTION_MODEL,
+                language: 'en',
+              },
+              turn_detection: {
+                type: 'server_vad' as const,
+                threshold: 0.5,
+                prefix_padding_ms: 300,
+                silence_duration_ms: 500,
+              },
+            },
+          },
+          instructions: sessionPolicy,
+          include: ['item.input_audio_transcription.logprobs'],
+        },
       } as unknown as RealtimeClientEvent;
 
-      this.onLog?.('log', `Sending session config with ${tools.length} tools`);
+      this.onLog?.('log', 'Sending transcription session config');
 
       try {
         this.session.send(sessionUpdateEvent);
-
         this.onLog?.('log', 'Session configuration sent');
       } catch (error: unknown) {
-        // If send fails, wait a bit and retry once
         const errorMessage = getLowercaseErrorField(error, 'message');
         if (errorMessage.includes('could not send data') || errorMessage.includes('not ready')) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-          try {
-            this.session.send(sessionUpdateEvent);
-          } catch (retryError: unknown) {
-            // Log but don't throw - connection might still work
-            const underlyingSocket = getSessionInternals(this.session).socket;
-            console.error(`[realtime] [${this.config.agentType}] Session update send failed after retry`, {
-              error: extractErrorMessage(retryError),
-              readyState: underlyingSocket?.readyState,
-              eventId: this.config.eventId,
-            });
-            this.onLog?.('error', `Session update failed: ${extractErrorMessage(retryError)}`);
-            // The session might still work, so we continue
-          }
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          this.session.send(sessionUpdateEvent);
         } else {
           throw error;
         }
       }
 
-      // Mark as active (connection established)
       this.isActive = true;
-      
-      // Log WebSocket state after marking active
       this.logWebSocketState('After marking active');
 
-      // Get session ID from URL or generate one
       const sessionId =
         this.session.url.toString().split('/').pop() ||
         `session_${this.config.eventId}_${this.config.agentType}_${Date.now()}`;
 
-      // Store connection timestamp on underlying socket if accessible
       try {
         const underlyingSocket = getUnderlyingSocket(this.session);
         if (underlyingSocket) {
           underlyingSocket.__connectedAt = new Date().toISOString();
         }
       } catch {
-        // Ignore if we can't access underlying socket
+        /* ignore */
       }
 
-      // Start ping-pong heartbeat
       this.heartbeat.start();
-
-      // Notify active status
       this.onStatusChange?.('active', sessionId);
-
-      // Reset retry tracking on successful connect
       this.errorRetryAttempts = 0;
       this.clearReconnectTimer();
 
-      // Update database
       if (this.supabase) {
         await this.updateDatabaseStatus('active', sessionId);
       }
 
-      const connectMessage = `Session connected: ${sessionId} (${this.config.agentType})`;
-      this.onLog?.('log', connectMessage);
-
+      this.onLog?.('log', `Session connected: ${sessionId} (${this.config.agentType})`);
       void this.messageQueue.processQueue();
 
       return sessionId;
     } catch (error: unknown) {
-      // Phase 9: Enhanced error context
       const underlyingSocket = getUnderlyingSocket(this.session);
       const errorContext = {
         errorType: error instanceof Error ? error.constructor.name : 'Unknown',
@@ -559,13 +433,10 @@ export class RealtimeSession implements AgentRealtimeSession {
         readyState: underlyingSocket?.readyState,
         timestamp: new Date().toISOString(),
       };
-      
-      this.onLog?.('error', `Connection failed: ${errorContext.message}`);
 
-      // Notify error status
+      this.onLog?.('error', `Connection failed: ${errorContext.message}`);
       this.onStatusChange?.('error');
 
-      // Update database
       if (this.supabase) {
         await this.updateDatabaseStatus('error');
       }
@@ -574,9 +445,6 @@ export class RealtimeSession implements AgentRealtimeSession {
     }
   }
 
-  /**
-   * Update agent_sessions table status
-   */
   private async updateDatabaseStatus(
     status: AgentSessionLifecycleStatus,
     sessionId?: string
@@ -585,23 +453,23 @@ export class RealtimeSession implements AgentRealtimeSession {
       return;
     }
 
+    const updateData = new Map<string, string>();
+    updateData.set('status', status as string);
+    updateData.set('updated_at', new Date().toISOString());
+
+    if (sessionId) {
+      updateData.set('provider_session_id', sessionId);
+    }
+
+    if (status === 'active' && this.config.model) {
+      updateData.set('model', this.config.model);
+    }
+
+    if (status === 'closed') {
+      updateData.set('closed_at', new Date().toISOString());
+    }
+
     try {
-      const updateData = new Map<string, string>();
-      updateData.set('status', status as string);
-      updateData.set('updated_at', new Date().toISOString());
-
-      if (sessionId) {
-        updateData.set('provider_session_id', sessionId);
-      }
-
-      if (status === 'active' && this.config.model) {
-        updateData.set('model', this.config.model);
-      }
-
-      if (status === 'closed') {
-        updateData.set('closed_at', new Date().toISOString());
-      }
-
       await this.supabase
         .from('agent_sessions')
         .update(Object.fromEntries(updateData))
@@ -611,45 +479,46 @@ export class RealtimeSession implements AgentRealtimeSession {
         });
     } catch (error: unknown) {
       this.onLog?.('error', `Database status update failed: ${extractErrorMessage(error)}`);
-      // Don't throw - status update failure shouldn't break session
     }
   }
 
-  /**
-   * Set up event handlers for Realtime API events
-   */
   private setupEventHandlers(): void {
     if (!this.session) {
       throw new Error('Session not initialized');
     }
 
-    // Handle session creation
     this.session.on('session.created', () => {
       this.eventRouter.handleSessionCreated();
     });
 
-    // Handle pong responses (WebSocket ping-pong)
-    // Note: OpenAI SDK may handle ping/pong at the WebSocket level, but we'll track it
-    // Check if the underlying socket supports ping/pong events
+    this.session.on(
+      'conversation.item.input_audio_transcription.delta',
+      (event: InputAudioTranscriptionDeltaEvent) => {
+        this.eventRouter.handleTranscriptionDelta(event);
+      }
+    );
+
+    this.session.on(
+      'conversation.item.input_audio_transcription.completed',
+      (event: InputAudioTranscriptionCompletedEvent) => {
+        this.eventRouter.handleTranscriptionCompleted(event);
+      }
+    );
+
     const underlyingSocket = getUnderlyingSocket(this.session);
     if (underlyingSocket && typeof underlyingSocket.on === 'function') {
-      // Standard WebSocket 'pong' event (fires when pong frame is received)
       underlyingSocket.on('pong', () => {
         this.eventRouter.handlePong();
       });
     } else {
-      // Ping/pong not available on this socket - disable ping/pong mechanism
       this.onLog?.('warn', 'Ping/pong not available on socket - SDK may handle it internally');
       this.heartbeat.stop();
     }
 
-    // Handle function call arguments completion
-    // When agent calls a tool, we receive the arguments and need to execute the tool
     this.session.on('response.function_call_arguments.done', (event: ResponseFunctionCallArgumentsDoneEvent) => {
       this.eventRouter.handleFunctionCall(event);
     });
 
-    // Handle response text completion (for JSON responses)
     this.session.on('response.output_text.delta', (event: unknown) => {
       this.eventRouter.handleResponseTextDelta(event);
     });
@@ -662,7 +531,6 @@ export class RealtimeSession implements AgentRealtimeSession {
       this.eventRouter.handleResponseDone(event);
     });
 
-    // Handle errors
     this.session.on('error', (error: unknown) => {
       const errorMessage = getLowercaseErrorField(error, 'message');
 
@@ -674,26 +542,24 @@ export class RealtimeSession implements AgentRealtimeSession {
       this.eventRouter.handleError(error);
     });
 
-    // Generic event handler for debugging
     this.session.on('event', (event: RealtimeServerEvent) => {
       this.eventRouter.handleGenericEvent(event);
     });
 
-    // Phase 5: Event handler registration confirmation (after all handlers are registered)
-    const handlersRegistered = [
-      'session.created',
-      'response.function_call_arguments.done',
-      'response.output_text.delta',
-      'response.output_text.done',
-      'response.done',
-      'error',
-      'event',
-    ];
-
     console.log(
       `[${new Date().toISOString()}] [realtime] [${this.config.agentType}] Event handlers registered`,
       {
-        handlersRegistered,
+        handlersRegistered: [
+          'session.created',
+          'conversation.item.input_audio_transcription.delta',
+          'conversation.item.input_audio_transcription.completed',
+          'response.function_call_arguments.done',
+          'response.output_text.delta',
+          'response.output_text.done',
+          'response.done',
+          'error',
+          'event',
+        ],
         eventId: this.config.eventId,
       }
     );
@@ -711,9 +577,6 @@ export class RealtimeSession implements AgentRealtimeSession {
     void this.runtimeController.handleTransientError();
   }
 
-  /**
-   * Send a message to the Realtime session
-   */
   async sendMessage(message: string, context?: RealtimeMessageContext): Promise<void> {
     await this.runtimeController.sendMessage(message, context);
   }
@@ -741,9 +604,6 @@ export class RealtimeSession implements AgentRealtimeSession {
     });
   }
 
-  /**
-   * Register event handler
-   */
   on<K extends RealtimeSessionEvent>(
     event: K,
     handler: (data: RealtimeSessionEventPayloads[K]) => void
@@ -754,9 +614,6 @@ export class RealtimeSession implements AgentRealtimeSession {
     this.eventHandlers[event]!.push(handler);
   }
 
-  /**
-   * Get session status
-   */
   getStatus(): RealtimeSessionStatus {
     const heartbeatState = this.heartbeat.getState();
     return buildStatusSnapshot({
@@ -771,15 +628,12 @@ export class RealtimeSession implements AgentRealtimeSession {
     this.onStatusChange?.(status, sessionId);
   }
 
-  /**
-   * Phase 7: Log WebSocket state transitions for debugging
-   */
   private logWebSocketState(operation: string, context?: Record<string, unknown>): void {
     try {
       const underlyingSocket = getUnderlyingSocket(this.session);
       const readyState = underlyingSocket?.readyState;
       const readyStateNames = ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'];
-      
+
       console.log(`[${new Date().toISOString()}] [realtime] [${this.config.agentType}] WebSocket state: ${operation}`, {
         readyState: readyState !== undefined ? `${readyState} (${readyStateNames[readyState]})` : 'unknown',
         isActive: this.isActive,
@@ -787,26 +641,19 @@ export class RealtimeSession implements AgentRealtimeSession {
         ...context,
       });
     } catch {
-      // Ignore if we can't access state
+      /* ignore */
     }
   }
 
-  /**
-   * Pause the session (close WebSocket but preserve state for resume)
-   */
   async pause(): Promise<void> {
     if (!this.isActive) {
       return;
     }
 
     try {
-      // Stop ping-pong heartbeat
       this.heartbeat.stop();
-
-      // Log WebSocket state before pausing
       this.logWebSocketState('Before pausing');
 
-      // Close WebSocket
       if (this.session) {
         this.session.close({
           code: 1000,
@@ -816,12 +663,8 @@ export class RealtimeSession implements AgentRealtimeSession {
       }
 
       this.isActive = false;
-      // Note: Don't clear messageQueue - preserve for resume
-
-      // Notify paused status
       this.onStatusChange?.('paused');
 
-      // Update database
       if (this.supabase) {
         await this.updateDatabaseStatus('paused');
       }
@@ -833,35 +676,22 @@ export class RealtimeSession implements AgentRealtimeSession {
     }
   }
 
-  /**
-   * Resume a paused session (reconnect and restore state)
-   */
   async resume(): Promise<string> {
     if (this.isActive) {
       throw new Error('Session already active');
     }
-
-    // Reconnect using the same connect() logic
     return await this.connect();
   }
 
-  /**
-   * Close the session permanently
-   */
   async close(): Promise<void> {
     if (!this.isActive && !this.session) {
-      // Already closed or paused
       return;
     }
 
     try {
-      // Log WebSocket state before closing
       this.logWebSocketState('Before closing');
-
-      // Stop heartbeat before closing
       this.heartbeat.stop();
 
-      // Close WebSocket if it exists
       if (this.session) {
         this.session.close({
           code: 1000,
@@ -872,11 +702,8 @@ export class RealtimeSession implements AgentRealtimeSession {
 
       this.isActive = false;
       this.messageQueue.clear();
-
-      // Notify closed status
       this.onStatusChange?.('closed');
 
-      // Update database
       if (this.supabase) {
         await this.updateDatabaseStatus('closed');
       }
@@ -888,3 +715,4 @@ export class RealtimeSession implements AgentRealtimeSession {
     }
   }
 }
+
