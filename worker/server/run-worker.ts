@@ -20,8 +20,10 @@ export interface WorkerRuntime {
   stop: () => Promise<void>;
 }
 
+const consoleLog = console.log as (...args: unknown[]) => void;
+
 const createLog = () => (...args: unknown[]): void => {
-  console.log(new Date().toISOString(), ...args);
+  consoleLog(...args);
 };
 
 export const startWorker = async (env: WorkerEnvConfig): Promise<WorkerRuntime> => {

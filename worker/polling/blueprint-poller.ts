@@ -22,6 +22,7 @@ interface ContextBlueprintRow {
 
 export class BlueprintPoller implements Poller {
   private processingAgents: Set<string>;
+  private readonly agentsWithActiveBlueprints: Set<string>;
 
   constructor(
     private readonly supabase: SupabaseClient,
@@ -31,6 +32,7 @@ export class BlueprintPoller implements Poller {
     private readonly log: LoggerFn = console.log
   ) {
     this.processingAgents = processingAgents ?? new Set<string>();
+    this.agentsWithActiveBlueprints = new Set<string>();
   }
 
   async tick(): Promise<void> {
@@ -79,9 +81,13 @@ export class BlueprintPoller implements Poller {
       // Only process if no active blueprints exist
       const existingBlueprints = blueprintRows ?? [];
       if (existingBlueprints.length === 0) {
+        this.agentsWithActiveBlueprints.delete(agent.id);
         agentsNeedingBlueprints.push(agent);
       } else {
-        this.log('[blueprint] Agent', agent.id, 'already has', existingBlueprints.length, 'active blueprint(s), skipping');
+        if (!this.agentsWithActiveBlueprints.has(agent.id)) {
+          this.log('[blueprint] Agent', agent.id, 'already has', existingBlueprints.length, 'active blueprint(s), skipping');
+          this.agentsWithActiveBlueprints.add(agent.id);
+        }
       }
     }
 

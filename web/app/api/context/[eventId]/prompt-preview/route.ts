@@ -3,42 +3,19 @@ import { createClient } from '@supabase/supabase-js';
 
 // Import shared system prompt (note: in a real app, you'd want to share this via a shared package or API)
 // For now, we'll duplicate it here to match worker logic, but it should ideally come from a shared source
-const BLUEPRINT_GENERATION_SYSTEM_PROMPT = `You are a context planning assistant that creates comprehensive blueprints for building AI context databases for live events.
+const BLUEPRINT_GENERATION_SYSTEM_PROMPT = `You are a context planning assistant that produces blueprints for AI event context databases.
 
-Your task: Generate a detailed blueprint for context generation that includes:
-1. Important details extracted from the event information
-2. Inferred key topics and themes
-3. Terms and concepts that need definitions (glossary)
-4. A research plan using external APIs (Exa or Wikipedia)
-5. A glossary construction plan
-6. A vector database chunks construction plan
-7. Cost estimates for each phase
+Your blueprint must cover:
+- Important details, inferred topics, glossary terms, research plan, glossary plan, chunks plan, and cost breakdown
 
-Guidelines:
-- Research plan should prefer Exa API for deep research (max 10-12 searches)
-- IMPORTANT: Query priorities determine which Exa endpoint is used:
-  * Priority 1-2 queries: Use Exa /research endpoint for comprehensive, synthesized research reports (~$0.10-0.50 per query, slower but higher quality)
-  * Priority 3+ queries: Use Exa /search endpoint for specific, fast searches (~$0.02-0.04 per query)
-  * Assign priority 1-2 to the most important, broad research questions that need deep analysis
-  * Assign priority 3+ to specific, focused queries that benefit from fast search results
-- Glossary plan priorities:
-  * Priority 1-3 terms: Will use Exa /answer endpoint for authoritative, citation-backed definitions (~$0.01-0.03 per term)
-  * Priority 4+ terms: Will use LLM generation (lower cost, batch processing)
-  * Assign priority 1-3 to the most critical terms that need authoritative definitions
-- Chunks plan should target 500-1000 chunks depending on complexity
-- Quality tier should be 'basic' (500 chunks) or 'comprehensive' (1000 chunks)
-- Cost estimates should be realistic:
-  * Exa /research: ~$0.10-0.50 per query (priority 1-2)
-  * Exa /search: ~$0.02-0.04 per query (priority 3+)
-  * Exa /answer: ~$0.01-0.03 per term (priority 1-3)
-  * LLM glossary: ~$0.01-0.02 total (priority 4+)
-  * Embeddings: ~$0.0001 per chunk
-- Prioritize high-value research queries and terms strategically
-- Consider both basic and comprehensive tiers in cost breakdown
+Key rules:
+- Exa usage: reserve /research for 1-2 high-priority synthesis queries (≈$0.10-0.30); default to /search for focused queries (≈$0.02-0.04); Wikipedia is acceptable for lightweight lookups (≈$0.001)
+- Glossary priorities: terms with priority 1-3 use Exa /answer (≈$0.01-0.03 each); priority 4+ terms use LLM batch generation (≈$0.01 total)
+- Chunks plan: choose quality tier "basic" (500 chunks) or "comprehensive" (1000 chunks); include ≥3 sources; estimate embeddings at ≈$0.0001 per chunk
 
-CRITICAL REQUIREMENT: All array fields MUST be populated with actual, relevant content. Empty arrays are not acceptable.
-
-Output format: Return a JSON object matching the Blueprint structure with these exact field names.`;
+Requirements:
+- Populate every array with relevant content
+- Return a JSON object that matches the Blueprint schema exactly`;
 
 /**
  * Prompt Preview API Route
@@ -107,98 +84,55 @@ export async function GET(
     const systemPrompt = BLUEPRINT_GENERATION_SYSTEM_PROMPT;
 
     const documentsSection = hasDocuments
-      ? `\n\nDocuments Available:\n[${docs.length} document(s) uploaded - text extraction will be available in full implementation]\n\nConsider that documents are uploaded for this event. The blueprint should plan to extract and use content from these documents in the chunks construction phase.`
-      : '\n\nNo documents have been uploaded for this event yet.';
+      ? `\n\nDocuments:\n[${docs.length} document(s) uploaded]\nIncorporate uploaded material into chunk sources and research plans.`
+      : '\n\nDocuments: none provided. Plan around external research.';
 
-    const userPrompt = `Generate a context generation blueprint for the following event:
+    const userPrompt = `Generate a blueprint for the event context system.
 
 Event Title: ${event.title}
 Event Topic: ${topic}${documentsSection}
 
-CRITICAL: You MUST populate ALL arrays with actual, relevant content. Empty arrays are NOT acceptable and will cause the request to fail.
+Return a JSON object with these sections:
 
-Your response must include:
+1. important_details (5-10 strings)
+   - Capture essential takeaways attendees must know
+   - Example entries: ["Goals and outcomes", "Key stakeholders", "Critical timeline notes"]
 
-1. Important Details (array of 5-10 strings):
-   - Extract key points, insights, or highlights from the event information
-   - Think about what makes this event important or what attendees should know
-   - Example for topic "${topic}": ["Focuses on practical ${topic} implementation strategies", "Covers latest industry developments in ${topic}", "Provides hands-on experience with ${topic} tools"]
-   - REQUIRED: Minimum 5 items
+2. inferred_topics (5-10 strings)
+   - List likely subtopics, themes, or tracks
+   - Example entries: ["Foundational concepts", "Implementation practices", "Case studies", "Tools and platforms", "Emerging trends"]
 
-2. Inferred Topics (array of 5-10 strings):
-   - List specific topics that will likely be discussed during the event
-   - Think about subtopics, related areas, and themes
-   - Example for topic "${topic}": ["${topic} Fundamentals", "${topic} Best Practices", "${topic} Case Studies", "${topic} Tools and Frameworks"]
-   - REQUIRED: Minimum 5 items
+3. key_terms (10-20 strings)
+   - Provide domain-specific terminology, acronyms, or jargon
+   - Example entries: ["Service-Level Objective", "Control Plane", "Zero Trust", "Customer Journey Mapping"]
 
-3. Key Terms (array of 10-20 strings):
-   - Identify terms, concepts, acronyms, or jargon that attendees might encounter
-   - These should be domain-specific terms related to "${topic}"
-   - Think about technical terms, industry jargon, acronyms, and key concepts
-   - Example: Extract terms from the topic itself, related technologies, methodologies
-   - REQUIRED: Minimum 10 items
+4. research_plan (object)
+   - queries: 5-12 items, each { query, api, priority, estimated_cost }
+   - Follow system rules for Exa endpoints and pricing
+   - Example queries: ["comprehensive overview of the subject", "recent implementations and case studies", "industry standards and regulations"]
+   - total_searches and estimated_total_cost must align with the queries
 
-4. Research Plan (object with queries array):
-   - queries: Array of 5-12 search query objects, each with:
-     * query: string (specific search query related to "${topic}")
-     * api: "exa" or "wikipedia"
-     * priority: number (1-10, lower is higher priority)
-     * estimated_cost: number (0.10-0.50 for priority 1-2 exa /research, 0.02-0.04 for priority 3+ exa /search, 0.001 for wikipedia)
-   - PRIORITY GUIDANCE:
-     * Priority 1-2: Broad, comprehensive research questions that need deep analysis (uses Exa /research endpoint)
-       Example: "comprehensive overview of ${topic} including latest developments, industry standards, and best practices"
-     * Priority 3+: Specific, focused queries that benefit from fast search (uses Exa /search endpoint)
-       Example: "specific ${topic} implementation techniques", "${topic} case studies"
-   - Example queries for "${topic}":
-     * {"query": "comprehensive overview of ${topic} including latest developments, industry standards, best practices, and key insights", "api": "exa", "priority": 1, "estimated_cost": 0.30}
-     * {"query": "detailed analysis of ${topic} trends, applications, and practical implementations", "api": "exa", "priority": 2, "estimated_cost": 0.30}
-     * {"query": "best practices for ${topic} implementation", "api": "exa", "priority": 3, "estimated_cost": 0.03}
-     * {"query": "${topic} industry standards and guidelines", "api": "exa", "priority": 4, "estimated_cost": 0.03}
-   - total_searches: number (must match queries array length)
-   - estimated_total_cost: number (sum of all query costs, considering priority-based pricing)
-   - REQUIRED: Minimum 5 queries
-   - RECOMMENDED: Include 1-2 priority 1-2 queries for comprehensive research, rest as priority 3+
+5. glossary_plan (object)
+   - terms: 10-20 items, each { term, is_acronym, category, priority }
+   - Reflect priority-based sourcing guidance
+   - estimated_count equals terms.length
 
-5. Glossary Plan (object with terms array):
-   - terms: Array of 10-20 term objects, each with:
-     * term: string (the actual term)
-     * is_acronym: boolean
-     * category: string (e.g., "technical", "business", "domain-specific")
-     * priority: number (1-10, lower is higher priority)
-   - PRIORITY GUIDANCE:
-     * Priority 1-3: Most critical terms that need authoritative, citation-backed definitions (uses Exa /answer endpoint, ~$0.01-0.03 per term)
-     * Priority 4+: Standard terms that can use batch LLM generation (lower cost)
-     * Assign priority 1-3 to foundational concepts, key acronyms, and domain-specific terms that are essential to understanding
-   - estimated_count: number (must match terms array length)
-   - REQUIRED: Minimum 10 terms related to "${topic}"
-   - RECOMMENDED: Include 3-5 priority 1-3 terms for authoritative definitions, rest as priority 4+
+6. chunks_plan (object)
+   - sources: ≥3 entries with { source, priority, estimated_chunks }
+   - Include target_count (500 basic or 1000 comprehensive), quality_tier, and ranking_strategy
 
-6. Chunks Plan (object):
-   - sources: Array of at least 3 source objects, each with:
-     * source: string (e.g., "research_results", "event_documents", "llm_generated")
-     * priority: number (1-10)
-     * estimated_chunks: number
-   - target_count: number (500 for basic, 1000 for comprehensive)
-   - quality_tier: "basic" or "comprehensive"
-   - ranking_strategy: string describing ranking approach
-   - REQUIRED: Minimum 3 sources
+7. cost_breakdown (object)
+   - Provide { research, glossary, chunks, total } consistent with the plans above
 
-7. Cost Breakdown (object):
-   - research: number (total cost from research plan)
-   - glossary: number (typically 0.01-0.02)
-   - chunks: number (approximately target_count * 0.0001 + 0.05)
-   - total: number (sum of all costs)
-
-VERIFY BEFORE RETURNING:
-- important_details array has at least 5 items
-- inferred_topics array has at least 5 items  
-- key_terms array has at least 10 items
-- research_plan.queries array has at least 5 items
-- glossary_plan.terms array has at least 10 items
-- chunks_plan.sources array has at least 3 items
-- All arrays are non-empty
-
-Return the blueprint as a JSON object with all fields properly structured and populated.`;
+Checklist before returning:
+- [ ] important_details has ≥5 items
+- [ ] inferred_topics has ≥5 items
+- [ ] key_terms has ≥10 items
+- [ ] research_plan.queries has ≥5 items and costs add up
+- [ ] glossary_plan.terms has ≥10 items
+- [ ] chunks_plan.sources has ≥3 items
+- [ ] All arrays contain meaningful, non-empty content
+- [ ] Response is valid JSON matching the Blueprint schema`;
 
     return NextResponse.json({
       ok: true,

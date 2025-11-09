@@ -707,6 +707,8 @@ function getStatusColor(status: string, stage?: string | null, blueprintStatus?:
         if (blueprintStatus === 'approved') return '#10b981'; // green - approved
         if (blueprintStatus === 'error') return '#ef4444'; // red - error
         return '#8b5cf6'; // purple - default blueprint state
+      case 'blueprint_generating':
+        return '#3b82f6'; // blue - actively generating
       case 'researching': return '#f59e0b'; // amber
       case 'building_glossary': return '#f59e0b'; // amber
       case 'building_chunks': return '#f59e0b'; // amber
@@ -738,6 +740,8 @@ function getStatusLabel(status: string, stage?: string | null, blueprintStatus?:
         if (blueprintStatus === 'approved') return 'Blueprint Approved';
         if (blueprintStatus === 'error') return 'Blueprint Error';
         return 'Blueprint';
+      case 'blueprint_generating':
+        return 'Generating Blueprint';
       case 'researching': return 'Researching';
       case 'building_glossary': return 'Building Glossary';
       case 'building_chunks': return 'Building Chunks';

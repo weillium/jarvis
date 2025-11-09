@@ -58,6 +58,11 @@ export const insertBlueprintRecord = async (
   eventId: string,
   agentId: string
 ): Promise<string> => {
+  const placeholderBlueprint: Record<string, unknown> = {
+    status: 'generating',
+    created_at: new Date().toISOString(),
+  };
+
   const { data, error }: SupabaseSingleResult<BlueprintRecord> = await supabase
     .from('context_blueprints')
     .insert(
@@ -65,6 +70,19 @@ export const insertBlueprintRecord = async (
         event_id: eventId,
         agent_id: agentId,
         status: 'generating',
+        blueprint: placeholderBlueprint,
+        important_details: [],
+        inferred_topics: [],
+        key_terms: [],
+        research_plan: null,
+        research_apis: [],
+        research_search_count: 0,
+        estimated_cost: 0,
+        glossary_plan: null,
+        chunks_plan: null,
+        target_chunk_count: null,
+        quality_tier: null,
+        created_at: new Date().toISOString(),
       })
     )
     .select('id')
@@ -241,6 +259,54 @@ export const supersedeExistingBlueprints = async (
   if (downstreamCycleError) {
     console.warn(
       `[blueprint] Warning: Failed to mark downstream cycles as superseded: ${downstreamCycleError.message}`
+    );
+  }
+};
+
+export const markBlueprintError = async (
+  supabase: WorkerSupabaseClient,
+  params: {
+    blueprintId: string;
+    errorMessage: string;
+  }
+): Promise<void> => {
+  const { error }: SupabaseMutationResult = await supabase
+    .from('context_blueprints')
+    .update(
+      asDbPayload({
+        status: 'error',
+        error_message: params.errorMessage,
+      })
+    )
+    .eq('id', params.blueprintId);
+
+  if (error) {
+    console.warn(
+      `[blueprint] Warning: Failed to mark blueprint ${params.blueprintId} as error: ${error.message}`
+    );
+  }
+};
+
+export const markBlueprintGenerationCycleFailed = async (
+  supabase: WorkerSupabaseClient,
+  params: {
+    generationCycleId: string;
+    errorMessage: string;
+  }
+): Promise<void> => {
+  const { error }: SupabaseMutationResult = await supabase
+    .from('generation_cycles')
+    .update(
+      asDbPayload({
+        status: 'failed',
+        error_message: params.errorMessage,
+      })
+    )
+    .eq('id', params.generationCycleId);
+
+  if (error) {
+    console.warn(
+      `[blueprint] Warning: Failed to mark blueprint generation cycle ${params.generationCycleId} as failed: ${error.message}`
     );
   }
 };

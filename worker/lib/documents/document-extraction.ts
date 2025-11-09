@@ -1,4 +1,3 @@
-import pdfParse from 'pdf-parse';
 import type { WorkerSupabaseClient } from '../../services/supabase';
 
 const DOCUMENT_BUCKET = 'event-docs';
@@ -115,8 +114,16 @@ const getDocumentExtension = (doc: EventDocumentMetadata): string | null => {
 
 const parseBuffer = async (buffer: Buffer, extension: string): Promise<string> => {
   if (extension === 'pdf') {
-    const result = await pdfParse(buffer);
-    return result.text ?? '';
+    const { PDFParse } = await loadPdfParse();
+    const parser = new PDFParse({ data: buffer });
+    try {
+      const result = await parser.getText();
+      return result.text ?? '';
+    } finally {
+      if (typeof parser.destroy === 'function') {
+        await parser.destroy();
+      }
+    }
   }
 
   return buffer.toString('utf8');
@@ -138,5 +145,45 @@ const normalizeText = (text: string | null | undefined): string | null => {
   }
 
   return cleaned;
+};
+
+type PdfParseModule = {
+  PDFParse: new (options: { data: Uint8Array | Buffer }) => {
+    getText: () => Promise<{ text?: string }>;
+    destroy?: () => Promise<void>;
+  };
+};
+
+let cachedPdfParse: PdfParseModule | null = null;
+
+const loadPdfParse = async (): Promise<PdfParseModule> => {
+  if (cachedPdfParse) {
+    return cachedPdfParse;
+  }
+
+  try {
+    const mod = (await import('pdf-parse')) as Partial<PdfParseModule>;
+    if (mod && typeof mod.PDFParse === 'function') {
+      cachedPdfParse = mod as PdfParseModule;
+      return cachedPdfParse;
+    }
+  } catch (err) {
+    console.debug('[documents] pdf-parse dynamic import failed:', String(err));
+  }
+
+  if (typeof require !== 'undefined') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+      const mod = require('pdf-parse') as Partial<PdfParseModule>;
+      if (mod && typeof mod.PDFParse === 'function') {
+        cachedPdfParse = mod as PdfParseModule;
+        return cachedPdfParse;
+      }
+    } catch (err) {
+      console.debug('[documents] pdf-parse require() failed:', String(err));
+    }
+  }
+
+  throw new Error('Failed to load pdf-parse module');
 };
 

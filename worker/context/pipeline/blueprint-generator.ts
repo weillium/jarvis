@@ -28,6 +28,8 @@ import {
   updateBlueprintRecord,
   updateGenerationCycleWithCost,
   supersedeExistingBlueprints,
+  markBlueprintError,
+  markBlueprintGenerationCycleFailed,
 } from './blueprint/persistence';
 
 const hasUploadedDocuments = (documentsText: string) =>
@@ -65,6 +67,23 @@ const prepareGenerationCycleMetadata = (blueprint: BlueprintWithUsage, genModel:
   };
 };
 
+const extractBlueprintErrorMessage = (err: unknown): string => {
+  const defaultMessage = 'Blueprint generation failed due to unexpected shape';
+
+  if (err && typeof err === 'object') {
+    const issues = (err as { blueprintIssues?: unknown }).blueprintIssues;
+    if (Array.isArray(issues) && issues.length > 0) {
+      return `Blueprint validation failed: ${issues.join('; ')}`;
+    }
+  }
+
+  if (err instanceof Error && err.message) {
+    return err.message;
+  }
+
+  return defaultMessage;
+};
+
 export async function generateContextBlueprint(
   eventId: string,
   agentId: string,
@@ -94,16 +113,36 @@ export async function generateContextBlueprint(
       console.log(`[blueprint] Generation cycle created with ID: ${generationCycleId}`);
     }
 
-    const blueprint = await generateBlueprintWithLLM({
-      context: {
-        eventTitle: event.title,
-        eventTopic: event.topic,
-        documentsText,
-        hasDocuments: hasUploadedDocuments(documentsText),
-      },
-      openai,
-      genModel,
-    });
+    let blueprint: BlueprintWithUsage;
+
+    try {
+      blueprint = await generateBlueprintWithLLM({
+        context: {
+          eventTitle: event.title,
+          eventTopic: event.topic,
+          documentsText,
+          hasDocuments: hasUploadedDocuments(documentsText),
+        },
+        openai,
+        genModel,
+      });
+    } catch (err: unknown) {
+      const errorMessage = extractBlueprintErrorMessage(err);
+
+      await markBlueprintError(supabase, {
+        blueprintId,
+        errorMessage,
+      });
+
+      if (generationCycleId) {
+        await markBlueprintGenerationCycleFailed(supabase, {
+          generationCycleId,
+          errorMessage,
+        });
+      }
+
+      throw err;
+    }
 
     const cycleCost = prepareGenerationCycleMetadata(blueprint, genModel);
 

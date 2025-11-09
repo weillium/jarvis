@@ -157,10 +157,48 @@ const isBlueprint = (value: unknown): value is Blueprint =>
   isCostBreakdown(value.cost_breakdown);
 
 export const ensureBlueprintShape = (value: unknown): Blueprint => {
-  if (!isBlueprint(value)) {
-    throw new Error('Blueprint stored in database has unexpected shape');
+  const issues: string[] = [];
+
+  if (isBlueprint(value)) {
+    return value;
   }
-  return value;
+
+  if (!isRecord(value)) {
+    issues.push('payload is not an object');
+  } else {
+    if (!isStringArray(value.important_details)) {
+      issues.push('important_details must be an array of strings with at least 5 items');
+    }
+    if (!isStringArray(value.inferred_topics)) {
+      issues.push('inferred_topics must be an array of strings with at least 5 items');
+    }
+    if (!isStringArray(value.key_terms)) {
+      issues.push('key_terms must be an array of strings with at least 10 items');
+    }
+    if (!isResearchPlan(value.research_plan)) {
+      issues.push('research_plan is missing required fields or contains invalid queries');
+    }
+    if (!isGlossaryPlan(value.glossary_plan)) {
+      issues.push('glossary_plan is missing required fields or term entries are invalid');
+    }
+    if (!isChunksPlan(value.chunks_plan)) {
+      issues.push('chunks_plan is missing required fields or contains invalid sources');
+    }
+    if (!isCostBreakdown(value.cost_breakdown)) {
+      issues.push('cost_breakdown must include numeric research, glossary, chunks, and total values');
+    }
+  }
+
+  if (issues.length > 0) {
+    console.error('[blueprint] Blueprint validation failed', {
+      issues,
+    });
+    const error = new Error('Blueprint stored in database has unexpected shape');
+    (error as { blueprintIssues?: string[] }).blueprintIssues = issues;
+    throw error;
+  }
+
+  return value as Blueprint;
 };
 
 export const normalizeGlossaryDefinitions = (

@@ -78,7 +78,133 @@ IMPORTANT: This is a retry attempt. The previous response had empty or insuffici
         request.temperature = currentTemperature;
       }
 
-      const response = await openai.chat.completions.create(request) as OpenAI.Chat.Completions.ChatCompletion;
+      const response = await openai.chat.completions.create({
+        ...request,
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'Blueprint',
+            schema: {
+              type: 'object',
+              required: [
+                'important_details',
+                'inferred_topics',
+                'key_terms',
+                'research_plan',
+                'glossary_plan',
+                'chunks_plan',
+                'cost_breakdown',
+              ],
+              additionalProperties: false,
+              properties: {
+                important_details: {
+                  type: 'array',
+                  minItems: 5,
+                  maxItems: 10,
+                  items: { type: 'string', minLength: 1 },
+                },
+                inferred_topics: {
+                  type: 'array',
+                  minItems: 5,
+                  maxItems: 10,
+                  items: { type: 'string', minLength: 1 },
+                },
+                key_terms: {
+                  type: 'array',
+                  minItems: 10,
+                  maxItems: 20,
+                  items: { type: 'string', minLength: 1 },
+                },
+                research_plan: {
+                  type: 'object',
+                  required: ['queries', 'total_searches', 'estimated_total_cost'],
+                  additionalProperties: false,
+                  properties: {
+                    queries: {
+                      type: 'array',
+                      minItems: 5,
+                      maxItems: 12,
+                      items: {
+                        type: 'object',
+                        required: ['query', 'api', 'priority', 'estimated_cost'],
+                        additionalProperties: false,
+                        properties: {
+                          query: { type: 'string', minLength: 1 },
+                          api: { type: 'string', enum: ['exa', 'wikipedia'] },
+                          priority: { type: 'integer', minimum: 1 },
+                          estimated_cost: { type: 'number', minimum: 0 },
+                        },
+                      },
+                    },
+                    total_searches: { type: 'integer', minimum: 1 },
+                    estimated_total_cost: { type: 'number', minimum: 0 },
+                  },
+                },
+                glossary_plan: {
+                  type: 'object',
+                  required: ['terms', 'estimated_count'],
+                  additionalProperties: false,
+                  properties: {
+                    terms: {
+                      type: 'array',
+                      minItems: 10,
+                      maxItems: 20,
+                      items: {
+                        type: 'object',
+                        required: ['term', 'is_acronym', 'category', 'priority'],
+                        additionalProperties: false,
+                        properties: {
+                          term: { type: 'string', minLength: 1 },
+                          is_acronym: { type: 'boolean' },
+                          category: { type: 'string', minLength: 1 },
+                          priority: { type: 'integer', minimum: 1 },
+                        },
+                      },
+                    },
+                    estimated_count: { type: 'integer', minimum: 10 },
+                  },
+                },
+                chunks_plan: {
+                  type: 'object',
+                  required: ['sources', 'target_count', 'quality_tier', 'ranking_strategy'],
+                  additionalProperties: false,
+                  properties: {
+                    sources: {
+                      type: 'array',
+                      minItems: 3,
+                      items: {
+                        type: 'object',
+                        required: ['source', 'priority', 'estimated_chunks'],
+                        additionalProperties: false,
+                        properties: {
+                          source: { type: 'string', minLength: 1 },
+                          priority: { type: 'integer', minimum: 1 },
+                          estimated_chunks: { type: 'integer', minimum: 1 },
+                        },
+                      },
+                    },
+                    target_count: { type: 'integer', enum: [500, 1000] },
+                    quality_tier: { type: 'string', enum: ['basic', 'comprehensive'] },
+                    ranking_strategy: { type: 'string', minLength: 1 },
+                  },
+                },
+                cost_breakdown: {
+                  type: 'object',
+                  required: ['research', 'glossary', 'chunks', 'total'],
+                  additionalProperties: false,
+                  properties: {
+                    research: { type: 'number', minimum: 0 },
+                    glossary: { type: 'number', minimum: 0 },
+                    chunks: { type: 'number', minimum: 0 },
+                    total: { type: 'number', minimum: 0 },
+                  },
+                },
+              },
+            },
+            strict: true,
+          },
+        },
+      }) as OpenAI.Chat.Completions.ChatCompletion;
 
       const content = response.choices[0]?.message?.content;
       if (!content) {

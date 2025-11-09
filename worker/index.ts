@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import './bootstrap/logging';
 import { loadWorkerEnv } from './bootstrap/env';
 import { startWorker } from './server/run-worker';
 

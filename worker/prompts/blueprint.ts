@@ -42,7 +42,7 @@ Return a JSON object with these sections:
 
 4. research_plan (object)
    - queries: 5-12 items, each { query, api, priority, estimated_cost }
-   - Follow system rules for Exa endpoints and pricing
+   - Follow system rules for Exa endpoints and pricing; every query MUST include numeric estimated_cost
    - Example queries: ["comprehensive overview of the subject", "recent implementations and case studies", "industry standards and regulations"]
    - total_searches and estimated_total_cost must align with the queries
 

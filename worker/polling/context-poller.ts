@@ -38,6 +38,7 @@ const isContextBlueprintRecord = (value: unknown): value is ContextBlueprintReco
 
 export class ContextPoller implements Poller {
   private processingAgents: Set<string>;
+  private readonly loggedProcessingAgents: Set<string>;
 
   constructor(
     private readonly supabase: SupabaseClient,
@@ -49,6 +50,7 @@ export class ContextPoller implements Poller {
     private readonly log: LoggerFn = console.log
   ) {
     this.processingAgents = processingAgents ?? new Set<string>();
+    this.loggedProcessingAgents = new Set<string>();
   }
 
   async tick(): Promise<void> {
@@ -77,7 +79,10 @@ export class ContextPoller implements Poller {
 
     for (const agent of approvedAgents) {
       if (this.processingAgents.has(agent.id)) {
-        this.log('[context-gen] Agent', agent.id, 'already being processed, skipping');
+        if (!this.loggedProcessingAgents.has(agent.id)) {
+          this.log('[context-gen] Agent', agent.id, 'already being processed, skipping');
+          this.loggedProcessingAgents.add(agent.id);
+        }
         continue;
       }
 
@@ -97,6 +102,7 @@ export class ContextPoller implements Poller {
       }
 
       this.processingAgents.add(agent.id);
+      this.loggedProcessingAgents.delete(agent.id);
 
       try {
         this.log(
@@ -119,6 +125,7 @@ export class ContextPoller implements Poller {
         console.error("[context-poller] error:", String(err));
       } finally {
         this.processingAgents.delete(agent.id);
+        this.loggedProcessingAgents.delete(agent.id);
       }
     }
   }
