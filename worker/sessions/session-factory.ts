@@ -5,7 +5,7 @@ import type {
   AgentSessionLifecycleStatus,
   RealtimeSessionConfig,
 } from './realtime-session';
-import { FactsRealtimeSession } from './realtime-session';
+import { FactsStatelessSession } from './realtime-session';
 import { CardsRealtimeSession } from './realtime-session/cards-realtime-session';
 import { TranscriptRealtimeSession } from './realtime-session/transcript-realtime-session';
 import type { EventRuntime } from '../types';
@@ -70,7 +70,7 @@ export class SessionFactory {
   ): AgentRealtimeSession {
     const config = this.buildConfig('facts', runtime, hooks, model);
     const openaiClient = apiKey ? new OpenAI({ apiKey }) : this.openai;
-    return new FactsRealtimeSession(openaiClient, config);
+    return new FactsStatelessSession(openaiClient, config);
   }
 
   private buildConfig(
