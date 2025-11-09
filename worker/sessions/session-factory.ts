@@ -5,7 +5,8 @@ import type {
   AgentSessionLifecycleStatus,
   RealtimeSessionConfig,
 } from './realtime-session';
-import { RealtimeSession } from './realtime-session';
+import { FactsRealtimeSession } from './realtime-session';
+import { CardsRealtimeSession } from './realtime-session/cards-realtime-session';
 import { TranscriptRealtimeSession } from './realtime-session/transcript-realtime-session';
 import type { EventRuntime } from '../types';
 import type { VectorSearchService } from '../context/vector-search';
@@ -58,7 +59,7 @@ export class SessionFactory {
   ): AgentRealtimeSession {
     const config = this.buildConfig('cards', runtime, hooks, model);
     const openaiClient = apiKey ? new OpenAI({ apiKey }) : this.openai;
-    return new RealtimeSession(openaiClient, config);
+    return new CardsRealtimeSession(openaiClient, config);
   }
 
   createFactsSession(
@@ -69,7 +70,7 @@ export class SessionFactory {
   ): AgentRealtimeSession {
     const config = this.buildConfig('facts', runtime, hooks, model);
     const openaiClient = apiKey ? new OpenAI({ apiKey }) : this.openai;
-    return new RealtimeSession(openaiClient, config);
+    return new FactsRealtimeSession(openaiClient, config);
   }
 
   private buildConfig(
