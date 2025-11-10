@@ -43,30 +43,74 @@ export class PromptCardGenerator implements CardGenerator {
       2048
     );
 
+    const supportingContext = input.messageContext?.supportingContext;
+
     const factsRecord = input.messageContext?.facts ?? {};
-    const factsJson =
+    const baseFactsJson =
       typeof factsRecord === 'string'
         ? factsRecord
         : JSON.stringify(factsRecord ?? {}, null, 2);
 
-    const glossaryContext =
-      typeof input.messageContext?.glossaryContext === 'string'
-        ? input.messageContext?.glossaryContext
+    const supportingFactsJson =
+      supportingContext?.facts && supportingContext.facts.length > 0
+        ? JSON.stringify(supportingContext.facts, null, 2)
         : '';
 
-    const recentCardsSummary = input.previousCards
-      .slice(-MAX_CARD_HISTORY)
-      .map(
-        (card) =>
-          `- [${card.kind}] ${card.title ?? 'untitled'} (type: ${card.card_type}, seq: ${card.source_seq})`
-      )
+    const factsJson = [supportingFactsJson, baseFactsJson].filter(Boolean).join('\n');
+
+    const glossaryContext =
+      typeof input.messageContext?.glossaryContext === 'string'
+        ? input.messageContext.glossaryContext
+        : '';
+
+    const supportingGlossary =
+      supportingContext?.glossaryEntries && supportingContext.glossaryEntries.length > 0
+        ? supportingContext.glossaryEntries
+            .map((entry) => `- ${entry.term}: ${entry.definition ?? ''}`)
+            .join('\n')
+        : '';
+
+    const contextBullets =
+      supportingContext?.contextBullets && supportingContext.contextBullets.length > 0
+        ? supportingContext.contextBullets.join('\n')
+        : '';
+
+    const recentCardsSummary = [
+      input.previousCards
+        .slice(-MAX_CARD_HISTORY)
+        .map(
+          (card) =>
+            `- [${card.kind}] ${card.title ?? 'untitled'} (type: ${card.card_type}, seq: ${card.source_seq})`
+        )
+        .join('\n'),
+      supportingContext?.recentCards && supportingContext.recentCards.length > 0
+        ? supportingContext.recentCards
+            .map(
+              (card) =>
+                `- [cached] ${card.conceptLabel} (${card.cardType ?? 'text'}) seq ${card.sourceSeq}`
+            )
+            .join('\n')
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const conceptFocus = input.messageContext?.concept
+      ? `Concept: ${input.messageContext.concept.label} (id: ${
+          input.messageContext.concept.id
+        }, source: ${input.messageContext.concept.source ?? 'unknown'})`
+      : undefined;
+
+    const combinedGlossary = [glossaryContext, supportingGlossary, contextBullets]
+      .filter(Boolean)
       .join('\n');
 
     const userPrompt = createCardGenerationUserPrompt(
       input.recentTranscript,
       bulletSummary,
       factsJson,
-      `${glossaryContext}\n\nRecent Cards:\n${recentCardsSummary || 'None'}`
+      `${combinedGlossary}\n\nRecent Cards:\n${recentCardsSummary || 'None'}`,
+      conceptFocus
     );
 
     const response = await this.deps.openaiService.createChatCompletion(

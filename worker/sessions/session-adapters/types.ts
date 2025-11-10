@@ -62,6 +62,24 @@ export interface RealtimeMessageContext {
   recentText?: string;
   facts?: Fact[] | Record<string, unknown>;
   sourceSeq?: number;
+  concept?: {
+    id: string;
+    label: string;
+    source?: string;
+  };
+  supportingContext?: {
+    facts?: Array<{ key: string; value: unknown; confidence: number }>;
+    recentCards?: Array<{
+      conceptId: string;
+      conceptLabel: string;
+      cardType?: string;
+      sourceSeq: number;
+      createdAt: number;
+      metadata?: Record<string, unknown>;
+    }>;
+    glossaryEntries?: Array<{ term: string; definition?: string }>;
+    contextBullets?: string[];
+  };
 }
 
 export type RealtimeSessionEvent = 'card' | 'response' | 'facts' | 'transcript' | 'error';

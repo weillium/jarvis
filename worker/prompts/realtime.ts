@@ -6,7 +6,8 @@ export function createCardGenerationUserPrompt(
   runtimeContext: string,
   currentTranscript: string,
   recentCards: string,
-  glossaryContext: string
+  glossaryContext: string,
+  conceptFocus?: string
 ): string {
   return `You are an event assistant generating concise, insightful recap cards.
 
@@ -22,6 +23,7 @@ ${recentCards}
 Glossary Context:
 ${glossaryContext}
 
+${conceptFocus ? `Concept Focus:\n${conceptFocus}\n\n` : ''}
 Instructions:
 - Create 1-2 new cards summarizing the key points
 - Each card: title (<= 8 words) + body (2 sentences max)

@@ -1,6 +1,7 @@
 import type { EventRuntime, TranscriptChunk } from '../types';
 import { RingBuffer } from '../state/ring-buffer';
 import { FactsStore } from '../state/facts-store';
+import { CardsStore } from '../state/cards-store';
 import type { GlossaryManager } from '../context/glossary-manager';
 import type { CheckpointManager } from '../monitoring/checkpoint-manager';
 import type { MetricsCollector } from '../monitoring/metrics-collector';
@@ -77,7 +78,9 @@ export class RuntimeManager {
       },
       ringBuffer: new RingBuffer(1000, 5 * 60 * 1000),
       factsStore,
+      cardsStore: new CardsStore(100),
       glossaryCache,
+      pendingCardConcepts: new Map(),
       transcriptLastSeq: checkpoints.transcript || 0,
       cardsLastSeq: checkpoints.cards,
       factsLastSeq: checkpoints.facts,

@@ -1,5 +1,6 @@
 import type { RingBuffer, TranscriptChunk } from '../state/ring-buffer';
 import type { FactsStore, Fact } from '../state/facts-store';
+import type { CardsStore, CardRecord } from '../state/cards-store';
 import type { AgentRealtimeSession } from '../sessions/session-adapters';
 
 export type EventRuntimeStatus =
@@ -29,7 +30,9 @@ export interface EventRuntime {
   // In-memory state
   ringBuffer: RingBuffer;
   factsStore: FactsStore;
+  cardsStore: CardsStore;
   glossaryCache?: Map<string, GlossaryEntry>;
+  pendingCardConcepts: Map<number, PendingCardConcept>;
 
   // Realtime sessions
   transcriptSession?: AgentRealtimeSession;
@@ -74,6 +77,13 @@ export interface EventRuntime {
 }
 
 export type { TranscriptChunk, Fact };
+export type { CardRecord };
+
+export interface PendingCardConcept {
+  conceptId: string;
+  conceptLabel: string;
+  triggeredAt: number;
+}
 
 export interface AgentSelection {
   transcript: boolean;
