@@ -35,6 +35,26 @@ type OpenAIChatCompletionCost = {
   model: string;
 };
 
+const EXA_SCHEMA_VALIDATION_SIGNATURES = [
+  'unable to validate json schema',
+  'schema validation failed',
+  'json schema validation failed',
+];
+
+export class ExaSchemaValidationError extends Error {
+  constructor(readonly detail: string) {
+    super('Exa schema validation failure');
+    this.name = 'ExaSchemaValidationError';
+  }
+}
+
+export function isExaSchemaValidationFailure(errorText: string): boolean {
+  const normalized = errorText.toLowerCase();
+  return EXA_SCHEMA_VALIDATION_SIGNATURES.some((signature) =>
+    normalized.includes(signature)
+  );
+}
+
 export interface ResearchPhaseOptions extends PhaseOptions {
   statusManager: StatusManager;
 }
@@ -166,7 +186,14 @@ export async function runResearchPhase(
               });
             }
           } catch (err: unknown) {
-            console.error('[orchestrator] error:', String(err));
+            const errString = String(err);
+            console.error('[orchestrator] error:', errString);
+            if (isExaSchemaValidationFailure(errString)) {
+              console.error(
+                `[research] ${queryProgress} Exa schema validation failed. Per Exa Research FAQ, schema validation failure terminates the task. Adjust the output schema to remove unsupported keywords. Details: ${errString}`
+              );
+              throw new ExaSchemaValidationError(errString);
+            }
           }
         } else if (queryItem.priority === 1) {
           console.log(
@@ -235,7 +262,7 @@ export async function runResearchPhase(
                       },
                       url: {
                         type: 'string',
-                        format: 'uri',
+                        pattern: '^https?://.+$',
                         description: 'Resolvable HTTPS URL',
                       },
                       publisher: {
@@ -342,7 +369,11 @@ TONE & SCOPE:
         `[research] ${queryProgress} Query processing complete. Total chunks so far: ${insertedCount.value}`
       );
     } catch (err: unknown) {
-      console.error('[orchestrator] error:', String(err));
+      const errString = String(err);
+      console.error('[orchestrator] error:', errString);
+      if (err instanceof ExaSchemaValidationError) {
+        throw err;
+      }
     }
   }
 

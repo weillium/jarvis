@@ -98,6 +98,12 @@ const formatDuration = (milliseconds: number): string => {
 // SessionStatusCard component
 type AgentType = AgentSessionDisplay['agent_type'];
 
+const agentTitles: Record<AgentType, string> = {
+  transcript: 'Transcript Agent',
+  cards: 'Cards Agent',
+  facts: 'Facts Agent',
+};
+
 interface SessionStatusCardProps {
   title: string;
   session: AgentSessionDisplay;
@@ -129,6 +135,8 @@ function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: Se
   const statusLabel = getSessionStatusLabel(session.status);
   const agentType = session.agent_type;
   const isExpanded = expandedLogs[agentType];
+  const isRealtime = session.transport === 'realtime';
+  const runtimeLabel = 'Runtime';
   
   let connectionStatus: string;
   let connectionColor: string;
@@ -177,7 +185,7 @@ function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: Se
   const baseUptimeMs = session.runtime_stats?.uptime_ms;
   const runtimeMs = (() => {
     if (typeof baseUptimeMs === 'number') {
-      if (!metricsRecordedAtMs || !isWebSocketLive) {
+      if (!metricsRecordedAtMs || !isWebSocketLive || session.status !== 'active') {
         return baseUptimeMs;
       }
       const elapsedSinceMetrics = Date.now() - metricsRecordedAtMs;
@@ -187,7 +195,20 @@ function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: Se
       return null;
     }
     const createdAtMs = new Date(session.metadata.created_at).getTime();
-    const diffMs = currentTime - createdAtMs;
+    const endTimestampMs = (() => {
+      if (session.status === 'active') {
+        return currentTime;
+      }
+      if (session.metadata.closed_at) {
+        return new Date(session.metadata.closed_at).getTime();
+      }
+      if (session.metadata.updated_at) {
+        return new Date(session.metadata.updated_at).getTime();
+      }
+      return currentTime;
+    })();
+
+    const diffMs = endTimestampMs - createdAtMs;
     return diffMs >= 0 ? diffMs : null;
   })();
 
@@ -202,183 +223,241 @@ function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: Se
       boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
     }}>
       {/* Header */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '16px',
-      }}>
-        <h5 style={{
-          fontSize: '16px',
-          fontWeight: '600',
-          color: '#0f172a',
-          margin: 0,
-        }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '16px',
+        }}
+      >
+        <h5
+          style={{
+            fontSize: '16px',
+            fontWeight: '600',
+            color: '#0f172a',
+            margin: 0,
+          }}
+        >
           {title}
         </h5>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-        }}>
-          <div style={{
-            width: '8px',
-            height: '8px',
-            borderRadius: '50%',
-            background: statusColor,
-          }} />
-          <span style={{
-            fontSize: '14px',
-            fontWeight: '500',
-            color: statusColor,
-          }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <div
+            style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              background: statusColor,
+            }}
+          />
+          <span
+            style={{
+              fontSize: '14px',
+              fontWeight: '500',
+              color: statusColor,
+            }}
+          >
             {statusLabel}
           </span>
         </div>
       </div>
 
       {/* Connection Status & Runtime */}
-      <div style={{
-        marginBottom: '16px',
-        paddingBottom: '16px',
-        borderBottom: '1px solid #e2e8f0',
-      }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          marginBottom: '8px',
-        }}>
-          <div style={{
-            width: '8px',
-            height: '8px',
-            borderRadius: '50%',
-            background: connectionColor,
-            animation: isWebSocketLive ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none',
-          }} />
-          <span style={{
-            fontSize: '12px',
-            fontWeight: '600',
-            color: connectionColor,
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-          }}>
-            WebSocket: {connectionStatus}
-            {actualWebSocketState && (
-              <span style={{
-                fontSize: '10px',
-                fontWeight: '400',
-                marginLeft: '6px',
-                opacity: 0.7,
-                textTransform: 'none',
-              }}>
-                ({actualWebSocketState})
-              </span>
-            )}
-          </span>
-        </div>
-        
-        {actualWebSocketState === 'OPEN' && (
-          <div style={{
-            marginBottom: '8px',
-            padding: '8px 12px',
-            background: session.ping_pong?.missedPongs === 0 ? '#f0fdf4' : session.ping_pong?.missedPongs === 1 ? '#fffbeb' : '#fef2f2',
-            borderRadius: '6px',
-            border: `1px solid ${session.ping_pong?.missedPongs === 0 ? '#bbf7d0' : session.ping_pong?.missedPongs === 1 ? '#fde68a' : '#fecaca'}`,
-          }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: '4px',
-            }}>
-              <span style={{
-                fontSize: '11px',
-                fontWeight: '600',
-                color: session.ping_pong?.missedPongs === 0 ? '#166534' : session.ping_pong?.missedPongs === 1 ? '#92400e' : '#991b1b',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-              }}>
-                Connection Health
-              </span>
-              <div style={{
+      <div
+        style={{
+          marginBottom: '16px',
+          paddingBottom: '16px',
+          borderBottom: '1px solid #e2e8f0',
+        }}
+      >
+        {isRealtime && (
+          <>
+            <div
+              style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '4px',
-              }}>
-                {session.ping_pong?.missedPongs === 0 && (
-                  <span style={{ fontSize: '12px' }}>✓ Healthy</span>
+                gap: '8px',
+                marginBottom: '8px',
+              }}
+            >
+              <div
+                style={{
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  background: connectionColor,
+                  animation: isWebSocketLive ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none',
+                }}
+              />
+              <span
+                style={{
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  color: connectionColor,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                }}
+              >
+                WebSocket: {connectionStatus}
+                {actualWebSocketState && (
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      fontWeight: '400',
+                      marginLeft: '6px',
+                      opacity: 0.7,
+                      textTransform: 'none',
+                    }}
+                  >
+                    ({actualWebSocketState})
+                  </span>
                 )}
-                {session.ping_pong?.missedPongs === 1 && (
-                  <span style={{ fontSize: '12px', color: '#d97706' }}>⚠ 1 Missed</span>
-                )}
-                {session.ping_pong && session.ping_pong.missedPongs >= 2 && (
-                  <span style={{ fontSize: '12px', color: '#dc2626' }}>⚠⚠ {session.ping_pong.missedPongs} Missed</span>
-                )}
-              </div>
+              </span>
             </div>
-            {session.ping_pong?.enabled && (
-              <div style={{
-                fontSize: '10px',
-                color: '#64748b',
-                display: 'flex',
-                gap: '12px',
-                flexWrap: 'wrap',
-              }}>
-                {session.ping_pong.lastPongReceived && (
-                  <span>
-                    Last pong: {new Date(session.ping_pong.lastPongReceived).toLocaleTimeString()}
+
+            {actualWebSocketState === 'OPEN' && (
+              <div
+                style={{
+                  marginBottom: '8px',
+                  padding: '8px 12px',
+                  background:
+                    session.ping_pong?.missedPongs === 0
+                      ? '#f0fdf4'
+                      : session.ping_pong?.missedPongs === 1
+                      ? '#fffbeb'
+                      : '#fef2f2',
+                  borderRadius: '6px',
+                  border: `1px solid ${
+                    session.ping_pong?.missedPongs === 0
+                      ? '#bbf7d0'
+                      : session.ping_pong?.missedPongs === 1
+                      ? '#fde68a'
+                      : '#fecaca'
+                  }`,
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '4px',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: '600',
+                      color:
+                        session.ping_pong?.missedPongs === 0
+                          ? '#166534'
+                          : session.ping_pong?.missedPongs === 1
+                          ? '#92400e'
+                          : '#991b1b',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px',
+                    }}
+                  >
+                    Connection Health
                   </span>
-                )}
-                <span>
-                  Ping interval: {Math.round((session.ping_pong.pingIntervalMs || 0) / 1000)}s
-                </span>
-                {session.ping_pong.missedPongs > 0 && (
-                  <span style={{ color: '#dc2626', fontWeight: '600' }}>
-                    {session.ping_pong.missedPongs}/{session.ping_pong.maxMissedPongs} missed
-                  </span>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    {session.ping_pong?.missedPongs === 0 && (
+                      <span style={{ fontSize: '12px' }}>✓ Healthy</span>
+                    )}
+                    {session.ping_pong?.missedPongs === 1 && (
+                      <span style={{ fontSize: '12px', color: '#d97706' }}>⚠ 1 Missed</span>
+                    )}
+                    {session.ping_pong && session.ping_pong.missedPongs >= 2 && (
+                      <span style={{ fontSize: '12px', color: '#dc2626' }}>
+                        ⚠⚠ {session.ping_pong.missedPongs} Missed
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {session.ping_pong?.enabled && (
+                  <div
+                    style={{
+                      fontSize: '10px',
+                      color: '#64748b',
+                      display: 'flex',
+                      gap: '12px',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    {session.ping_pong.lastPongReceived && (
+                      <span>
+                        Last pong: {new Date(session.ping_pong.lastPongReceived).toLocaleTimeString()}
+                      </span>
+                    )}
+                    <span>Ping interval: {Math.round((session.ping_pong.pingIntervalMs || 0) / 1000)}s</span>
+                    {session.ping_pong.missedPongs > 0 && (
+                      <span style={{ color: '#dc2626', fontWeight: '600' }}>
+                        {session.ping_pong.missedPongs}/{session.ping_pong.maxMissedPongs} missed
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
             )}
-          </div>
+          </>
         )}
-        
-        {runtime && (
-          <div style={{
+
+        <div
+          style={{
             fontSize: '12px',
             color: '#64748b',
             marginBottom: '4px',
-          }}>
-            Runtime: {runtime}
+          }}
+        >
+          {runtime ? `${runtimeLabel}: ${runtime}` : `${runtimeLabel}: N/A`}
+        </div>
+        {isRealtime && (
+          <div
+            style={{
+              fontSize: '12px',
+              color: '#64748b',
+              fontFamily: 'monospace',
+              marginBottom: '4px',
+            }}
+          >
+            {session.session_id === 'pending' ||
+            (session.status === 'closed' &&
+              session.metadata?.created_at &&
+              new Date().getTime() - new Date(session.metadata.created_at).getTime() < 60000) ? (
+              <span style={{ fontStyle: 'italic', color: '#94a3b8' }}>Pending activation</span>
+            ) : (
+              <>Session: {session.session_id.substring(0, 20)}...</>
+            )}
           </div>
         )}
-        <div style={{
-          fontSize: '12px',
-          color: '#64748b',
-          fontFamily: 'monospace',
-          marginBottom: '4px',
-        }}>
-          {session.session_id === 'pending' || (session.status === 'closed' && session.metadata?.created_at && 
-            (new Date().getTime() - new Date(session.metadata.created_at).getTime()) < 60000) ? (
-              <span style={{ fontStyle: 'italic', color: '#94a3b8' }}>
-                Pending activation
-              </span>
-          ) : (
-            <>Session: {session.session_id.substring(0, 20)}...</>
-          )}
-        </div>
-        <div style={{
-          fontSize: '12px',
-          color: '#64748b',
-        }}>
+        <div
+          style={{
+            fontSize: '12px',
+            color: '#64748b',
+          }}
+        >
           Model: {session.metadata.model || 'N/A'}
         </div>
         {session.metrics_recorded_at && (
-          <div style={{
-            fontSize: '11px',
-            color: '#94a3b8',
-            fontStyle: 'italic',
-          }}>
+          <div
+            style={{
+              fontSize: '11px',
+              color: '#94a3b8',
+              fontStyle: 'italic',
+            }}
+          >
             Metrics recorded at: {new Date(session.metrics_recorded_at).toLocaleString()}
           </div>
         )}
@@ -1312,42 +1391,38 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
 
       {displaySessions.length > 0 && (
         <>
-          {/* Realtime Agent Sessions Section */}
+          {/* Realtime Sessions */}
           {(() => {
-            const realtimeSessions = displaySessions.filter((session) => {
-              if (session.agent_type === 'transcript') {
-                return true;
-              }
-              if (session.agent_type === 'cards') {
-                return session.transport === 'realtime';
-              }
-              return false;
-            });
+            const realtimeSessions = displaySessions.filter(
+              (session) => session.transport === 'realtime'
+            );
             if (realtimeSessions.length === 0) return null;
-            
+
             return (
               <div style={{ marginBottom: '32px' }}>
-                <h5 style={{
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  color: '#64748b',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  marginBottom: '16px',
-                }}>
-                  Realtime Agent Sessions
+                <h5
+                  style={{
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    color: '#64748b',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    marginBottom: '16px',
+                  }}
+                >
+                  Realtime Sessions
                 </h5>
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
-                  gap: '16px',
-                }}>
-                  {realtimeSessions.map(session => (
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
+                    gap: '16px',
+                  }}
+                >
+                  {realtimeSessions.map((session) => (
                     <SessionStatusCard
                       key={`${session.agent_type}-${session.session_id}-${session.status}`}
-                      title={session.agent_type === 'transcript'
-                        ? 'Transcript Agent'
-                        : 'Cards Agent (Realtime)'}
+                      title={agentTitles[session.agent_type]}
                       session={session}
                       expandedLogs={expandedLogs}
                       setExpandedLogs={setExpandedLogs}
@@ -1357,43 +1432,39 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
               </div>
             );
           })()}
-          
-          {/* Stateless Agent Sessions Section */}
+
+          {/* Stateless Sessions */}
           {(() => {
-            const statelessSessions = displaySessions.filter((session) => {
-              if (session.agent_type === 'facts') {
-                return true;
-              }
-              if (session.agent_type === 'cards') {
-                return session.transport === 'stateless';
-              }
-              return false;
-            });
+            const statelessSessions = displaySessions.filter(
+              (session) => session.transport === 'stateless'
+            );
             if (statelessSessions.length === 0) return null;
-            
+
             return (
               <div>
-                <h5 style={{
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  color: '#64748b',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  marginBottom: '16px',
-                }}>
-                  Stateless Agent Sessions
+                <h5
+                  style={{
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    color: '#64748b',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    marginBottom: '16px',
+                  }}
+                >
+                  Stateless Sessions
                 </h5>
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
-                  gap: '16px',
-                }}>
-                  {statelessSessions.map(session => (
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
+                    gap: '16px',
+                  }}
+                >
+                  {statelessSessions.map((session) => (
                     <SessionStatusCard
                       key={`${session.agent_type}-${session.session_id}-${session.status}`}
-                      title={session.agent_type === 'facts'
-                        ? 'Facts Agent'
-                        : 'Cards Agent (Stateless)'}
+                      title={agentTitles[session.agent_type]}
                       session={session}
                       expandedLogs={expandedLogs}
                       setExpandedLogs={setExpandedLogs}

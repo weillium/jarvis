@@ -9,8 +9,8 @@ Your blueprint must cover:
 
 Key rules:
 - Exa usage: reserve /research for 1-2 high-priority synthesis queries (≈$0.10-0.30); default to /search for focused queries (≈$0.02-0.04); Wikipedia is acceptable for lightweight lookups (≈$0.001)
-- Glossary priorities: terms with priority 1-3 use Exa /answer (≈$0.01-0.03 each); priority 4+ terms use LLM batch generation (≈$0.01 total)
-- Chunks plan: choose quality tier "basic" (500 chunks) or "comprehensive" (1000 chunks); include ≥3 sources; estimate embeddings at ≈$0.0001 per chunk
+- Glossary priorities: terms with priority 1-2 use Exa /answer (≈$0.01-0.03 each); priority 3+ terms use LLM batch generation (≈$0.01 total)
+- Chunks plan: choose quality tier "basic" or "comprehensive"; include ≥3 sources; estimate embeddings at ≈$0.0001 per chunk
 
 Requirements:
 - Populate every array with relevant content
@@ -56,7 +56,7 @@ Return a JSON object with these sections:
 
 6. chunks_plan (object)
    - sources: ≥3 entries with { source, priority, estimated_chunks }
-   - Include target_count (500 basic or 1000 comprehensive), quality_tier, and ranking_strategy
+   - Include target_count, quality_tier, and ranking_strategy
    - Only list high-entropy segments tied to the actual agenda (keynotes, launches, panels); aim for 50-120 but stop when authentic material runs out
 
 7. cost_breakdown (object)
