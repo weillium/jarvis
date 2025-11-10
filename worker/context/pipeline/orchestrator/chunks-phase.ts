@@ -16,7 +16,7 @@ export const runChunksPhase = async (
   generationCycleId: string,
   options: ChunksPhaseOptions
 ) => {
-  const { supabase, openai, embedModel, genModel, chunkModel, statusManager } = options;
+  const { supabase, openai, embedModel, chunkModel, statusManager } = options;
 
   await statusManager.updateCycle(generationCycleId, { status: 'processing' });
 

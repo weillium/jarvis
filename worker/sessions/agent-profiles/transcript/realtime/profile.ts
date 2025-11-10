@@ -1,7 +1,6 @@
 import type { RealtimeSessionProfile } from '../../../session-adapters/realtime/profile-types';
 import { createBufferedTranscriptAudioHooks } from '../../../session-adapters/realtime/runtime-controller';
 import { TranscriptAgentHandler } from '../../../session-adapters/handlers/transcript-handler';
-import { getPolicy } from '../../../../policies';
 import {
   buildTranscriptSessionConfiguration,
   createTranscriptEventRouterHooks,
@@ -17,8 +16,7 @@ export const transcriptRealtimeProfile: RealtimeSessionProfile = {
   }),
   resolveModel: (hint) => hint ?? REALTIME_CONNECTION_MODEL,
   createSessionConfiguration: ({ config, log }) => {
-    const policy = getPolicy('transcript');
-    const configuration = buildTranscriptSessionConfiguration({ config, policy });
+    const configuration = buildTranscriptSessionConfiguration({ config });
     log('log', 'Sending transcription session config', configuration.logContext);
     return configuration;
   },

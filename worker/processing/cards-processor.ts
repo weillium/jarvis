@@ -134,12 +134,13 @@ export class CardsProcessor {
       2048
     );
 
+    const supportingRecentCards = triggerContext?.supportingContext.recentCards ?? [];
     const recentCardsSummary =
-      triggerContext?.supportingContext.recentCards
-        .map(
-          (card) =>
-            `- ${card.conceptLabel} (${card.cardType}) @ seq ${card.sourceSeq} — ${card.metadata.title ?? 'untitled'}`
-        )
+      supportingRecentCards
+        .map((card) => {
+          const title = typeof card.metadata?.title === 'string' ? card.metadata.title : 'untitled';
+          return `- ${card.conceptLabel} (${card.cardType ?? 'text'}) @ seq ${card.sourceSeq} — ${title}`;
+        })
         .join('\n') || 'None';
 
     const factsForPrompt =

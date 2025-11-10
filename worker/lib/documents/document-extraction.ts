@@ -171,17 +171,16 @@ const loadPdfParse = async (): Promise<PdfParseModule> => {
     console.debug('[documents] pdf-parse dynamic import failed:', String(err));
   }
 
-  if (typeof require !== 'undefined') {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
-      const mod = require('pdf-parse') as Partial<PdfParseModule>;
-      if (mod && typeof mod.PDFParse === 'function') {
-        cachedPdfParse = mod as PdfParseModule;
-        return cachedPdfParse;
-      }
-    } catch (err) {
-      console.debug('[documents] pdf-parse require() failed:', String(err));
+  try {
+    const { createRequire } = await import('module');
+    const requireModule = createRequire(import.meta.url);
+    const mod = requireModule('pdf-parse') as Partial<PdfParseModule>;
+    if (mod && typeof mod.PDFParse === 'function') {
+      cachedPdfParse = mod as PdfParseModule;
+      return cachedPdfParse;
     }
+  } catch (err) {
+    console.debug('[documents] pdf-parse createRequire fallback failed:', String(err));
   }
 
   throw new Error('Failed to load pdf-parse module');

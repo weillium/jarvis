@@ -4,7 +4,9 @@ export type {
   GlossaryEntry,
   TranscriptChunk,
   Fact,
-  AgentSelection
+  AgentSelection,
+  CardRecord,
+  PendingCardConcept
 } from './runtime';
 export type { AgentSessionStatus, AgentType, LogEntry, SessionStatus } from './session';
 export type { AgentContext, ProcessingMetrics } from './processing';

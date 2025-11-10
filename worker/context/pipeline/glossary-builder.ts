@@ -51,7 +51,7 @@ export async function buildGlossary(
   researchResults: ResearchResults | null,
   options: GlossaryBuilderOptions
 ): Promise<GlossaryBuildResult> {
-  const { supabase, openai, genModel, glossaryModel, exaApiKey } = options;
+  const { supabase, openai, glossaryModel, exaApiKey } = options;
 
   console.log(`[glossary] Building glossary for event ${eventId}, cycle ${generationCycleId}`);
   console.log(`[glossary] Blueprint has ${blueprint.glossary_plan.terms.length} terms planned`);
@@ -63,7 +63,7 @@ export async function buildGlossary(
       termCount: 0,
       costBreakdown: {
         openai: { total: 0, chat_completions: [] },
-        exa: { total: 0, answer: { cost: 0, queries: 0 } },
+        exa: { total: 0, answer: { cost: 0, queries: 0, calls: [] } },
       },
     };
   }

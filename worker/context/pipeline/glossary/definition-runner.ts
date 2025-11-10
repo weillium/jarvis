@@ -274,7 +274,6 @@ async function polishExaAnswer(
 ): Promise<TermGenerationResult> {
   const { term, answerText, citationUrl, snippets, importantDetails, openai, glossaryModel } = params;
 
-  /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call */
   const {
     definition: polishedDefinition,
     openAICalls: polishedCalls,
@@ -292,7 +291,6 @@ async function polishExaAnswer(
       importantDetails,
     }),
   });
-  /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call */
 
   if (!polishedDefinition) {
     return { definition: null, openAICalls: polishedCalls };
@@ -319,7 +317,6 @@ async function polishExaAnswer(
 async function generateViaGlossaryModel(params: TermGenerationParams): Promise<TermGenerationResult> {
   const { term, snippets, importantDetails, openai, glossaryModel } = params;
 
-  /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call */
   const {
     definition: generatedDefinition,
     openAICalls,
@@ -336,7 +333,6 @@ async function generateViaGlossaryModel(params: TermGenerationParams): Promise<T
       snippets,
     }),
   });
-  /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call */
 
   if (!generatedDefinition) {
     return { definition: null, openAICalls };

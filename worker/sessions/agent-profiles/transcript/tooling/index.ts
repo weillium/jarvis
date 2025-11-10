@@ -19,13 +19,12 @@ export const REALTIME_CONNECTION_MODEL = 'gpt-realtime' as const;
 
 interface TranscriptSessionConfigurationParams {
   config: RealtimeSessionConfig;
-  policy: string;
 }
 
 export const buildTranscriptSessionConfiguration = (
   params: TranscriptSessionConfigurationParams
 ): SessionConfiguration => {
-  const { config, policy } = params;
+  const { config } = params;
 
   let transcriptionModel: TranscriptModel = DEFAULT_TRANSCRIPTION_MODEL;
   switch (config.model) {

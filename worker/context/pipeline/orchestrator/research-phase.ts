@@ -571,7 +571,6 @@ async function fetchWithWikipediaLimits(url: string): Promise<Response> {
   let attempt = 0;
   let delay = WIKIPEDIA_INITIAL_BACKOFF_MS;
 
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     attempt += 1;
     const response = await fetch(url);
