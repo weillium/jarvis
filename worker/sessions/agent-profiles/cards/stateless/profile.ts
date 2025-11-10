@@ -3,10 +3,18 @@ import type { RealtimeMessageContext } from '../../../session-adapters/types';
 import type { RealtimeCardDTO } from '../../../../types';
 import type { OpenAIService } from '../../../../services/openai-service';
 import { PromptCardGenerator } from '../tooling';
+import {
+  resolveModelOrThrow,
+  resolveModelSetFromEnv,
+} from '../../../../services/model-management/model-resolver';
 
 const MAX_CARD_HISTORY = 50;
 const CARD_HISTORY_KEY = 'cards:history';
-const DEFAULT_STATELESS_MODEL = process.env.CARDS_STATELESS_MODEL ?? 'gpt-4o-mini';
+const WORKER_MODEL_SET = resolveModelSetFromEnv();
+const FALLBACK_CARD_MODEL = resolveModelOrThrow({
+  modelKey: 'runtime.cards_generation',
+  modelSet: WORKER_MODEL_SET,
+});
 
 interface CardsStatelessProfileDeps {
   openaiService: OpenAIService;
@@ -35,11 +43,11 @@ const mergeCardHistory = (
 
 export const cardsStatelessProfile: StatelessSessionProfile<CardsStatelessProfileDeps> = {
   agentType: 'cards',
-  resolveModel: (hint) => hint ?? DEFAULT_STATELESS_MODEL,
+  resolveModel: (hint) => hint ?? FALLBACK_CARD_MODEL,
   createHooks: ({ config, deps, emit, log, storage }) => {
     const generator = new PromptCardGenerator({
       openaiService: deps.openaiService,
-      configModel: config.model ?? DEFAULT_STATELESS_MODEL,
+      configModel: config.model ?? FALLBACK_CARD_MODEL,
       eventId: config.eventId,
     });
 

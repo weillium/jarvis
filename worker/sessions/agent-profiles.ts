@@ -34,7 +34,7 @@ const resolveStatelessProfileDeps = (
   agentType: AgentType,
   deps: AgentProfileDeps
 ): unknown => {
-  if (agentType === 'cards') {
+  if (agentType === 'cards' || agentType === 'facts') {
     return { openaiService: deps.openaiService };
   }
   return undefined;

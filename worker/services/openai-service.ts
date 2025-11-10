@@ -2,19 +2,30 @@ import OpenAI from 'openai';
 import type {
   ChatCompletionContentPart,
   ChatCompletionMessage,
-  ChatCompletionMessageParam
+  ChatCompletionMessageParam,
 } from 'openai/resources/chat/completions';
 import type {
   ChatCompletionDTO,
-  ChatCompletionMessageDTO
+  ChatCompletionMessageDTO,
 } from '../types';
+import type { ModelSet } from './model-management/model-providers';
+import {
+  resolveModel,
+  resolveModelSetFromEnv,
+} from './model-management/model-resolver';
 
 export class OpenAIService {
   private client: OpenAI;
   private embedModel: string;
   private genModel: string;
+  private readonly modelSet: ModelSet;
 
-  constructor(clientOrKey: OpenAI | string, embedModel: string, genModel: string) {
+  constructor(
+    clientOrKey: OpenAI | string,
+    embedModel: string,
+    genModel: string,
+    modelSet?: ModelSet
+  ) {
     if (typeof clientOrKey === 'string') {
       this.client = new OpenAI({ apiKey: clientOrKey });
     } else {
@@ -22,6 +33,7 @@ export class OpenAIService {
     }
     this.embedModel = embedModel;
     this.genModel = genModel;
+    this.modelSet = modelSet ?? resolveModelSetFromEnv();
   }
 
   getClient(): OpenAI {
@@ -37,7 +49,12 @@ export class OpenAIService {
   }
 
   getRealtimeModel(defaultModel: string = 'gpt-4o-realtime-preview-2024-10-01'): string {
-    return process.env.OPENAI_REALTIME_MODEL || defaultModel;
+    const resolution = resolveModel({
+      modelKey: 'runtime.realtime',
+      modelSet: this.modelSet,
+      throwOnMissing: false,
+    });
+    return resolution.resolvedValue ?? defaultModel;
   }
 
   async createEmbedding(text: string): Promise<number[]> {

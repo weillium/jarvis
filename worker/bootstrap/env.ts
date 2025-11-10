@@ -1,7 +1,14 @@
+import type { ModelSet } from '../services/model-management/model-providers';
+import {
+  resolveModelOrThrow,
+  resolveModelSetFromEnv,
+} from '../services/model-management/model-resolver';
+
 export interface WorkerEnvConfig {
   supabaseUrl: string;
   serviceRoleKey: string;
   openaiApiKey: string;
+  modelSet: ModelSet;
   embedModel: string;
   chunksPolishModel: string;
   contextGenModel: string;
@@ -53,14 +60,27 @@ export const loadWorkerEnv = (): WorkerEnvConfig => {
   const serviceRoleKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY');
   const openaiApiKey = requireEnv('OPENAI_API_KEY');
 
-  const embedModel = process.env.CONTEXT_CHUNKS_MODEL || 'text-embedding-3-small';
-  const chunksPolishModel = process.env.CONTEXT_CHUNKS_POLISHING_MODEL || 'gpt-5-mini';
-  const contextGenModel = process.env.CONTEXT_BLUEPRINT_MODEL || 'gpt-5';
-  const glossaryModel = process.env.CONTEXT_GLOSSARY_MODEL || contextGenModel;
-  const cardsModel = process.env.OPENAI_CARDS_MODEL || process.env.DEFAULT_CARDS_MODEL;
-  if (!cardsModel) {
-    throw new Error('OPENAI_CARDS_MODEL or DEFAULT_CARDS_MODEL must be set');
-  }
+  const modelSet = resolveModelSetFromEnv();
+  const embedModel = resolveModelOrThrow({
+    modelKey: 'context.chunking',
+    modelSet,
+  });
+  const chunksPolishModel = resolveModelOrThrow({
+    modelKey: 'context.chunk_polish',
+    modelSet,
+  });
+  const contextGenModel = resolveModelOrThrow({
+    modelKey: 'context.blueprint',
+    modelSet,
+  });
+  const glossaryModel = resolveModelOrThrow({
+    modelKey: 'context.glossary',
+    modelSet,
+  });
+  const cardsModel = resolveModelOrThrow({
+    modelKey: 'runtime.cards_generation',
+    modelSet,
+  });
   const sseEndpointRaw = process.env.SSE_ENDPOINT || 'http://localhost:3000';
   const sseEndpoint = sanitizeEndpoint(sseEndpointRaw);
   const workerPort = parseWorkerPort(process.env.WORKER_PORT);
@@ -69,6 +89,7 @@ export const loadWorkerEnv = (): WorkerEnvConfig => {
     supabaseUrl,
     serviceRoleKey,
     openaiApiKey,
+    modelSet,
     embedModel,
     chunksPolishModel,
     contextGenModel,

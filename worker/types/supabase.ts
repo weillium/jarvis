@@ -1,5 +1,7 @@
 import type { AgentType } from './session';
 
+export type AgentTransport = 'realtime' | 'stateless';
+
 export interface CheckpointRecord {
   agent_type: AgentType;
   last_seq_processed: number;
@@ -28,6 +30,7 @@ export interface AgentSessionRecord {
   id: string;
   agent_type: AgentType;
   status: string;
+  transport: AgentTransport;
   provider_session_id?: string | null;
   created_at?: string;
   updated_at?: string;
@@ -43,6 +46,7 @@ export interface AgentSessionUpsert {
   provider_session_id: string;
   agent_type: AgentType;
   status: string;
+  transport: AgentTransport;
   model?: string;
 }
 
@@ -58,6 +62,7 @@ export interface AgentSessionHistoryParams {
   connection_count?: number;
   error_message?: string;
   metadata?: Record<string, unknown>;
+  transport?: AgentTransport;
 }
 
 export interface InsertTranscriptParams {

@@ -62,7 +62,12 @@ export const createWorkerInfrastructure = (
 ): WorkerInfrastructure => {
   const supabaseClient = createSupabaseClient(env.supabaseUrl, env.serviceRoleKey);
   const repositories = buildRepositories(supabaseClient);
-  const openaiService = new OpenAIService(env.openaiApiKey, env.embedModel, env.contextGenModel);
+  const openaiService = new OpenAIService(
+    env.openaiApiKey,
+    env.embedModel,
+    env.contextGenModel,
+    env.modelSet
+  );
   const openai = openaiService.getClient();
   const sseService = new SSEService(env.sseEndpoint);
   const modelSelectionService = new ModelSelectionService();

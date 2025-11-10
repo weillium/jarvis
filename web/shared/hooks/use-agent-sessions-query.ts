@@ -52,6 +52,7 @@ export interface RuntimeStats {
 
 export interface AgentSession {
   agent_type: 'transcript' | 'cards' | 'facts';
+  transport: 'realtime' | 'stateless';
   session_id: string;
   status: 'active' | 'paused' | 'closed' | 'error';
   metadata: AgentSessionMetadata;

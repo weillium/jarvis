@@ -2,8 +2,11 @@ import type OpenAI from 'openai';
 import type { RealtimeSessionConfig } from '../session-adapters';
 import { createStatelessAgentSession } from '../session-adapters/stateless/driver';
 import { factsStatelessProfile } from './facts/stateless/profile';
+import type { OpenAIService } from '../../services/openai-service';
 
-type FactsSessionFactoryDeps = unknown;
+interface FactsSessionFactoryDeps {
+  openaiService: OpenAIService;
+}
 
 export const factsAgentDefinition = {
   name: 'Facts Agent',
@@ -13,14 +16,15 @@ export const factsAgentDefinition = {
   createStatelessSession: (
     openai: OpenAI,
     config: RealtimeSessionConfig,
-    _deps: FactsSessionFactoryDeps
+    deps: FactsSessionFactoryDeps
   ) => {
-    void _deps;
     return createStatelessAgentSession({
       openai,
       config,
       profile: factsStatelessProfile,
-      profileDeps: undefined,
+      profileDeps: {
+        openaiService: deps.openaiService,
+      },
       logLabel: 'facts',
     });
   },

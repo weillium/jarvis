@@ -1,9 +1,5 @@
-/**
- * Model Selection Service
- * 
- * Handles model and API key selection based on agent model_set value.
- * Supports multiple model providers (open_ai, etc.) with fallback defaults.
- */
+import type { ModelSet } from './model-management/model-providers';
+import { resolveModelOrThrow, resolveModelSet } from './model-management/model-resolver';
 
 export interface ModelConfig {
   transcriptModel: string;
@@ -12,15 +8,40 @@ export interface ModelConfig {
   apiKey: string;
 }
 
-const resolveCardsModel = (): string => {
-  const model = process.env.OPENAI_CARDS_MODEL || process.env.DEFAULT_CARDS_MODEL;
-  if (!model) {
-    throw new Error('OPENAI_CARDS_MODEL or DEFAULT_CARDS_MODEL must be set');
-  }
-  return model;
-};
-
 export class ModelSelectionService {
+  private normalizeModelSet(rawModelSet: string): ModelSet {
+    try {
+      return resolveModelSet(rawModelSet);
+    } catch {
+      return 'default';
+    }
+  }
+
+  private resolveApiKey(modelSet: ModelSet): string {
+    if (modelSet === 'open_ai') {
+      return process.env.OPENAI_API_KEY || process.env.DEFAULT_API_KEY || '';
+    }
+    return process.env.DEFAULT_API_KEY || '';
+  }
+
+  private buildModelConfig(modelSet: ModelSet): ModelConfig {
+    return {
+      transcriptModel: resolveModelOrThrow({
+        modelKey: 'runtime.transcript_realtime',
+        modelSet,
+      }),
+      cardsModel: resolveModelOrThrow({
+        modelKey: 'runtime.cards_generation',
+        modelSet,
+      }),
+      factsModel: resolveModelOrThrow({
+        modelKey: 'runtime.facts_generation',
+        modelSet,
+      }),
+      apiKey: this.resolveApiKey(modelSet),
+    };
+  }
+
   /**
    * Get model configuration based on model_set value
    * 
@@ -28,22 +49,8 @@ export class ModelSelectionService {
    * @returns Model configuration with transcript, cards, facts models, and API key
    */
   getModelConfig(modelSet: string): ModelConfig {
-    if (modelSet === 'open_ai') {
-      return {
-        transcriptModel: process.env.OPENAI_TRANSCRIPT_MODEL || process.env.DEFAULT_TRANSCRIPT_MODEL || 'gpt-4o-realtime-preview-2024-10-01',
-        cardsModel: resolveCardsModel(),
-        factsModel: process.env.OPENAI_FACTS_MODEL || process.env.DEFAULT_FACTS_MODEL || 'gpt-4o-mini',
-        apiKey: process.env.OPENAI_API_KEY || process.env.DEFAULT_API_KEY || '',
-      };
-    }
-
-    // Default fallback for unknown model_set values
-    return {
-      transcriptModel: process.env.DEFAULT_TRANSCRIPT_MODEL || 'gpt-4o-realtime-preview-2024-10-01',
-      cardsModel: resolveCardsModel(),
-      factsModel: process.env.DEFAULT_FACTS_MODEL || 'gpt-4o-mini',
-      apiKey: process.env.DEFAULT_API_KEY || '',
-    };
+    const normalizedModelSet = this.normalizeModelSet(modelSet);
+    return this.buildModelConfig(normalizedModelSet);
   }
 
   /**
@@ -54,7 +61,8 @@ export class ModelSelectionService {
    * @returns The model string to use for this agent type
    */
   getModelForAgentType(modelSet: string, agentType: 'transcript' | 'cards' | 'facts'): string {
-    const config = this.getModelConfig(modelSet);
+    const normalizedModelSet = this.normalizeModelSet(modelSet);
+    const config = this.buildModelConfig(normalizedModelSet);
     
     if (agentType === 'transcript') {
       return config.transcriptModel;
@@ -69,7 +77,10 @@ export class ModelSelectionService {
     }
     
     // Fallback (should not happen)
-    return config.transcriptModel;
+    return resolveModelOrThrow({
+      modelKey: 'runtime.realtime',
+      modelSet: normalizedModelSet,
+    });
   }
 
   /**
@@ -79,8 +90,8 @@ export class ModelSelectionService {
    * @returns The API key string
    */
   getApiKey(modelSet: string): string {
-    const config = this.getModelConfig(modelSet);
-    return config.apiKey;
+    const normalizedModelSet = this.normalizeModelSet(modelSet);
+    return this.resolveApiKey(normalizedModelSet);
   }
 }
 

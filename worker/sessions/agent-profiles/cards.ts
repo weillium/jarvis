@@ -41,24 +41,12 @@ const defaultCardsSessionFactory: CardsAgentSessionFactory = {
     }),
 };
 
-const transportOverride = (process.env.CARDS_AGENT_TRANSPORT ?? '').toLowerCase();
-
-const resolveTransport = (override: string): AgentProfileTransport => {
-  if (override === 'realtime') {
-    return 'realtime';
-  }
-  if (override === 'stateless') {
-    return 'stateless';
-  }
-  return 'stateless';
-};
-
-const resolvedTransport = resolveTransport(transportOverride);
+const resolvedTransport: AgentProfileTransport = 'stateless';
 
 export const cardsAgentDefinition = {
   name: 'Cards Agent',
   description:
-    'Generates summary cards from the live transcript. Defaults to a stateless transport unless overridden.',
+    'Generates summary cards from the live transcript using the stateless transport by default.',
   availableTransports: ['realtime', 'stateless'] as const,
   defaultTransport: resolvedTransport,
   sessionFactory: defaultCardsSessionFactory,

@@ -3,6 +3,7 @@ import type {
   AgentSessionRecord,
   AgentStatusRecord,
   AgentSummaryRecord,
+  AgentTransport,
   CheckpointRecord,
   FactRecord,
   GlossaryRecord,
@@ -119,6 +120,17 @@ const getAgentType = (
   throw new Error(`Expected '${key}' to be a valid agent type`);
 };
 
+const getAgentTransport = (
+  record: Record<string, unknown>,
+  key: string
+): AgentTransport => {
+  const value = record[key];
+  if (isAgentTransport(value)) {
+    return value;
+  }
+  throw new Error(`Expected '${key}' to be a valid agent transport`);
+};
+
 const getStringArray = (
   record: Record<string, unknown>,
   key: string
@@ -143,6 +155,9 @@ const getNumberArray = (
 
 const isAgentType = (value: unknown): value is AgentType =>
   value === 'transcript' || value === 'cards' || value === 'facts';
+
+const isAgentTransport = (value: unknown): value is AgentTransport =>
+  value === 'realtime' || value === 'stateless';
 
 const toArray = (rows: unknown): unknown[] => {
   if (!Array.isArray(rows)) {
@@ -205,6 +220,7 @@ export const mapAgentSessionRecord = (row: unknown): AgentSessionRecord => {
     id: getString(record, 'id', 'AgentSessionRecord'),
     agent_type: getAgentType(record, 'agent_type'),
     status: getString(record, 'status', 'AgentSessionRecord'),
+    transport: getAgentTransport(record, 'transport'),
     provider_session_id: providerSessionId === undefined ? undefined : providerSessionId,
     created_at: createdAt ?? undefined,
     updated_at: updatedAt ?? undefined,

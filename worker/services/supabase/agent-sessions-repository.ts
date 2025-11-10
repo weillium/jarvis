@@ -37,7 +37,7 @@ export class AgentSessionsRepository {
     let query = this.client
       .from('agent_sessions')
       .select(
-        'id, agent_type, status, provider_session_id, created_at, updated_at, closed_at, model, connection_count, last_connected_at'
+        'id, agent_type, status, transport, provider_session_id, created_at, updated_at, closed_at, model, connection_count, last_connected_at'
       )
       .eq('event_id', eventId)
       .eq('agent_id', agentId);
@@ -205,6 +205,7 @@ export class AgentSessionsRepository {
       p_connection_count: params.connection_count || null,
       p_error_message: params.error_message || null,
       p_metadata: params.metadata || null,
+      p_transport: params.transport || null,
     });
 
     if (error) {

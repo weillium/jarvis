@@ -97,6 +97,7 @@ export const createWorkerServer = ({
                 id: session.id,
                 agent_type: session.agent_type,
                 status: session.status,
+                transport: session.transport,
                 model: session.model,
               })),
             })

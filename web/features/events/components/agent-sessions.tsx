@@ -21,6 +21,7 @@ interface AgentSessionsProps {
 
 interface AgentSessionDisplay {
   agent_type: 'transcript' | 'cards' | 'facts';
+  transport: 'realtime' | 'stateless';
   session_id: string;
   status: 'active' | 'paused' | 'closed' | 'error';
   metadata: {
@@ -1313,7 +1314,15 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
         <>
           {/* Realtime Agent Sessions Section */}
           {(() => {
-            const realtimeSessions = displaySessions.filter(s => s.agent_type === 'transcript' || s.agent_type === 'cards');
+            const realtimeSessions = displaySessions.filter((session) => {
+              if (session.agent_type === 'transcript') {
+                return true;
+              }
+              if (session.agent_type === 'cards') {
+                return session.transport === 'realtime';
+              }
+              return false;
+            });
             if (realtimeSessions.length === 0) return null;
             
             return (
@@ -1336,7 +1345,9 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
                   {realtimeSessions.map(session => (
                     <SessionStatusCard
                       key={`${session.agent_type}-${session.session_id}-${session.status}`}
-                      title={session.agent_type === 'transcript' ? 'Transcript Agent' : session.agent_type === 'cards' ? 'Cards Agent' : 'Facts Agent'}
+                      title={session.agent_type === 'transcript'
+                        ? 'Transcript Agent'
+                        : 'Cards Agent (Realtime)'}
                       session={session}
                       expandedLogs={expandedLogs}
                       setExpandedLogs={setExpandedLogs}
@@ -1349,7 +1360,15 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
           
           {/* Stateless Agent Sessions Section */}
           {(() => {
-            const statelessSessions = displaySessions.filter(s => s.agent_type === 'facts');
+            const statelessSessions = displaySessions.filter((session) => {
+              if (session.agent_type === 'facts') {
+                return true;
+              }
+              if (session.agent_type === 'cards') {
+                return session.transport === 'stateless';
+              }
+              return false;
+            });
             if (statelessSessions.length === 0) return null;
             
             return (
@@ -1372,7 +1391,9 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
                   {statelessSessions.map(session => (
                     <SessionStatusCard
                       key={`${session.agent_type}-${session.session_id}-${session.status}`}
-                      title="Facts Agent"
+                      title={session.agent_type === 'facts'
+                        ? 'Facts Agent'
+                        : 'Cards Agent (Stateless)'}
                       session={session}
                       expandedLogs={expandedLogs}
                       setExpandedLogs={setExpandedLogs}

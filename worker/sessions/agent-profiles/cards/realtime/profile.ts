@@ -3,8 +3,16 @@ import { createPassthroughAudioHooks } from '../../../session-adapters/realtime/
 import { CardsAgentHandler } from '../../../session-adapters/handlers/cards-handler';
 import { getPolicy } from '../../../../policies';
 import { getCardsRealtimeTooling } from '../tooling';
+import {
+  resolveModelOrThrow,
+  resolveModelSetFromEnv,
+} from '../../../../services/model-management/model-resolver';
 
-const DEFAULT_REALTIME_MODEL = process.env.CARDS_REALTIME_MODEL ?? 'gpt-realtime';
+const WORKER_MODEL_SET = resolveModelSetFromEnv();
+const DEFAULT_REALTIME_MODEL = resolveModelOrThrow({
+  modelKey: 'runtime.realtime',
+  modelSet: WORKER_MODEL_SET,
+});
 
 export const cardsRealtimeProfile: RealtimeSessionProfile = {
   agentType: 'cards',

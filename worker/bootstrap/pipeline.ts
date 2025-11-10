@@ -107,9 +107,6 @@ export const createWorkerProcessingPipeline = (
 
   const factsProcessor = new FactsProcessor(
     contextBuilder,
-    infrastructure.repositories.facts,
-    infrastructure.repositories.agentOutputs,
-    infrastructure.openaiService,
     infrastructure.logger,
     infrastructure.metricsCollector,
     infrastructure.checkpointManager

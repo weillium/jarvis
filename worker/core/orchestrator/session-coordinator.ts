@@ -5,8 +5,9 @@ import type { SessionLifecycle } from '../session-lifecycle';
 import type { RuntimeManager } from '../runtime-manager';
 import type { EventProcessor } from '../event-processor';
 import type { StatusUpdater } from '../../monitoring/status-updater';
-import type { AgentSelection, EventRuntime } from '../../types';
+import type { AgentSelection, AgentTransport, EventRuntime } from '../../types';
 import type { AgentSessionRecord } from '../../services/supabase/types';
+import { agentTransportProfiles } from '../../sessions/agent-profiles/registry';
 
 interface SessionCoordinatorDeps {
   runtimeManager: RuntimeManager;
@@ -80,6 +81,7 @@ export class SessionCoordinator {
         provider_session_id: 'pending' as const,
         agent_type: 'transcript' as const,
         status: 'closed' as const,
+        transport: resolveTransportForAgent('transcript'),
         model: transcriptModel,
       },
       {
@@ -88,6 +90,7 @@ export class SessionCoordinator {
         provider_session_id: 'pending' as const,
         agent_type: 'cards' as const,
         status: 'closed' as const,
+        transport: resolveTransportForAgent('cards'),
         model: cardsModel,
       },
       {
@@ -96,6 +99,7 @@ export class SessionCoordinator {
         provider_session_id: 'pending' as const,
         agent_type: 'facts' as const,
         status: 'closed' as const,
+        transport: resolveTransportForAgent('facts'),
         model: factsModel,
       },
     ];
@@ -242,6 +246,7 @@ export class SessionCoordinator {
             provider_session_id: 'pending',
             agent_type: 'transcript',
             status: 'closed',
+            transport: resolveTransportForAgent('transcript'),
             model: transcriptModel,
           },
           {
@@ -250,6 +255,7 @@ export class SessionCoordinator {
             provider_session_id: 'pending',
             agent_type: 'cards',
             status: 'closed',
+            transport: resolveTransportForAgent('cards'),
             model: cardsModel,
           },
           {
@@ -258,6 +264,7 @@ export class SessionCoordinator {
             provider_session_id: 'pending',
             agent_type: 'facts',
             status: 'closed',
+            transport: resolveTransportForAgent('facts'),
             model: factsModel,
           },
         ]);
@@ -487,3 +494,15 @@ export class SessionCoordinator {
     return false;
   }
 }
+
+const resolveTransportForAgent = (agentType: AgentType): AgentTransport => {
+  switch (agentType) {
+    case 'cards':
+      return agentTransportProfiles.cards.defaultTransport;
+    case 'facts':
+      return agentTransportProfiles.facts.defaultTransport;
+    case 'transcript':
+    default:
+      return agentTransportProfiles.transcript.defaultTransport;
+  }
+};

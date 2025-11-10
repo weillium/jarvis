@@ -22,6 +22,7 @@ export type {
   AgentSessionHistoryParams,
   AgentSessionRecord,
   AgentSessionUpsert,
+  AgentTransport,
   AgentStatusRecord,
   AgentSummaryRecord,
   CheckpointRecord,

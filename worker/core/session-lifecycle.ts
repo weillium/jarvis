@@ -1,4 +1,10 @@
-import type { AgentSelection, AgentType, EventRuntime } from '../types';
+import type {
+  AgentSelection,
+  AgentSessionRecord,
+  AgentTransport,
+  AgentType,
+  EventRuntime
+} from '../types';
 import type { AgentSessionLifecycleStatus } from '../sessions/session-adapters';
 import type {
   SessionCreationOptions,
@@ -11,6 +17,7 @@ import type { ModelSelectionService } from '../services/model-selection-service'
 import type { StatusUpdater } from '../monitoring/status-updater';
 import type { AgentsRepository } from '../services/supabase/agents-repository';
 import type { AgentSessionsRepository } from '../services/supabase/agent-sessions-repository';
+import { agentTransportProfiles } from '../sessions/agent-profiles/registry';
 
 type TranscriptPayload = {
   text: string;
@@ -212,7 +219,15 @@ export class SessionLifecycle {
       const previousStatus = currentSession?.status;
 
       if (status === 'active' && sessionId) {
-        await this.handleActiveStatus(runtime, eventId, agentId, agentType, previousStatus, sessionId);
+        await this.handleActiveStatus(
+          runtime,
+          eventId,
+          agentId,
+          agentType,
+          previousStatus,
+          sessionId,
+          currentSession
+        );
       } else if (status !== 'active') {
         await this.logStatusChange(
           runtime,
@@ -238,7 +253,8 @@ export class SessionLifecycle {
     agentId: string,
     agentType: AgentType,
     previousStatus: string | undefined,
-    sessionId: string
+    sessionId: string,
+    currentSession?: AgentSessionRecord
   ): Promise<void> {
     try {
       const { connection_count, session_id } = await this.agentSessionsRepository.incrementConnectionCount(
@@ -270,6 +286,7 @@ export class SessionLifecycle {
         metadata: {
           websocket_state: this.getWebsocketState(runtime, agentType),
         },
+        transport: currentSession?.transport ?? resolveTransportForAgent(agentType),
       });
     } catch (err: unknown) {
       console.error("[worker] error:", String(err));
@@ -284,7 +301,7 @@ export class SessionLifecycle {
     status: string,
     sessionId: string | undefined,
     previousStatus: string | undefined,
-    currentSession?: { provider_session_id?: string | null; connection_count?: number | null }
+    currentSession?: AgentSessionRecord
   ): Promise<void> {
     const sessionDbId = await this.agentSessionsRepository.getSessionId(eventId, agentType);
     if (!sessionDbId) {
@@ -312,6 +329,7 @@ export class SessionLifecycle {
       metadata: {
         websocket_state: this.getWebsocketState(runtime, agentType),
       },
+      transport: currentSession?.transport ?? resolveTransportForAgent(agentType),
     });
   }
 
@@ -398,3 +416,11 @@ export class SessionLifecycle {
     );
   }
 }
+
+const resolveTransportForAgent = (agentType: AgentType): AgentTransport => {
+  const profile = agentTransportProfiles[agentType];
+  if (!profile) {
+    return 'stateless';
+  }
+  return profile.defaultTransport;
+};
