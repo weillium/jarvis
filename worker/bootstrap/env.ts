@@ -12,6 +12,7 @@ export interface WorkerEnvConfig {
   embedModel: string;
   chunksPolishModel: string;
   contextGenModel: string;
+  stubResearchModel: string;
   glossaryModel: string;
   cardsModel: string;
   exaApiKey?: string;
@@ -58,7 +59,6 @@ const parseWorkerPort = (value: string | undefined): number => {
 export const loadWorkerEnv = (): WorkerEnvConfig => {
   const supabaseUrl = requireEnv('SUPABASE_URL');
   const serviceRoleKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY');
-  const openaiApiKey = requireEnv('OPENAI_API_KEY');
 
   const modelSet = resolveModelSetFromEnv();
   const embedModel = resolveModelOrThrow({
@@ -73,12 +73,20 @@ export const loadWorkerEnv = (): WorkerEnvConfig => {
     modelKey: 'context.blueprint',
     modelSet,
   });
+  const stubResearchModel = resolveModelOrThrow({
+    modelKey: 'context.stub_research',
+    modelSet,
+  });
   const glossaryModel = resolveModelOrThrow({
     modelKey: 'context.glossary',
     modelSet,
   });
   const cardsModel = resolveModelOrThrow({
     modelKey: 'runtime.cards_generation',
+    modelSet,
+  });
+  const openaiApiKey = resolveModelOrThrow({
+    modelKey: 'runtime.api_key',
     modelSet,
   });
   const sseEndpointRaw = process.env.SSE_ENDPOINT || 'http://localhost:3000';
@@ -93,6 +101,7 @@ export const loadWorkerEnv = (): WorkerEnvConfig => {
     embedModel,
     chunksPolishModel,
     contextGenModel,
+    stubResearchModel,
     glossaryModel,
     cardsModel,
     exaApiKey: process.env.EXA_API_KEY,

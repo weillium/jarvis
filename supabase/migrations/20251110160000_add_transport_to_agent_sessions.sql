@@ -61,6 +61,20 @@ comment on column agent_sessions_history.transport is 'Transport mode recorded f
 
 -- 3. helper function update -------------------------------------------------
 
+drop function if exists log_agent_session_history(
+  uuid,
+  uuid,
+  uuid,
+  text,
+  text,
+  text,
+  text,
+  text,
+  integer,
+  text,
+  jsonb
+);
+
 create or replace function log_agent_session_history(
   p_agent_session_id uuid,
   p_event_id uuid,

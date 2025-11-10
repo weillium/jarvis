@@ -25,6 +25,7 @@ export interface ContextGenerationOrchestratorOptions {
   openai: OpenAI;
   embedModel: string;
   genModel: string;
+  stubResearchModel: string;
   chunkPolishModel: string;
   glossaryModel: string;
   exaApiKey?: string; // Optional Exa API key for research
@@ -42,7 +43,15 @@ export async function executeContextGeneration(
   blueprintId: string,
   options: ContextGenerationOrchestratorOptions
 ): Promise<void> {
-  const { supabase, openai, embedModel, genModel, chunkPolishModel, glossaryModel } = options;
+  const {
+    supabase,
+    openai,
+    embedModel,
+    genModel,
+    stubResearchModel,
+    chunkPolishModel,
+    glossaryModel,
+  } = options;
   const statusManager = new StatusManager(supabase);
   const generationContext: GenerationContext = { eventId, agentId, blueprintId };
 
@@ -65,7 +74,14 @@ export async function executeContextGeneration(
       generationContext,
       blueprint,
       researchCycleId,
-      { supabase, openai, genModel, exaApiKey: options.exaApiKey, statusManager }
+      {
+        supabase,
+        openai,
+        genModel,
+        stubResearchModel,
+        exaApiKey: options.exaApiKey,
+        statusManager,
+      }
     );
 
     console.log(`[context-gen] Research completed: ${researchResults.chunks.length} chunks found`);
@@ -85,6 +101,7 @@ export async function executeContextGeneration(
         supabase,
         openai,
         genModel,
+        stubResearchModel,
         embedModel,
         glossaryModel,
         exaApiKey: options.exaApiKey,
@@ -110,6 +127,7 @@ export async function executeContextGeneration(
         openai,
         embedModel,
         genModel,
+        stubResearchModel,
         chunkModel: chunkPolishModel,
         statusManager,
       }
@@ -137,7 +155,7 @@ export async function regenerateResearchStage(
   blueprintId: string,
   options: ContextGenerationOrchestratorOptions
 ): Promise<ResearchResults> {
-  const { supabase, openai, genModel } = options;
+  const { supabase, openai, genModel, stubResearchModel } = options;
   const statusManager = new StatusManager(supabase);
   const generationContext: GenerationContext = { eventId, agentId, blueprintId };
 
@@ -165,7 +183,14 @@ export async function regenerateResearchStage(
     generationContext,
     blueprint,
     researchCycleId,
-    { supabase, openai, genModel, exaApiKey: options.exaApiKey, statusManager }
+    {
+      supabase,
+      openai,
+      genModel,
+      stubResearchModel,
+      exaApiKey: options.exaApiKey,
+      statusManager,
+    }
   );
 
   console.log(`[context-gen] Research regeneration completed: ${researchResults.chunks.length} chunks found`);
@@ -194,6 +219,7 @@ export async function regenerateResearchStage(
         supabase,
         openai,
         genModel,
+        stubResearchModel,
         embedModel: options.embedModel,
         glossaryModel: options.glossaryModel,
         exaApiKey: options.exaApiKey,
@@ -215,6 +241,7 @@ export async function regenerateResearchStage(
         openai,
         embedModel: options.embedModel,
         genModel,
+        stubResearchModel,
         chunkModel: options.chunkPolishModel,
         statusManager,
       }
@@ -267,6 +294,7 @@ export async function regenerateGlossaryStage(
     supabase,
     openai,
     genModel,
+    stubResearchModel: options.stubResearchModel,
     embedModel,
     glossaryModel: options.glossaryModel,
     exaApiKey: options.exaApiKey,
@@ -319,6 +347,7 @@ export async function regenerateChunksStage(
     openai,
     embedModel,
     genModel,
+    stubResearchModel: options.stubResearchModel,
     chunkModel: chunkPolishModel,
     statusManager,
   });

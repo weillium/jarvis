@@ -11,6 +11,7 @@ export interface PhaseOptions {
   supabase: WorkerSupabaseClient;
   openai: OpenAI;
   genModel: string;
+  stubResearchModel?: string;
   embedModel?: string;
   exaApiKey?: string;
 }

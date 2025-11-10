@@ -1,5 +1,5 @@
 import type { ModelSet } from './model-management/model-providers';
-import { resolveModelOrThrow, resolveModelSet } from './model-management/model-resolver';
+import { resolveModel, resolveModelOrThrow, resolveModelSet } from './model-management/model-resolver';
 
 export interface ModelConfig {
   transcriptModel: string;
@@ -18,10 +18,12 @@ export class ModelSelectionService {
   }
 
   private resolveApiKey(modelSet: ModelSet): string {
-    if (modelSet === 'open_ai') {
-      return process.env.OPENAI_API_KEY || process.env.DEFAULT_API_KEY || '';
-    }
-    return process.env.DEFAULT_API_KEY || '';
+    const resolution = resolveModel({
+      modelKey: 'runtime.api_key',
+      modelSet,
+      throwOnMissing: false,
+    });
+    return resolution.resolvedValue ?? '';
   }
 
   private buildModelConfig(modelSet: ModelSet): ModelConfig {

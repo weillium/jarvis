@@ -35,7 +35,8 @@ export type ModelKey =
   | 'runtime.stateless'
   | 'runtime.transcript_realtime'
   | 'runtime.cards_generation'
-  | 'runtime.facts_generation';
+  | 'runtime.facts_generation'
+  | 'runtime.api_key';
 
 const createDescriptor = (descriptor: ModelDescriptor): ModelDescriptor => descriptor;
 
@@ -50,7 +51,7 @@ export const MODEL_DESCRIPTORS: Record<ModelKey, ModelDescriptor> = {
         fallbackValue: 'gpt-5',
       },
       open_ai: {
-        envVar: 'CONTEXT_BLUEPRINT_MODEL',
+        envVar: 'OPENAI_CONTEXT_BLUEPRINT_MODEL',
         fallbackValue: 'gpt-5',
       },
     },
@@ -63,11 +64,11 @@ export const MODEL_DESCRIPTORS: Record<ModelKey, ModelDescriptor> = {
     bindings: {
       default: {
         envVar: 'DEFAULT_CONTEXT_STUB_RESEARCH_MODEL',
-        fallbackValue: 'gpt-4o-mini',
+        fallbackValue: 'gpt-5',
       },
       open_ai: {
-        envVar: 'CONTEXT_STUB_RESEARCH_MODEL',
-        fallbackValue: 'gpt-4o-mini',
+        envVar: 'OPENAI_CONTEXT_STUB_RESEARCH_MODEL',
+        fallbackValue: 'gpt-5',
       },
     },
   }),
@@ -78,11 +79,11 @@ export const MODEL_DESCRIPTORS: Record<ModelKey, ModelDescriptor> = {
     bindings: {
       default: {
         envVar: 'DEFAULT_CONTEXT_GLOSSARY_MODEL',
-        fallbackValue: 'gpt-5',
+        fallbackValue: 'gpt-5-mini',
       },
       open_ai: {
-        envVar: 'CONTEXT_GLOSSARY_MODEL',
-        fallbackValue: 'gpt-5',
+        envVar: 'OPENAI_CONTEXT_GLOSSARY_MODEL',
+        fallbackValue: 'gpt-5-mini',
       },
     },
     notes: 'Current implementation falls back to the blueprint model when unset.',
@@ -97,7 +98,7 @@ export const MODEL_DESCRIPTORS: Record<ModelKey, ModelDescriptor> = {
         fallbackValue: 'text-embedding-3-small',
       },
       open_ai: {
-        envVar: 'CONTEXT_CHUNKS_MODEL',
+        envVar: 'OPENAI_CONTEXT_CHUNKS_MODEL',
         fallbackValue: 'text-embedding-3-small',
       },
     },
@@ -110,11 +111,11 @@ export const MODEL_DESCRIPTORS: Record<ModelKey, ModelDescriptor> = {
     bindings: {
       default: {
         envVar: 'DEFAULT_CONTEXT_CHUNKS_POLISHING_MODEL',
-        fallbackValue: 'gpt-5-mini',
+        fallbackValue: 'gpt-5-nano',
       },
       open_ai: {
-        envVar: 'CONTEXT_CHUNKS_POLISHING_MODEL',
-        fallbackValue: 'gpt-5-mini',
+        envVar: 'OPENAI_CONTEXT_CHUNKS_POLISHING_MODEL',
+        fallbackValue: 'gpt-5-nano',
       },
     },
   }),
@@ -125,11 +126,11 @@ export const MODEL_DESCRIPTORS: Record<ModelKey, ModelDescriptor> = {
     bindings: {
       default: {
         envVar: 'DEFAULT_REALTIME_MODEL',
-        fallbackValue: 'gpt-realtime',
+        fallbackValue: 'gpt-realtime-mini',
       },
       open_ai: {
         envVar: 'OPENAI_REALTIME_MODEL',
-        fallbackValue: 'gpt-4o-realtime-preview-2024-10-01',
+        fallbackValue: 'gpt-realtime-mini',
       },
     },
     notes:
@@ -142,11 +143,11 @@ export const MODEL_DESCRIPTORS: Record<ModelKey, ModelDescriptor> = {
     bindings: {
       default: {
         envVar: 'DEFAULT_STATELESS_MODEL',
-        fallbackValue: 'gpt-4o-mini',
+        fallbackValue: 'gpt-5-mini',
       },
       open_ai: {
         envVar: 'OPENAI_STATELESS_MODEL',
-        fallbackValue: 'gpt-4o-mini',
+        fallbackValue: 'gpt-5-mini',
       },
     },
   }),
@@ -157,11 +158,11 @@ export const MODEL_DESCRIPTORS: Record<ModelKey, ModelDescriptor> = {
     bindings: {
       default: {
         envVar: 'DEFAULT_TRANSCRIPT_MODEL',
-        fallbackValue: 'gpt-4o-realtime-preview-2024-10-01',
+        fallbackValue: 'gpt-4o-transcribe',
       },
       open_ai: {
         envVar: 'OPENAI_TRANSCRIPT_MODEL',
-        fallbackValue: 'gpt-4o-realtime-preview-2024-10-01',
+        fallbackValue: 'gpt-4o-transcribe',
       },
     },
   }),
@@ -173,9 +174,11 @@ export const MODEL_DESCRIPTORS: Record<ModelKey, ModelDescriptor> = {
       default: {
         envVar: 'DEFAULT_CARDS_MODEL',
         required: true,
+        fallbackValue: 'gpt-5-mini',
       },
       open_ai: {
         envVar: 'OPENAI_CARDS_MODEL',
+        fallbackValue: 'gpt-5-mini',
       },
     },
   }),
@@ -186,11 +189,25 @@ export const MODEL_DESCRIPTORS: Record<ModelKey, ModelDescriptor> = {
     bindings: {
       default: {
         envVar: 'DEFAULT_FACTS_MODEL',
-        fallbackValue: 'gpt-4o-mini',
+        fallbackValue: 'gpt-5-nano',
       },
       open_ai: {
         envVar: 'OPENAI_FACTS_MODEL',
-        fallbackValue: 'gpt-4o-mini',
+        fallbackValue: 'gpt-5-nano',
+      },
+    },
+  }),
+  'runtime.api_key': createDescriptor({
+    key: 'runtime.api_key',
+    stage: 'event_runtime',
+    description: 'Provider API key used for realtime/stateless agent sessions.',
+    bindings: {
+      default: {
+        envVar: 'DEFAULT_API_KEY',
+        required: true,
+      },
+      open_ai: {
+        envVar: 'OPENAI_API_KEY',
       },
     },
   }),

@@ -45,7 +45,7 @@ export async function runResearchPhase(
   generationCycleId: string,
   options: ResearchPhaseOptions
 ): Promise<ResearchResults> {
-  const { supabase, openai, genModel, exaApiKey, statusManager } = options;
+  const { supabase, openai, genModel, stubResearchModel, exaApiKey, statusManager } = options;
   const queries: Blueprint['research_plan']['queries'] =
     blueprint.research_plan.queries ?? [];
 
@@ -141,7 +141,13 @@ export async function runResearchPhase(
           const startTime = Date.now();
 
           try {
-            const stubChunks = await generateStubResearchChunks(queryItem.query, openai, genModel, costBreakdown);
+            const fallbackModel = stubResearchModel ?? genModel;
+            const stubChunks = await generateStubResearchChunks(
+              queryItem.query,
+              openai,
+              fallbackModel,
+              costBreakdown
+            );
             const duration = Date.now() - startTime;
             console.log(
               `[research] ${queryProgress} LLM stub generated ${stubChunks.length} chunks in ${duration}ms for query: "${queryItem.query}"`

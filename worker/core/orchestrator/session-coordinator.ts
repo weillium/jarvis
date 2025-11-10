@@ -61,7 +61,7 @@ export class SessionCoordinator {
     }
 
     const agentId = agent.id;
-    const modelSet = agent.model_set || 'open_ai';
+    const modelSet = agent.model_set || 'default';
 
     const existingSessions = await this.agentSessionsRepository.getSessionsForAgent(eventId, agentId);
     if (existingSessions.length > 0) {
@@ -234,7 +234,7 @@ export class SessionCoordinator {
     if (existingSessionRecords.length === 0) {
       try {
         const agent = await this.agentsRepository.getAgentStatus(agentId);
-        const modelSet = agent?.model_set || 'open_ai';
+        const modelSet = agent?.model_set || 'default';
         const transcriptModel = this.modelSelectionService.getModelForAgentType(modelSet, 'transcript');
         const cardsModel = this.modelSelectionService.getModelForAgentType(modelSet, 'cards');
         const factsModel = this.modelSelectionService.getModelForAgentType(modelSet, 'facts');

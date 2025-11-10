@@ -52,7 +52,7 @@ export class SessionLifecycle {
       params;
 
     const agent = await this.agentsRepository.getAgentStatus(agentId);
-    const modelSet = modelSetOverride ?? agent?.model_set ?? 'open_ai';
+    const modelSet = modelSetOverride ?? agent?.model_set ?? 'default';
 
     const transcriptModel = this.modelSelectionService.getModelForAgentType(
       modelSet,

@@ -7,6 +7,10 @@ import type {
   RegisterSessionEventsParams,
   SessionConfiguration,
 } from '../../../session-adapters/realtime/profile-types';
+import {
+  resolveModelOrThrow,
+  resolveModelSetFromEnv,
+} from '../../../../services/model-management/model-resolver';
 
 type TranscriptModel =
   | 'gpt-4o-transcribe'
@@ -14,8 +18,16 @@ type TranscriptModel =
   | 'gpt-4o-mini-transcribe'
   | 'gpt-4o-transcribe-diarize';
 
-export const DEFAULT_TRANSCRIPTION_MODEL: TranscriptModel = 'gpt-4o-transcribe';
-export const REALTIME_CONNECTION_MODEL = 'gpt-realtime' as const;
+const WORKER_MODEL_SET = resolveModelSetFromEnv();
+
+export const DEFAULT_TRANSCRIPTION_MODEL: TranscriptModel = resolveModelOrThrow({
+  modelKey: 'runtime.transcript_realtime',
+  modelSet: WORKER_MODEL_SET,
+}) as TranscriptModel;
+export const REALTIME_CONNECTION_MODEL = resolveModelOrThrow({
+  modelKey: 'runtime.realtime',
+  modelSet: WORKER_MODEL_SET,
+});
 
 interface TranscriptSessionConfigurationParams {
   config: RealtimeSessionConfig;
