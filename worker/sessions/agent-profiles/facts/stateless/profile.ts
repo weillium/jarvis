@@ -28,6 +28,7 @@ export const factsStatelessProfile: StatelessSessionProfile<FactsStatelessProfil
 
     const generator = new PromptFactsGenerator({
       openaiService: deps.openaiService,
+      model: config.model ?? FALLBACK_FACTS_MODEL,
     });
 
     const persistHistory = (

@@ -3,7 +3,6 @@ import type { RuntimeManager } from './runtime-manager';
 import type { EventProcessor } from './event-processor';
 import type { SSEService } from '../services/sse-service';
 import type { Logger } from '../monitoring/logger';
-import type { MetricsCollector } from '../monitoring/metrics-collector';
 import type { StatusUpdater } from '../monitoring/status-updater';
 import type { CheckpointManager } from '../monitoring/checkpoint-manager';
 import type { GlossaryManager } from '../context/glossary-manager';
@@ -36,7 +35,6 @@ export class Orchestrator {
   private readonly config: OrchestratorConfig;
   private readonly transcriptsRepository: TranscriptsRepository;
   private readonly logger: Logger;
-  private readonly metrics: MetricsCollector;
   private readonly checkpointManager: CheckpointManager;
   private readonly glossaryManager: GlossaryManager;
   private readonly sessionLifecycle: SessionLifecycle;
@@ -56,7 +54,6 @@ export class Orchestrator {
     agentSessionsRepository: AgentSessionsRepository,
     transcriptsRepository: TranscriptsRepository,
     logger: Logger,
-    metrics: MetricsCollector,
     checkpointManager: CheckpointManager,
     glossaryManager: GlossaryManager,
     runtimeManager: RuntimeManager,
@@ -70,7 +67,6 @@ export class Orchestrator {
     this.config = config;
     this.transcriptsRepository = transcriptsRepository;
     this.logger = logger;
-    this.metrics = metrics;
     this.checkpointManager = checkpointManager;
     this.glossaryManager = glossaryManager;
     this.sessionLifecycle = sessionLifecycle;
@@ -169,7 +165,6 @@ export class Orchestrator {
     console.log('[orchestrator] Shutting down...');
 
     for (const runtime of this.runtimeManager.getAllRuntimes()) {
-      this.logContextSummary(runtime);
 
       if (runtime.summaryTimer) {
         clearInterval(runtime.summaryTimer);
@@ -205,6 +200,7 @@ export class Orchestrator {
   private startPeriodicSummary(runtime: EventRuntime): void {
     if (runtime.summaryTimer) {
       clearInterval(runtime.summaryTimer);
+      runtime.summaryTimer = undefined;
     }
     if (runtime.statusUpdateTimer) {
       clearInterval(runtime.statusUpdateTimer);
@@ -216,58 +212,6 @@ export class Orchestrator {
       });
     }, 5000);
 
-    runtime.summaryTimer = setInterval(() => {
-      this.logContextSummary(runtime);
-    }, 5 * 60 * 1000);
-
-    setTimeout(() => {
-      this.logContextSummary(runtime);
-    }, 60 * 1000);
-  }
-
-  private logContextSummary(runtime: EventRuntime): void {
-    const transcript = this.metrics.getMetrics(runtime.eventId, 'transcript');
-    const cards = this.metrics.getMetrics(runtime.eventId, 'cards');
-    const facts = this.metrics.getMetrics(runtime.eventId, 'facts');
-    const ringStats = runtime.ringBuffer.getStats();
-    const factsStats = runtime.factsStore.getStats();
-
-    console.log(`\n[context] === Summary (Event: ${runtime.eventId}) ===`);
-    console.log(`[context] Transcript Agent:`);
-    if (transcript.count > 0) {
-      console.log(`[context]   - Avg tokens: ${Math.round(transcript.total / transcript.count)}`);
-      console.log(`[context]   - Max tokens: ${transcript.max}`);
-      console.log(
-        `[context]   - Warnings: ${transcript.warnings} (${((transcript.warnings / transcript.count) * 100).toFixed(1)}%)`
-      );
-      console.log(
-        `[context]   - Critical: ${transcript.criticals} (${((transcript.criticals / transcript.count) * 100).toFixed(1)}%)`
-      );
-    }
-    console.log(`[context] Cards Agent:`);
-    if (cards.count > 0) {
-      console.log(`[context]   - Avg tokens: ${Math.round(cards.total / cards.count)}`);
-      console.log(`[context]   - Max tokens: ${cards.max}`);
-      console.log(
-        `[context]   - Warnings: ${cards.warnings} (${((cards.warnings / cards.count) * 100).toFixed(1)}%)`
-      );
-      console.log(
-        `[context]   - Critical: ${cards.criticals} (${((cards.criticals / cards.count) * 100).toFixed(1)}%)`
-      );
-    }
-    console.log(`[context] Facts Agent:`);
-    if (facts.count > 0) {
-      console.log(`[context]   - Avg tokens: ${Math.round(facts.total / facts.count)}`);
-      console.log(`[context]   - Max tokens: ${facts.max}`);
-      console.log(
-        `[context]   - Warnings: ${facts.warnings} (${((facts.warnings / facts.count) * 100).toFixed(1)}%)`
-      );
-      console.log(
-        `[context]   - Critical: ${facts.criticals} (${((facts.criticals / facts.count) * 100).toFixed(1)}%)`
-      );
-    }
-    console.log(`[context] RingBuffer: ${ringStats.finalized} finalized chunks`);
-    console.log(`[context] FactsStore: ${factsStats.capacityUsed} (${factsStats.evictions} evictions)`);
-    console.log(`[context] ========================================\n`);
+    runtime.summaryTimer = undefined;
   }
 }

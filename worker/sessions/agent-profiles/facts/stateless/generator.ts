@@ -12,6 +12,7 @@ import {
 
 interface FactsGenerationDeps {
   openaiService: OpenAIService;
+  model?: string;
 }
 
 interface FactsGenerationInput {
@@ -78,6 +79,7 @@ export class PromptFactsGenerator {
       {
         responseFormat: { type: 'json_object' },
         temperature: 0.5,
+        model: this.deps.model,
       }
     );
 

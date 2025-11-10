@@ -242,6 +242,10 @@ export class SessionLifecycle {
       }
 
       await this.statusUpdater.updateAndPushStatus(runtime);
+
+      if (status === 'paused' || status === 'closed') {
+        await this.statusUpdater.updateAndPushStatus(runtime);
+      }
     } catch (err: unknown) {
       console.error("[worker] error:", String(err));
     }

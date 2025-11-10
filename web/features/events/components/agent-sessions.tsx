@@ -29,6 +29,8 @@ interface AgentSessionDisplay {
     updated_at: string;
     closed_at: string | null;
     model?: string;
+    connection_count: number;
+    last_connected_at: string | null;
   };
   token_metrics?: TokenMetrics;
   runtime_stats?: RuntimeStats;
@@ -191,10 +193,20 @@ function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: Se
       const elapsedSinceMetrics = Date.now() - metricsRecordedAtMs;
       return baseUptimeMs + Math.max(elapsedSinceMetrics, 0);
     }
-    if (!session.metadata.created_at) {
+    const startTimestampMs = (() => {
+      if (session.metadata.last_connected_at) {
+        return new Date(session.metadata.last_connected_at).getTime();
+      }
+      if (session.metadata.created_at) {
+        return new Date(session.metadata.created_at).getTime();
+      }
+      return null;
+    })();
+
+    if (startTimestampMs === null || Number.isNaN(startTimestampMs)) {
       return null;
     }
-    const createdAtMs = new Date(session.metadata.created_at).getTime();
+
     const endTimestampMs = (() => {
       if (session.status === 'active') {
         return currentTime;
@@ -208,7 +220,7 @@ function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: Se
       return currentTime;
     })();
 
-    const diffMs = endTimestampMs - createdAtMs;
+    const diffMs = endTimestampMs - startTimestampMs;
     return diffMs >= 0 ? diffMs : null;
   })();
 

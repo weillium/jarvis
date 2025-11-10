@@ -71,10 +71,11 @@ export class OpenAIService {
     options?: {
       responseFormat?: { type: 'json_object' };
       temperature?: number;
+      model?: string;
     }
   ): Promise<ChatCompletionDTO> {
     const request: OpenAI.Chat.Completions.ChatCompletionCreateParams = {
-      model: this.genModel,
+      model: options?.model ?? this.genModel,
       messages,
     };
 

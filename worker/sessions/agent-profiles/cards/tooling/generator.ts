@@ -121,6 +121,7 @@ export class PromptCardGenerator implements CardGenerator {
       {
         responseFormat: { type: 'json_object' },
         temperature: 0.6,
+        model: this.deps.configModel,
       }
     );
 

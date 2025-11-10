@@ -189,11 +189,11 @@ export const MODEL_DESCRIPTORS: Record<ModelKey, ModelDescriptor> = {
     bindings: {
       default: {
         envVar: 'DEFAULT_FACTS_MODEL',
-        fallbackValue: 'gpt-5-nano',
+        fallbackValue: 'gpt-5-mini',
       },
       open_ai: {
         envVar: 'OPENAI_FACTS_MODEL',
-        fallbackValue: 'gpt-5-nano',
+        fallbackValue: 'gpt-5-mini',
       },
     },
   }),

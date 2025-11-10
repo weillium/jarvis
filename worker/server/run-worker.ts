@@ -84,7 +84,6 @@ export const startWorker = async (env: WorkerEnvConfig): Promise<WorkerRuntime> 
     infrastructure.repositories.agentSessions,
     infrastructure.repositories.transcripts,
     infrastructure.logger,
-    infrastructure.metricsCollector,
     infrastructure.checkpointManager,
     pipeline.glossaryManager,
     runtimeManager,
