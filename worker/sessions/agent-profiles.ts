@@ -88,7 +88,7 @@ const buildAgentProfile = (
 
 export const defaultAgentProfiles: AgentProfileRegistry = {
   cards: buildAgentProfile('cards', agentTransportProfiles.cards, ['realtime', 'stateless']),
-  transcript: buildAgentProfile('transcript', agentTransportProfiles.transcript, ['realtime']),
+  transcript: buildAgentProfile('transcript', agentTransportProfiles.transcript, ['realtime', 'stateless']),
   facts: buildAgentProfile('facts', agentTransportProfiles.facts, ['stateless']),
 };
 

@@ -33,28 +33,6 @@ Instructions:
 - Return JSON array of cards`;
 }
 
-export const FACTS_EXTRACTION_SYSTEM_PROMPT = `You are a facts extractor. Track stable keys (agenda, decisions, deadlines, metrics). Return JSON array of facts.`;
-
-export function createFactsExtractionUserPrompt(
-  recentTranscript: string,
-  existingFacts: string
-): string {
-  return `You are an event intelligence assistant extracting stable facts.
-
-Recent Transcript Window:
-${recentTranscript}
-
-Existing Facts:
-${existingFacts}
-
-Instructions:
-- Identify durable facts (agenda, decisions, deadlines, metrics, speakers)
-- Update confidence scores based on new evidence
-- Mark outdated facts as "stale": true
-- Do NOT include speculative or unverified statements
-- Return JSON array of facts`;
-}
-
 export function createRealtimeCardsUserPrompt(
   runtimeContext: string,
   activeAgents: string,

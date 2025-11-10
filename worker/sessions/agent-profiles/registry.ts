@@ -7,6 +7,7 @@ import { factsAgentDefinition } from './facts';
 import { cardsRealtimeProfile } from './cards/realtime/profile';
 import { cardsStatelessProfile } from './cards/stateless/profile';
 import { transcriptRealtimeProfile } from './transcript/realtime/profile';
+import { transcriptStatelessProfile } from './transcript/stateless/profile';
 import { factsStatelessProfile } from './facts/stateless/profile';
 
 export interface AgentTransportProfiles {
@@ -32,6 +33,7 @@ export const agentTransportProfiles: Record<AgentType, AgentTransportProfiles> =
     description: transcriptAgentDefinition.description,
     transports: {
       realtime: transcriptRealtimeProfile,
+      stateless: transcriptStatelessProfile as StatelessSessionProfile<unknown>,
     },
   },
   facts: {

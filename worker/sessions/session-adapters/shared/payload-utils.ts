@@ -95,6 +95,32 @@ export const mapCardPayload = (payload: unknown): RealtimeCardDTO | null => {
   return null;
 };
 
+export const mapCardCollectionPayload = (payload: unknown): RealtimeCardDTO[] => {
+  if (!payload) {
+    return [];
+  }
+
+  if (typeof payload === 'string') {
+    const parsed = safeJsonParse<unknown>(payload);
+    return parsed ? mapCardCollectionPayload(parsed) : [];
+  }
+
+  if (Array.isArray(payload)) {
+    return payload
+      .map(mapCardPayload)
+      .filter((card): card is RealtimeCardDTO => card !== null);
+  }
+
+  if (isRecord(payload) && Array.isArray(payload.cards)) {
+    return payload.cards
+      .map(mapCardPayload)
+      .filter((card): card is RealtimeCardDTO => card !== null);
+  }
+
+  const single = mapCardPayload(payload);
+  return single ? [single] : [];
+};
+
 const mapFactCandidate = (value: unknown): RealtimeFactDTO | null => {
   if (!isRecord(value) || typeof value.key !== 'string' || !('value' in value)) {
     return null;

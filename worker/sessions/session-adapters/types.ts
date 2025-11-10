@@ -67,6 +67,10 @@ export interface RealtimeMessageContext {
     label: string;
     source?: string;
   };
+  transcriptMeta?: {
+    isFinal?: boolean;
+    usage?: RealtimeTranscriptionUsageDTO;
+  };
   supportingContext?: {
     facts?: Array<{ key: string; value: unknown; confidence: number }>;
     recentCards?: Array<{

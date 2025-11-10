@@ -1,14 +1,10 @@
 import type { RealtimeFactDTO } from '../../../../types';
 import type { Fact } from '../../../../state/facts-store';
 import type { OpenAIService } from '../../../../services/openai-service';
-import {
-  FACTS_EXTRACTION_SYSTEM_PROMPT,
-  createFactsExtractionUserPrompt,
-} from '../../../../prompts';
-import {
-  isRecord,
-  safeJsonParse,
-} from '../../../session-adapters/shared/payload-utils';
+import { getPolicy } from '../../../../policies';
+import { createFactsGenerationUserPrompt } from '../../../../prompts';
+import { mapFactsPayload } from '../../../session-adapters/shared/payload-utils';
+import { executeJsonPrompt } from '../../shared/json-prompt-runner';
 
 interface FactsGenerationDeps {
   openaiService: OpenAIService;
@@ -44,15 +40,15 @@ const formatExistingFacts = (
   }
 };
 
-const formatTranscriptWindow = (
-  recentTranscript: string,
-  glossaryContext?: string
-): string => {
+const formatTranscriptWindow = (recentTranscript: string): string => recentTranscript;
+
+const normalizeGlossaryContext = (glossaryContext?: string): string | undefined => {
   if (!glossaryContext) {
-    return recentTranscript;
+    return undefined;
   }
 
-  return `${recentTranscript}\n\nGlossary Context:\n${glossaryContext}`;
+  const trimmed = glossaryContext.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 };
 
 export class PromptFactsGenerator {
@@ -60,30 +56,24 @@ export class PromptFactsGenerator {
 
   async generate(input: FactsGenerationInput): Promise<FactsGenerationResult> {
     const existingFactsJson = formatExistingFacts(input.existingFacts);
-    const transcriptWindow = formatTranscriptWindow(
-      input.recentTranscript,
-      input.glossaryContext
-    );
+    const policy = getPolicy('facts', 1);
+    const transcriptWindow = formatTranscriptWindow(input.recentTranscript);
+    const glossaryContext = normalizeGlossaryContext(input.glossaryContext);
 
-    const response = await this.deps.openaiService.createChatCompletion(
-      [
-        { role: 'system', content: FACTS_EXTRACTION_SYSTEM_PROMPT },
-        {
-          role: 'user',
-          content: createFactsExtractionUserPrompt(
-            transcriptWindow,
-            existingFactsJson
-          ),
-        },
-      ],
-      {
-        responseFormat: { type: 'json_object' },
-        temperature: 0.5,
-        model: this.deps.model,
-      }
-    );
+    const userPrompt = createFactsGenerationUserPrompt({
+      transcriptWindow,
+      existingFactsJson,
+      glossaryContext,
+    });
 
-    const content = response.choices[0]?.message?.content;
+    const { content, parsed } = await executeJsonPrompt({
+      openaiService: this.deps.openaiService,
+      model: this.deps.model,
+      systemPrompt: policy,
+      userPrompt,
+      temperature: 0.5,
+    });
+
     if (!content) {
       return {
         generatedFacts: [],
@@ -91,65 +81,17 @@ export class PromptFactsGenerator {
       };
     }
 
+    const payloadSource = parsed ?? content;
+
     return {
-      generatedFacts: this.parseFacts(content),
-      rawResponse: content,
+      generatedFacts: this.parseFacts(payloadSource),
+      rawResponse: payloadSource,
     };
   }
 
-  private parseFacts(raw: string): RealtimeFactDTO[] {
-    const parsed = safeJsonParse<unknown>(raw);
-    if (!parsed) {
-      return [];
-    }
-
-    if (Array.isArray(parsed)) {
-      return this.normalizeFacts(parsed);
-    }
-
-    if (isRecord(parsed) && Array.isArray(parsed.facts)) {
-      return this.normalizeFacts(parsed.facts);
-    }
-
-    if (isRecord(parsed)) {
-      const single = this.normalizeFact(parsed);
-      return single ? [single] : [];
-    }
-
-    return [];
+  private parseFacts(raw: unknown): RealtimeFactDTO[] {
+    return mapFactsPayload(raw);
   }
 
-  private normalizeFacts(candidates: unknown[]): RealtimeFactDTO[] {
-    return candidates
-      .map((candidate) => this.normalizeFact(candidate))
-      .filter((fact): fact is RealtimeFactDTO => fact !== null);
-  }
-
-  private normalizeFact(candidate: unknown): RealtimeFactDTO | null {
-    if (!isRecord(candidate)) {
-      return null;
-    }
-
-    const { key, value, confidence, ...rest } = candidate;
-    if (typeof key !== 'string' || !('value' in candidate)) {
-      return null;
-    }
-
-    const fact: RealtimeFactDTO = {
-      key,
-      value,
-    };
-
-    if (typeof confidence === 'number') {
-      fact.confidence = confidence;
-    }
-
-    for (const [extraKey, extraValue] of Object.entries(rest)) {
-      fact[extraKey] = extraValue;
-    }
-
-    return fact;
-  }
 }
-
 
