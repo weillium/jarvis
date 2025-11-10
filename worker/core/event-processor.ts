@@ -157,7 +157,7 @@ export class EventProcessor {
       return;
     }
 
-    void this.factsProcessor.process(runtime, runtime.factsSession, runtime.factsSessionId);
+      void this.factsProcessor.process(runtime, runtime.factsSession, runtime.factsSessionId);
   }
 
   private evaluateCardTrigger(runtime: EventRuntime): CardTriggerContext | null {

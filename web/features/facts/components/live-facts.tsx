@@ -16,6 +16,14 @@ interface Fact {
   updated_at: string;
 }
 
+interface ApiFact {
+  fact_key: string;
+  fact_value: any;
+  confidence: number;
+  last_seen_seq: number;
+  updated_at: string;
+}
+
 /**
  * Live Facts Component
  * Displays facts as they are updated via SSE stream
@@ -23,6 +31,60 @@ interface Fact {
 export function LiveFacts({ eventId }: LiveFactsProps) {
   const [facts, setFacts] = useState<Map<string, Fact>>(new Map());
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
+  const [initialLoadError, setInitialLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadInitialFacts = async () => {
+      try {
+        setInitialLoadError(null);
+
+        const response = await fetch(`/api/context/${eventId}/facts`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to load facts (status ${response.status})`);
+        }
+
+        const data: { ok: boolean; facts?: ApiFact[]; error?: string } = await response.json();
+        if (!data.ok) {
+          throw new Error(data.error || 'Failed to load facts');
+        }
+
+        if (isCancelled) {
+          return;
+        }
+
+        const nextFacts = new Map<string, Fact>();
+        for (const fact of data.facts ?? []) {
+          nextFacts.set(fact.fact_key, {
+            key: fact.fact_key,
+            value: fact.fact_value,
+            confidence: fact.confidence,
+            last_seen_seq: fact.last_seen_seq,
+            updated_at: fact.updated_at,
+          });
+        }
+
+        setFacts(nextFacts);
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+        console.error('[LiveFacts] Failed to load initial facts:', error);
+        setInitialLoadError(error instanceof Error ? error.message : 'Failed to load facts');
+      }
+    };
+
+    void loadInitialFacts();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [eventId]);
 
   const { isConnected, isConnecting, reconnect } = useSSEStream({
     eventId,
@@ -150,7 +212,9 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
             fontSize: '14px',
           }}
         >
-          No facts tracked yet. Facts will appear as they are extracted during the event.
+          {initialLoadError
+            ? `Failed to load facts: ${initialLoadError}`
+            : 'No facts tracked yet. Facts will appear as they are extracted during the event.'}
         </div>
       ) : (
         <div

@@ -10,7 +10,7 @@ import OpenAI from 'openai';
 
 const DEFAULT_OUTPUT_PATH = path.resolve(
   __dirname,
-  'generated-transcript-first-minute.pcm'
+  'generated-transcript-second-minute.pcm'
 );
 const DEFAULT_MODEL = 'gpt-4o-mini-tts';
 const DEFAULT_SAMPLE_RATE = 24_000;
@@ -20,7 +20,10 @@ const DEFAULT_EVENT_ID = '1b377cd5-4c73-4eee-ada8-fcc3800f2bbb';
 const DEFAULT_WORKER_URL = 'http://localhost:3001';
 const DEFAULT_ENCODING = 'pcm_s16le';
 const DEFAULT_CHUNK_DURATION_MS = 20;
-const MAX_DURATION_MS = 60_000;
+const MINUTE_MS = 60_000;
+const SECOND_MINUTE_START_MS = MINUTE_MS;
+const SECOND_MINUTE_DURATION_MS = MINUTE_MS;
+const CAPTURE_DURATION_MS = SECOND_MINUTE_START_MS + SECOND_MINUTE_DURATION_MS;
 
 type SpeakerId = string;
 
@@ -234,7 +237,11 @@ async function main(): Promise<void> {
   const openai = new OpenAI({ apiKey });
   const audioChunks: Buffer[] = [];
   let totalBytes = 0;
-  const maxBytes = calculateMaxBytes(sampleRate, MAX_DURATION_MS, BYTES_PER_SAMPLE);
+  const maxBytes = calculateMaxBytes(
+    sampleRate,
+    CAPTURE_DURATION_MS,
+    BYTES_PER_SAMPLE
+  );
   let durationLimitReached = false;
 
   for (const segment of transcript) {
@@ -277,6 +284,7 @@ async function main(): Promise<void> {
       totalBytes,
       maxBytes,
       BYTES_PER_SAMPLE,
+      CAPTURE_DURATION_MS,
       '[generate-pcm-first-minute]'
     ));
 
@@ -302,6 +310,7 @@ async function main(): Promise<void> {
         totalBytes,
         maxBytes,
         BYTES_PER_SAMPLE,
+        CAPTURE_DURATION_MS,
         '[generate-pcm-first-minute]'
       ));
     }
@@ -326,10 +335,40 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  const totalSamples = combined.length / BYTES_PER_SAMPLE;
+  const captureStartSample = Math.round(
+    (SECOND_MINUTE_START_MS / 1_000) * sampleRate
+  );
+  const captureDurationSamples = Math.round(
+    (SECOND_MINUTE_DURATION_MS / 1_000) * sampleRate
+  );
+  const captureEndSample = captureStartSample + captureDurationSamples;
+
+  if (totalSamples <= captureStartSample) {
+    console.error(
+      '[generate-pcm-first-minute] error:',
+      `Synthesized audio is shorter than ${SECOND_MINUTE_START_MS} ms; cannot extract second minute`
+    );
+    process.exit(1);
+  }
+
+  const boundedEndSample = Math.min(captureEndSample, totalSamples);
+  const captureStartByte = captureStartSample * BYTES_PER_SAMPLE;
+  const captureEndByte = boundedEndSample * BYTES_PER_SAMPLE;
+  const secondMinuteBuffer = combined.subarray(captureStartByte, captureEndByte);
+
+  if (secondMinuteBuffer.length === 0) {
+    console.error(
+      '[generate-pcm-first-minute] error:',
+      'Extracted second-minute payload is empty'
+    );
+    process.exit(1);
+  }
+
   await ensureDirectory(path.dirname(outputPath));
-  await writeFile(outputPath, combined);
+  await writeFile(outputPath, secondMinuteBuffer);
   console.log(
-    `[generate-pcm-first-minute] ✅ Wrote ${combined.length} bytes (≤ ${MAX_DURATION_MS} ms) to ${outputPath}`
+    `[generate-pcm-first-minute] ✅ Wrote ${secondMinuteBuffer.length} bytes (minute 2 of transcript) to ${outputPath}`
   );
 
   if (skipStream) {
@@ -338,7 +377,7 @@ async function main(): Promise<void> {
   }
 
   await streamToWorker({
-    buffer: combined,
+    buffer: secondMinuteBuffer,
     eventId,
     workerUrl,
     sampleRate,
@@ -616,6 +655,7 @@ function enforceDurationLimit(
   totalBytes: number,
   maxBytes: number,
   bytesPerSample: number,
+  maxDurationMs: number,
   prefix: string
 ): { totalBytes: number; durationLimitReached: boolean } {
   if (totalBytes <= maxBytes) {
@@ -651,7 +691,7 @@ function enforceDurationLimit(
   }
 
   console.log(
-    `${prefix} Reached ${MAX_DURATION_MS} ms cap; truncating additional audio`
+    `${prefix} Reached ${maxDurationMs} ms cap; truncating additional audio`
   );
   return { totalBytes, durationLimitReached: true };
 }

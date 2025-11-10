@@ -40,7 +40,11 @@ export class SSEService {
         );
       }
     } catch (err: unknown) {
-      console.error("[worker] error:", String(err));
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      console.error(
+        `[sse] pushSessionStatus failed for event ${eventId} (endpoint: ${this.baseUrl})`,
+        errorMessage
+      );
     }
   }
 }

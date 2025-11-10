@@ -25,16 +25,23 @@ interface FactsGenerationResult {
 const FACTS_RESPONSE_SCHEMA = {
   name: 'RealtimeFacts',
   schema: {
-    type: 'array',
-    items: {
-      type: 'object',
-      required: ['key', 'value'],
-      additionalProperties: true,
-      properties: {
-        key: { type: 'string' },
-        value: {},
-        confidence: { type: 'number', minimum: 0, maximum: 1 },
-        stale: { type: 'boolean' },
+    type: 'object',
+    required: ['facts'],
+    additionalProperties: false,
+    properties: {
+      facts: {
+        type: 'array',
+        items: {
+          type: 'object',
+          required: ['key', 'value'],
+          additionalProperties: true,
+          properties: {
+            key: { type: 'string' },
+            value: {},
+            confidence: { type: 'number', minimum: 0, maximum: 1 },
+            stale: { type: 'boolean' },
+          },
+        },
       },
     },
   },
@@ -84,13 +91,6 @@ export class PromptFactsGenerator {
       glossaryContext,
     });
 
-    console.log('[facts][debug] facts generation prompt', {
-      transcriptLength: transcriptWindow.length,
-      existingFactsLength: existingFactsJson.length,
-      glossaryLength: glossaryContext?.length ?? 0,
-      promptPreview: userPrompt.slice(0, 500),
-    });
-
     const { content, parsed } = await executeJsonPrompt({
       openaiService: this.deps.openaiService,
       model: this.deps.model,
@@ -98,12 +98,6 @@ export class PromptFactsGenerator {
       userPrompt,
       responseFormat: { type: 'json_schema', json_schema: FACTS_RESPONSE_SCHEMA },
     });
-
-    if (content === null) {
-      console.log('[facts][debug] model returned empty content');
-    } else {
-      console.log('[facts][debug] raw content preview', content.slice(0, 500));
-    }
 
     if (!content) {
       return {
@@ -113,14 +107,6 @@ export class PromptFactsGenerator {
     }
 
     const payloadSource = parsed ?? content;
-
-    console.log('[facts][debug] payload source preview', {
-      parsed: parsed !== null,
-      payloadPreview:
-        typeof payloadSource === 'string'
-          ? payloadSource.slice(0, 500)
-          : JSON.stringify(payloadSource).slice(0, 500),
-    });
 
     return {
       generatedFacts: this.parseFacts(payloadSource),
