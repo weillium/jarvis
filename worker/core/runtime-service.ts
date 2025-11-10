@@ -50,10 +50,6 @@ export class RuntimeService {
       clearInterval(runtime.statusUpdateTimer);
       runtime.statusUpdateTimer = undefined;
     }
-    if (runtime.factsUpdateTimer) {
-      clearTimeout(runtime.factsUpdateTimer);
-      runtime.factsUpdateTimer = undefined;
-    }
 
     for (const agentType of ['transcript', 'cards', 'facts'] as const) {
       try {

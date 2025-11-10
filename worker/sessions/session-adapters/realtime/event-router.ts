@@ -252,14 +252,15 @@ const normalizeTranscriptionCompletedEvent = (
 
 export class EventRouter {
   private readonly deps: RouterDependencies;
+  private deltaLogCount = 0;
+  private completedLogCount = 0;
 
   constructor(deps: RouterDependencies) {
     this.deps = deps;
   }
 
   private log(level: 'log' | 'warn' | 'error', message: string): void {
-    const timestamped = `[${new Date().toISOString()}] ${message}`;
-    this.deps.onLog?.(level, timestamped);
+    this.deps.onLog?.(level, message);
   }
 
   handleFunctionCall(event: ResponseFunctionCallArgumentsDoneEvent): void {
@@ -331,6 +332,15 @@ export class EventRouter {
       return;
     }
 
+    this.deltaLogCount = (this.deltaLogCount ?? 0) + 1;
+    if (this.deltaLogCount <= 5) {
+      try {
+        this.log('log', `Transcription delta received payload: ${JSON.stringify(normalized)}`);
+      } catch {
+        this.log('log', 'Transcription delta received payload (failed to stringify)');
+      }
+    }
+
     const snippet =
       typeof normalized.delta === 'string' && normalized.delta.length > 0
         ? normalized.delta.slice(0, 80)
@@ -348,6 +358,15 @@ export class EventRouter {
     if (!normalized) {
       this.log('warn', 'Dropping transcription completion with invalid payload');
       return;
+    }
+
+    this.completedLogCount = (this.completedLogCount ?? 0) + 1;
+    if (this.completedLogCount <= 5) {
+      try {
+        this.log('log', `Transcription completed payload: ${JSON.stringify(normalized)}`);
+      } catch {
+        this.log('log', 'Transcription completed payload (failed to stringify)');
+      }
     }
 
     const snippet =

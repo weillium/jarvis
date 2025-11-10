@@ -15,12 +15,6 @@ export async function generateStubResearchChunks(
   }
 ): Promise<string[]> {
   try {
-    const modelLower = genModel.toLowerCase();
-    const isO1Model = modelLower.startsWith('o1');
-    const isGpt5Model = modelLower.includes('gpt-5') || modelLower.startsWith('gpt5');
-    const onlySupportsDefaultTemp = isO1Model || isGpt5Model;
-    const supportsCustomTemperature = !onlySupportsDefaultTemp;
-
     const requestOptions: Parameters<OpenAI['chat']['completions']['create']>[0] = {
       model: genModel,
       messages: [
@@ -30,10 +24,6 @@ export async function generateStubResearchChunks(
       response_format: { type: 'json_object' },
       stream: false,
     };
-
-    if (supportsCustomTemperature) {
-      requestOptions.temperature = 0.7;
-    }
 
     const rawResponse = await openai.chat.completions.create(requestOptions);
     if (!isRecord(rawResponse) || !Array.isArray(rawResponse.choices)) {

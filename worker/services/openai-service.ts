@@ -3,6 +3,7 @@ import type {
   ChatCompletionContentPart,
   ChatCompletionMessage,
   ChatCompletionMessageParam,
+  ChatCompletionCreateParams,
 } from 'openai/resources/chat/completions';
 import type {
   ChatCompletionDTO,
@@ -69,7 +70,7 @@ export class OpenAIService {
   async createChatCompletion(
     messages: ChatCompletionMessageParam[],
     options?: {
-      responseFormat?: { type: 'json_object' };
+      responseFormat?: ChatCompletionCreateParams['response_format'];
       temperature?: number;
       model?: string;
     }

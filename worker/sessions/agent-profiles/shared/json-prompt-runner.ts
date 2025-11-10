@@ -1,3 +1,4 @@
+import type { ChatCompletionCreateParams } from 'openai/resources/chat/completions';
 import type { OpenAIService } from '../../../services/openai-service';
 import type { ChatCompletionDTO } from '../../../types';
 import { safeJsonParse } from '../../session-adapters/shared/payload-utils';
@@ -8,6 +9,7 @@ export interface ExecuteJsonPromptOptions {
   systemPrompt: string;
   userPrompt: string;
   temperature?: number;
+  responseFormat?: ChatCompletionCreateParams['response_format'];
 }
 
 export interface ExecuteJsonPromptResult {
@@ -19,7 +21,7 @@ export interface ExecuteJsonPromptResult {
 export const executeJsonPrompt = async (
   options: ExecuteJsonPromptOptions
 ): Promise<ExecuteJsonPromptResult> => {
-  const { openaiService, model, systemPrompt, userPrompt, temperature } = options;
+  const { openaiService, model, systemPrompt, userPrompt, temperature, responseFormat } = options;
 
   const response = await openaiService.createChatCompletion(
     [
@@ -27,7 +29,7 @@ export const executeJsonPrompt = async (
       { role: 'user', content: userPrompt },
     ],
     {
-      responseFormat: { type: 'json_object' },
+      responseFormat: responseFormat ?? { type: 'json_object' },
       temperature,
       model,
     }

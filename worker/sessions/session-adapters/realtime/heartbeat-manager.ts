@@ -8,7 +8,7 @@ import { getUnderlyingSocket } from './transport-utils';
 
 type LogLevel = 'log' | 'warn' | 'error';
 
-type LogFn = (level: LogLevel, message: string, context?: { seq?: number }) => void;
+type LogFn = (level: LogLevel, message: string, context?: Record<string, unknown>) => void;
 
 type NotifyStatusFn = (
   status: AgentSessionLifecycleStatus,

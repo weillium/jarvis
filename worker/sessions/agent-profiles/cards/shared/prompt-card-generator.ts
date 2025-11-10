@@ -119,7 +119,6 @@ export class PromptCardGenerator implements CardGenerator {
       model: this.deps.configModel,
       systemPrompt: policy,
       userPrompt,
-      temperature: 0.6,
     });
 
     if (!content) {

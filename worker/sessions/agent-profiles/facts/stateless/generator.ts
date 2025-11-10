@@ -22,6 +22,24 @@ interface FactsGenerationResult {
   rawResponse?: unknown;
 }
 
+const FACTS_RESPONSE_SCHEMA = {
+  name: 'RealtimeFacts',
+  schema: {
+    type: 'array',
+    items: {
+      type: 'object',
+      required: ['key', 'value'],
+      additionalProperties: true,
+      properties: {
+        key: { type: 'string' },
+        value: {},
+        confidence: { type: 'number', minimum: 0, maximum: 1 },
+        stale: { type: 'boolean' },
+      },
+    },
+  },
+} as const;
+
 const formatExistingFacts = (
   existingFacts: FactsGenerationInput['existingFacts']
 ): string => {
@@ -66,13 +84,26 @@ export class PromptFactsGenerator {
       glossaryContext,
     });
 
+    console.log('[facts][debug] facts generation prompt', {
+      transcriptLength: transcriptWindow.length,
+      existingFactsLength: existingFactsJson.length,
+      glossaryLength: glossaryContext?.length ?? 0,
+      promptPreview: userPrompt.slice(0, 500),
+    });
+
     const { content, parsed } = await executeJsonPrompt({
       openaiService: this.deps.openaiService,
       model: this.deps.model,
       systemPrompt: policy,
       userPrompt,
-      temperature: 0.5,
+      responseFormat: { type: 'json_schema', json_schema: FACTS_RESPONSE_SCHEMA },
     });
+
+    if (content === null) {
+      console.log('[facts][debug] model returned empty content');
+    } else {
+      console.log('[facts][debug] raw content preview', content.slice(0, 500));
+    }
 
     if (!content) {
       return {
@@ -82,6 +113,14 @@ export class PromptFactsGenerator {
     }
 
     const payloadSource = parsed ?? content;
+
+    console.log('[facts][debug] payload source preview', {
+      parsed: parsed !== null,
+      payloadPreview:
+        typeof payloadSource === 'string'
+          ? payloadSource.slice(0, 500)
+          : JSON.stringify(payloadSource).slice(0, 500),
+    });
 
     return {
       generatedFacts: this.parseFacts(payloadSource),

@@ -179,7 +179,6 @@ export class CardsProcessor {
         ],
         {
           responseFormat: { type: 'json_object' },
-          temperature: 0.7,
         }
       );
 

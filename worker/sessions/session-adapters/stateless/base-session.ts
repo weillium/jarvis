@@ -31,7 +31,7 @@ export class StatelessAgentSession implements AgentRealtimeSession {
   private readonly onLog?: (
     level: 'log' | 'warn' | 'error',
     message: string,
-    context?: { seq?: number }
+    context?: Record<string, unknown>
   ) => void;
   private readonly eventHandlers: {
     [K in RealtimeSessionEvent]?: Array<(payload: RealtimeSessionEventPayloads[K]) => void>;
@@ -207,7 +207,7 @@ export class StatelessAgentSession implements AgentRealtimeSession {
   protected log(
     level: 'log' | 'warn' | 'error',
     message: string,
-    context?: { seq?: number }
+    context?: Record<string, unknown>
   ): void {
     this.onLog?.(level, `[${this.logLabel}] ${message}`, context);
   }

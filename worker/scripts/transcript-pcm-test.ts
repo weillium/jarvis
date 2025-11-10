@@ -11,7 +11,7 @@ const DEFAULT_SAMPLE_RATE = 24_000;
 const DEFAULT_BYTES_PER_SAMPLE = 2;
 const DEFAULT_ENCODING = 'pcm_s16le';
 const DEFAULT_EVENT_ID = '1b377cd5-4c73-4eee-ada8-fcc3800f2bbb';
-const DEFAULT_AUDIO_PATH = '/Users/will-liao/Downloads/output_24khz_mono.pcm';
+const DEFAULT_AUDIO_PATH = '/Users/will-liao/Desktop/Coding/Git/jarvis/worker/scripts/generated-transcript-first-minute.pcm';
 const DEFAULT_WORKER_URL = 'http://localhost:3001';
 const DEFAULT_SUPABASE_URL = 'http://127.0.0.1:54421';
 const DEFAULT_SUPABASE_SERVICE_ROLE_KEY =
@@ -113,7 +113,7 @@ async function main(): Promise<void> {
 
   const trimmedSampleCount = singleChunk
     ? Math.max(1, Math.round((targetChunkMs / 1_000) * sampleRate))
-    : Math.max(1, Math.floor(sampleCount / 2));
+    : sampleCount;
   const trimmedByteLength = Math.min(
     trimmedSampleCount * bytesPerSample,
     audioBuffer.length

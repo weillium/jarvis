@@ -26,7 +26,7 @@ type EmbedHandler = (text: string) => Promise<number[]>;
 type LogHandler = (
   level: 'log' | 'warn' | 'error',
   message: string,
-  context?: { seq?: number }
+  context?: Record<string, unknown>
 ) => void;
 
 export interface AgentSessionOptions {

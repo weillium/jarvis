@@ -16,7 +16,7 @@ type StatusHandler = (status: AgentSessionLifecycleStatus, sessionId?: string) =
 type LogHandler = (
   level: 'log' | 'warn' | 'error',
   message: string,
-  context?: { seq?: number }
+  context?: Record<string, unknown>
 ) => void;
 type RetrieveHandler = (
   query: string,

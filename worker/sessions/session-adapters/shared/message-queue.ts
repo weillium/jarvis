@@ -16,7 +16,7 @@ interface MessageQueueDeps {
   onLog?: (
     level: 'log' | 'warn' | 'error',
     message: string,
-    context?: { seq?: number }
+    context?: Record<string, unknown>
   ) => void;
 }
 

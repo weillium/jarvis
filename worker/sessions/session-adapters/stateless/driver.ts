@@ -51,7 +51,7 @@ class ProfileDrivenStatelessSession<ProfileDeps> extends StatelessAgentSession {
         this.emitEvent(event, payload);
       },
       log: (level, message, context) => {
-        this.log(level, message, context as { seq?: number } | undefined);
+        this.log(level, message, context);
       },
       storage: this.createStorageFacade(),
     };

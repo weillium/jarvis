@@ -215,6 +215,7 @@ export const createBufferedTranscriptAudioHooks: RuntimeControllerHooksFactory =
   };
   let flushThresholdBytes = RuntimeController.computeFlushThreshold(audioFormat);
   let audioReady = false;
+  let sentChunkCount = 0;
 
   const inferBytesPerSample = (encoding?: string): number | undefined => {
     switch (encoding) {
@@ -298,20 +299,26 @@ export const createBufferedTranscriptAudioHooks: RuntimeControllerHooksFactory =
       const payloadBase64 = payload.toString('base64');
 
       try {
-        context.log('log', `WS send -> input_audio_buffer.append (${payload.length} bytes)`);
         session.send({
           type: 'input_audio_buffer.append',
           audio: payloadBase64,
         } as RealtimeClientEvent);
+        sentChunkCount += 1;
+        if (sentChunkCount <= 10) {
+          context.log(
+            'log',
+            `Transcript chunk sent (#${sentChunkCount}, ${payload.length} bytes, ~${(
+              (payload.length / (format.sampleRate * format.bytesPerSample)) *
+              1000
+            ).toFixed(2)} ms)`
+          );
+        }
       } catch (error: unknown) {
         context.log('warn', `${logPrefix}: failed to flush ${payload.length} bytes, preserving buffer for retry`);
         throw error;
       }
 
       transcriptPcmBuffer = transcriptPcmBuffer.subarray(size);
-
-      const approxMs = (payload.length / (format.sampleRate * format.bytesPerSample)) * 1000;
-      context.log('log', `${logPrefix}: flushed ${payload.length} bytes (~${approxMs.toFixed(2)} ms) to transcript session`);
     };
 
     while (transcriptPcmBuffer.length >= minFlushBytes) {

@@ -68,8 +68,7 @@ export const buildTranscriptSessionConfiguration = (
             language: 'en',
           },
           turn_detection: {
-            type: 'semantic_vad',
-            eagerness: 'high',
+            type: 'server_vad',
           },
         },
       },

@@ -6,15 +6,17 @@ export type SessionStatus =
   | 'closed'
   | 'error';
 
+export interface LogContext extends Record<string, unknown> {
+  seq?: number;
+  agent_type?: AgentType;
+  event_id?: string;
+}
+
 export interface LogEntry {
   level: 'log' | 'warn' | 'error';
   message: string;
   timestamp: string;
-  context?: {
-    seq?: number;
-    agent_type?: AgentType;
-    event_id?: string;
-  };
+  context?: LogContext;
 }
 
 export interface AgentSessionStatus {

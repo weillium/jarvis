@@ -31,7 +31,7 @@ export interface RealtimeSessionConfig {
   onLog?: (
     level: 'log' | 'warn' | 'error',
     message: string,
-    context?: { seq?: number }
+    context?: Record<string, unknown>
   ) => void;
   supabase?: SupabaseClient;
   onRetrieve?: (query: string, topK: number) => Promise<VectorMatchRecord[]>;

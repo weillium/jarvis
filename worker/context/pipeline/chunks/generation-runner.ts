@@ -61,10 +61,6 @@ export const generateLLMChunks = async (
   );
 
   try {
-    const isO1Model = chunkModel.startsWith('o1');
-    const onlySupportsDefaultTemp = isO1Model || chunkModel.includes('gpt-5');
-    const supportsCustomTemperature = !onlySupportsDefaultTemp;
-
     const requestOptions: ChatCompletionRequest = {
       model: chunkModel,
       messages: [
@@ -73,10 +69,6 @@ export const generateLLMChunks = async (
       ],
       response_format: { type: 'json_object' },
     };
-
-    if (supportsCustomTemperature) {
-      requestOptions.temperature = 0.7;
-    }
 
     const response = await openai.chat.completions.create(
       requestOptions

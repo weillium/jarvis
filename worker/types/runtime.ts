@@ -61,8 +61,6 @@ export interface EventRuntime {
   cardsLastSeq: number;
   factsLastSeq: number;
 
-  // Debouncing for Facts agent
-  factsUpdateTimer?: NodeJS.Timeout;
   factsLastUpdate: number;
 
   // Periodic summary timer

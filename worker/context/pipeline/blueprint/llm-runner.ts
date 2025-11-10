@@ -48,10 +48,6 @@ export const generateBlueprintWithLLM = async (
   while (attempt <= maxRetries) {
     try {
       const isRetry = attempt > 0;
-      const isO1Model = genModel.startsWith('o1');
-      const onlySupportsDefaultTemp = isO1Model || genModel.includes('gpt-5');
-      const supportsCustomTemperature = !onlySupportsDefaultTemp;
-      const currentTemperature = supportsCustomTemperature ? (isRetry ? 0.5 : 0.7) : undefined;
 
       const promptMessage = isRetry
         ? `${userPrompt}
@@ -60,9 +56,7 @@ IMPORTANT: This is a retry attempt. The previous response had empty or insuffici
         : userPrompt;
 
       console.log(
-        `[blueprint] LLM attempt ${attempt + 1}/${maxRetries + 1} for topic "${topic}"${
-          isRetry && supportsCustomTemperature ? ' (retry with lower temperature)' : ''
-        }`
+        `[blueprint] LLM attempt ${attempt + 1}/${maxRetries + 1} for topic "${topic}"`
       );
 
       const request: ChatCompletionCreateParams = {
@@ -73,10 +67,6 @@ IMPORTANT: This is a retry attempt. The previous response had empty or insuffici
         ],
         response_format: { type: 'json_object' },
       };
-
-      if (supportsCustomTemperature && currentTemperature !== undefined) {
-        request.temperature = currentTemperature;
-      }
 
       const response = await openai.chat.completions.create({
         ...request,

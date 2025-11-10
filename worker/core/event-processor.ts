@@ -53,7 +53,6 @@ type DetermineCardTypeFn = (
 ) => CardType;
 
 export class EventProcessor {
-  private readonly FACTS_DEBOUNCE_MS = 25000;
   private readonly CARD_WINDOW_CHUNKS = Number(process.env.CARDS_CONCEPT_WINDOW ?? 3);
   private readonly CARD_MIN_CHUNKS = Number(process.env.CARDS_CONCEPT_MIN_CHUNKS ?? 2);
   private readonly CARD_FRESHNESS_MS =
@@ -158,14 +157,7 @@ export class EventProcessor {
       return;
     }
 
-    if (runtime.factsUpdateTimer) {
-      clearTimeout(runtime.factsUpdateTimer);
-    }
-
-    runtime.factsUpdateTimer = setTimeout(() => {
-      runtime.factsUpdateTimer = undefined;
-      void this.factsProcessor.process(runtime, runtime.factsSession, runtime.factsSessionId);
-    }, this.FACTS_DEBOUNCE_MS);
+    void this.factsProcessor.process(runtime, runtime.factsSession, runtime.factsSessionId);
   }
 
   private evaluateCardTrigger(runtime: EventRuntime): CardTriggerContext | null {

@@ -1,4 +1,4 @@
-import type { LogEntry, AgentType } from '../types';
+import type { LogEntry, AgentType, LogContext } from '../types';
 
 export class Logger {
   private logBuffers: Map<string, LogEntry[]> = new Map();
@@ -8,7 +8,7 @@ export class Logger {
     agentType: AgentType,
     level: 'log' | 'warn' | 'error',
     message: string,
-    context?: { seq?: number; event_id?: string }
+    context?: LogContext
   ): void {
     const key = this.getKey(eventId, agentType);
     if (!this.logBuffers.has(key)) {
@@ -32,13 +32,7 @@ export class Logger {
       buffer.shift();
     }
 
-    if (level === 'error') {
-      console.error(`[${agentType}] ${message}`);
-    } else if (level === 'warn') {
-      console.warn(`[${agentType}] ${message}`);
-    } else {
-      console.log(`[${agentType}] ${message}`);
-    }
+    this.print(level, agentType, message, entry.context);
   }
 
   getLogs(eventId: string, agentType: AgentType): LogEntry[] {
@@ -53,5 +47,27 @@ export class Logger {
 
   private getKey(eventId: string, agentType: AgentType): string {
     return `${eventId}:${agentType}`;
+  }
+
+  private print(
+    level: 'log' | 'warn' | 'error',
+    agentType: AgentType,
+    message: string,
+    context?: LogContext
+  ): void {
+    const formattedLabel = `[${agentType}] ${message}`;
+    const payload = context && Object.keys(context).length > 0 ? context : undefined;
+
+    if (level === 'error') {
+      payload ? console.error(formattedLabel, payload) : console.error(formattedLabel);
+      return;
+    }
+
+    if (level === 'warn') {
+      payload ? console.warn(formattedLabel, payload) : console.warn(formattedLabel);
+      return;
+    }
+
+    payload ? console.log(formattedLabel, payload) : console.log(formattedLabel);
   }
 }
