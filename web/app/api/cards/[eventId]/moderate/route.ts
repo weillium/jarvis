@@ -19,6 +19,8 @@ export async function POST(
     const body = await req.json();
     const cardId: string | undefined = body?.cardId;
     const isActive: boolean = body?.isActive !== false;
+    const reason: string | undefined =
+      typeof body?.reason === 'string' && body.reason.trim().length > 0 ? body.reason.trim() : undefined;
 
     if (!cardId || typeof cardId !== 'string') {
       return NextResponse.json(
@@ -27,7 +29,7 @@ export async function POST(
       );
     }
 
-    const { ok, error } = await updateCardActiveStatus(eventId, cardId, isActive);
+    const { ok, error } = await updateCardActiveStatus(eventId, cardId, isActive, { reason });
     if (!ok) {
       return NextResponse.json(
         { ok: false, error: error ?? 'Failed to update card status' },

@@ -5,6 +5,8 @@ export interface Card {
   kind: string | null;
   payload: Record<string, any> | null;
   is_active: boolean;
+  updated_at?: string;
+  last_seen_seq?: number | null;
 }
 
 export type CardType = 'text' | 'text_visual' | 'visual';
@@ -19,14 +21,15 @@ export interface CardPayload {
   source_seq?: number;
 }
 
-export interface SSECardMessage {
-  type: 'card';
-  id?: string;
-  payload: CardPayload;
-  for_seq?: number;
+export interface CardSnapshot {
+  id: string;
+  event_id: string;
+  payload: Record<string, any>;
+  card_kind: string | null;
   created_at: string;
-  timestamp: string;
-  is_active?: boolean;
+  updated_at?: string | null;
+  last_seen_seq?: number | null;
+  is_active: boolean;
 }
 
 export interface SSEFactMessage {
@@ -55,5 +58,50 @@ export interface SSEHeartbeatMessage {
   timestamp: string;
 }
 
-export type SSEMessage = SSECardMessage | SSEFactMessage | SSEConnectedMessage | SSEHeartbeatMessage;
+export interface SSECardCreatedMessage {
+  type: 'card_created';
+  timestamp: string;
+  card: CardSnapshot;
+}
+
+export interface SSECardUpdatedMessage {
+  type: 'card_updated';
+  timestamp: string;
+  card: CardSnapshot;
+}
+
+export interface SSECardDeactivatedMessage {
+  type: 'card_deactivated';
+  timestamp: string;
+  card_id: string;
+}
+
+export interface SSECardDeletedMessage {
+  type: 'card_deleted';
+  timestamp: string;
+  card_id: string;
+}
+
+export type SSEMessage =
+  | SSECardCreatedMessage
+  | SSECardUpdatedMessage
+  | SSECardDeactivatedMessage
+  | SSECardDeletedMessage
+  | SSEFactMessage
+  | SSEConnectedMessage
+  | SSEHeartbeatMessage;
+
+export type CardAuditAction = 'deactivated' | 'reactivated' | 'updated';
+
+export interface CardAuditLogEntry {
+  id: string;
+  event_id: string;
+  card_id: string;
+  action: CardAuditAction;
+  actor_id: string;
+  reason: string | null;
+  payload_before: Record<string, any> | null;
+  payload_after: Record<string, any> | null;
+  created_at: string;
+}
 

@@ -137,13 +137,13 @@ export function useUpdateCardActiveStatusMutation(eventId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ cardId, isActive }: { cardId: string; isActive: boolean }) => {
+    mutationFn: async ({ cardId, isActive, reason }: { cardId: string; isActive: boolean; reason?: string }) => {
       const res = await fetch(`/api/cards/${eventId}/moderate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ cardId, isActive }),
+        body: JSON.stringify({ cardId, isActive, reason }),
       });
       const data = await res.json();
       if (!data.ok) {
@@ -154,10 +154,10 @@ export function useUpdateCardActiveStatusMutation(eventId: string) {
     onSuccess: (_, { cardId, isActive }) => {
       queryClient.setQueryData<Card[]>(['cards', eventId], (previous = []) => {
         if (!Array.isArray(previous)) return previous;
-        if (isActive) {
-          return previous;
+        if (!isActive) {
+          return previous.filter((card) => card.id !== cardId);
         }
-        return previous.filter((card) => card.id !== cardId);
+        return previous;
       });
     },
   });

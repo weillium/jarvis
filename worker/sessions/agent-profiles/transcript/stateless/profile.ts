@@ -43,11 +43,11 @@ export const transcriptStatelessProfile: StatelessSessionProfile = {
       onSessionClose: ({ storage: sessionStorage }) => {
         sessionStorage.clear();
       },
-      onSendMessage: async ({ message, context }) => {
+      onSendMessage: ({ message, context }) => {
         const input = buildGenerationInput(message, context);
         if (!input) {
           log('warn', 'Stateless transcript session received empty message');
-          return;
+          return Promise.resolve();
         }
 
         const { transcript } = generator.generate(input);
@@ -61,6 +61,8 @@ export const transcriptStatelessProfile: StatelessSessionProfile = {
           prompt: createTranscriptGenerationUserPrompt(input),
           recordedAt: new Date().toISOString(),
         });
+
+        return Promise.resolve();
       },
     };
   },

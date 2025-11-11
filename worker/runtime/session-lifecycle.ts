@@ -1,10 +1,4 @@
-import type {
-  AgentSelection,
-  AgentSessionRecord,
-  AgentTransport,
-  AgentType,
-  EventRuntime,
-} from '../types';
+import type { AgentSelection, AgentType, EventRuntime } from '../types';
 import type { AgentSessionLifecycleStatus } from '../sessions/session-adapters';
 import type {
   SessionCreationOptions,
@@ -17,7 +11,6 @@ import type { ModelSelectionService } from '../services/model-selection-service'
 import type { StatusUpdater } from '../monitoring/status-updater';
 import type { AgentsRepository } from '../services/supabase/agents-repository';
 import type { AgentSessionsRepository } from '../services/supabase/agent-sessions-repository';
-import { agentTransportProfiles } from '../sessions/agent-profiles/registry';
 
 type TranscriptPayload = {
   text: string;

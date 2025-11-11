@@ -117,39 +117,93 @@ export async function GET(req: NextRequest) {
             filter: `event_id=eq.${eventId}`,
           },
           (payload: any) => {
-            const row = payload.new ?? payload.old;
-            if (!row || typeof row !== 'object') {
+            const eventType = payload.eventType;
+            const newRow = payload.new;
+            const oldRow = payload.old;
+
+            const toSnapshot = (row: any) => {
+              if (!row || typeof row !== 'object' || typeof row.payload !== 'object') {
+                return null;
+              }
+
+              return {
+                id: row.card_id,
+                event_id: row.event_id,
+                payload: row.payload,
+                card_kind:
+                  typeof row.card_kind === 'string'
+                    ? row.card_kind
+                    : typeof row.payload?.kind === 'string'
+                    ? row.payload.kind
+                    : null,
+                created_at: typeof row.created_at === 'string' ? row.created_at : new Date().toISOString(),
+                updated_at: typeof row.updated_at === 'string' ? row.updated_at : null,
+                last_seen_seq:
+                  typeof row.last_seen_seq === 'number' && Number.isFinite(row.last_seen_seq)
+                    ? row.last_seen_seq
+                    : null,
+                is_active: row.is_active !== false,
+              };
+            };
+
+            if (eventType === 'INSERT') {
+              const snapshot = toSnapshot(newRow);
+              if (!snapshot) return;
+              controller.enqueue(
+                encoder.encode(
+                  formatSSE({
+                    type: 'card_created',
+                    timestamp: new Date().toISOString(),
+                    card: snapshot,
+                  })
+                )
+              );
               return;
             }
 
-            const cardPayload = row.payload;
-            if (!cardPayload || typeof cardPayload !== 'object') {
+            if (eventType === 'UPDATE') {
+              const snapshot = toSnapshot(newRow);
+              if (!snapshot) return;
+
+              const wasActive = oldRow ? oldRow.is_active !== false : true;
+              const nowInactive = snapshot.is_active === false;
+
+              if (wasActive && nowInactive) {
+                controller.enqueue(
+                  encoder.encode(
+                    formatSSE({
+                      type: 'card_deactivated',
+                      timestamp: new Date().toISOString(),
+                      card_id: snapshot.id,
+                    })
+                  )
+                );
+                return;
+              }
+
+              controller.enqueue(
+                encoder.encode(
+                  formatSSE({
+                    type: 'card_updated',
+                    timestamp: new Date().toISOString(),
+                    card: snapshot,
+                  })
+                )
+              );
               return;
             }
 
-            const forSeq =
-              typeof row.last_seen_seq === 'number' && Number.isFinite(row.last_seen_seq)
-                ? row.last_seen_seq
-                : undefined;
-
-            const createdAt =
-              (typeof row.updated_at === 'string' && row.updated_at) ||
-              (typeof row.created_at === 'string' && row.created_at) ||
-              new Date().toISOString();
-
-            controller.enqueue(
-              encoder.encode(
-                formatSSE({
-                  type: 'card',
-                  id: row.card_id,
-                  payload: cardPayload,
-                  for_seq: forSeq,
-                  created_at: createdAt,
-                  timestamp: new Date().toISOString(),
-                  is_active: row.is_active !== false,
-                })
-              )
-            );
+            if (eventType === 'DELETE' && oldRow) {
+              controller.enqueue(
+                encoder.encode(
+                  formatSSE({
+                    type: 'card_deleted',
+                    timestamp: new Date().toISOString(),
+                    card_id: oldRow.card_id,
+                  })
+                )
+              );
+            }
           }
         )
         .subscribe();

@@ -1,4 +1,4 @@
-import type { EventRuntime, TranscriptChunk, CardStateRecord } from '../types';
+import type { EventRuntime, TranscriptChunk } from '../types';
 import { RingBuffer } from '../state/ring-buffer';
 import { FactsStore } from '../state/facts-store';
 import { CardsStore, type CardRecord } from '../state/cards-store';
@@ -10,18 +10,7 @@ import type { FactsRepository } from '../services/supabase/facts-repository';
 import type { TranscriptsRepository } from '../services/supabase/transcripts-repository';
 import type { AgentsRepository } from '../services/supabase/agents-repository';
 import type { CardsRepository } from '../services/supabase/cards-repository';
-
-const CARD_TYPES = new Set(['text', 'text_visual', 'visual']);
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
-
-const toFiniteInteger = (value: unknown): number | null => {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return Math.trunc(value);
-  }
-  return null;
-};
+import { normalizeCardStateRecord } from '../lib/cards/payload-normalizer';
 
 export class RuntimeManager {
   private readonly runtimes: Map<string, EventRuntime> = new Map();
@@ -91,13 +80,9 @@ export class RuntimeManager {
       const loadedCards: CardRecord[] = [];
 
       for (const card of activeCards) {
-        const seqCandidate = toFiniteInteger(card.last_seen_seq);
-        if (seqCandidate !== null) {
-          cardsLastSeq = Math.max(cardsLastSeq, seqCandidate);
-        }
-
-        const record = this.mapCardStateToRecord(card);
+        const record = normalizeCardStateRecord(card);
         if (record) {
+          cardsLastSeq = Math.max(cardsLastSeq, record.sourceSeq);
           loadedCards.push(record);
         }
       }
@@ -189,64 +174,6 @@ export class RuntimeManager {
     }
 
     return runtimes;
-  }
-
-  private mapCardStateToRecord(card: CardStateRecord): CardRecord | null {
-    if (!isRecord(card.payload)) {
-      return null;
-    }
-
-    const payload = card.payload;
-    const conceptId =
-      typeof payload.concept_id === 'string' && payload.concept_id.trim().length > 0
-        ? payload.concept_id
-        : card.card_id;
-    const conceptLabel =
-      typeof payload.concept_label === 'string' && payload.concept_label.trim().length > 0
-        ? payload.concept_label
-        : typeof payload.title === 'string' && payload.title.trim().length > 0
-        ? payload.title
-        : 'Card';
-
-    const cardTypeRaw = payload.card_type;
-    const cardType =
-      typeof cardTypeRaw === 'string' && CARD_TYPES.has(cardTypeRaw) ? cardTypeRaw : 'text';
-
-    const sourceSeq =
-      toFiniteInteger(card.source_seq) ??
-      toFiniteInteger(card.last_seen_seq) ??
-      0;
-
-    const createdAtIso = typeof card.updated_at === 'string' ? card.updated_at : card.created_at;
-    const createdAtParsed = createdAtIso ? Date.parse(createdAtIso) : Number.NaN;
-    const createdAt = Number.isFinite(createdAtParsed) ? createdAtParsed : Date.now();
-
-    const title = typeof payload.title === 'string' ? payload.title : undefined;
-    const body =
-      typeof payload.body === 'string' ? payload.body : payload.body === null ? null : null;
-    const label =
-      typeof payload.label === 'string' ? payload.label : payload.label === null ? null : null;
-    const imageUrl =
-      typeof payload.image_url === 'string'
-        ? payload.image_url
-        : payload.image_url === null
-        ? null
-        : null;
-
-    return {
-      conceptId,
-      conceptLabel,
-      cardType,
-      sourceSeq,
-      createdAt,
-      metadata: {
-        title,
-        body,
-        label,
-        imageUrl,
-        agentOutputId: card.card_id,
-      },
-    };
   }
 }
 

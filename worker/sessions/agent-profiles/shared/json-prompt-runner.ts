@@ -15,7 +15,7 @@ export interface ExecuteJsonPromptOptions {
 export interface ExecuteJsonPromptResult {
   response: ChatCompletionDTO;
   content: string | null;
-  parsed: unknown | null;
+  parsed: unknown;
 }
 
 export const executeJsonPrompt = async (

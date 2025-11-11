@@ -16,15 +16,16 @@ export class Logger {
     }
 
     const buffer = this.logBuffers.get(key)!;
+    const baseContext: LogContext = {
+      agent_type: agentType,
+      event_id: eventId,
+    };
+    const mergedContext: LogContext = context ? { ...context, ...baseContext } : baseContext;
     const entry: LogEntry = {
       level,
       message,
       timestamp: new Date().toISOString(),
-      context: {
-        ...context,
-        agent_type: agentType,
-        event_id: eventId,
-      },
+      context: mergedContext,
     };
 
     buffer.push(entry);
@@ -56,18 +57,34 @@ export class Logger {
     context?: LogContext
   ): void {
     const formattedLabel = `[${agentType}] ${message}`;
-    const payload = context && Object.keys(context).length > 0 ? context : undefined;
+
+    let payload: LogContext | undefined;
+    if (context && Object.keys(context).length > 0) {
+      payload = context;
+    }
 
     if (level === 'error') {
-      payload ? console.error(formattedLabel, payload) : console.error(formattedLabel);
+      if (payload) {
+        console.error(formattedLabel, payload);
+      } else {
+        console.error(formattedLabel);
+      }
       return;
     }
 
     if (level === 'warn') {
-      payload ? console.warn(formattedLabel, payload) : console.warn(formattedLabel);
+      if (payload) {
+        console.warn(formattedLabel, payload);
+      } else {
+        console.warn(formattedLabel);
+      }
       return;
     }
 
-    payload ? console.log(formattedLabel, payload) : console.log(formattedLabel);
+    if (payload) {
+      console.log(formattedLabel, payload);
+    } else {
+      console.log(formattedLabel);
+    }
   }
 }
