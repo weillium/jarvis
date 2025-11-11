@@ -223,7 +223,16 @@ export class TranscriptIngestionService {
     }
 
     const logMessage = `${logPrefix} Transcript Agent (seq ${seq}): ${totalTokens}/2048 tokens (${budgetStatus.percentage}%) - breakdown: ${breakdownStr}`;
-    this.logger.log(runtime.eventId, 'transcript', logLevel, logMessage, { seq });
+    const counterKey = 'transcriptUsage';
+    const currentCount = runtime.logCounters[counterKey] ?? 0;
+    const shouldLog = logLevel !== 'log' || currentCount < 10;
+
+    if (shouldLog) {
+      if (logLevel === 'log') {
+        runtime.logCounters[counterKey] = currentCount + 1;
+      }
+      this.logger.log(runtime.eventId, 'transcript', logLevel, logMessage, { seq });
+    }
 
     this.metrics.recordTokens(
       runtime.eventId,

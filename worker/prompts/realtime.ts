@@ -25,12 +25,26 @@ ${glossaryContext}
 
 ${conceptFocus ? `Concept Focus:\n${conceptFocus}\n\n` : ''}
 Instructions:
-- Create 1-2 new cards summarizing the key points
-- Each card: title (<= 8 words) + body (2 sentences max)
-- Highlight actionable insights, decisions, or notable moments
-- Avoid repeating previous cards unless it adds new information
-- Use present tense and concise language
-- Return JSON array of cards`;
+- Create 1-2 new cards only when they give the audience practical scaffolding to understand the discussion.
+- Pick the best fitting kind for each card: Definition, Framework, Timeline, Metric, Map, Comparison, Stakeholder, Process, Risk, or Opportunity.
+- Each card needs a short title (<= 8 words) and up to 3 tight bullets/sentences with concrete detail.
+- Highlight what changed, why it matters, or how to interpret it. Avoid repeating recent cards unless adding new insight.
+- Prefer present tense and direct language. Quote metrics, dates, and named entities precisely.
+- Return a single JSON object shaped exactly as:
+  {
+    "cards": [
+      {
+        "kind": "Definition | Framework | Timeline | Metric | Map | Comparison | Stakeholder | Process | Risk | Opportunity",
+        "card_type": "text | text_visual | visual",
+        "title": "concise title",
+        "body": "bullet or sentence summary (omit/null for visual)",
+        "label": "short visual label or null",
+        "image_url": "https://..." or null,
+        "source_seq": <number>
+      }
+    ]
+  }
+- Do NOT emit multiple root JSON fragments or extra fields.`;
 }
 
 export function createRealtimeCardsUserPrompt(

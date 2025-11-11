@@ -28,6 +28,8 @@ interface RouterDependencies {
   hooks?: EventRouterHooks;
 }
 
+const TRANSCRIPTION_STATUS_LOG_LIMIT = 10;
+
 const extractDeltaText = (event: unknown): string | null => {
   if (!isRecord(event)) {
     return null;
@@ -332,23 +334,23 @@ export class EventRouter {
       return;
     }
 
-    this.deltaLogCount = (this.deltaLogCount ?? 0) + 1;
-    if (this.deltaLogCount <= 5) {
+    this.deltaLogCount += 1;
+    if (this.deltaLogCount <= TRANSCRIPTION_STATUS_LOG_LIMIT) {
       try {
         this.log('log', `Transcription delta received payload: ${JSON.stringify(normalized)}`);
       } catch {
         this.log('log', 'Transcription delta received payload (failed to stringify)');
       }
-    }
 
-    const snippet =
-      typeof normalized.delta === 'string' && normalized.delta.length > 0
-        ? normalized.delta.slice(0, 80)
-        : '<empty>';
-    this.log(
-      'log',
-      `Transcription delta received (item=${normalized.item_id}, idx=${normalized.content_index ?? 0}): ${snippet}`
-    );
+      const snippet =
+        typeof normalized.delta === 'string' && normalized.delta.length > 0
+          ? normalized.delta.slice(0, 80)
+          : '<empty>';
+      this.log(
+        'log',
+        `Transcription delta received (item=${normalized.item_id}, idx=${normalized.content_index ?? 0}): ${snippet}`
+      );
+    }
 
     void this.deps.agentHandler.handleTranscriptionDelta(normalized);
   }
@@ -360,23 +362,23 @@ export class EventRouter {
       return;
     }
 
-    this.completedLogCount = (this.completedLogCount ?? 0) + 1;
-    if (this.completedLogCount <= 5) {
+    this.completedLogCount += 1;
+    if (this.completedLogCount <= TRANSCRIPTION_STATUS_LOG_LIMIT) {
       try {
         this.log('log', `Transcription completed payload: ${JSON.stringify(normalized)}`);
       } catch {
         this.log('log', 'Transcription completed payload (failed to stringify)');
       }
-    }
 
-    const snippet =
-      typeof normalized.transcript === 'string' && normalized.transcript.length > 0
-        ? normalized.transcript.slice(0, 80)
-        : '<empty>';
-    this.log(
-      'log',
-      `Transcription completed (item=${normalized.item_id}, idx=${normalized.content_index ?? 0}): ${snippet}`
-    );
+      const snippet =
+        typeof normalized.transcript === 'string' && normalized.transcript.length > 0
+          ? normalized.transcript.slice(0, 80)
+          : '<empty>';
+      this.log(
+        'log',
+        `Transcription completed (item=${normalized.item_id}, idx=${normalized.content_index ?? 0}): ${snippet}`
+      );
+    }
 
     void this.deps.agentHandler.handleTranscriptionCompleted(normalized);
   }

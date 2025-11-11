@@ -6,6 +6,7 @@ import { formatResearchSummaryForPrompt } from '../../../../lib/text/llm-prompt-
 import { mapCardPayload } from '../../../session-adapters/shared/payload-utils';
 import type { OpenAIService } from '../../../../services/openai-service';
 import { isRecord } from '../../../../lib/context-normalization';
+import { safeJsonParse } from '../../../session-adapters/shared/payload-utils';
 import { executeJsonPrompt } from '../../shared/json-prompt-runner';
 
 export interface CardGenerationInput {
@@ -141,7 +142,8 @@ export class PromptCardGenerator implements CardGenerator {
       contentPreview: content.slice(0, 500),
     });
 
-    const payloadSource = parsed ?? content;
+    const payloadSource =
+      parsed ?? (content ? this.normalizeCardPayloadContent(content) : content);
 
     console.log('[cards][debug] payload source preview', {
       eventId: this.deps.eventId,
@@ -186,6 +188,43 @@ export class PromptCardGenerator implements CardGenerator {
       rawResponse: { raw: payloadSource },
       generatedCards,
     };
+  }
+
+  private normalizeCardPayloadContent(content: string): unknown {
+    const trimmed = content.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const directlyParsed = safeJsonParse<unknown>(trimmed);
+    if (directlyParsed !== null) {
+      return directlyParsed;
+    }
+
+    const fragments = trimmed
+      .split(/\n+/)
+      .map((fragment) => fragment.trim())
+      .filter((fragment) => fragment.length > 0);
+
+    if (fragments.length <= 1) {
+      return null;
+    }
+
+    const parsedFragments: unknown[] = [];
+    for (const fragment of fragments) {
+      const parsed = safeJsonParse<unknown>(fragment);
+      if (parsed === null) {
+        return null;
+      }
+      parsedFragments.push(parsed);
+    }
+
+    console.log('[cards][debug] normalized newline-delimited card payload', {
+      eventId: this.deps.eventId,
+      fragmentCount: parsedFragments.length,
+    });
+
+    return parsedFragments;
   }
 }
 

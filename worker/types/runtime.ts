@@ -26,6 +26,7 @@ export interface EventRuntime {
   agentId: string;
   status: EventRuntimeStatus;
   enabledAgents: AgentSelection;
+  logCounters: Record<string, number>;
 
   // In-memory state
   ringBuffer: RingBuffer;

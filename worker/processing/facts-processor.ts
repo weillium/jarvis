@@ -42,7 +42,16 @@ export class FactsProcessor {
       }
 
       const logMessage = `${logPrefix} Facts Agent (seq ${runtime.factsLastSeq}): ${tokenBreakdown.total}/2048 tokens (${budgetStatus.percentage}%) - ${breakdownStr}`;
-      this.logger.log(runtime.eventId, 'facts', logLevel, logMessage, { seq: runtime.factsLastSeq });
+      const counterKey = 'factsUsage';
+      const currentCount = runtime.logCounters[counterKey] ?? 0;
+      const shouldLog = logLevel !== 'log' || currentCount < 10;
+
+      if (shouldLog) {
+        if (logLevel === 'log') {
+          runtime.logCounters[counterKey] = currentCount + 1;
+        }
+        this.logger.log(runtime.eventId, 'facts', logLevel, logMessage, { seq: runtime.factsLastSeq });
+      }
 
       this.metrics.recordTokens(
         runtime.eventId,

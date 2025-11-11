@@ -78,6 +78,7 @@ export class RuntimeManager {
         cards: false,
         facts: false,
       },
+      logCounters: {},
       ringBuffer: new RingBuffer(1000, 5 * 60 * 1000),
       factsStore,
       cardsStore: new CardsStore(100),

@@ -61,43 +61,55 @@ const produceCardTool: FunctionToolDefinition = {
   type: 'function',
   name: 'produce_card',
   description:
-    'Generate a context card when content is novel and user-useful. This is the ONLY way to emit cards - you MUST use this tool instead of returning JSON directly.',
+    'Generate a contextual scaffold when content is novel and audience-useful. This is the ONLY way to emit cards - you MUST use this tool instead of returning JSON directly.',
   parameters: {
     type: 'object',
     properties: {
       kind: {
         type: 'string',
-        enum: ['Decision', 'Metric', 'Deadline', 'Topic', 'Entity', 'Action', 'Context', 'Definition'],
-        description: 'The type/category of the card',
+        enum: [
+          'Definition',
+          'Framework',
+          'Timeline',
+          'Metric',
+          'Map',
+          'Comparison',
+          'Stakeholder',
+          'Process',
+          'Risk',
+          'Opportunity',
+        ],
+        description:
+          'The contextual scaffold best describing this card: definition, framework, timeline, metric, map, comparison, stakeholder, process, risk, or opportunity.',
       },
       card_type: {
         type: 'string',
         enum: ['text', 'text_visual', 'visual'],
         description:
-          'The card display type: "text" for text-only, "text_visual" for text with image, "visual" for image-only',
+          'The visual style for the card: "text" for copy-only, "text_visual" for copy plus image, "visual" for image-forward content.',
       },
       title: {
         type: 'string',
-        description: 'Brief title for the card (aim for <= 60 characters)',
+        description: 'Brief title or headline for the card (aim for <= 60 characters).',
       },
       body: {
         type: 'string',
         description:
-          '1-3 bullet points with key information (required for text/text_visual types, null for visual type)',
+          '1-3 bullet points or sentences with precise supporting detail (required for text/text_visual types, null for visual type).',
       },
       label: {
         type: 'string',
         description:
-          'Short label for image (required for visual type; aim for <= 40 characters; null for text/text_visual types)',
+          'Short label for visual assets (required for visual type; aim for <= 40 characters; null for text/text_visual types).',
       },
       image_url: {
         type: 'string',
         description:
-          'URL to supporting image (required for text_visual/visual types, null for text type)',
+          'URL to supporting map/diagram/illustration (required for text_visual/visual types, null for text type).',
       },
       source_seq: {
         type: 'number',
-        description: 'The sequence number of the source transcript that triggered this card',
+        description: 'Sequence number of the transcript chunk that prompted this card.',
       },
     },
     required: ['kind', 'card_type', 'title', 'source_seq'],
