@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { EventRuntime, TranscriptChunk, CardRecord, GlossaryEntry } from '../types';
 import type { ContextBuilder, AgentContext } from '../context/context-builder';
 import type { OpenAIService } from '../services/openai-service';
@@ -9,6 +10,7 @@ import { getPolicy } from '../policies';
 import { createCardGenerationUserPrompt } from '../prompts';
 import { checkBudgetStatus, formatTokenBreakdown } from '../utils/token-counter';
 import type { AgentOutputsRepository } from '../services/supabase/agent-outputs-repository';
+import type { CardsRepository } from '../services/supabase/cards-repository';
 import { isRecord } from '../lib/context-normalization';
 import { formatResearchSummaryForPrompt } from '../lib/text/llm-prompt-formatting';
 
@@ -45,6 +47,7 @@ export class CardsProcessor {
   constructor(
     private contextBuilder: ContextBuilder,
     private readonly agentOutputs: AgentOutputsRepository,
+    private readonly cardsRepository: CardsRepository,
     private openai: OpenAIService,
     private logger: Logger,
     private metrics: MetricsCollector,
@@ -215,13 +218,45 @@ export class CardsProcessor {
         card.image_url = null;
       }
 
+      const cardId = randomUUID();
+      const chunkSeq =
+        typeof chunk.seq === 'number' && Number.isFinite(chunk.seq) ? Math.trunc(chunk.seq) : undefined;
+      const sourceSeqValue =
+        typeof card.source_seq === 'number' && Number.isFinite(card.source_seq)
+          ? Math.trunc(card.source_seq)
+          : chunkSeq ?? null;
+      const runtimeCardsSeq =
+        typeof runtime.cardsLastSeq === 'number' && Number.isFinite(runtime.cardsLastSeq)
+          ? runtime.cardsLastSeq
+          : 0;
+      const lastSeenSeq = chunkSeq ?? (sourceSeqValue ?? runtimeCardsSeq ?? 0);
+      const sources =
+        chunkSeq !== undefined
+          ? [chunkSeq]
+          : sourceSeqValue !== null
+          ? [sourceSeqValue]
+          : [];
+
       await this.agentOutputs.insertAgentOutput({
+        id: cardId,
         event_id: runtime.eventId,
         agent_id: runtime.agentId,
         agent_type: 'cards',
-        for_seq: chunk.seq,
+        for_seq: lastSeenSeq,
         type: 'card',
         payload: card,
+      });
+
+      await this.cardsRepository.upsertCard({
+        event_id: runtime.eventId,
+        card_id: cardId,
+        card_kind: typeof card.kind === 'string' ? card.kind : null,
+        card_type: typeof card.card_type === 'string' ? card.card_type : null,
+        payload: card,
+        source_seq: sourceSeqValue,
+        last_seen_seq: typeof lastSeenSeq === 'number' ? lastSeenSeq : runtimeCardsSeq,
+        sources,
+        is_active: true,
       });
 
       if (triggerContext && chunk.seq) {

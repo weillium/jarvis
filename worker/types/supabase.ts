@@ -95,12 +95,27 @@ export interface GlossaryRecord {
 }
 
 export interface AgentOutputRecord {
+  id?: string;
   event_id: string;
   agent_id: string;
   agent_type: AgentType;
   for_seq: number;
   type: 'card' | 'fact_update';
   payload: unknown;
+}
+
+export interface CardStateRecord {
+  event_id: string;
+  card_id: string;
+  card_kind: string | null;
+  card_type: string | null;
+  payload: unknown;
+  source_seq: number | null;
+  last_seen_seq: number;
+  sources: number[];
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface FactRecord {

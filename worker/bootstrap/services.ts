@@ -11,11 +11,12 @@ import {
   createSupabaseClient,
   AgentsRepository,
   AgentSessionsRepository,
-  CheckpointsRepository,
-  TranscriptsRepository,
-  GlossaryRepository,
   AgentOutputsRepository,
+  CardsRepository,
+  CheckpointsRepository,
   FactsRepository,
+  GlossaryRepository,
+  TranscriptsRepository,
   VectorSearchGateway,
 } from '../services/supabase';
 import type { WorkerEnvConfig } from './env';
@@ -27,6 +28,7 @@ export interface WorkerRepositories {
   transcripts: TranscriptsRepository;
   glossary: GlossaryRepository;
   agentOutputs: AgentOutputsRepository;
+  cards: CardsRepository;
   facts: FactsRepository;
   vectorSearchGateway: VectorSearchGateway;
 }
@@ -53,6 +55,7 @@ const buildRepositories = (
   transcripts: new TranscriptsRepository(supabaseClient),
   glossary: new GlossaryRepository(supabaseClient),
   agentOutputs: new AgentOutputsRepository(supabaseClient),
+  cards: new CardsRepository(supabaseClient),
   facts: new FactsRepository(supabaseClient),
   vectorSearchGateway: new VectorSearchGateway(supabaseClient),
 });

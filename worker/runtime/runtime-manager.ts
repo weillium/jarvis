@@ -1,7 +1,7 @@
-import type { EventRuntime, TranscriptChunk } from '../types';
+import type { EventRuntime, TranscriptChunk, CardStateRecord } from '../types';
 import { RingBuffer } from '../state/ring-buffer';
 import { FactsStore } from '../state/facts-store';
-import { CardsStore } from '../state/cards-store';
+import { CardsStore, type CardRecord } from '../state/cards-store';
 import type { GlossaryManager } from '../context/glossary-manager';
 import type { CheckpointManager } from '../monitoring/checkpoint-manager';
 import type { MetricsCollector } from '../monitoring/metrics-collector';
@@ -9,12 +9,26 @@ import type { Logger } from '../monitoring/logger';
 import type { FactsRepository } from '../services/supabase/facts-repository';
 import type { TranscriptsRepository } from '../services/supabase/transcripts-repository';
 import type { AgentsRepository } from '../services/supabase/agents-repository';
+import type { CardsRepository } from '../services/supabase/cards-repository';
+
+const CARD_TYPES = new Set(['text', 'text_visual', 'visual']);
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const toFiniteInteger = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+  return null;
+};
 
 export class RuntimeManager {
   private readonly runtimes: Map<string, EventRuntime> = new Map();
 
   constructor(
     private readonly agentsRepository: AgentsRepository,
+    private readonly cardsRepository: CardsRepository,
     private readonly factsRepository: FactsRepository,
     private readonly transcriptsRepository: TranscriptsRepository,
     private readonly glossaryManager: GlossaryManager,
@@ -69,6 +83,32 @@ export class RuntimeManager {
       }
     }
 
+    const cardsStore = new CardsStore(100);
+    let cardsLastSeq = checkpoints.cards || 0;
+    const activeCards = await this.cardsRepository.getCards(eventId, true);
+
+    if (activeCards.length > 0) {
+      const loadedCards: CardRecord[] = [];
+
+      for (const card of activeCards) {
+        const seqCandidate = toFiniteInteger(card.last_seen_seq);
+        if (seqCandidate !== null) {
+          cardsLastSeq = Math.max(cardsLastSeq, seqCandidate);
+        }
+
+        const record = this.mapCardStateToRecord(card);
+        if (record) {
+          loadedCards.push(record);
+        }
+      }
+
+      loadedCards.forEach((cardRecord) => cardsStore.add(cardRecord));
+
+      console.log(
+        `[runtime-manager] Loaded ${loadedCards.length} active cards into CardsStore for event ${eventId}`
+      );
+    }
+
     const runtime: EventRuntime = {
       eventId,
       agentId,
@@ -81,11 +121,12 @@ export class RuntimeManager {
       logCounters: {},
       ringBuffer: new RingBuffer(1000, 5 * 60 * 1000),
       factsStore,
-      cardsStore: new CardsStore(100),
+      cardsStore,
       glossaryCache,
       pendingCardConcepts: new Map(),
+      pendingFactSources: [],
       transcriptLastSeq: checkpoints.transcript || 0,
-      cardsLastSeq: checkpoints.cards,
+      cardsLastSeq,
       factsLastSeq: checkpoints.facts,
       factsLastUpdate: Date.now(),
       createdAt: new Date(),
@@ -148,6 +189,64 @@ export class RuntimeManager {
     }
 
     return runtimes;
+  }
+
+  private mapCardStateToRecord(card: CardStateRecord): CardRecord | null {
+    if (!isRecord(card.payload)) {
+      return null;
+    }
+
+    const payload = card.payload;
+    const conceptId =
+      typeof payload.concept_id === 'string' && payload.concept_id.trim().length > 0
+        ? payload.concept_id
+        : card.card_id;
+    const conceptLabel =
+      typeof payload.concept_label === 'string' && payload.concept_label.trim().length > 0
+        ? payload.concept_label
+        : typeof payload.title === 'string' && payload.title.trim().length > 0
+        ? payload.title
+        : 'Card';
+
+    const cardTypeRaw = payload.card_type;
+    const cardType =
+      typeof cardTypeRaw === 'string' && CARD_TYPES.has(cardTypeRaw) ? cardTypeRaw : 'text';
+
+    const sourceSeq =
+      toFiniteInteger(card.source_seq) ??
+      toFiniteInteger(card.last_seen_seq) ??
+      0;
+
+    const createdAtIso = typeof card.updated_at === 'string' ? card.updated_at : card.created_at;
+    const createdAtParsed = createdAtIso ? Date.parse(createdAtIso) : Number.NaN;
+    const createdAt = Number.isFinite(createdAtParsed) ? createdAtParsed : Date.now();
+
+    const title = typeof payload.title === 'string' ? payload.title : undefined;
+    const body =
+      typeof payload.body === 'string' ? payload.body : payload.body === null ? null : null;
+    const label =
+      typeof payload.label === 'string' ? payload.label : payload.label === null ? null : null;
+    const imageUrl =
+      typeof payload.image_url === 'string'
+        ? payload.image_url
+        : payload.image_url === null
+        ? null
+        : null;
+
+    return {
+      conceptId,
+      conceptLabel,
+      cardType,
+      sourceSeq,
+      createdAt,
+      metadata: {
+        title,
+        body,
+        label,
+        imageUrl,
+        agentOutputId: card.card_id,
+      },
+    };
   }
 }
 

@@ -83,24 +83,30 @@ export class FactsStore {
         ? Math.min(1.0, existing.confidence + 0.1) // Boost confidence
         : Math.max(0.1, existing.confidence - 0.2); // Lower confidence on mismatch
 
+      const updatedSources =
+        typeof sourceId === 'number' && Number.isFinite(sourceId)
+          ? this.appendUniqueSource(existing.sources, sourceId)
+          : existing.sources;
+
       this.facts.set(key, {
         key,
         value,
         confidence: newConfidence,
         lastSeenSeq: sourceSeq,
-        sources: sourceId
-          ? [...existing.sources, sourceId].slice(-10) // Keep last 10 sources
-          : existing.sources,
+        sources: updatedSources,
       });
       return [];
     } else {
       // Insert new fact
+      const initialSources =
+        typeof sourceId === 'number' && Number.isFinite(sourceId) ? [sourceId] : [];
+
       this.facts.set(key, {
         key,
         value,
         confidence,
         lastSeenSeq: sourceSeq,
-        sources: sourceId ? [sourceId] : [],
+        sources: initialSources,
       });
 
       // Evict if over capacity and return evicted keys
@@ -167,6 +173,18 @@ export class FactsStore {
       result[fact.key] = fact.value;
     }
     return result;
+  }
+
+  private appendUniqueSource(existingSources: number[], sourceId: number): number[] {
+    if (!Number.isFinite(sourceId)) {
+      return existingSources;
+    }
+
+    if (existingSources.includes(sourceId)) {
+      return existingSources.slice(-10);
+    }
+
+    return [...existingSources, sourceId].slice(-10);
   }
 
   /**

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type {
   EventRuntime,
   RealtimeCardDTO,
@@ -10,6 +11,7 @@ import type { CardsProcessor, CardTriggerContext } from '../processing/cards-pro
 import type { FactsProcessor } from '../processing/facts-processor';
 import type { TranscriptProcessor } from '../processing/transcript-processor';
 import type { AgentOutputsRepository } from '../services/supabase/agent-outputs-repository';
+import type { CardsRepository } from '../services/supabase/cards-repository';
 import type { FactsRepository } from '../services/supabase/facts-repository';
 import {
   extractConcepts,
@@ -79,6 +81,7 @@ export class EventProcessor {
     private readonly factsProcessor: FactsProcessor,
     private readonly transcriptProcessor: TranscriptProcessor,
     private readonly agentOutputs: AgentOutputsRepository,
+    private readonly cardsRepository: CardsRepository,
     private readonly factsRepository: FactsRepository,
     private readonly determineCardType: DetermineCardTypeFn
   ) {}
@@ -181,6 +184,21 @@ export class EventProcessor {
     }
 
     if (runtime.enabledAgents.facts) {
+      const pendingFactSources = runtime.pendingFactSources as Array<{
+        seq: number;
+        transcriptId: number;
+      }>;
+
+      if (chunk.seq && typeof chunk.transcript_id === 'number') {
+        pendingFactSources.push({
+          seq: chunk.seq,
+          transcriptId: chunk.transcript_id,
+        });
+
+        if (pendingFactSources.length > 50) {
+          pendingFactSources.shift();
+        }
+      }
       this.scheduleFactsUpdate(runtime);
     }
   }
@@ -415,8 +433,17 @@ export class EventProcessor {
         card.image_url = null;
       }
 
-      const sourceSeq = card.source_seq || runtime.cardsLastSeq;
-      const pendingConcept = sourceSeq ? runtime.pendingCardConcepts.get(sourceSeq) : undefined;
+      const cardSourceSeq =
+        typeof card.source_seq === 'number' && Number.isFinite(card.source_seq)
+          ? Math.trunc(card.source_seq)
+          : undefined;
+      const runtimeCardsSeq =
+        typeof runtime.cardsLastSeq === 'number' && Number.isFinite(runtime.cardsLastSeq)
+          ? runtime.cardsLastSeq
+          : 0;
+      const forSeq = cardSourceSeq ?? runtimeCardsSeq;
+      const pendingConcept =
+        cardSourceSeq !== undefined ? runtime.pendingCardConcepts.get(cardSourceSeq) : undefined;
 
       if (pendingConcept) {
         (card as MutableCardPayload & { concept_id?: string; concept_label?: string }).concept_id =
@@ -425,25 +452,40 @@ export class EventProcessor {
           pendingConcept.conceptLabel;
       }
 
+      const cardId = randomUUID();
+
       await this.agentOutputs.insertAgentOutput({
+        id: cardId,
         event_id: runtime.eventId,
         agent_id: runtime.agentId,
         agent_type: 'cards',
-        for_seq: sourceSeq,
+        for_seq: forSeq,
         type: 'card',
         payload: card,
       });
 
+      await this.cardsRepository.upsertCard({
+        event_id: runtime.eventId,
+        card_id: cardId,
+        card_kind: typeof card.kind === 'string' ? card.kind : null,
+        card_type: typeof card.card_type === 'string' ? card.card_type : null,
+        payload: card,
+        source_seq: cardSourceSeq ?? null,
+        last_seen_seq: forSeq,
+        sources: Number.isFinite(forSeq) ? [Math.trunc(forSeq)] : [],
+        is_active: true,
+      });
+
       console.log(
-        `[cards] Card received from Realtime API (seq: ${card.source_seq || runtime.cardsLastSeq}, type: ${cardType})`
+        `[cards] Card received from Realtime API (seq: ${cardSourceSeq ?? runtimeCardsSeq}, type: ${cardType})`
       );
 
-      if (pendingConcept && sourceSeq) {
+      if (pendingConcept && cardSourceSeq !== undefined) {
         runtime.cardsStore.add({
           conceptId: pendingConcept.conceptId,
           conceptLabel: pendingConcept.conceptLabel,
           cardType,
-          sourceSeq,
+          sourceSeq: cardSourceSeq,
           createdAt: Date.now(),
           metadata: {
             title: card.title,
@@ -453,8 +495,8 @@ export class EventProcessor {
           },
         });
       }
-      if (sourceSeq) {
-        runtime.pendingCardConcepts.delete(sourceSeq);
+      if (cardSourceSeq !== undefined) {
+        runtime.pendingCardConcepts.delete(cardSourceSeq);
       }
     } catch (err: unknown) {
       console.error("[event-processor] error:", String(err));
@@ -473,13 +515,29 @@ export class EventProcessor {
       }
 
       const evictedKeys: string[] = [];
-      
+      const pendingFactSources = runtime.pendingFactSources as Array<{
+        seq: number;
+        transcriptId: number;
+      }>;
+      const pendingSource =
+        pendingFactSources.length > 0 ? pendingFactSources.shift() : undefined;
+      const factSourceSeq =
+        typeof pendingSource?.seq === 'number' ? pendingSource.seq : runtime.factsLastSeq;
+      const factSourceId =
+        typeof pendingSource?.transcriptId === 'number' ? pendingSource.transcriptId : undefined;
+
       for (const fact of facts) {
         if (!fact.key || fact.value === undefined) continue;
 
         const initialConfidence =
           (typeof fact.confidence === 'number' ? fact.confidence : undefined) || 0.7;
-        const keysEvicted = runtime.factsStore.upsert(fact.key, fact.value, initialConfidence, runtime.factsLastSeq, undefined);
+        const keysEvicted = runtime.factsStore.upsert(
+          fact.key,
+          fact.value,
+          initialConfidence,
+          factSourceSeq,
+          factSourceId
+        );
         
         if (keysEvicted.length > 0) {
           evictedKeys.push(...keysEvicted);
@@ -493,7 +551,7 @@ export class EventProcessor {
           fact_key: fact.key,
           fact_value: fact.value,
           confidence: computedConfidence,
-          last_seen_seq: runtime.factsLastSeq,
+          last_seen_seq: factSourceSeq,
           sources: storedFact?.sources || [],
         });
 
@@ -501,7 +559,7 @@ export class EventProcessor {
           event_id: runtime.eventId,
           agent_id: runtime.agentId,
           agent_type: 'facts',
-          for_seq: runtime.factsLastSeq,
+          for_seq: factSourceSeq,
           type: 'fact_update',
           payload: fact,
         });

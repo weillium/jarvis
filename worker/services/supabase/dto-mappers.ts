@@ -4,6 +4,7 @@ import type {
   AgentStatusRecord,
   AgentSummaryRecord,
   AgentTransport,
+  CardStateRecord,
   CheckpointRecord,
   FactRecord,
   GlossaryRecord,
@@ -272,6 +273,25 @@ export const mapFactRecords = (rows: unknown): FactRecord[] =>
       last_seen_seq: getNumber(record, 'last_seen_seq', 'FactRecord'),
       sources: getNumberArray(record, 'sources'),
       is_active: typeof record['is_active'] === 'boolean' ? record['is_active'] : undefined,
+    };
+  });
+
+export const mapCardStateRecords = (rows: unknown): CardStateRecord[] =>
+  toArray(rows).map((row) => {
+    const record = toRecord(row, 'CardStateRecord');
+    const sourceSeq = getOptionalNumber(record, 'source_seq');
+    return {
+      event_id: getString(record, 'event_id', 'CardStateRecord'),
+      card_id: getString(record, 'card_id', 'CardStateRecord'),
+      card_kind: getNullableString(record, 'card_kind'),
+      card_type: getNullableString(record, 'card_type'),
+      payload: record['payload'],
+      source_seq: sourceSeq ?? null,
+      last_seen_seq: getNumber(record, 'last_seen_seq', 'CardStateRecord'),
+      sources: getNumberArray(record, 'sources'),
+      is_active: typeof record['is_active'] === 'boolean' ? record['is_active'] : undefined,
+      created_at: getOptionalString(record, 'created_at') ?? undefined,
+      updated_at: getOptionalString(record, 'updated_at') ?? undefined,
     };
   });
 

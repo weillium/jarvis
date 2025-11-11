@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/shared/lib/supabase/client';
+import type { Card } from '@/shared/types/card';
 
 /**
  * Mutation hooks for all POST/PUT/DELETE operations
@@ -124,6 +125,40 @@ export function useRegenerateStageMutation(eventId: string) {
       } else if (stage === 'chunks') {
         queryClient.invalidateQueries({ queryKey: ['context-database', eventId] });
       }
+    },
+  });
+}
+
+// ============================================================================
+// Cards Moderation Mutations
+// ============================================================================
+
+export function useUpdateCardActiveStatusMutation(eventId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ cardId, isActive }: { cardId: string; isActive: boolean }) => {
+      const res = await fetch(`/api/cards/${eventId}/moderate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ cardId, isActive }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        throw new Error(data.error || 'Failed to update card status');
+      }
+      return { cardId, isActive };
+    },
+    onSuccess: (_, { cardId, isActive }) => {
+      queryClient.setQueryData<Card[]>(['cards', eventId], (previous = []) => {
+        if (!Array.isArray(previous)) return previous;
+        if (isActive) {
+          return previous;
+        }
+        return previous.filter((card) => card.id !== cardId);
+      });
     },
   });
 }

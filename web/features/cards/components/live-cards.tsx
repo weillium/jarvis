@@ -1,10 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSSEStream } from '@/shared/hooks/use-sse-stream';
-import type { SSEMessage, SSECardMessage } from '@/shared/types/card';
+import type { SSECardMessage, SSEMessage, Card } from '@/shared/types/card';
 import { CardDisplay } from './card-display';
 import type { CardPayload } from '@/shared/types/card';
+import { useCardsQuery } from '@/shared/hooks/use-cards-query';
+import { useQueryClient } from '@tanstack/react-query';
+import { useUpdateCardActiveStatusMutation } from '@/shared/hooks/use-mutations';
 
 interface LiveCardsProps {
   eventId: string;
@@ -15,18 +18,46 @@ interface LiveCardsProps {
  * Displays cards as they arrive via SSE stream
  */
 export function LiveCards({ eventId }: LiveCardsProps) {
-  const [cards, setCards] = useState<Array<{ payload: CardPayload; timestamp: string }>>([]);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
+  const [moderatingCardId, setModeratingCardId] = useState<string | null>(null);
+  const [moderationError, setModerationError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const { data: cardsData, isLoading } = useCardsQuery(eventId);
+
+  const cards = useMemo(() => cardsData ?? [], [cardsData]);
+  const updateCardStatus = useUpdateCardActiveStatusMutation(eventId);
 
   const { isConnected, isConnecting, error, reconnect } = useSSEStream({
     eventId,
     onMessage: (message: SSEMessage) => {
       if (message.type === 'card') {
         const cardMessage = message as SSECardMessage;
-        setCards((prev) => [
-          { payload: cardMessage.payload, timestamp: cardMessage.timestamp },
-          ...prev,
-        ]);
+        queryClient.setQueryData<Card[]>(['cards', eventId], (previousCards = []) => {
+          const cardId =
+            cardMessage.id ??
+            `live-${eventId}-${cardMessage.timestamp}-${cardMessage.payload.source_seq ?? 'unknown'}`;
+
+          if (cardMessage.is_active === false) {
+            return previousCards.filter((card) => card.id !== cardId);
+          }
+
+          const alreadyExists = previousCards.some((card) => card.id === cardId);
+          if (alreadyExists) {
+            return previousCards;
+          }
+
+          const nextCard: Card = {
+            id: cardId,
+            event_id: eventId,
+            emitted_at: cardMessage.created_at ?? cardMessage.timestamp,
+            kind: cardMessage.payload.kind,
+            payload: cardMessage.payload,
+            is_active: cardMessage.is_active !== false,
+          };
+
+          return [nextCard, ...previousCards];
+        });
       }
     },
     onConnect: () => {
@@ -51,6 +82,21 @@ export function LiveCards({ eventId }: LiveCardsProps) {
       setConnectionStatus('disconnected');
     }
   }, [isConnected, isConnecting]);
+
+  const handleDeactivate = async (cardId: string) => {
+    setModerationError(null);
+    setModeratingCardId(cardId);
+    try {
+      await updateCardStatus.mutateAsync({ cardId, isActive: false });
+    } catch (err) {
+      console.error('[LiveCards] Failed to deactivate card:', err);
+      setModerationError(
+        err instanceof Error ? err.message : 'Failed to deactivate card'
+      );
+    } finally {
+      setModeratingCardId(null);
+    }
+  };
 
   return (
     <div>
@@ -114,9 +160,36 @@ export function LiveCards({ eventId }: LiveCardsProps) {
         )}
       </div>
 
+      {moderationError && (
+        <div
+          style={{
+            marginBottom: '16px',
+            padding: '12px',
+            background: '#fef2f2',
+            border: '1px solid #fecaca',
+            borderRadius: '8px',
+            color: '#991b1b',
+            fontSize: '13px',
+          }}
+        >
+          {moderationError}
+        </div>
+      )}
+
       {/* Cards List */}
       <div>
-        {cards.length === 0 ? (
+        {isLoading ? (
+          <div
+            style={{
+              padding: '48px 24px',
+              textAlign: 'center',
+              color: '#94a3b8',
+              fontSize: '14px',
+            }}
+          >
+            Loading cards...
+          </div>
+        ) : cards.length === 0 ? (
           <div
             style={{
               padding: '48px 24px',
@@ -132,13 +205,49 @@ export function LiveCards({ eventId }: LiveCardsProps) {
               : 'Disconnected. Click reconnect to try again.'}
           </div>
         ) : (
-          cards.map((card, index) => (
-            <CardDisplay
-              key={`${card.payload.source_seq || index}-${card.timestamp}`}
-              card={card.payload}
-              timestamp={card.timestamp}
-            />
-          ))
+          cards.map((card) => {
+            const payload = card.payload as CardPayload | null;
+            if (!payload) {
+              return null;
+            }
+
+            return (
+              <div
+                key={card.id}
+                style={{
+                  marginBottom: '16px',
+                  padding: '16px',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  background: '#ffffff',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                }}
+              >
+                <CardDisplay card={payload} timestamp={card.emitted_at} />
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => handleDeactivate(card.id)}
+                    disabled={moderatingCardId === card.id}
+                    style={{
+                      padding: '6px 12px',
+                      background: '#f97316',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: 500,
+                      cursor: moderatingCardId === card.id ? 'not-allowed' : 'pointer',
+                      opacity: moderatingCardId === card.id ? 0.6 : 1,
+                    }}
+                  >
+                    {moderatingCardId === card.id ? 'Deactivating…' : 'Deactivate'}
+                  </button>
+                </div>
+              </div>
+            );
+          })
         )}
       </div>
     </div>

@@ -4,6 +4,7 @@ export interface Card {
   emitted_at: string;
   kind: string | null;
   payload: Record<string, any> | null;
+  is_active: boolean;
 }
 
 export type CardType = 'text' | 'text_visual' | 'visual';
@@ -20,10 +21,12 @@ export interface CardPayload {
 
 export interface SSECardMessage {
   type: 'card';
+  id?: string;
   payload: CardPayload;
   for_seq?: number;
   created_at: string;
   timestamp: string;
+  is_active?: boolean;
 }
 
 export interface SSEFactMessage {

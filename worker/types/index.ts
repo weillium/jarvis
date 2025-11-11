@@ -26,6 +26,7 @@ export type {
   AgentStatusRecord,
   AgentSummaryRecord,
   CheckpointRecord,
+  CardStateRecord,
   FactRecord,
   GlossaryRecord,
   InsertTranscriptParams,

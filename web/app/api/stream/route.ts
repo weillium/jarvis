@@ -125,10 +125,12 @@ export async function GET(req: NextRequest) {
                 encoder.encode(
                   formatSSE({
                     type: 'card',
+                    id: output.id,
                     payload: output.payload,
                     for_seq: output.for_seq,
                     created_at: output.created_at,
                     timestamp: new Date().toISOString(),
+                    is_active: true,
                   })
                 )
               );

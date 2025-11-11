@@ -3,6 +3,7 @@ export * from './types';
 export * from './agents-repository';
 export * from './agent-sessions-repository';
 export * from './agent-outputs-repository';
+export * from './cards-repository';
 export * from './checkpoints-repository';
 export * from './transcripts-repository';
 export * from './glossary-repository';

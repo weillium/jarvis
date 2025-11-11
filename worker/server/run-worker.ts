@@ -35,6 +35,7 @@ export const startWorker = async (env: WorkerEnvConfig): Promise<WorkerRuntime> 
 
   const runtimeManager = new RuntimeManager(
     infrastructure.repositories.agents,
+    infrastructure.repositories.cards,
     infrastructure.repositories.facts,
     infrastructure.repositories.transcripts,
     pipeline.glossaryManager,
@@ -48,6 +49,7 @@ export const startWorker = async (env: WorkerEnvConfig): Promise<WorkerRuntime> 
     pipeline.factsProcessor,
     pipeline.transcriptProcessor,
     infrastructure.repositories.agentOutputs,
+    infrastructure.repositories.cards,
     infrastructure.repositories.facts,
     determineCardType
   );
