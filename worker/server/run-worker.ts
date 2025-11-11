@@ -151,6 +151,7 @@ export const startWorker = async (env: WorkerEnvConfig): Promise<WorkerRuntime> 
     orchestrator,
     workerPort: env.workerPort,
     log,
+    supabase: infrastructure.supabaseClient,
   });
 
   const intervals: NodeJS.Timeout[] = [];

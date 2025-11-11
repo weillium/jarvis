@@ -5,10 +5,15 @@ import type { WorkerSupabaseClient } from './types';
 const MAX_DOCUMENTS_FOR_PROMPT = 3;
 const MAX_SNIPPET_LENGTH = 600;
 
-export const extractDocumentsText = async (
+export interface BlueprintDocumentsSection {
+  text: string;
+  totalDocuments: number;
+}
+
+export const loadBlueprintDocumentsSection = async (
   eventId: string,
   supabase: WorkerSupabaseClient
-): Promise<string> => {
+): Promise<BlueprintDocumentsSection> => {
   try {
     const { data: docs, error } = await supabase
       .from('event_docs')
@@ -18,35 +23,48 @@ export const extractDocumentsText = async (
 
     if (error) {
       console.warn(`[blueprint] Error fetching documents: ${error.message}`);
-      return '';
+      return { text: '', totalDocuments: 0 };
     }
 
-    if (!docs || docs.length === 0) {
+    const allDocs = docs ?? [];
+
+    if (allDocs.length === 0) {
       console.log(`[blueprint] No documents found for event ${eventId}`);
-      return '';
+      return { text: '', totalDocuments: 0 };
     }
 
     const extracted = await extractDocumentBatch(
       supabase,
-      docs,
+      allDocs,
       { maxDocuments: MAX_DOCUMENTS_FOR_PROMPT }
     );
 
     if (extracted.length === 0) {
       console.log(`[blueprint] Unable to extract text from documents for event ${eventId}`);
-      return '';
+      return { text: '', totalDocuments: allDocs.length };
     }
 
     console.log(
-      `[blueprint] Extracted text from ${extracted.length}/${docs.length} document(s) for event ${eventId}`
+      `[blueprint] Extracted text from ${extracted.length}/${allDocs.length} document(s) for event ${eventId}`
     );
 
-    return buildPromptSection(extracted);
+    return {
+      text: buildPromptSection(extracted),
+      totalDocuments: allDocs.length,
+    };
   } catch (err: unknown) {
     console.error('[blueprint-generator] error:', String(err));
   }
 
-  return '';
+  return { text: '', totalDocuments: 0 };
+};
+
+export const extractDocumentsText = async (
+  eventId: string,
+  supabase: WorkerSupabaseClient
+): Promise<string> => {
+  const section = await loadBlueprintDocumentsSection(eventId, supabase);
+  return section.text;
 };
 
 const buildPromptSection = (extractedDocs: ExtractedDocumentText[]): string => {

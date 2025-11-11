@@ -55,6 +55,17 @@ export type BlueprintWithUsage = Blueprint & {
   usage?: OpenAIUsage | null;
 };
 
+export interface BlueprintPromptPreview {
+  systemPrompt: string;
+  userPrompt: string;
+  event: {
+    title: string;
+    topic: string;
+    hasDocuments: boolean;
+    documentCount: number;
+  };
+}
+
 export type SupabaseErrorLike = { message: string } | null;
 
 export interface SupabaseMutationResult {

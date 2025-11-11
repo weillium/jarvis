@@ -16,9 +16,11 @@ import {
 import type {
   Blueprint,
   BlueprintGeneratorOptions,
+  BlueprintPromptPreview,
   BlueprintWithUsage,
+  WorkerSupabaseClient,
 } from './blueprint/types';
-import { extractDocumentsText } from './blueprint/documents';
+import { loadBlueprintDocumentsSection } from './blueprint/documents';
 import { generateBlueprintWithLLM } from './blueprint/llm-runner';
 import {
   ensureAgentBlueprintStage,
@@ -31,6 +33,7 @@ import {
   markBlueprintError,
   markBlueprintGenerationCycleFailed,
 } from './blueprint/persistence';
+import { buildBlueprintPrompts } from './blueprint/prompt-builder';
 
 const hasUploadedDocuments = (documentsText: string) =>
   documentsText.length > 0 && !documentsText.includes('will be available');
@@ -99,7 +102,8 @@ export async function generateContextBlueprint(
     const event = await fetchEventRecord(supabase, eventId);
     console.log(`[blueprint] Event: ${event.title}, Topic: ${event.topic || 'N/A'}`);
 
-    const documentsText = await extractDocumentsText(eventId, supabase);
+    const documentsSection = await loadBlueprintDocumentsSection(eventId, supabase);
+    const documentsText = documentsSection.text;
     const blueprintId = await insertBlueprintRecord(supabase, eventId, agentId);
     console.log(`[blueprint] Blueprint record created with ID: ${blueprintId}`);
 
@@ -182,5 +186,36 @@ export async function generateContextBlueprint(
     console.error('[blueprint-generator] error:', String(err));
     return '';
   }
+}
+
+export async function getBlueprintPromptPreview(
+  eventId: string,
+  options: { supabase: WorkerSupabaseClient }
+): Promise<BlueprintPromptPreview> {
+  const { supabase } = options;
+
+  const event = await fetchEventRecord(supabase, eventId);
+  const documentsSection = await loadBlueprintDocumentsSection(eventId, supabase);
+  const documentsText = documentsSection.text;
+  const hasDocuments = hasUploadedDocuments(documentsText);
+  const topic = event.topic || event.title;
+
+  const { systemPrompt, userPrompt } = buildBlueprintPrompts({
+    eventTitle: event.title,
+    topic,
+    documentsText,
+    hasDocuments,
+  });
+
+  return {
+    systemPrompt,
+    userPrompt,
+    event: {
+      title: event.title,
+      topic,
+      hasDocuments,
+      documentCount: documentsSection.totalDocuments,
+    },
+  };
 }
 

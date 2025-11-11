@@ -1,11 +1,14 @@
 import http from 'http';
 import { URL } from 'url';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Orchestrator } from '../runtime/orchestrator';
+import { getBlueprintPromptPreview } from '../context/pipeline/blueprint-generator';
 
 interface WorkerServerDeps {
   orchestrator: Orchestrator;
   workerPort: number;
   log: (...args: unknown[]) => void;
+  supabase: SupabaseClient;
 }
 
 const safeParseJson = <T>(raw: string): T | null => {
@@ -48,6 +51,7 @@ export const createWorkerServer = ({
   orchestrator,
   workerPort,
   log,
+  supabase,
 }: WorkerServerDeps): http.Server => {
   const server = http.createServer((req, res) => {
     void (async () => {
@@ -275,6 +279,39 @@ export const createWorkerServer = ({
         return;
       }
 
+      if (pathname === '/blueprint/prompt' && req.method === 'GET') {
+        const eventId = url.searchParams.get('event_id');
+
+        if (!eventId) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ ok: false, error: 'Missing event_id parameter' }));
+          return;
+        }
+
+        try {
+          const preview = await getBlueprintPromptPreview(eventId, { supabase });
+          res.writeHead(200);
+          res.end(
+            JSON.stringify({
+              ok: true,
+              prompt: {
+                system: preview.systemPrompt,
+                user: preview.userPrompt,
+              },
+              event: preview.event,
+            })
+          );
+          return;
+        } catch (err: unknown) {
+          const errorText = String(err);
+          console.error('[worker] error:', errorText);
+          const status = errorText.includes('Event not found') ? 404 : 500;
+          res.writeHead(status);
+          res.end(JSON.stringify({ ok: false, error: errorText }));
+          return;
+        }
+      }
+
       res.writeHead(404);
       res.end(JSON.stringify({ ok: false, error: 'Not found' }));
     } catch (err: unknown) {
@@ -296,6 +333,7 @@ export const createWorkerServer = ({
     log('[worker-server] Endpoints:');
     log('[worker-server]   GET /health - Health check');
     log('[worker-server]   GET /websocket-state?event_id=<eventId> - Get WebSocket connection state');
+    log('[worker-server]   GET /blueprint/prompt?event_id=<eventId> - Get blueprint prompt preview');
     log('[worker-server]   POST /sessions/create - Create agent sessions for an event');
     log('[worker-server]   POST /sessions/reset - Reset runtime state for an event');
     log('[worker-server]   POST /sessions/transcript/audio - Append transcript audio for an event');
