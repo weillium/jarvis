@@ -34,7 +34,7 @@ import { ConnectionManager } from './connection-manager';
 import type { RealtimeSessionProfile, SessionConfiguration } from './profile-types';
 import { classifyRealtimeError } from './utils';
 
-type LogContext = Record<string, unknown> & { seq?: number };
+type LogMetadata = Record<string, unknown> & { seq?: number };
 
 export class RealtimeAgentSession implements AgentRealtimeSession {
   private readonly openai: OpenAI;
@@ -58,7 +58,7 @@ export class RealtimeAgentSession implements AgentRealtimeSession {
   private readonly onLog?: (
     level: 'log' | 'warn' | 'error',
     message: string,
-    context?: LogContext
+    context?: Record<string, unknown>
   ) => void;
   private readonly supabase?: SupabaseClient;
   private readonly onRetrieve: RealtimeSessionConfig['onRetrieve'];
@@ -147,7 +147,7 @@ export class RealtimeAgentSession implements AgentRealtimeSession {
         agentType: this.config.agentType,
         model: this.config.model,
       },
-      onLog: (level, message, meta) => this.onLog?.(level, message, meta as LogContext),
+      onLog: (level, message, meta) => this.onLog?.(level, message, meta as LogMetadata),
       emitEvent: <K extends RealtimeSessionEvent>(
         event: K,
         payload: RealtimeSessionEventPayloads[K]
@@ -201,7 +201,7 @@ export class RealtimeAgentSession implements AgentRealtimeSession {
       const sessionConfiguration = this.createSessionConfiguration();
       await this.sendSessionConfiguration(sessionConfiguration.event);
       if (sessionConfiguration.logContext) {
-        this.onLog?.('log', 'Session configuration applied', sessionConfiguration.logContext as LogContext);
+        this.onLog?.('log', 'Session configuration applied', sessionConfiguration.logContext as LogMetadata);
       }
 
       this.isActive = true;
@@ -356,7 +356,7 @@ export class RealtimeAgentSession implements AgentRealtimeSession {
   private createSessionConfiguration(): SessionConfiguration {
     return this.profile.createSessionConfiguration({
       config: this.config,
-      log: (level, message, context) => this.onLog?.(level, message, context as LogContext),
+      log: (level, message, context) => this.onLog?.(level, message, context as LogMetadata),
     });
   }
 
@@ -609,7 +609,7 @@ export class RealtimeAgentSession implements AgentRealtimeSession {
           isActive: this.isActive,
           eventId: this.config.eventId,
           ...context,
-        } as LogContext
+        } as LogMetadata
       );
     } catch {
       /* ignore */

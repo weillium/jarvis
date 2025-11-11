@@ -22,11 +22,10 @@ export interface AgentSessionSSEEnrichment {
     level: 'log' | 'warn' | 'error';
     message: string;
     timestamp: string;
-    context?: {
-      seq?: number;
-      agent_type?: 'cards' | 'facts';
-      event_id?: string;
-    };
+    context?: Array<{
+      key: string;
+      value: string | number | boolean | null | undefined;
+    }>;
   }>;
   // Real-time metrics (only during active sessions)
   token_metrics?: TokenMetrics;

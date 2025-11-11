@@ -43,14 +43,14 @@ export const transcriptStatelessProfile: StatelessSessionProfile = {
       onSessionClose: ({ storage: sessionStorage }) => {
         sessionStorage.clear();
       },
-      onSendMessage: ({ message, context }) => {
+      onSendMessage: async ({ message, context }) => {
         const input = buildGenerationInput(message, context);
         if (!input) {
           log('warn', 'Stateless transcript session received empty message');
-          return Promise.resolve();
+          return;
         }
 
-        const { transcript } = generator.generate(input);
+        const { transcript } = await Promise.resolve(generator.generate(input));
 
         emit('transcript', transcript);
 
@@ -62,7 +62,7 @@ export const transcriptStatelessProfile: StatelessSessionProfile = {
           recordedAt: new Date().toISOString(),
         });
 
-        return Promise.resolve();
+        return;
       },
     };
   },

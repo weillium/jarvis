@@ -35,8 +35,23 @@ interface GenerationCycle {
   };
 }
 
+const isGenerationCycle = (value: unknown): value is GenerationCycle => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.id === 'string' &&
+    typeof record.cycle_type === 'string' &&
+    typeof record.status === 'string'
+  );
+};
+
 export function VersionHistory({ eventId, embedded = false }: VersionHistoryProps) {
-  const { data: cycles, isLoading, refetch } = useContextVersionsQuery(eventId);
+  const { data: cyclesData, isLoading, refetch } = useContextVersionsQuery(eventId);
+  const cycles: GenerationCycle[] = Array.isArray(cyclesData)
+    ? cyclesData.filter(isGenerationCycle)
+    : [];
   const [isExpanded, setIsExpanded] = useState(embedded); // Auto-expand when embedded
   const [filterByType, setFilterByType] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -53,7 +68,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
     }
   };
 
-  const versionData = cycles ? { cycles, count: cycles.length } : null;
+  const versionData = cycles.length > 0 ? { cycles, count: cycles.length } : null;
   const loading = isLoading;
 
   const getStatusColor = (status: string): string => {
@@ -124,22 +139,21 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
     return titleCased || trimmed;
   };
 
-  const filteredCycles = cycles?.filter((cycle) => {
+  const filteredCycles = cycles.filter((cycle) => {
     if (filterByType && cycle.cycle_type !== filterByType) return false;
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      const matchesQuery = cycle.cycle_type.toLowerCase().includes(query) ||
-                           (cycle.component && cycle.component.toLowerCase().includes(query)) ||
-                           (cycle.status && cycle.status.toLowerCase().includes(query)) ||
-                           (cycle.error_message && cycle.error_message.toLowerCase().includes(query));
+      const matchesQuery =
+        cycle.cycle_type.toLowerCase().includes(query) ||
+        (cycle.component?.toLowerCase().includes(query) ?? false) ||
+        cycle.status.toLowerCase().includes(query) ||
+        (cycle.error_message?.toLowerCase().includes(query) ?? false);
       if (!matchesQuery) return false;
     }
     return true;
-  }) || [];
+  });
 
-  const uniqueTypes = cycles
-    ? Array.from(new Set(cycles.map((c) => c.cycle_type))).sort()
-    : [];
+  const uniqueTypes = Array.from(new Set(cycles.map((cycle) => cycle.cycle_type))).sort();
 
   const renderChatCompletions = (
     completions: Array<{

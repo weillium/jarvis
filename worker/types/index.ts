@@ -8,7 +8,7 @@ export type {
   CardRecord,
   PendingCardConcept
 } from './runtime';
-export type { AgentSessionStatus, AgentType, LogEntry, SessionStatus } from './session';
+export type { AgentSessionStatus, AgentType, LogContext, LogEntry, SessionStatus } from './session';
 export type { AgentContext, ProcessingMetrics } from './processing';
 export type {
   ChatCompletionDTO,

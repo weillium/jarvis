@@ -16,7 +16,7 @@ const FALLBACK_CARD_MODEL = resolveModelOrThrow({
   modelSet: WORKER_MODEL_SET,
 });
 
-interface CardsStatelessProfileDeps {
+export interface CardsStatelessProfileDeps {
   openaiService: OpenAIService;
 }
 

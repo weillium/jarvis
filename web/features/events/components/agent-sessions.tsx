@@ -596,7 +596,12 @@ function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: Se
                     marginBottom: '4px',
                   }}>
                     {new Date(log.timestamp).toLocaleTimeString()}
-                    {log.context?.seq && ` • Seq ${log.context.seq}`}
+                    {(() => {
+                      const seqEntry = log.context?.find(
+                        (entry) => entry.key === 'seq' && typeof entry.value === 'number'
+                      );
+                      return seqEntry ? ` • Seq ${seqEntry.value}` : null;
+                    })()}
                   </div>
                   <div style={{
                     fontSize: '12px',

@@ -15,8 +15,11 @@ export interface ExecuteJsonPromptOptions {
 export interface ExecuteJsonPromptResult {
   response: ChatCompletionDTO;
   content: string | null;
-  parsed: unknown;
+  parsed: JsonValue | null;
 }
+
+type JsonPrimitive = string | number | boolean | null;
+type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
 export const executeJsonPrompt = async (
   options: ExecuteJsonPromptOptions
@@ -36,7 +39,7 @@ export const executeJsonPrompt = async (
   );
 
   const content = response.choices[0]?.message?.content ?? null;
-  const parsed = content ? safeJsonParse<unknown>(content) : null;
+  const parsed = content ? safeJsonParse<JsonValue>(content) : null;
 
   return {
     response,

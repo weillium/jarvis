@@ -14,7 +14,7 @@ const FALLBACK_FACTS_MODEL = resolveModelOrThrow({
   modelSet: WORKER_MODEL_SET,
 });
 
-interface FactsStatelessProfileDeps {
+export interface FactsStatelessProfileDeps {
   openaiService: OpenAIService;
 }
 

@@ -2,7 +2,8 @@ import type { CardStateRecord } from '../../types';
 import type { CardRecord } from '../../state/cards-store';
 import { isRecord } from '../context-normalization';
 
-const CARD_TYPE_SET = new Set(['text', 'text_visual', 'visual'] as const);
+const CARD_TYPE_VALUES = ['text', 'text_visual', 'visual'] as const;
+const CARD_TYPE_SET = new Set<string>(CARD_TYPE_VALUES);
 type CardType = CardRecord['cardType'];
 
 const toFiniteInteger = (value: unknown): number | null => {

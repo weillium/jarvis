@@ -25,7 +25,7 @@ export const agentTransportProfiles: Record<AgentType, AgentTransportProfiles> =
     description: cardsAgentDefinition.description,
     transports: {
       realtime: cardsRealtimeProfile,
-      stateless: cardsStatelessProfile,
+      stateless: cardsStatelessProfile as StatelessSessionProfile,
     },
   },
   transcript: {
@@ -40,7 +40,7 @@ export const agentTransportProfiles: Record<AgentType, AgentTransportProfiles> =
     defaultTransport: factsAgentDefinition.defaultTransport,
     description: factsAgentDefinition.description,
     transports: {
-      stateless: factsStatelessProfile,
+      stateless: factsStatelessProfile as StatelessSessionProfile,
     },
   },
 };
