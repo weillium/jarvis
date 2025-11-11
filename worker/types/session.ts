@@ -59,6 +59,15 @@ export interface AgentSessionStatus {
       breakdown: Record<string, number>;
       timestamp: string;
     };
+    facts_budget?: {
+      selected: number;
+      overflow: number;
+      summary: number;
+      total_facts: number;
+      budget_tokens: number;
+      used_tokens: number;
+      selection_ratio: number;
+    };
   };
   recent_logs: LogEntry[];
   metadata: {

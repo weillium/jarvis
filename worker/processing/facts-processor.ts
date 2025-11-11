@@ -78,7 +78,7 @@ export class FactsProcessor {
         logPrefix = `[context] ⚠️ WARNING`;
       }
 
-      const logMessage = `${logPrefix} Facts Agent (seq ${runtime.factsLastSeq}): ${tokenBreakdown.total}/2048 tokens (${budgetStatus.percentage}%) - ${breakdownStr} | selected ${budgetResult.metrics.selectedFacts}/${budgetResult.metrics.totalFacts} (summary ${budgetResult.metrics.summaryFacts})`;
+      const logMessage = `${logPrefix} Facts Agent (seq ${runtime.factsLastSeq}): ${tokenBreakdown.total}/2048 tokens (${budgetStatus.percentage}%) - ${breakdownStr} | selected ${budgetResult.metrics.selected}/${budgetResult.metrics.totalFacts} (summary ${budgetResult.metrics.summary})`;
       this.logger.log(runtime.eventId, 'facts', logLevel, logMessage, { seq: runtime.factsLastSeq });
 
       this.metrics.recordTokens(
@@ -86,7 +86,8 @@ export class FactsProcessor {
         'facts',
         tokenBreakdown.total,
         budgetStatus.warning,
-        budgetStatus.critical
+        budgetStatus.critical,
+        budgetResult.metrics
       );
 
       await session.sendMessage(recentText, {

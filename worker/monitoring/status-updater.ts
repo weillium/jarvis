@@ -72,6 +72,18 @@ export class StatusUpdater {
   ): Promise<void> {
     const metrics = this.metrics.getMetrics(runtime.eventId, agentType);
     const logs = this.logger.getLogs(runtime.eventId, agentType);
+    const factsBudget =
+      agentType === 'facts' && metrics.lastBudget
+        ? {
+            selected: metrics.lastBudget.selected,
+            overflow: metrics.lastBudget.overflow,
+            summary: metrics.lastBudget.summary,
+            total_facts: metrics.lastBudget.totalFacts,
+            budget_tokens: metrics.lastBudget.budgetTokens,
+            used_tokens: metrics.lastBudget.usedTokens,
+            selection_ratio: metrics.lastBudget.selectionRatio,
+          }
+        : undefined;
 
     const tokenMetrics = {
       total_tokens: metrics.total,
@@ -81,6 +93,18 @@ export class StatusUpdater {
       warnings: metrics.warnings,
       criticals: metrics.criticals,
       last_request: this.extractLastRequest(logs),
+      facts_budget:
+        agentType === 'facts' && metrics.lastBudget
+          ? {
+              selected: metrics.lastBudget.selected,
+              overflow: metrics.lastBudget.overflow,
+              summary: metrics.lastBudget.summary,
+              total_facts: metrics.lastBudget.totalFacts,
+              budget_tokens: metrics.lastBudget.budgetTokens,
+              used_tokens: metrics.lastBudget.usedTokens,
+              selection_ratio: metrics.lastBudget.selectionRatio,
+            }
+          : undefined,
     };
 
     const runtimeStats = {
@@ -269,6 +293,7 @@ export class StatusUpdater {
         warnings: metrics.warnings,
         criticals: metrics.criticals,
         last_request: this.extractLastRequest(logs),
+        facts_budget: factsBudget,
       },
       recent_logs: logs.slice(-50),
       metadata: {

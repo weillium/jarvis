@@ -5,10 +5,21 @@ export interface AgentContext {
   glossaryContext: string;
 }
 
+export interface FactsBudgetSnapshot {
+  totalFacts: number;
+  selected: number;
+  overflow: number;
+  summary: number;
+  budgetTokens: number;
+  usedTokens: number;
+  selectionRatio: number;
+}
+
 export interface ProcessingMetrics {
   total: number;
   count: number;
   max: number;
   warnings: number;
   criticals: number;
+  lastBudget?: FactsBudgetSnapshot;
 }

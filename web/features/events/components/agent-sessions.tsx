@@ -540,6 +540,64 @@ function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: Se
               </div>
             </div>
           )}
+          {session.agent_type === 'facts' && session.token_metrics.facts_budget && (
+            <div style={{
+              marginTop: '12px',
+              padding: '12px',
+              borderRadius: '6px',
+              border: '1px solid #e2e8f0',
+              background: '#f8fafc',
+            }}>
+              <div style={{
+                fontSize: '12px',
+                fontWeight: '600',
+                color: '#475569',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+                marginBottom: '8px',
+              }}>
+                Facts Prompt Budget (last run)
+              </div>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                gap: '10px',
+              }}>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '2px' }}>Selected Facts</div>
+                  <div style={{ fontSize: '15px', fontWeight: 600, color: '#0f172a' }}>
+                    {session.token_metrics.facts_budget.selected} / {session.token_metrics.facts_budget.total_facts}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '2px' }}>Overflow Facts</div>
+                  <div style={{ fontSize: '15px', fontWeight: 600, color: '#0f172a' }}>
+                    {session.token_metrics.facts_budget.overflow}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '2px' }}>Summaries Added</div>
+                  <div style={{ fontSize: '15px', fontWeight: 600, color: '#0f172a' }}>
+                    {session.token_metrics.facts_budget.summary}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '2px' }}>Tokens Used / Budget</div>
+                  <div style={{ fontSize: '15px', fontWeight: 600, color: '#0f172a' }}>
+                    {session.token_metrics.facts_budget.used_tokens} / {session.token_metrics.facts_budget.budget_tokens}
+                  </div>
+                </div>
+              </div>
+              <div style={{
+                marginTop: '8px',
+                fontSize: '11px',
+                color: '#64748b',
+              }}>
+                Selection Ratio:{' '}
+                {(session.token_metrics.facts_budget.selection_ratio * 100).toFixed(1)}%
+              </div>
+            </div>
+          )}
         </div>
       )}
 

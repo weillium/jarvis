@@ -1,4 +1,5 @@
 import type { Fact } from '../../state/facts-store';
+import type { FactsBudgetSnapshot } from '../../types/processing';
 import { countTokens } from '../../utils/token-counter';
 
 interface FactsPromptBudgetOptions {
@@ -32,7 +33,7 @@ export interface FactsPromptBudgetResult {
   selectedFacts: Fact[];
   overflowFacts: Fact[];
   summaryFacts: Fact[];
-  metrics: BudgetMetrics;
+  metrics: FactsBudgetSnapshot;
   confidenceAdjustments: ConfidenceAdjustment[];
 }
 
@@ -157,11 +158,11 @@ export function budgetFactsPrompt(options: FactsPromptBudgetOptions): FactsPromp
     }
   }
 
-  const metrics: BudgetMetrics = {
+  const metrics: FactsBudgetSnapshot = {
     totalFacts: facts.length,
-    selectedFacts: selectedFacts.length,
-    overflowFacts: overflowFacts.length,
-    summaryFacts: summaryFacts.length,
+    selected: selectedFacts.length,
+    overflow: overflowFacts.length,
+    summary: summaryFacts.length,
     budgetTokens: availableBudget,
     usedTokens,
     selectionRatio: selectedFacts.length / Math.max(facts.length, 1),
