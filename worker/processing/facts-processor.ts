@@ -1,10 +1,26 @@
-import type { EventRuntime } from '../types';
-import type { ContextBuilder } from '../context/context-builder';
+import type { EventRuntime, Fact } from '../types';
+import type { FactsStore } from '../state/facts-store';
+import type { AgentContext, ContextBuilder } from '../context/context-builder';
 import type { Logger } from '../monitoring/logger';
 import type { MetricsCollector } from '../monitoring/metrics-collector';
 import type { CheckpointManager } from '../monitoring/checkpoint-manager';
 import type { AgentRealtimeSession } from '../sessions/session-adapters';
-import { checkBudgetStatus, formatTokenBreakdown } from '../utils/token-counter';
+import { budgetFactsPrompt } from '../runtime/facts/prompt-budgeter';
+import type { FactsPromptBudgetResult } from '../runtime/facts/prompt-budgeter';
+import type { ConfidenceAdjustment } from '../runtime/facts/prompt-budgeter';
+import { checkBudgetStatus, countTokens, formatTokenBreakdown } from '../utils/token-counter';
+
+const buildPromptFactsRecord = (
+  facts: Fact[]
+): Record<string, { value: unknown; confidence: number }> => {
+  return facts.reduce<Record<string, { value: unknown; confidence: number }>>((acc, fact) => {
+    acc[fact.key] = {
+      value: fact.value,
+      confidence: fact.confidence,
+    };
+    return acc;
+  }, {});
+};
 
 export class FactsProcessor {
   constructor(
@@ -25,8 +41,29 @@ export class FactsProcessor {
     }
 
     try {
-      const { context, recentText } = this.contextBuilder.buildFactsContext(runtime);
-      const tokenBreakdown = this.contextBuilder.getFactsTokenBreakdown(context, recentText);
+      const allFacts = runtime.factsStore.getAll();
+      const { context: baseContext, recentText } = this.contextBuilder.buildFactsContext(runtime);
+
+      const recentTextTokens = countTokens(recentText);
+      const glossaryTokens = countTokens(baseContext.glossaryContext);
+
+      const budgetResult: FactsPromptBudgetResult = budgetFactsPrompt({
+        facts: allFacts,
+        recentTranscript: recentText,
+        totalBudgetTokens: 2048,
+        transcriptTokens: recentTextTokens,
+        glossaryTokens,
+      });
+
+      const promptFacts = budgetResult.promptFacts;
+      const promptFactsRecord = buildPromptFactsRecord(promptFacts);
+      const promptContext: AgentContext = {
+        bullets: [],
+        facts: promptFactsRecord,
+        glossaryContext: baseContext.glossaryContext,
+      };
+
+      const tokenBreakdown = this.contextBuilder.getFactsTokenBreakdown(promptContext, recentText);
       const budgetStatus = checkBudgetStatus(tokenBreakdown.total, 2048);
       const breakdownStr = formatTokenBreakdown(tokenBreakdown.breakdown);
 
@@ -41,17 +78,8 @@ export class FactsProcessor {
         logPrefix = `[context] ⚠️ WARNING`;
       }
 
-      const logMessage = `${logPrefix} Facts Agent (seq ${runtime.factsLastSeq}): ${tokenBreakdown.total}/2048 tokens (${budgetStatus.percentage}%) - ${breakdownStr}`;
-      const counterKey = 'factsUsage';
-      const currentCount = runtime.logCounters[counterKey] ?? 0;
-      const shouldLog = logLevel !== 'log' || currentCount < 10;
-
-      if (shouldLog) {
-        if (logLevel === 'log') {
-          runtime.logCounters[counterKey] = currentCount + 1;
-        }
-        this.logger.log(runtime.eventId, 'facts', logLevel, logMessage, { seq: runtime.factsLastSeq });
-      }
+      const logMessage = `${logPrefix} Facts Agent (seq ${runtime.factsLastSeq}): ${tokenBreakdown.total}/2048 tokens (${budgetStatus.percentage}%) - ${breakdownStr} | selected ${budgetResult.metrics.selectedFacts}/${budgetResult.metrics.totalFacts} (summary ${budgetResult.metrics.summaryFacts})`;
+      this.logger.log(runtime.eventId, 'facts', logLevel, logMessage, { seq: runtime.factsLastSeq });
 
       this.metrics.recordTokens(
         runtime.eventId,
@@ -63,9 +91,14 @@ export class FactsProcessor {
 
       await session.sendMessage(recentText, {
         recentText,
-        facts: runtime.factsStore.getAll(),
-        glossaryContext: context.glossaryContext,
+        facts: promptFacts,
+        glossaryContext: baseContext.glossaryContext,
       });
+
+      const factsStore = runtime.factsStore as FactsStore & {
+        applyConfidenceAdjustments: (adjustments: ConfidenceAdjustment[]) => void;
+      };
+      factsStore.applyConfidenceAdjustments(budgetResult.confidenceAdjustments);
 
       await this.checkpointManager.saveCheckpoint(
         runtime.eventId,

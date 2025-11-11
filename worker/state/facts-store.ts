@@ -235,5 +235,33 @@ export class FactsStore {
       evictions: this.evictionCount,
     };
   }
+
+  applyConfidenceAdjustments(adjustments: Array<{ key: string; newConfidence: number }>): void {
+    if (!adjustments.length) {
+      return;
+    }
+
+    for (const adjustment of adjustments) {
+      const existing = this.facts.get(adjustment.key);
+      if (!existing) {
+        continue;
+      }
+      const confidence = clampConfidence(adjustment.newConfidence);
+      if (Math.abs(confidence - existing.confidence) < 0.001) {
+        continue;
+      }
+      this.facts.set(adjustment.key, {
+        ...existing,
+        confidence,
+      });
+    }
+  }
 }
+
+const clampConfidence = (value: number): number => {
+  if (Number.isNaN(value)) {
+    return 0.1;
+  }
+  return Math.min(1, Math.max(0.1, value));
+};
 

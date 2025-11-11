@@ -809,9 +809,8 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
   
   const checkingSessions = sessionsQueryLoading;
   
-  const existingAgentTypes = sessionsData?.sessions
-    .filter(s => s.status === 'active' || s.status === 'paused')
-    .map(s => s.agent_type) || [];
+  const existingAgentTypes =
+    sessionsData?.sessions?.map((session) => session.agent_type) ?? [];
   
   const { enrichment, isLoading: enrichmentLoading, error: enrichmentError, reconnect } = useAgentSessionEnrichment(
     eventId,
