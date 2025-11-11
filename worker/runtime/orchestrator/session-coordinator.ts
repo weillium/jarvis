@@ -31,7 +31,11 @@ export class SessionCoordinator {
   private readonly eventProcessor: EventProcessor;
   private readonly statusUpdater: StatusUpdater;
   private readonly log: (...args: unknown[]) => void;
-  private readonly attachTranscriptHandler: (runtime: EventRuntime, eventId: string, agentId: string) => void;
+  private readonly attachTranscriptHandler: (
+    runtime: EventRuntime,
+    eventId: string,
+    agentId: string
+  ) => void;
   private readonly startPeriodicSummary: (runtime: EventRuntime) => void;
 
   constructor(deps: SessionCoordinatorDeps) {
@@ -506,3 +510,4 @@ const resolveTransportForAgent = (agentType: AgentType): AgentTransport => {
       return agentTransportProfiles.transcript.defaultTransport;
   }
 };
+

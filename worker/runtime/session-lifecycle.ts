@@ -3,7 +3,7 @@ import type {
   AgentSessionRecord,
   AgentTransport,
   AgentType,
-  EventRuntime
+  EventRuntime,
 } from '../types';
 import type { AgentSessionLifecycleStatus } from '../sessions/session-adapters';
 import type {
@@ -48,8 +48,15 @@ export class SessionLifecycle {
   ) {}
 
   async createRealtimeSessions(params: CreateSessionsParams): Promise<void> {
-    const { runtime, eventId, agentId, enabledAgents, sessionOptions, modelSetOverride, apiKeyOverride } =
-      params;
+    const {
+      runtime,
+      eventId,
+      agentId,
+      enabledAgents,
+      sessionOptions,
+      modelSetOverride,
+      apiKeyOverride,
+    } = params;
 
     const agent = await this.agentsRepository.getAgentStatus(agentId);
     const modelSet = modelSetOverride ?? agent?.model_set ?? 'default';
@@ -316,3 +323,4 @@ export class SessionLifecycle {
     );
   }
 }
+

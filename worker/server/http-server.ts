@@ -1,6 +1,6 @@
 import http from 'http';
 import { URL } from 'url';
-import type { Orchestrator } from '../core/orchestrator';
+import type { Orchestrator } from '../runtime/orchestrator';
 
 interface WorkerServerDeps {
   orchestrator: Orchestrator;

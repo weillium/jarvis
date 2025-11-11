@@ -4,7 +4,7 @@ import type {
   SupabaseClient,
 } from '@supabase/supabase-js';
 import type { Poller } from './base-poller';
-import type { Orchestrator } from '../core/orchestrator';
+import type { Orchestrator } from '../runtime/orchestrator';
 
 type LoggerFn = (...args: unknown[]) => void;
 

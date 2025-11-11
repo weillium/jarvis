@@ -11,7 +11,20 @@ import type { FactsProcessor } from '../processing/facts-processor';
 import type { TranscriptProcessor } from '../processing/transcript-processor';
 import type { AgentOutputsRepository } from '../services/supabase/agent-outputs-repository';
 import type { FactsRepository } from '../services/supabase/facts-repository';
-import { extractConcepts, normalizeConcept } from '../lib/text/concept-extractor';
+import {
+  extractConcepts,
+  normalizeConcept,
+  type ConceptCandidate,
+} from '../lib/text/concept-extractor';
+import {
+  CARD_SALIENCE_THRESHOLD,
+  computeCardSalience,
+  type CardSalienceComponents,
+} from './cards/salience';
+import {
+  checkCardRateLimit,
+  recordCardFire,
+} from './cards/rate-limit';
 
 type CardType = RealtimeCardDTO['card_type'];
 
@@ -80,9 +93,6 @@ export class EventProcessor {
   }
 
   attachSessionHandlers(runtime: EventRuntime): void {
-    // Transcript agent handlers can be added here if needed
-    // For now, transcript agent may not emit events that need handling
-    
     if (runtime.cardsSession && runtime.cardsSession !== runtime.cardsHandlerSession) {
       runtime.cardsSession.on('card', (card: RealtimeCardDTO) => {
         void this.handleCardResponse(runtime, card);
@@ -99,10 +109,6 @@ export class EventProcessor {
   }
 
   cleanup(eventId: string, runtime: EventRuntime): void {
-    if (runtime.factsUpdateTimer) {
-      clearTimeout(runtime.factsUpdateTimer);
-      runtime.factsUpdateTimer = undefined;
-    }
     runtime.transcriptHandlerSession = undefined;
     runtime.cardsHandlerSession = undefined;
     runtime.factsHandlerSession = undefined;
@@ -128,6 +134,15 @@ export class EventProcessor {
     runtime.factsLastSeq = Math.max(runtime.factsLastSeq, chunk.seq);
 
     if (runtime.enabledAgents.cards && runtime.cardsSession) {
+      const rateLimitCheck = checkCardRateLimit(runtime);
+      if (!rateLimitCheck.allowed) {
+        console.log('[cards][debug] rate limit prevented card trigger', {
+          eventId: runtime.eventId,
+          reason: rateLimitCheck.reason,
+        });
+        return;
+      }
+
       console.log('[cards][debug] evaluating card trigger', {
         eventId: runtime.eventId,
         lastSeq: chunk.seq,
@@ -153,6 +168,7 @@ export class EventProcessor {
           runtime.cardsSessionId,
           triggerContext
         );
+        recordCardFire(runtime);
       }
     } else if (!runtime.enabledAgents.cards) {
       console.log('[cards][debug] cards agent disabled for runtime', {
@@ -174,7 +190,7 @@ export class EventProcessor {
       return;
     }
 
-      void this.factsProcessor.process(runtime, runtime.factsSession, runtime.factsSessionId);
+    void this.factsProcessor.process(runtime, runtime.factsSession, runtime.factsSessionId);
   }
 
   private evaluateCardTrigger(runtime: EventRuntime): CardTriggerContext | null {
@@ -227,34 +243,65 @@ export class EventProcessor {
       return null;
     }
 
-    const selected = novelCandidates[0];
-    const occurrences = this.countConceptOccurrences(recentChunks, selected.conceptLabel);
-    console.log('[cards][debug] candidate occurrence count', {
-      eventId: runtime.eventId,
-      conceptId: selected.conceptId,
-      conceptLabel: selected.conceptLabel,
-      occurrences,
-      required: this.CARD_MIN_CHUNKS,
-    });
-    if (occurrences < this.CARD_MIN_CHUNKS) {
-      console.log('[cards][debug] novel concept below occurrence threshold', {
-        eventId: runtime.eventId,
-        conceptId: selected.conceptId,
-        conceptLabel: selected.conceptLabel,
+    let bestCandidate: ConceptCandidate | null = null;
+    let bestScore = Number.NEGATIVE_INFINITY;
+    let bestComponents: CardSalienceComponents | null = null;
+    let bestOccurrences = 0;
+
+    for (const candidate of novelCandidates) {
+      const occurrences = this.countConceptOccurrences(recentChunks, candidate.conceptLabel);
+      const { score, components } = computeCardSalience({
+        candidate,
+        runtime,
+        recentChunks,
         occurrences,
-        required: this.CARD_MIN_CHUNKS,
+        freshnessMs: this.CARD_FRESHNESS_MS,
+        recentLimit: this.CARD_RECENT_LIMIT,
+      });
+
+      console.log('[cards][debug] salience score evaluated', {
+        eventId: runtime.eventId,
+        conceptId: candidate.conceptId,
+        conceptLabel: candidate.conceptLabel,
+        occurrences,
+        score,
+        components,
+      });
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestCandidate = candidate;
+        bestComponents = components;
+        bestOccurrences = occurrences;
+      }
+    }
+
+    if (!bestCandidate || bestScore < CARD_SALIENCE_THRESHOLD) {
+      console.log('[cards][debug] no candidate exceeded salience threshold', {
+        eventId: runtime.eventId,
+        bestScore,
+        threshold: CARD_SALIENCE_THRESHOLD,
       });
       return null;
     }
 
-    const supportingContext = this.buildSupportingContext(runtime, selected, contextBullets);
+    console.log('[cards][debug] salience winner selected', {
+      eventId: runtime.eventId,
+      conceptId: bestCandidate.conceptId,
+      conceptLabel: bestCandidate.conceptLabel,
+      score: bestScore,
+      occurrences: bestOccurrences,
+      components: bestComponents ?? {},
+    });
+
+    const supportingContext = this.buildSupportingContext(runtime, bestCandidate, contextBullets);
 
     return {
-      conceptId: normalizeConcept(selected.conceptId),
-      conceptLabel: selected.conceptLabel,
-      matchSource: selected.matchSource,
+      conceptId: normalizeConcept(bestCandidate.conceptId),
+      conceptLabel: bestCandidate.conceptLabel,
+      matchSource: bestCandidate.matchSource,
       supportingContext,
-    };
+    } as CardTriggerContext;
   }
 
   private countConceptOccurrences(chunks: TranscriptChunk[], label: string): number {
@@ -387,8 +434,6 @@ export class EventProcessor {
         payload: card,
       });
 
-      // Cards are now inserted via insertAgentOutput only (no need for separate insertCard)
-
       console.log(
         `[cards] Card received from Realtime API (seq: ${card.source_seq || runtime.cardsLastSeq}, type: ${cardType})`
       );
@@ -436,12 +481,10 @@ export class EventProcessor {
           (typeof fact.confidence === 'number' ? fact.confidence : undefined) || 0.7;
         const keysEvicted = runtime.factsStore.upsert(fact.key, fact.value, initialConfidence, runtime.factsLastSeq, undefined);
         
-        // Accumulate evicted keys to mark as inactive later
         if (keysEvicted.length > 0) {
           evictedKeys.push(...keysEvicted);
         }
 
-        // Get the computed confidence from FactsStore (may have been adjusted)
         const storedFact = runtime.factsStore.get(fact.key);
         const computedConfidence = storedFact?.confidence ?? initialConfidence;
 
@@ -464,7 +507,6 @@ export class EventProcessor {
         });
       }
 
-      // Mark evicted facts as inactive in database
       if (evictedKeys.length > 0) {
         await this.factsRepository.updateFactActiveStatus(runtime.eventId, evictedKeys, false);
         console.log(
@@ -478,3 +520,4 @@ export class EventProcessor {
     }
   }
 }
+

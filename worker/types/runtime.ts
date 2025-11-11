@@ -33,6 +33,8 @@ export interface EventRuntime {
   cardsStore: CardsStore;
   glossaryCache?: Map<string, GlossaryEntry>;
   pendingCardConcepts: Map<number, PendingCardConcept>;
+  cardsLastTriggeredAt?: number;
+  cardsRateHistory?: number[];
 
   // Realtime sessions
   transcriptSession?: AgentRealtimeSession;

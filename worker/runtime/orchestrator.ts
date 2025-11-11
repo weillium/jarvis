@@ -115,7 +115,11 @@ export class Orchestrator {
     return this.statusService.getRuntime(eventId);
   }
 
-  getSessionStatus(eventId: string): { transcript: AgentSessionStatus | null; cards: AgentSessionStatus | null; facts: AgentSessionStatus | null } {
+  getSessionStatus(eventId: string): {
+    transcript: AgentSessionStatus | null;
+    cards: AgentSessionStatus | null;
+    facts: AgentSessionStatus | null;
+  } {
     return this.statusService.getSessionStatus(eventId);
   }
 
@@ -123,16 +127,6 @@ export class Orchestrator {
     if (!chunk?.audioBase64) {
       throw new Error('Audio payload is required');
     }
-
-    // console.log('[orchestrator] Received transcript audio chunk', {
-    //   eventId,
-    //   bytes: Math.round((chunk.audioBase64.length * 3) / 4),
-    //   seq: chunk.seq,
-    //   isFinal: chunk.isFinal,
-    //   sampleRate: chunk.sampleRate,
-    //   bytesPerSample: chunk.bytesPerSample,
-    //   encoding: chunk.encoding,
-    // });
 
     await this.transcriptCoordinator.appendTranscriptAudio(eventId, chunk);
   }
@@ -165,7 +159,6 @@ export class Orchestrator {
     console.log('[orchestrator] Shutting down...');
 
     for (const runtime of this.runtimeManager.getAllRuntimes()) {
-
       if (runtime.summaryTimer) {
         clearInterval(runtime.summaryTimer);
       }
@@ -177,7 +170,6 @@ export class Orchestrator {
       await this.checkpointManager.saveCheckpoint(runtime.eventId, 'cards', runtime.cardsLastSeq);
       await this.checkpointManager.saveCheckpoint(runtime.eventId, 'facts', runtime.factsLastSeq);
 
-      // Record metrics before closing sessions
       await this.statusUpdater.recordMetricsOnSessionClose(runtime, 'transcript');
       await this.statusUpdater.recordMetricsOnSessionClose(runtime, 'cards');
       await this.statusUpdater.recordMetricsOnSessionClose(runtime, 'facts');
@@ -215,3 +207,4 @@ export class Orchestrator {
     runtime.summaryTimer = undefined;
   }
 }
+

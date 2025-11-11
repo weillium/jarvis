@@ -6,7 +6,7 @@ import { FactsProcessor } from '../processing/facts-processor';
 import { TranscriptProcessor } from '../processing/transcript-processor';
 import { SessionFactory } from '../sessions/session-factory';
 import { SessionManager } from '../sessions/session-manager';
-import { SessionLifecycle } from '../core/session-lifecycle';
+import { SessionLifecycle } from '../runtime/session-lifecycle';
 import type { WorkerEnvConfig } from './env';
 import type { WorkerInfrastructure } from './services';
 import type { RealtimeCardType } from '../types/websocket';

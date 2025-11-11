@@ -1,9 +1,9 @@
 import type http from 'http';
-import { Orchestrator, type OrchestratorConfig } from '../core/orchestrator';
-import { RuntimeManager } from '../core/runtime-manager';
-import { EventProcessor } from '../core/event-processor';
-import { RuntimeService } from '../core/runtime-service';
-import { TranscriptIngestionService } from '../core/transcript-ingestion-service';
+import { Orchestrator, type OrchestratorConfig } from '../runtime/orchestrator';
+import { RuntimeManager } from '../runtime/runtime-manager';
+import { EventProcessor } from '../runtime/event-processor';
+import { RuntimeService } from '../runtime/runtime-service';
+import { TranscriptIngestionService } from '../runtime/transcript-ingestion-service';
 import { BlueprintPoller } from '../polling/blueprint-poller';
 import { ContextPoller } from '../polling/context-poller';
 import { RegenerationPoller } from '../polling/regeneration-poller';

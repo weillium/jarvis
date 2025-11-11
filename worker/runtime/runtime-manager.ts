@@ -44,7 +44,6 @@ export class RuntimeManager {
     this.logger.clearLogs(eventId, 'cards');
     this.logger.clearLogs(eventId, 'facts');
 
-    // Load active facts from database
     const factsStore = new FactsStore(50);
     const activeFacts = await this.factsRepository.getFacts(eventId, true);
     if (activeFacts.length > 0) {
@@ -57,13 +56,16 @@ export class RuntimeManager {
           sources: f.sources || [],
         }))
       );
-      
-      // Mark any evicted facts as inactive in database
+
       if (evictedKeys.length > 0) {
         await this.factsRepository.updateFactActiveStatus(eventId, evictedKeys, false);
-        console.log(`[runtime-manager] Loaded ${activeFacts.length} active facts, evicted ${evictedKeys.length} facts (capacity limit)`);
+        console.log(
+          `[runtime-manager] Loaded ${activeFacts.length} active facts, evicted ${evictedKeys.length} facts (capacity limit)`
+        );
       } else {
-        console.log(`[runtime-manager] Loaded ${activeFacts.length} active facts into FactsStore for event ${eventId}`);
+        console.log(
+          `[runtime-manager] Loaded ${activeFacts.length} active facts into FactsStore for event ${eventId}`
+        );
       }
     }
 
@@ -147,3 +149,4 @@ export class RuntimeManager {
     return runtimes;
   }
 }
+

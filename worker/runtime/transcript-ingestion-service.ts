@@ -95,8 +95,7 @@ export class TranscriptIngestionService {
     const speaker = runtime.pendingTranscriptChunk?.speaker ?? null;
 
     if (!final) {
-      const seq =
-        runtime.streamingTranscript?.seq ?? runtime.transcriptLastSeq + 1;
+      const seq = runtime.streamingTranscript?.seq ?? runtime.transcriptLastSeq + 1;
 
       runtime.streamingTranscript = {
         seq,
@@ -278,3 +277,4 @@ const isRealtimeTranscript = (value: unknown): value is RealtimeTranscript => {
 
   return true;
 };
+
