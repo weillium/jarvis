@@ -105,36 +105,51 @@ export async function GET(req: NextRequest) {
       // SSE only streams real-time enrichment data (connection health, logs, metrics)
       console.log(`[api/stream] SSE connection established for event ${eventId} - waiting for enrichment data from worker`);
 
-      // Subscribe to agent_outputs table for cards
+      // Subscribe to cards table for canonical state changes
       const cardsChannel = supabase
-        .channel(`agent_outputs_${eventId}`)
+        .channel(`cards_${eventId}`)
         .on(
           'postgres_changes',
           {
-            event: 'INSERT',
+            event: '*',
             schema: 'public',
-            table: 'agent_outputs',
+            table: 'cards',
             filter: `event_id=eq.${eventId}`,
           },
           (payload: any) => {
-            const output = payload.new;
-            
-            // Only stream cards (not facts updates)
-            if (output.agent_type === 'cards' && output.type === 'card') {
-              controller.enqueue(
-                encoder.encode(
-                  formatSSE({
-                    type: 'card',
-                    id: output.id,
-                    payload: output.payload,
-                    for_seq: output.for_seq,
-                    created_at: output.created_at,
-                    timestamp: new Date().toISOString(),
-                    is_active: true,
-                  })
-                )
-              );
+            const row = payload.new ?? payload.old;
+            if (!row || typeof row !== 'object') {
+              return;
             }
+
+            const cardPayload = row.payload;
+            if (!cardPayload || typeof cardPayload !== 'object') {
+              return;
+            }
+
+            const forSeq =
+              typeof row.last_seen_seq === 'number' && Number.isFinite(row.last_seen_seq)
+                ? row.last_seen_seq
+                : undefined;
+
+            const createdAt =
+              (typeof row.updated_at === 'string' && row.updated_at) ||
+              (typeof row.created_at === 'string' && row.created_at) ||
+              new Date().toISOString();
+
+            controller.enqueue(
+              encoder.encode(
+                formatSSE({
+                  type: 'card',
+                  id: row.card_id,
+                  payload: cardPayload,
+                  for_seq: forSeq,
+                  created_at: createdAt,
+                  timestamp: new Date().toISOString(),
+                  is_active: row.is_active !== false,
+                })
+              )
+            );
           }
         )
         .subscribe();
