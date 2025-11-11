@@ -15,6 +15,7 @@ interface AgentSessionRow {
 
 interface AgentStatusRow {
   status: string;
+  stage: string | null;
 }
 
 export class PauseResumePoller implements Poller {
@@ -84,13 +85,13 @@ export class PauseResumePoller implements Poller {
     for (const session of pausedForResume) {
       const agentQuery = this.supabase
         .from('agents')
-        .select('status')
+        .select('status, stage')
         .eq('id', session.agent_id)
         .single();
       const agentResponse: PostgrestSingleResponse<AgentStatusRow> = await agentQuery;
       const { data: agent } = agentResponse;
 
-      if (agent && agent.status === 'running') {
+      if (agent && agent.status === 'active' && agent.stage === 'running') {
         if (!eventsToResume.has(session.event_id)) {
           eventsToResume.set(session.event_id, session.agent_id);
         }

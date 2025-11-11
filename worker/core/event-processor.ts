@@ -128,8 +128,17 @@ export class EventProcessor {
     runtime.factsLastSeq = Math.max(runtime.factsLastSeq, chunk.seq);
 
     if (runtime.enabledAgents.cards && runtime.cardsSession) {
+      console.log('[cards][debug] evaluating card trigger', {
+        eventId: runtime.eventId,
+        lastSeq: chunk.seq,
+      });
       const triggerContext = this.evaluateCardTrigger(runtime);
       if (triggerContext) {
+        console.log('[cards][debug] card trigger selected', {
+          eventId: runtime.eventId,
+          conceptId: triggerContext.conceptId,
+          conceptLabel: triggerContext.conceptLabel,
+        });
         if (chunk.seq) {
           runtime.pendingCardConcepts.set(chunk.seq, {
             conceptId: triggerContext.conceptId,
@@ -145,6 +154,14 @@ export class EventProcessor {
           triggerContext
         );
       }
+    } else if (!runtime.enabledAgents.cards) {
+      console.log('[cards][debug] cards agent disabled for runtime', {
+        eventId: runtime.eventId,
+      });
+    } else if (!runtime.cardsSession) {
+      console.log('[cards][debug] cards session missing; skipping trigger evaluation', {
+        eventId: runtime.eventId,
+      });
     }
 
     if (runtime.enabledAgents.facts) {
@@ -177,7 +194,18 @@ export class EventProcessor {
       existingConceptIds,
     });
 
+    console.log('[cards][debug] concept candidates evaluated', {
+      eventId: runtime.eventId,
+      recentChunkCount: recentChunks.length,
+      candidateCount: candidates.length,
+      candidateLabels: candidates.map((candidate) => candidate.conceptLabel),
+    });
+
     if (candidates.length === 0) {
+      console.log('[cards][debug] no concept candidates found', {
+        eventId: runtime.eventId,
+        recentChunkCount: recentChunks.length,
+      });
       return null;
     }
 
@@ -185,13 +213,37 @@ export class EventProcessor {
       (candidate) => !runtime.cardsStore.hasRecentConcept(candidate.conceptId, this.CARD_FRESHNESS_MS)
     );
 
+    console.log('[cards][debug] novel concept candidates', {
+      eventId: runtime.eventId,
+      novelCandidateCount: novelCandidates.length,
+      novelLabels: novelCandidates.map((candidate) => candidate.conceptLabel),
+    });
+
     if (novelCandidates.length === 0) {
+      console.log('[cards][debug] no novel concept candidates', {
+        eventId: runtime.eventId,
+        candidateCount: candidates.length,
+      });
       return null;
     }
 
     const selected = novelCandidates[0];
     const occurrences = this.countConceptOccurrences(recentChunks, selected.conceptLabel);
+    console.log('[cards][debug] candidate occurrence count', {
+      eventId: runtime.eventId,
+      conceptId: selected.conceptId,
+      conceptLabel: selected.conceptLabel,
+      occurrences,
+      required: this.CARD_MIN_CHUNKS,
+    });
     if (occurrences < this.CARD_MIN_CHUNKS) {
+      console.log('[cards][debug] novel concept below occurrence threshold', {
+        eventId: runtime.eventId,
+        conceptId: selected.conceptId,
+        conceptLabel: selected.conceptLabel,
+        occurrences,
+        required: this.CARD_MIN_CHUNKS,
+      });
       return null;
     }
 

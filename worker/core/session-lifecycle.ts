@@ -210,35 +210,8 @@ export class SessionLifecycle {
     sessionId?: string
   ): Promise<void> {
     try {
-      const currentSessions = await this.agentSessionsRepository.getSessionsForAgent(
-        eventId,
-        agentId,
-        []
-      );
-      const currentSession = currentSessions.find((s) => s.agent_type === agentType);
-      const previousStatus = currentSession?.status;
-
       if (status === 'active' && sessionId) {
-        await this.handleActiveStatus(
-          runtime,
-          eventId,
-          agentId,
-          agentType,
-          previousStatus,
-          sessionId,
-          currentSession
-        );
-      } else if (status !== 'active') {
-        await this.logStatusChange(
-          runtime,
-          eventId,
-          agentId,
-          agentType,
-          status,
-          sessionId,
-          previousStatus,
-          currentSession
-        );
+        await this.handleActiveStatus(runtime, eventId, agentId, agentType, sessionId);
       }
 
       await this.statusUpdater.updateAndPushStatus(runtime);
@@ -256,95 +229,18 @@ export class SessionLifecycle {
     eventId: string,
     agentId: string,
     agentType: AgentType,
-    previousStatus: string | undefined,
-    sessionId: string,
-    currentSession?: AgentSessionRecord
+    sessionId: string
   ): Promise<void> {
     try {
-      const { connection_count, session_id } = await this.agentSessionsRepository.incrementConnectionCount(
-        eventId,
-        agentType
-      );
+      await this.agentSessionsRepository.incrementConnectionCount(eventId, agentType);
 
       await this.agentSessionsRepository.updateSession(eventId, agentType, {
         provider_session_id: sessionId,
         status: 'active',
       });
-
-      const sessionDbId =
-        session_id || (await this.agentSessionsRepository.getSessionId(eventId, agentType));
-      if (!sessionDbId) {
-        return;
-      }
-
-      await this.agentSessionsRepository.logHistory({
-        agent_session_id: sessionDbId,
-        event_id: eventId,
-        agent_id: agentId,
-        agent_type: agentType,
-        event_type: previousStatus === 'paused' ? 'resumed' : 'connected',
-        provider_session_id: sessionId,
-        previous_status: previousStatus || undefined,
-        new_status: 'active',
-        connection_count,
-        metadata: {
-          websocket_state: this.getWebsocketState(runtime, agentType),
-        },
-        transport: currentSession?.transport ?? resolveTransportForAgent(agentType),
-      });
     } catch (err: unknown) {
       console.error("[worker] error:", String(err));
     }
-  }
-
-  private async logStatusChange(
-    runtime: EventRuntime,
-    eventId: string,
-    agentId: string,
-    agentType: AgentType,
-    status: string,
-    sessionId: string | undefined,
-    previousStatus: string | undefined,
-    currentSession?: AgentSessionRecord
-  ): Promise<void> {
-    const sessionDbId = await this.agentSessionsRepository.getSessionId(eventId, agentType);
-    if (!sessionDbId) {
-      return;
-    }
-
-    const eventTypeMap: Record<string, 'disconnected' | 'paused' | 'error' | 'closed'> = {
-      paused: 'paused',
-      error: 'error',
-      closed: 'closed',
-    };
-
-    const eventType = eventTypeMap[status] || 'disconnected';
-
-    await this.agentSessionsRepository.logHistory({
-      agent_session_id: sessionDbId,
-      event_id: eventId,
-      agent_id: agentId,
-      agent_type: agentType,
-      event_type: eventType,
-      provider_session_id: sessionId || currentSession?.provider_session_id || undefined,
-      previous_status: previousStatus || undefined,
-      new_status: status,
-      connection_count: currentSession?.connection_count || undefined,
-      metadata: {
-        websocket_state: this.getWebsocketState(runtime, agentType),
-      },
-      transport: currentSession?.transport ?? resolveTransportForAgent(agentType),
-    });
-  }
-
-  private getWebsocketState(runtime: EventRuntime, agentType: AgentType) {
-    if (agentType === 'transcript') {
-      return runtime.transcriptSession?.getStatus()?.websocketState;
-    }
-    if (agentType === 'cards') {
-      return runtime.cardsSession?.getStatus()?.websocketState;
-    }
-    return runtime.factsSession?.getStatus()?.websocketState;
   }
 
   private buildDefaultSessionOptions(runtime: EventRuntime): SessionCreationOptions {
@@ -420,11 +316,3 @@ export class SessionLifecycle {
     );
   }
 }
-
-const resolveTransportForAgent = (agentType: AgentType): AgentTransport => {
-  const profile = agentTransportProfiles[agentType];
-  if (!profile) {
-    return 'stateless';
-  }
-  return profile.defaultTransport;
-};

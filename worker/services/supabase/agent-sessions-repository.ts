@@ -7,7 +7,6 @@ import type { AgentType } from '../../types';
 import type {
   AgentSessionRecord,
   AgentSessionUpsert,
-  AgentSessionHistoryParams,
 } from './types';
 import {
   mapAgentSessionRecords,
@@ -190,26 +189,5 @@ export class AgentSessionsRepository {
     }
 
     return mapSingleId(data);
-  }
-
-  async logHistory(params: AgentSessionHistoryParams): Promise<void> {
-    const { error } = await this.client.rpc('log_agent_session_history', {
-      p_agent_session_id: params.agent_session_id,
-      p_event_id: params.event_id,
-      p_agent_id: params.agent_id,
-      p_agent_type: params.agent_type,
-      p_event_type: params.event_type,
-      p_provider_session_id: params.provider_session_id || null,
-      p_previous_status: params.previous_status || null,
-      p_new_status: params.new_status || null,
-      p_connection_count: params.connection_count || null,
-      p_error_message: params.error_message || null,
-      p_metadata: params.metadata || null,
-      p_transport: params.transport || null,
-    });
-
-    if (error) {
-      console.error(`Failed to log session history: ${error.message}`, params);
-    }
   }
 }
