@@ -72,16 +72,19 @@ export class StatusUpdater {
   ): Promise<void> {
     const metrics = this.metrics.getMetrics(runtime.eventId, agentType);
     const logs = this.logger.getLogs(runtime.eventId, agentType);
+    const factsBudgetSnapshot = metrics.lastBudget;
     const factsBudget =
-      agentType === 'facts' && metrics.lastBudget
+      agentType === 'facts' && factsBudgetSnapshot
         ? {
-            selected: metrics.lastBudget.selected,
-            overflow: metrics.lastBudget.overflow,
-            summary: metrics.lastBudget.summary,
-            total_facts: metrics.lastBudget.totalFacts,
-            budget_tokens: metrics.lastBudget.budgetTokens,
-            used_tokens: metrics.lastBudget.usedTokens,
-            selection_ratio: metrics.lastBudget.selectionRatio,
+            selected: factsBudgetSnapshot.selected,
+            overflow: factsBudgetSnapshot.overflow,
+            summary: factsBudgetSnapshot.summary,
+            total_facts: factsBudgetSnapshot.totalFacts,
+            budget_tokens: factsBudgetSnapshot.budgetTokens,
+            used_tokens: factsBudgetSnapshot.usedTokens,
+            selection_ratio: factsBudgetSnapshot.selectionRatio,
+            merged_clusters: factsBudgetSnapshot.mergedClusters,
+            merged_facts: factsBudgetSnapshot.mergedFacts,
           }
         : undefined;
 
@@ -93,18 +96,7 @@ export class StatusUpdater {
       warnings: metrics.warnings,
       criticals: metrics.criticals,
       last_request: this.extractLastRequest(logs),
-      facts_budget:
-        agentType === 'facts' && metrics.lastBudget
-          ? {
-              selected: metrics.lastBudget.selected,
-              overflow: metrics.lastBudget.overflow,
-              summary: metrics.lastBudget.summary,
-              total_facts: metrics.lastBudget.totalFacts,
-              budget_tokens: metrics.lastBudget.budgetTokens,
-              used_tokens: metrics.lastBudget.usedTokens,
-              selection_ratio: metrics.lastBudget.selectionRatio,
-            }
-          : undefined,
+      facts_budget: factsBudget,
     };
 
     const runtimeStats = {
@@ -267,6 +259,22 @@ export class StatusUpdater {
         status = 'closed';
       }
     }
+
+    const factsBudgetSnapshot = metrics.lastBudget;
+    const factsBudget =
+      agentType === 'facts' && factsBudgetSnapshot
+        ? {
+            selected: factsBudgetSnapshot.selected,
+            overflow: factsBudgetSnapshot.overflow,
+            summary: factsBudgetSnapshot.summary,
+            total_facts: factsBudgetSnapshot.totalFacts,
+            budget_tokens: factsBudgetSnapshot.budgetTokens,
+            used_tokens: factsBudgetSnapshot.usedTokens,
+            selection_ratio: factsBudgetSnapshot.selectionRatio,
+            merged_clusters: factsBudgetSnapshot.mergedClusters,
+            merged_facts: factsBudgetSnapshot.mergedFacts,
+          }
+        : undefined;
 
     return {
       agent_type: agentType,

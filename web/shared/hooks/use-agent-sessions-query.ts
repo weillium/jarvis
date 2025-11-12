@@ -33,6 +33,11 @@ export interface TokenMetrics {
     budget_tokens: number;
     used_tokens: number;
     selection_ratio: number;
+    merged_clusters: number;
+    merged_facts: Array<{
+      representative: string;
+      members: string[];
+    }>;
   };
 }
 

@@ -251,7 +251,9 @@ export class FactsStore {
     };
   }
 
-  applyConfidenceAdjustments(adjustments: Array<{ key: string; newConfidence: number }>): void {
+  applyConfidenceAdjustments(
+    adjustments: Array<{ key: string; newConfidence?: number; newMissStreak?: number }>
+  ): void {
     if (!adjustments.length) {
       return;
     }
@@ -261,15 +263,42 @@ export class FactsStore {
       if (!existing) {
         continue;
       }
-      const confidence = clampConfidence(adjustment.newConfidence);
-      if (Math.abs(confidence - existing.confidence) < 0.001) {
-        continue;
+      const updated: Fact = { ...existing };
+
+      if (typeof adjustment.newConfidence === 'number' && !Number.isNaN(adjustment.newConfidence)) {
+        const confidence = clampConfidence(adjustment.newConfidence);
+        updated.confidence = confidence;
       }
-      this.facts.set(adjustment.key, {
-        ...existing,
-        confidence,
-      });
+
+      if (typeof adjustment.newMissStreak === 'number' && adjustment.newMissStreak >= 0) {
+        updated.missStreak = adjustment.newMissStreak;
+      }
+
+      this.facts.set(adjustment.key, updated);
     }
+  }
+
+  recordMerge(primaryKey: string, memberKeys: string[], mergedAt: string): void {
+    if (memberKeys.length === 0) {
+      return;
+    }
+
+    const primary = this.facts.get(primaryKey);
+    if (!primary) {
+      return;
+    }
+
+    const mergedSet = new Set(primary.mergedFrom);
+    for (const memberKey of memberKeys) {
+      if (memberKey && memberKey !== primaryKey) {
+        mergedSet.add(memberKey);
+      }
+    }
+
+    primary.mergedFrom = Array.from(mergedSet);
+    primary.mergedAt = mergedAt;
+    primary.missStreak = 0;
+    this.facts.set(primaryKey, primary);
   }
 }
 

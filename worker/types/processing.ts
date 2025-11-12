@@ -14,7 +14,7 @@ export interface FactsBudgetSnapshot {
   usedTokens: number;
   selectionRatio: number;
   mergedClusters: number;
-  mergeMap?: Array<{
+  mergedFacts: Array<{
     representative: string;
     members: string[];
   }>;

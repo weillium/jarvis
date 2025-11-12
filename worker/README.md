@@ -64,4 +64,11 @@ The worker hosts the long-running agents that ingest context, orchestrate pipeli
 - Wrap JSON parsing through the shared safe helpers rather than calling `JSON.parse` directly.
 - Keep cards, transcripts, and facts agents isolated across runtime, processing, and session layers.
 
+## Observability & Prompts
+- Facts prompt budgeting streams detailed telemetry via `services/observability/status-updater.ts`:
+  - `facts_budget` contains selection counts, overflow, summaries, merged cluster totals, merged fact provenance, and token usage.
+  - Real-time values appear in the web Agent Sessions panel (“Facts Prompt Budget” card). Historical snapshots persist when sessions close.
+- Worker logs include `[context] Facts Agent` entries that show token totals, selection ratio, and merged cluster counts per cycle.
+- Tune thresholds by editing constants in `runtime/facts/prompt-budgeter.ts` (`FACTS_BUDGET_DEFAULTS`, `FAST_DECAY_THRESHOLD`, etc.) to react quickly to telemetry.
+
 

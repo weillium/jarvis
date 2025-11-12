@@ -632,14 +632,38 @@ function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: Se
                   </div>
                 </div>
               </div>
-              <div style={{
-                marginTop: '8px',
-                fontSize: '11px',
-                color: '#64748b',
-              }}>
+              <div style={{ marginTop: '8px', fontSize: '11px', color: '#64748b' }}>
                 Selection Ratio:{' '}
                 {(session.token_metrics.facts_budget.selection_ratio * 100).toFixed(1)}%
               </div>
+              <div style={{ marginTop: '4px', fontSize: '11px', color: '#64748b' }}>
+                Merged Clusters: {session.token_metrics.facts_budget.merged_clusters}
+              </div>
+              {session.token_metrics.facts_budget.merged_facts.length > 0 && (
+                <div style={{ marginTop: '10px' }}>
+                  <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
+                    Merged Facts
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: '#475569' }}>
+                    {session.token_metrics.facts_budget.merged_facts.slice(0, 5).map((merged, idx) => (
+                      <li key={`${merged.representative}-${idx}`}>
+                        <span style={{ fontWeight: 600 }}>{merged.representative}</span>
+                        {merged.members.length > 0 && (
+                          <span style={{ opacity: 0.8 }}>
+                            {' '}
+                            ← {merged.members.join(', ')}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  {session.token_metrics.facts_budget.merged_facts.length > 5 && (
+                    <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>
+                      +{session.token_metrics.facts_budget.merged_facts.length - 5} additional merges
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
