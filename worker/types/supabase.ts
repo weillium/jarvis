@@ -142,6 +142,13 @@ export interface FactRecord {
   fact_objects?: string[] | null;
 }
 
+export interface FactAliasRecord {
+  event_id: string;
+  canonical_key: string;
+  alias_key: string;
+  created_at?: string | null;
+}
+
 export interface VectorMatchRecord {
   id: string;
   chunk: string;

@@ -22,6 +22,16 @@ export const postProcessBlueprint = (input: Blueprint, topic: string): Blueprint
       sources: [...input.chunks_plan.sources],
     },
     cost_breakdown: { ...input.cost_breakdown },
+    agent_alignment: {
+      facts: {
+        highlights: [...input.agent_alignment.facts.highlights],
+        open_questions: [...input.agent_alignment.facts.open_questions],
+      },
+      cards: {
+        assets: [...input.agent_alignment.cards.assets],
+        open_questions: [...input.agent_alignment.cards.open_questions],
+      },
+    },
   };
 
   if (blueprint.important_details.length >= 5) {
@@ -60,6 +70,8 @@ export const postProcessBlueprint = (input: Blueprint, topic: string): Blueprint
         api: 'exa',
         priority: 1,
         estimated_cost: 0.03,
+        agent_utility: ['facts', 'cards'],
+        provenance_hint: `General coverage on ${topic}`,
       },
     ];
     blueprint.research_plan.total_searches = 1;
@@ -76,6 +88,7 @@ export const postProcessBlueprint = (input: Blueprint, topic: string): Blueprint
         is_acronym: false,
         category: 'domain-specific',
         priority: 1,
+        agent_utility: ['facts', 'cards'],
       },
     ];
     blueprint.glossary_plan.estimated_count = 1;
@@ -87,9 +100,12 @@ export const postProcessBlueprint = (input: Blueprint, topic: string): Blueprint
   if (blueprint.chunks_plan.sources.length === 0) {
     blueprint.chunks_plan.sources = [
       {
-        source: 'llm_generated',
+        label: 'LLM Generated Summary',
+        upstream_reference: 'fallback',
+        expected_format: 'llm_summary',
         priority: 1,
         estimated_chunks: blueprint.chunks_plan.target_count || 500,
+        agent_utility: ['cards', 'facts'],
       },
     ];
     console.error(
@@ -123,6 +139,17 @@ export const postProcessBlueprint = (input: Blueprint, topic: string): Blueprint
       api: queryPlan.api === 'exa' || queryPlan.api === 'wikipedia' ? queryPlan.api : 'exa',
       priority: queryPlan.priority || 5,
       estimated_cost: queryPlan.estimated_cost || (queryPlan.api === 'exa' ? 0.03 : 0.001),
+      agent_utility:
+        Array.isArray(queryPlan.agent_utility) && queryPlan.agent_utility.length > 0
+          ? queryPlan.agent_utility.filter(
+              (consumer): consumer is 'facts' | 'cards' | 'glossary' =>
+                consumer === 'facts' || consumer === 'cards' || consumer === 'glossary'
+            )
+          : ['facts'],
+      provenance_hint:
+        typeof queryPlan.provenance_hint === 'string' && queryPlan.provenance_hint.length > 0
+          ? queryPlan.provenance_hint
+          : 'Provenance not specified',
     }));
     blueprint.research_plan.total_searches = blueprint.research_plan.queries.length;
     blueprint.research_plan.estimated_total_cost = blueprint.research_plan.queries.reduce(
@@ -137,9 +164,42 @@ export const postProcessBlueprint = (input: Blueprint, topic: string): Blueprint
       is_acronym: termPlan.is_acronym || false,
       category: termPlan.category || 'general',
       priority: termPlan.priority || 5,
+      agent_utility:
+        Array.isArray(termPlan.agent_utility) && termPlan.agent_utility.length > 0
+          ? termPlan.agent_utility.filter(
+              (agent): agent is 'facts' | 'cards' => agent === 'facts' || agent === 'cards'
+            )
+          : ['facts'],
     }));
     blueprint.glossary_plan.estimated_count = blueprint.glossary_plan.terms.length;
   }
+
+  if (blueprint.chunks_plan.sources) {
+    blueprint.chunks_plan.sources = blueprint.chunks_plan.sources.map((sourcePlan) => ({
+      label: sourcePlan.label || '',
+      upstream_reference: sourcePlan.upstream_reference || 'unspecified',
+      expected_format: sourcePlan.expected_format || 'unspecified',
+      priority: sourcePlan.priority || 5,
+      estimated_chunks: sourcePlan.estimated_chunks || 10,
+      agent_utility:
+        Array.isArray(sourcePlan.agent_utility) && sourcePlan.agent_utility.length > 0
+          ? sourcePlan.agent_utility.filter(
+              (agent): agent is 'facts' | 'cards' => agent === 'facts' || agent === 'cards'
+            )
+          : ['cards'],
+    }));
+  }
+
+  blueprint.agent_alignment.facts.highlights = blueprint.agent_alignment.facts.highlights.filter(
+    isMeaningfulString
+  );
+  blueprint.agent_alignment.facts.open_questions =
+    blueprint.agent_alignment.facts.open_questions.filter(isMeaningfulString);
+  blueprint.agent_alignment.cards.assets = blueprint.agent_alignment.cards.assets.filter(
+    isMeaningfulString
+  );
+  blueprint.agent_alignment.cards.open_questions =
+    blueprint.agent_alignment.cards.open_questions.filter(isMeaningfulString);
 
   if (blueprint.cost_breakdown.total === 0) {
     blueprint.cost_breakdown.total =

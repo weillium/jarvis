@@ -540,6 +540,22 @@ export class EventProcessor {
       const factSourceId =
         typeof pendingSource?.transcriptId === 'number' ? pendingSource.transcriptId : undefined;
 
+      const aliasUpdates = new Map<string, string>();
+      const trackAlias = (aliasKey: string | undefined, canonicalKey: string): void => {
+        if (!aliasKey) {
+          return;
+        }
+        const normalizedAlias = aliasKey.trim().toLowerCase();
+        const normalizedCanonical = canonicalKey.trim();
+        if (!normalizedAlias || !normalizedCanonical) {
+          return;
+        }
+        if (normalizedAlias === normalizedCanonical.toLowerCase()) {
+          return;
+        }
+        aliasUpdates.set(normalizedAlias, normalizedCanonical);
+      };
+
       const rejectedForValidation: Array<{ key: string; value: unknown; reason: string }> = [];
 
       for (const rawFact of facts) {
@@ -569,11 +585,14 @@ export class EventProcessor {
         let targetKey = resolveAliasKey(aliasMap, validated.key);
         if (targetKey !== validated.key) {
           registerAliasKey(aliasMap, validated.key, targetKey);
+          trackAlias(validated.key, targetKey);
         }
         if (validated.originalKey && validated.originalKey !== targetKey) {
           registerAliasKey(aliasMap, validated.originalKey, targetKey);
+          trackAlias(validated.originalKey, targetKey);
         }
         registerAliasKey(aliasMap, rawFact.key, targetKey);
+        trackAlias(rawFact.key, targetKey);
 
         const now = Date.now();
         const candidateFact: Fact = {
@@ -611,10 +630,13 @@ export class EventProcessor {
           if (similar) {
             targetKey = similar.key;
             registerAliasKey(aliasMap, validated.key, targetKey);
+            trackAlias(validated.key, targetKey);
             if (validated.originalKey && validated.originalKey !== targetKey) {
               registerAliasKey(aliasMap, validated.originalKey, targetKey);
+              trackAlias(validated.originalKey, targetKey);
             }
             registerAliasKey(aliasMap, rawFact.key, targetKey);
+            trackAlias(rawFact.key, targetKey);
             candidateFact.key = targetKey;
             existingFact = similar.fact;
           }
@@ -630,10 +652,13 @@ export class EventProcessor {
           if (similar) {
             targetKey = similar.key;
             registerAliasKey(aliasMap, validated.key, targetKey);
+            trackAlias(validated.key, targetKey);
             if (validated.originalKey && validated.originalKey !== targetKey) {
               registerAliasKey(aliasMap, validated.originalKey, targetKey);
+              trackAlias(validated.originalKey, targetKey);
             }
             registerAliasKey(aliasMap, rawFact.key, targetKey);
+            trackAlias(rawFact.key, targetKey);
             candidateFact.key = targetKey;
             existingFact = similar.fact;
           }
@@ -762,6 +787,15 @@ export class EventProcessor {
           sources: updatedFact.sources,
           merge_provenance: updatedFact.mergedFrom,
           merged_at: updatedFact.mergedAt,
+          dormant_at:
+            typeof updatedFact.dormantAt === 'number' && Number.isFinite(updatedFact.dormantAt)
+              ? new Date(updatedFact.dormantAt).toISOString()
+              : null,
+          pruned_at:
+            typeof updatedFact.prunedAt === 'number' && Number.isFinite(updatedFact.prunedAt)
+              ? new Date(updatedFact.prunedAt).toISOString()
+              : null,
+          is_active: !factsStore.isDormant(updatedFact.key),
         };
         if (runtime.factsNormalizedHashEnabled) {
           supabaseFact.normalized_hash = updatedFact.normalizedHash ?? normalizedValue.hash;
@@ -808,6 +842,16 @@ export class EventProcessor {
             reason: entry.reason,
           })),
         });
+      }
+
+      if (aliasUpdates.size > 0) {
+        await this.factsRepository.upsertFactAliases(
+          runtime.eventId,
+          Array.from(aliasUpdates.entries()).map(([aliasKey, canonicalKey]) => ({
+            aliasKey,
+            canonicalKey,
+          }))
+        );
       }
 
       console.log(`[facts] ${facts.length} facts updated from Realtime API`);

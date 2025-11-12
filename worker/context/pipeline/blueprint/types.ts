@@ -14,6 +14,8 @@ export interface Blueprint {
       api: 'exa' | 'wikipedia';
       priority: number;
       estimated_cost?: number;
+      agent_utility: Array<'facts' | 'cards' | 'glossary'>;
+      provenance_hint: string;
     }>;
     total_searches: number;
     estimated_total_cost: number;
@@ -24,14 +26,18 @@ export interface Blueprint {
       is_acronym: boolean;
       category: string;
       priority: number;
+      agent_utility: Array<'facts' | 'cards'>;
     }>;
     estimated_count: number;
   };
   chunks_plan: {
     sources: Array<{
-      source: string;
+      label: string;
+      upstream_reference: string;
+      expected_format: string;
       priority: number;
       estimated_chunks: number;
+      agent_utility: Array<'facts' | 'cards'>;
     }>;
     target_count: number;
     quality_tier: 'basic' | 'comprehensive';
@@ -42,6 +48,16 @@ export interface Blueprint {
     glossary: number;
     chunks: number;
     total: number;
+  };
+  agent_alignment: {
+    facts: {
+      highlights: string[];
+      open_questions: string[];
+    };
+    cards: {
+      assets: string[];
+      open_questions: string[];
+    };
   };
 }
 

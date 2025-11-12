@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { FactRecord } from './types';
-import { mapFactRecords } from './dto-mappers';
+import type { FactAliasRecord, FactRecord } from './types';
+import { mapFactAliasRecords, mapFactRecords } from './dto-mappers';
 
 export class FactsRepository {
   constructor(private readonly client: SupabaseClient) {}
@@ -57,6 +57,84 @@ export class FactsRepository {
       .update({ is_active: isActive })
       .eq('event_id', eventId)
       .in('fact_key', factKeys);
+
+    if (error) throw error;
+  }
+
+  async updateFactLifecycle(
+    eventId: string,
+    updates: Array<{ key: string; isActive?: boolean; dormantAt?: string | null; prunedAt?: string | null }>
+  ): Promise<void> {
+    if (updates.length === 0) {
+      return;
+    }
+
+    for (const update of updates) {
+      const payload: Record<string, unknown> = {};
+      if (update.isActive !== undefined) {
+        payload.is_active = update.isActive;
+      }
+      if (update.dormantAt !== undefined) {
+        payload.dormant_at = update.dormantAt;
+      }
+      if (update.prunedAt !== undefined) {
+        payload.pruned_at = update.prunedAt;
+      }
+      if (Object.keys(payload).length === 0) {
+        continue;
+      }
+
+      const { error } = await this.client
+        .from('facts')
+        .update(payload)
+        .eq('event_id', eventId)
+        .eq('fact_key', update.key);
+
+      if (error) throw error;
+    }
+  }
+
+  async getFactAliases(eventId: string): Promise<FactAliasRecord[]> {
+    const { data, error } = await this.client
+      .from('fact_key_aliases')
+      .select('*')
+      .eq('event_id', eventId);
+
+    if (error) throw error;
+    return mapFactAliasRecords(data);
+  }
+
+  async upsertFactAliases(
+    eventId: string,
+    aliases: Array<{ aliasKey: string; canonicalKey: string }>
+  ): Promise<void> {
+    if (aliases.length === 0) {
+      return;
+    }
+
+    const rows = aliases.map((alias) => ({
+      event_id: eventId,
+      alias_key: alias.aliasKey,
+      canonical_key: alias.canonicalKey,
+    }));
+
+    const { error } = await this.client
+      .from('fact_key_aliases')
+      .upsert(rows, { onConflict: 'event_id,alias_key' });
+
+    if (error) throw error;
+  }
+
+  async deleteFactAliases(eventId: string, aliasKeys: string[]): Promise<void> {
+    if (aliasKeys.length === 0) {
+      return;
+    }
+
+    const { error } = await this.client
+      .from('fact_key_aliases')
+      .delete()
+      .eq('event_id', eventId)
+      .in('alias_key', aliasKeys);
 
     if (error) throw error;
   }

@@ -12,6 +12,7 @@ import type { AgentsRepository } from '../services/supabase/agents-repository';
 import type { CardsRepository } from '../services/supabase/cards-repository';
 import { normalizeCardStateRecord } from '../lib/cards/payload-normalizer';
 import type { FactKind } from './facts/fact-types';
+import { registerAliasKey } from './facts/alias-map';
 
 export class RuntimeManager {
   private readonly runtimes: Map<string, EventRuntime> = new Map();
@@ -55,6 +56,7 @@ export class RuntimeManager {
     this.logger.clearLogs(eventId, 'facts');
 
     const factsStore = new FactsStore(50);
+    const factKeyAliases = new Map<string, string>();
     const activeFacts = await this.factsRepository.getFacts(eventId, true);
     if (activeFacts.length > 0) {
       type LoadableFact = Parameters<FactsStore['loadFacts']>[0][number];
@@ -86,6 +88,22 @@ export class RuntimeManager {
           }
         }
 
+        let dormantAtMs: number | null = null;
+        if (typeof f.dormant_at === 'string') {
+          const parsedDormant = new Date(f.dormant_at).getTime();
+          if (!Number.isNaN(parsedDormant)) {
+            dormantAtMs = parsedDormant;
+          }
+        }
+
+        let prunedAtMs: number | null = null;
+        if (typeof f.pruned_at === 'string') {
+          const parsedPruned = new Date(f.pruned_at).getTime();
+          if (!Number.isNaN(parsedPruned)) {
+            prunedAtMs = parsedPruned;
+          }
+        }
+
         const kind: FactKind =
           typeof f.fact_kind === 'string' && (['claim', 'question', 'meta'] as FactKind[]).includes(
             f.fact_kind as FactKind
@@ -104,8 +122,8 @@ export class RuntimeManager {
           missStreak: 0,
           createdAt: Number.isFinite(createdAtMs) ? createdAtMs : Date.now(),
           lastTouchedAt: Number.isFinite(updatedAtMs) ? updatedAtMs : Date.now(),
-          dormantAt: null,
-          prunedAt: null,
+          dormantAt: dormantAtMs,
+          prunedAt: prunedAtMs,
           normalizedHash: typeof f.normalized_hash === 'string' ? f.normalized_hash : undefined,
           fingerprintHash: typeof f.fingerprint_hash === 'string' ? f.fingerprint_hash : undefined,
           kind,
@@ -140,6 +158,11 @@ export class RuntimeManager {
           `[runtime-manager] Loaded ${activeFacts.length} active facts into FactsStore for event ${eventId}`
         );
       }
+    }
+
+    const aliasRecords = await this.factsRepository.getFactAliases(eventId);
+    for (const alias of aliasRecords) {
+      registerAliasKey(factKeyAliases, alias.alias_key, alias.canonical_key);
     }
 
     const cardsStore = new CardsStore(100);
@@ -180,7 +203,7 @@ export class RuntimeManager {
       glossaryCache,
       pendingCardConcepts: new Map(),
       pendingFactSources: [],
-      factKeyAliases: new Map(),
+      factKeyAliases,
       factsNormalizedHashEnabled: normalizedHashSupported,
       transcriptLastSeq: checkpoints.transcript || 0,
       cardsLastSeq,

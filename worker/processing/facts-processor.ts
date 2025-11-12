@@ -92,6 +92,9 @@ export class FactsProcessor {
         budgetResult.selectedFacts.map((fact: Fact) => fact.key)
       );
 
+      const lifecycleUpdates = new Map<string, FactLifecycleUpdate>();
+      const demotedDormantKeys: string[] = [];
+
       const promptFacts = budgetResult.promptFacts;
       const promptFactsRecord = buildPromptFactsRecord(promptFacts);
       const promptContext: AgentContext = {
@@ -149,7 +152,14 @@ export class FactsProcessor {
       const now = Date.now();
 
       for (const demoted of demotedFacts) {
-        runtime.factsStore.markDormant(demoted.key, now, FACT_DORMANT_CONFIDENCE_DROP);
+        const marked = runtime.factsStore.markDormant(demoted.key, now, FACT_DORMANT_CONFIDENCE_DROP);
+        if (marked) {
+          demotedDormantKeys.push(demoted.key);
+          mergeLifecycleUpdate(lifecycleUpdates, demoted.key, {
+            isActive: false,
+            dormantAt: new Date(now).toISOString(),
+          });
+        }
       }
 
       const revivedKeys: string[] = [];
@@ -167,10 +177,14 @@ export class FactsProcessor {
         );
         if (revived) {
           revivedKeys.push(key);
+          mergeLifecycleUpdate(lifecycleUpdates, key, {
+            isActive: true,
+            dormantAt: null,
+          });
         }
       }
 
-      const dormantKeys: string[] = [];
+      const newDormantKeys: string[] = [];
       const snapshotAfter: Fact[] = runtime.factsStore.getAll(true);
       for (const fact of snapshotAfter) {
         if (selectedKeySet.has(fact.key)) {
@@ -184,7 +198,11 @@ export class FactsProcessor {
             idleMs >= FACT_DORMANT_IDLE_MS
           ) {
             if (runtime.factsStore.markDormant(fact.key, now, FACT_DORMANT_CONFIDENCE_DROP)) {
-              dormantKeys.push(fact.key);
+              newDormantKeys.push(fact.key);
+              mergeLifecycleUpdate(lifecycleUpdates, fact.key, {
+                isActive: false,
+                dormantAt: new Date(now).toISOString(),
+              });
             }
           }
         } else {
@@ -198,18 +216,29 @@ export class FactsProcessor {
       const prunedKeys = runtime.factsStore.drainPrunedKeys();
       if (prunedKeys.length > 0) {
         await this.factsRepository.updateFactActiveStatus(runtime.eventId, prunedKeys, false);
+        const prunedIso = new Date(now).toISOString();
+        for (const key of prunedKeys) {
+          mergeLifecycleUpdate(lifecycleUpdates, key, {
+            isActive: false,
+            dormantAt: null,
+            prunedAt: prunedIso,
+          });
+        }
         this.logger.log(runtime.eventId, 'facts', 'log', `[lifecycle] pruned facts: ${formatLifecycleList(prunedKeys)}`, {
           prunedKeys,
         });
       }
 
-      if (dormantKeys.length > 0) {
+      const allDormantKeys = Array.from(
+        new Set<string>([...newDormantKeys, ...demotedDormantKeys])
+      );
+      if (allDormantKeys.length > 0) {
         this.logger.log(
           runtime.eventId,
           'facts',
           'log',
-          `[lifecycle] dormant facts: ${formatLifecycleList(dormantKeys)}`,
-          { dormantKeys }
+          `[lifecycle] dormant facts: ${formatLifecycleList(allDormantKeys)}`,
+          { dormantKeys: allDormantKeys }
         );
       }
 
@@ -221,6 +250,14 @@ export class FactsProcessor {
           `[lifecycle] revived facts: ${formatLifecycleList(revivedKeys)}`,
           { revivedKeys }
         );
+      }
+
+      if (lifecycleUpdates.size > 0) {
+        const lifecyclePayload = Array.from(lifecycleUpdates.entries()).map(([key, update]) => ({
+          key,
+          ...update,
+        }));
+        await this.factsRepository.updateFactLifecycle(runtime.eventId, lifecyclePayload);
       }
       await this.checkpointManager.saveCheckpoint(
         runtime.eventId,
@@ -268,4 +305,19 @@ const compareFactPriority = (a: Fact, b: Fact): number => {
   }
 
   return (b.createdAt ?? 0) - (a.createdAt ?? 0);
+};
+
+type FactLifecycleUpdate = {
+  isActive?: boolean;
+  dormantAt?: string | null;
+  prunedAt?: string | null;
+};
+
+const mergeLifecycleUpdate = (
+  target: Map<string, FactLifecycleUpdate>,
+  key: string,
+  patch: FactLifecycleUpdate
+): void => {
+  const existing = target.get(key) ?? {};
+  target.set(key, { ...existing, ...patch });
 };

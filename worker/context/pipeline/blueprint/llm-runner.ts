@@ -84,6 +84,7 @@ IMPORTANT: This is a retry attempt. The previous response had empty or insuffici
                 'glossary_plan',
                 'chunks_plan',
                 'cost_breakdown',
+                'agent_alignment',
               ],
               additionalProperties: false,
               properties: {
@@ -116,13 +117,22 @@ IMPORTANT: This is a retry attempt. The previous response had empty or insuffici
                       maxItems: 12,
                       items: {
                         type: 'object',
-                        required: ['query', 'api', 'priority', 'estimated_cost'],
+                        required: ['query', 'api', 'priority', 'estimated_cost', 'agent_utility', 'provenance_hint'],
                         additionalProperties: false,
                         properties: {
                           query: { type: 'string', minLength: 1 },
                           api: { type: 'string', enum: ['exa', 'wikipedia'] },
                           priority: { type: 'integer', minimum: 1 },
                           estimated_cost: { type: 'number', minimum: 0 },
+                          agent_utility: {
+                            type: 'array',
+                            minItems: 1,
+                            items: {
+                              type: 'string',
+                              enum: ['facts', 'cards', 'glossary'],
+                            },
+                          },
+                          provenance_hint: { type: 'string' },
                         },
                       },
                     },
@@ -164,12 +174,29 @@ IMPORTANT: This is a retry attempt. The previous response had empty or insuffici
                       minItems: 3,
                       items: {
                         type: 'object',
-                        required: ['source', 'priority', 'estimated_chunks'],
+                        required: [
+                          'label',
+                          'upstream_reference',
+                          'expected_format',
+                          'priority',
+                          'estimated_chunks',
+                          'agent_utility',
+                        ],
                         additionalProperties: false,
                         properties: {
-                          source: { type: 'string', minLength: 1 },
+                          label: { type: 'string', minLength: 1 },
+                          upstream_reference: { type: 'string', minLength: 1 },
+                          expected_format: { type: 'string', minLength: 1 },
                           priority: { type: 'integer', minimum: 1 },
                           estimated_chunks: { type: 'integer', minimum: 1 },
+                          agent_utility: {
+                            type: 'array',
+                            minItems: 1,
+                            items: {
+                              type: 'string',
+                              enum: ['facts', 'cards'],
+                            },
+                          },
                         },
                       },
                     },
@@ -187,6 +214,43 @@ IMPORTANT: This is a retry attempt. The previous response had empty or insuffici
                     glossary: { type: 'number', minimum: 0 },
                     chunks: { type: 'number', minimum: 0 },
                     total: { type: 'number', minimum: 0 },
+                  },
+                },
+                agent_alignment: {
+                  type: 'object',
+                  required: ['facts', 'cards'],
+                  additionalProperties: false,
+                  properties: {
+                    facts: {
+                      type: 'object',
+                      required: ['highlights', 'open_questions'],
+                      additionalProperties: false,
+                      properties: {
+                        highlights: {
+                          type: 'array',
+                          items: { type: 'string', minLength: 1 },
+                        },
+                        open_questions: {
+                          type: 'array',
+                          items: { type: 'string', minLength: 1 },
+                        },
+                      },
+                    },
+                    cards: {
+                      type: 'object',
+                      required: ['assets', 'open_questions'],
+                      additionalProperties: false,
+                      properties: {
+                        assets: {
+                          type: 'array',
+                          items: { type: 'string', minLength: 1 },
+                        },
+                        open_questions: {
+                          type: 'array',
+                          items: { type: 'string', minLength: 1 },
+                        },
+                      },
+                    },
                   },
                 },
               },

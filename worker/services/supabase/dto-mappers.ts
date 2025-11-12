@@ -6,6 +6,7 @@ import type {
   AgentTransport,
   CardStateRecord,
   CheckpointRecord,
+  FactAliasRecord,
   FactRecord,
   GlossaryRecord,
   TranscriptRecord,
@@ -290,6 +291,17 @@ export const mapFactRecords = (rows: unknown): FactRecord[] =>
       fact_objects: Array.isArray(record['fact_objects'])
         ? record['fact_objects'].filter((entry): entry is string => typeof entry === 'string')
         : undefined,
+    };
+  });
+
+export const mapFactAliasRecords = (rows: unknown): FactAliasRecord[] =>
+  toArray(rows).map((row) => {
+    const record = toRecord(row, 'FactAliasRecord');
+    return {
+      event_id: getString(record, 'event_id', 'FactAliasRecord'),
+      canonical_key: getString(record, 'canonical_key', 'FactAliasRecord'),
+      alias_key: getString(record, 'alias_key', 'FactAliasRecord'),
+      created_at: getOptionalString(record, 'created_at') ?? undefined,
     };
   });
 

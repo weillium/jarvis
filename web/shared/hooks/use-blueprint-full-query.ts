@@ -3,16 +3,81 @@
 import { useQuery } from '@tanstack/react-query';
 import { useVisibilityRefetchInterval } from '@/shared/hooks/use-visibility-refetch-interval';
 
+export type BlueprintResearchAPI = 'exa' | 'wikipedia';
+export type BlueprintPurpose = 'facts' | 'cards' | 'glossary';
+export type BlueprintAgentType = 'facts' | 'cards';
+
+export interface BlueprintResearchQuery {
+  query: string;
+  api: BlueprintResearchAPI;
+  priority: number;
+  estimated_cost?: number;
+  purpose?: BlueprintPurpose[];
+  provenance_hint?: string;
+}
+
+export interface BlueprintResearchPlan {
+  queries: BlueprintResearchQuery[];
+  total_searches: number;
+  estimated_total_cost: number;
+}
+
+export interface BlueprintGlossaryTermPlan {
+  term: string;
+  is_acronym: boolean;
+  category: string;
+  priority: number;
+}
+
+export interface BlueprintGlossaryPlan {
+  terms: BlueprintGlossaryTermPlan[];
+  estimated_count: number;
+}
+
+export interface BlueprintChunkSourcePlan {
+  source: string;
+  priority: number;
+  estimated_chunks: number;
+  serves_agents?: BlueprintAgentType[];
+}
+
+export interface BlueprintChunksPlan {
+  sources: BlueprintChunkSourcePlan[];
+  target_count: number;
+  quality_tier: 'basic' | 'comprehensive';
+  ranking_strategy: string;
+}
+
+export interface BlueprintCostBreakdown {
+  research: number;
+  glossary: number;
+  chunks: number;
+  total: number;
+}
+
+export interface BlueprintAgentAlignment {
+  facts?: {
+    highlights?: string[];
+    open_questions?: string[];
+  };
+  cards?: {
+    assets?: string[];
+    open_questions?: string[];
+  };
+}
+
 export interface BlueprintFull {
   id: string;
   status: string;
-  blueprint: any;
+  blueprint: Record<string, unknown> | null;
   important_details: string[] | null;
   inferred_topics: string[] | null;
   key_terms: string[] | null;
-  research_plan: any;
-  glossary_plan: any;
-  chunks_plan: any;
+  research_plan: BlueprintResearchPlan | null;
+  glossary_plan: BlueprintGlossaryPlan | null;
+  chunks_plan: BlueprintChunksPlan | null;
+  cost_breakdown: BlueprintCostBreakdown | null;
+  agent_alignment: BlueprintAgentAlignment | null;
   target_chunk_count: number | null;
   quality_tier: string | null;
   estimated_cost: number | null;
@@ -51,7 +116,7 @@ export function useBlueprintFullQuery(eventId: string | null) {
         throw new Error(data.error || 'Failed to fetch blueprint');
       }
       
-      return data.blueprint || null;
+      return (data.blueprint ?? null) as BlueprintFull | null;
     },
     enabled: !!eventId,
     staleTime: 1000 * 30, // 30 seconds

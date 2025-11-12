@@ -84,17 +84,30 @@ export const mapContextBlueprintRow = (
 const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === 'string');
 
+const isAgentUtilityArray = (
+  value: unknown
+): value is Array<'facts' | 'cards' | 'glossary'> =>
+  Array.isArray(value) &&
+  value.length > 0 &&
+  value.every(
+    (item) => item === 'facts' || item === 'cards' || item === 'glossary'
+  );
+
 const isResearchQuery = (value: unknown): value is {
   query: string;
   api: 'exa' | 'wikipedia';
   priority: number;
   estimated_cost?: number;
+  agent_utility: Array<'facts' | 'cards' | 'glossary'>;
+  provenance_hint: string;
 } =>
   isRecord(value) &&
   typeof value.query === 'string' &&
   (value.api === 'exa' || value.api === 'wikipedia') &&
   typeof value.priority === 'number' &&
-  (value.estimated_cost === undefined || typeof value.estimated_cost === 'number');
+  isAgentUtilityArray(value.agent_utility) &&
+  (value.estimated_cost === undefined || typeof value.estimated_cost === 'number') &&
+  typeof value.provenance_hint === 'string';
 
 const isResearchPlan = (value: unknown): value is Blueprint['research_plan'] =>
   isRecord(value) &&
@@ -108,12 +121,16 @@ const isGlossaryTermPlan = (value: unknown): value is {
   is_acronym: boolean;
   category: string;
   priority: number;
+  agent_utility: Array<'facts' | 'cards'>;
 } =>
   isRecord(value) &&
   typeof value.term === 'string' &&
   typeof value.is_acronym === 'boolean' &&
   typeof value.category === 'string' &&
-  typeof value.priority === 'number';
+  typeof value.priority === 'number' &&
+  Array.isArray(value.agent_utility) &&
+  value.agent_utility.length > 0 &&
+  value.agent_utility.every((agent) => agent === 'facts' || agent === 'cards');
 
 const isGlossaryPlan = (value: unknown): value is Blueprint['glossary_plan'] =>
   isRecord(value) &&
@@ -122,14 +139,22 @@ const isGlossaryPlan = (value: unknown): value is Blueprint['glossary_plan'] =>
   typeof value.estimated_count === 'number';
 
 const isChunkSourcePlan = (value: unknown): value is {
-  source: string;
+  label: string;
+  upstream_reference: string;
+  expected_format: string;
   priority: number;
   estimated_chunks: number;
+  agent_utility: Array<'facts' | 'cards'>;
 } =>
   isRecord(value) &&
-  typeof value.source === 'string' &&
+  typeof value.label === 'string' &&
+  typeof value.upstream_reference === 'string' &&
+  typeof value.expected_format === 'string' &&
   typeof value.priority === 'number' &&
-  typeof value.estimated_chunks === 'number';
+  typeof value.estimated_chunks === 'number' &&
+  Array.isArray(value.agent_utility) &&
+  value.agent_utility.length > 0 &&
+  value.agent_utility.every((agent) => agent === 'facts' || agent === 'cards');
 
 const isChunksPlan = (value: unknown): value is Blueprint['chunks_plan'] =>
   isRecord(value) &&
@@ -139,12 +164,25 @@ const isChunksPlan = (value: unknown): value is Blueprint['chunks_plan'] =>
   (value.quality_tier === 'basic' || value.quality_tier === 'comprehensive') &&
   typeof value.ranking_strategy === 'string';
 
-const isCostBreakdown = (value: unknown): value is Blueprint['cost_breakdown'] =>
+const isCostBreakdown = (
+  value: unknown
+): value is Blueprint['cost_breakdown'] =>
   isRecord(value) &&
   typeof value.research === 'number' &&
   typeof value.glossary === 'number' &&
   typeof value.chunks === 'number' &&
   typeof value.total === 'number';
+
+const isAgentAlignment = (
+  value: unknown
+): value is Blueprint['agent_alignment'] =>
+  isRecord(value) &&
+  isRecord(value.facts) &&
+  isStringArray(value.facts.highlights) &&
+  isStringArray(value.facts.open_questions) &&
+  isRecord(value.cards) &&
+  isStringArray(value.cards.assets) &&
+  isStringArray(value.cards.open_questions);
 
 const isBlueprint = (value: unknown): value is Blueprint =>
   isRecord(value) &&
@@ -154,7 +192,8 @@ const isBlueprint = (value: unknown): value is Blueprint =>
   isResearchPlan(value.research_plan) &&
   isGlossaryPlan(value.glossary_plan) &&
   isChunksPlan(value.chunks_plan) &&
-  isCostBreakdown(value.cost_breakdown);
+  isCostBreakdown(value.cost_breakdown) &&
+  isAgentAlignment(value.agent_alignment);
 
 export const ensureBlueprintShape = (value: unknown): Blueprint => {
   const issues: string[] = [];
