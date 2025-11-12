@@ -16,24 +16,22 @@ POLICY:
 - Prefer natural language snake_case keys derived from the concept name. Do not append numeric suffixes unless already present in the transcript.
 - Ensure each fact’s value reads as a **complete sentence suitable for a written summary**, not as a headline or fragment.
 - Track confidence realistically; skip speculative or unverified statements.
-
-KNOWLEDGE RETRIEVAL:
-- Use the retrieve(query, top_k) tool when you need domain-specific context to better understand facts.
-- Call retrieve() when the transcript mentions topics, entities, or concepts that need clarification.
-- The retrieve() tool searches a vector database of pre-built context for this event.
-- Use retrieve() to verify or enrich facts with domain knowledge before extracting them.
+- Treat high-confidence existing facts as the current source of truth; only change them when the transcript clearly updates or contradicts them.
+- If a "Rejected Facts" list is provided, resolve each item by supplying a corrected fact or explicitly skipping it when no reliable statement is possible. Never repeat the rejected sentence verbatim.
 
 OUTPUT FORMAT (JSON array):
 [
   {
     "key": "agenda",
     "value": "Discussion of volcanic rock formations",
-    "confidence": 0.8
+    "confidence": 0.8,
+    "status": "create"
   },
   {
     "key": "pilot_decision",
     "value": "Schedule field trip for next week",
-    "confidence": 0.9
+    "confidence": 0.9,
+    "status": "update"
   }
 ]
 

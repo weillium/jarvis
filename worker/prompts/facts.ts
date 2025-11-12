@@ -2,6 +2,7 @@ export interface FactsPromptContext {
   transcriptWindow: string;
   existingFactsJson: string;
   glossaryContext?: string;
+  rejectedFactsJson?: string;
 }
 
 export function createFactsGenerationUserPrompt(context: FactsPromptContext): string {
@@ -12,23 +13,25 @@ export function createFactsGenerationUserPrompt(context: FactsPromptContext): st
 Recent Transcript Window:
 ${transcriptWindow}
 
-Existing Facts:
+Existing Facts (with confidence):
 ${existingFactsJson}
+
+Rejected Facts:
+${rejectedFactsJson && rejectedFactsJson.trim().length > 0 ? rejectedFactsJson : 'None'}
 
 Glossary Context:
 ${glossaryContext && glossaryContext.trim().length > 0 ? glossaryContext : 'None'}
 
 Instructions:
 - Each fact must be a single declarative sentence with a clear subject and verb describing a unique claim, observation, decision, or metric.
-- Do not produce questions, prompts, or procedural notes. Skip topic labels like "Live debate" or "Start discussion" unless you can rewrite them into neutral declarative statements.
-- Compare against Existing Facts. If the meaning already exists:
-  - Reuse that fact's key and set "status": "update".
-  - Provide the updated declarative value rather than duplicating the original wording.
-- Only emit "status": "create" for genuinely new facts; do not rephrase the same idea with different words.
-- Rewrite any reporting scaffolding ("the speaker said...", "he emphasized...") into a neutral declarative statement about the topic itself.
+- Do not produce questions, prompts, or procedural notes unless you can rewrite them into neutral declarative statements.
+- Treat high-confidence existing facts as canonical. Only change them when the transcript clearly updates or contradicts them.
+- Compare against Existing Facts. If the meaning already exists, reuse its key, set "status": "update", and supply the revised declarative value.
+- Use "status": "create" only for genuinely new facts; do not rephrase the same idea with different words.
+- Resolve each entry in Rejected Facts by either producing a corrected update or explicitly omitting it when no reliable fact is present. Never repeat the rejected wording.
 - Prefer descriptive snake_case keys (e.g., "launch_date", "budget_owner") and reuse existing keys when updating entries.
-- Update confidence scores based on new evidence and omit speculative or unverified statements.
-- Return JSON array of facts where each item includes at minimum {"key","value","confidence","status"} and optional metadata.`;
+- Set realistic confidence scores based on the evidence in the transcript window.
+- Return a JSON array of facts; each item must include at minimum {"key","value","confidence","status"} plus any helpful metadata.`;
 }
 
 
