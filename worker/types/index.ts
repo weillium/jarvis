@@ -9,7 +9,7 @@ export type {
   PendingCardConcept
 } from './runtime';
 export type { AgentSessionStatus, AgentType, LogContext, LogEntry, SessionStatus } from './session';
-export type { AgentContext, ProcessingMetrics } from './processing';
+export type { AgentContext, FactsBudgetSnapshot, ProcessingMetrics } from './processing';
 export type {
   ChatCompletionDTO,
   ChatCompletionChoiceDTO,

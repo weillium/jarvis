@@ -20,16 +20,35 @@ export const normalizeFactKey = (rawKey: string): string => {
 };
 
 export const sanitizeFactValue = (value: unknown): unknown => {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
   if (typeof value === 'string') {
     return value.trim();
   }
+
   if (typeof value === 'number' || typeof value === 'boolean') {
     return value;
   }
-  if (Array.isArray(value) || (typeof value === 'object' && value !== null)) {
+
+  if (typeof value === 'bigint' || typeof value === 'symbol') {
+    return value.toString();
+  }
+
+  if (typeof value === 'function') {
+    return value.name ? `[Function ${value.name}]` : '[Function]';
+  }
+
+  if (Array.isArray(value)) {
     return value;
   }
-  return String(value ?? '');
+
+  if (typeof value === 'object') {
+    return value;
+  }
+
+  return '';
 };
 
 export const validateRealtimeFact = (fact: RealtimeFactDTO): ValidatedFactInput | null => {

@@ -536,7 +536,6 @@ export class EventProcessor {
       const factSourceId =
         typeof pendingSource?.transcriptId === 'number' ? pendingSource.transcriptId : undefined;
 
-      /* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment */
       for (const rawFact of facts) {
         const validated = validateRealtimeFact(rawFact);
         if (!validated) {
@@ -549,6 +548,7 @@ export class EventProcessor {
 
         const existingFact = factsStore.get(normalizedKey);
 
+        const now = Date.now();
         const candidateFact: Fact = {
           key: normalizedKey,
           value: sanitizedValue,
@@ -558,6 +558,10 @@ export class EventProcessor {
           mergedFrom: [],
           mergedAt: null,
           missStreak: 0,
+          createdAt: now,
+          lastTouchedAt: now,
+          dormantAt: null,
+          prunedAt: null,
         };
 
         let updatedFact: Fact | null = null;
@@ -652,7 +656,6 @@ export class EventProcessor {
           },
         });
       }
-      /* eslint-enable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment */
 
       if (evictedKeys.length > 0) {
         await this.factsRepository.updateFactActiveStatus(runtime.eventId, evictedKeys, false);

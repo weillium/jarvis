@@ -202,21 +202,28 @@ IMPORTANT: This is a retry attempt. The previous response had empty or insuffici
       }
 
       const attemptUsage: OpenAIUsage | null = response.usage
-        ? {
-            prompt_tokens: response.usage.prompt_tokens,
-            completion_tokens: response.usage.completion_tokens ?? 0,
-            total_tokens:
-              response.usage.total_tokens ??
-              response.usage.prompt_tokens + (response.usage.completion_tokens ?? 0),
-          }
+        ? (() => {
+            const promptTokens = response.usage.prompt_tokens ?? 0;
+            const completionTokens = response.usage.completion_tokens ?? 0;
+            const totalTokens = response.usage.total_tokens ?? promptTokens + completionTokens;
+
+            return {
+              total_tokens: totalTokens,
+              prompt_tokens: promptTokens,
+              completion_tokens: completionTokens,
+            };
+          })()
         : null;
 
       if (attemptUsage) {
+        const attemptPromptTokens = attemptUsage.prompt_tokens ?? 0;
+        const attemptCompletionTokens = attemptUsage.completion_tokens ?? 0;
+
         if (totalUsage) {
           totalUsage = {
-            prompt_tokens: totalUsage.prompt_tokens + attemptUsage.prompt_tokens,
-            completion_tokens: (totalUsage.completion_tokens ?? 0) + (attemptUsage.completion_tokens ?? 0),
             total_tokens: totalUsage.total_tokens + attemptUsage.total_tokens,
+            prompt_tokens: (totalUsage.prompt_tokens ?? 0) + attemptPromptTokens,
+            completion_tokens: (totalUsage.completion_tokens ?? 0) + attemptCompletionTokens,
           };
         } else {
           totalUsage = attemptUsage;

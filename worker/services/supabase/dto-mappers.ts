@@ -275,6 +275,10 @@ export const mapFactRecords = (rows: unknown): FactRecord[] =>
       is_active: typeof record['is_active'] === 'boolean' ? record['is_active'] : undefined,
       merge_provenance: getStringArray(record, 'merge_provenance'),
       merged_at: getOptionalString(record, 'merged_at') ?? null,
+      created_at: getOptionalString(record, 'created_at') ?? undefined,
+      updated_at: getOptionalString(record, 'updated_at') ?? undefined,
+      dormant_at: getOptionalString(record, 'dormant_at') ?? undefined,
+      pruned_at: getOptionalString(record, 'pruned_at') ?? undefined,
     };
   });
 

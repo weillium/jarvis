@@ -63,6 +63,21 @@ export class RuntimeManager {
           : [];
         const rawMergedAt: unknown = f.merged_at;
         const mergedAt: string | null = typeof rawMergedAt === 'string' ? rawMergedAt : null;
+        let createdAtMs = Date.now();
+        if (typeof f.created_at === 'string') {
+          const parsedTime = new Date(f.created_at).getTime();
+          if (!Number.isNaN(parsedTime)) {
+            createdAtMs = parsedTime;
+          }
+        }
+
+        let updatedAtMs = createdAtMs;
+        if (typeof f.updated_at === 'string') {
+          const parsedTime = new Date(f.updated_at).getTime();
+          if (!Number.isNaN(parsedTime)) {
+            updatedAtMs = parsedTime;
+          }
+        }
 
         return {
           key: f.fact_key,
@@ -73,6 +88,10 @@ export class RuntimeManager {
           mergedFrom: mergeProvenance,
           mergedAt,
           missStreak: 0,
+          createdAt: Number.isFinite(createdAtMs) ? createdAtMs : Date.now(),
+          lastTouchedAt: Number.isFinite(updatedAtMs) ? updatedAtMs : Date.now(),
+          dormantAt: null,
+          prunedAt: null,
         };
       });
       const evictedKeys = factsStore.loadFacts(formattedFacts);

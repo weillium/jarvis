@@ -1,8 +1,8 @@
-import type { AgentSessionStatus, EventRuntime, SessionStatus } from '../types';
-import type { SSEService } from '../services/sse-service';
+import type { AgentSessionStatus, EventRuntime, SessionStatus } from '../../types';
+import type { SSEService } from '../sse-service';
 import type { Logger } from './logger';
 import type { MetricsCollector } from './metrics-collector';
-import type { AgentSessionsRepository } from '../services/supabase/agent-sessions-repository';
+import type { AgentSessionsRepository } from '../supabase/agent-sessions-repository';
 
 export class StatusUpdater {
   constructor(
@@ -16,13 +16,13 @@ export class StatusUpdater {
   async updateAndPushStatus(runtime: EventRuntime): Promise<void> {
     const statuses = await this.buildStatuses(runtime, true);
     runtime.updatedAt = new Date();
-    
+
     // Extract only enrichment fields (websocket_state, ping_pong, logs, real-time metrics)
     // Database fields (status, metadata, session_id) are handled by React Query
     const transcriptEnrichment = this.extractEnrichment(statuses.transcript);
     const cardsEnrichment = this.extractEnrichment(statuses.cards);
     const factsEnrichment = this.extractEnrichment(statuses.facts);
-    
+
     await this.sse.pushSessionStatus(runtime.eventId, transcriptEnrichment);
     await this.sse.pushSessionStatus(runtime.eventId, cardsEnrichment);
     await this.sse.pushSessionStatus(runtime.eventId, factsEnrichment);

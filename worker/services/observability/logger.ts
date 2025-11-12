@@ -1,4 +1,4 @@
-import type { LogEntry, AgentType, LogContext } from '../types';
+import type { AgentType, LogContext, LogEntry } from '../../types';
 import { isRecord } from '../../lib/context-normalization';
 
 export class Logger {

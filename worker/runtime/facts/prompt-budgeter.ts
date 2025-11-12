@@ -331,15 +331,20 @@ function buildSummaryFact(overflowFacts: Fact[], selectedFacts: Fact[], remainin
     overflowFacts.reduce((sum, fact) => sum + fact.confidence, 0) / Math.max(overflowFacts.length, 1);
 
   const summaryValue = `Summarized ${overflowFacts.length} additional facts: ${keys.join(', ')}`;
+  const now = Date.now();
   const summaryFact: Fact = {
-    key: `${SUMMARY_PREFIX}:${Date.now()}:${Math.random().toString(36).slice(2, 6)}`,
+    key: `${SUMMARY_PREFIX}:${now}:${Math.random().toString(36).slice(2, 6)}`,
     value: summaryValue,
     confidence: clampConfidence(averageConfidence),
-    lastSeenSeq: selectedFacts.length > 0 ? selectedFacts[0].lastSeenSeq : Date.now(),
+    lastSeenSeq: selectedFacts.length > 0 ? selectedFacts[0].lastSeenSeq : now,
     sources: [],
     mergedFrom: [],
     mergedAt: null,
     missStreak: 0,
+    createdAt: now,
+    lastTouchedAt: now,
+    dormantAt: null,
+    prunedAt: null,
   };
 
   const summaryTokens = estimateFactTokens(summaryFact);

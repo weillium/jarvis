@@ -34,33 +34,6 @@ const STOPWORDS = new Set([
 
 export const FACT_SIMILARITY_THRESHOLD = DEFAULT_SIMILARITY_THRESHOLD;
 
-type TokenSet = {
-  tokens: Set<string>;
-  magnitude: number;
-};
-
-const tokenize = (text: string): TokenSet => {
-  const rawTokens = text
-    .toLowerCase()
-    .split(/[^a-z0-9]+/g)
-    .filter((token) => token.length > 0 && !STOPWORDS.has(token));
-
-  const tokenCounts = new Map<string, number>();
-  for (const token of rawTokens) {
-    tokenCounts.set(token, (tokenCounts.get(token) ?? 0) + 1);
-  }
-
-  let magnitudeSq = 0;
-  for (const count of tokenCounts.values()) {
-    magnitudeSq += count * count;
-  }
-
-  return {
-    tokens: new Set(tokenCounts.keys()),
-    magnitude: Math.sqrt(magnitudeSq),
-  };
-};
-
 const factToComparableText = (fact: Fact): string => {
   if (typeof fact.value === 'string') {
     return `${fact.key} ${fact.value}`;

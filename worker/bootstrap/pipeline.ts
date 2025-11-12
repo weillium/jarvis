@@ -110,7 +110,8 @@ export const createWorkerProcessingPipeline = (
     contextBuilder,
     infrastructure.logger,
     infrastructure.metricsCollector,
-    infrastructure.checkpointManager
+    infrastructure.checkpointManager,
+    infrastructure.repositories.facts
   );
 
   const transcriptProcessor = new TranscriptProcessor(infrastructure.repositories.transcripts);

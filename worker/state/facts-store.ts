@@ -13,12 +13,19 @@ export interface Fact {
   mergedFrom: string[];
   mergedAt: string | null;
   missStreak: number;
+  createdAt: number;
+  lastTouchedAt: number;
+  dormantAt: number | null;
+  prunedAt: number | null;
 }
 
 export class FactsStore {
   private facts: Map<string, Fact> = new Map();
   private maxItems: number;
   private evictionCount: number = 0;
+  private dormantFacts: Set<string> = new Set();
+  private prunedFacts: Set<string> = new Set();
+  private prunedQueue: Set<string> = new Set();
 
   constructor(maxItems: number = 50) {
     this.maxItems = maxItems;
@@ -56,6 +63,9 @@ export class FactsStore {
     for (let i = 0; i < overCapacity; i++) {
       const [key] = factsArray[i];
       this.facts.delete(key);
+      this.dormantFacts.delete(key);
+      this.prunedFacts.delete(key);
+      this.prunedQueue.delete(key);
       this.evictionCount++;
       evictedKeys.push(key);
     }
@@ -77,6 +87,7 @@ export class FactsStore {
     sourceId?: number
   ): string[] {
     const existing = this.facts.get(key);
+    const now = Date.now();
 
     if (existing) {
       // Update existing fact
@@ -100,7 +111,14 @@ export class FactsStore {
         mergedFrom: existing.mergedFrom,
         mergedAt: existing.mergedAt,
         missStreak: existing.missStreak ?? 0,
+        createdAt: existing.createdAt,
+        lastTouchedAt: now,
+        dormantAt: null,
+        prunedAt: null,
       });
+      this.dormantFacts.delete(key);
+      this.prunedFacts.delete(key);
+      this.prunedQueue.delete(key);
       return [];
     } else {
       // Insert new fact
@@ -116,7 +134,14 @@ export class FactsStore {
         mergedFrom: [],
         mergedAt: null,
         missStreak: 0,
+        createdAt: now,
+        lastTouchedAt: now,
+        dormantAt: null,
+        prunedAt: null,
       });
+      this.dormantFacts.delete(key);
+      this.prunedFacts.delete(key);
+      this.prunedQueue.delete(key);
 
       // Evict if over capacity and return evicted keys
       return this.evictIfNeeded();
@@ -138,9 +163,17 @@ export class FactsStore {
       mergedFrom?: string[];
       mergedAt?: string | null;
       missStreak?: number;
+      createdAt?: number;
+      lastTouchedAt?: number;
+      dormantAt?: number | null;
+      prunedAt?: number | null;
     }>
   ): string[] {
     const evictedKeys: string[] = [];
+    const now = Date.now();
+    this.dormantFacts.clear();
+    this.prunedFacts.clear();
+    this.prunedQueue.clear();
     
     for (const fact of facts) {
       this.facts.set(fact.key, {
@@ -152,6 +185,10 @@ export class FactsStore {
         mergedFrom: fact.mergedFrom ?? [],
         mergedAt: fact.mergedAt ?? null,
         missStreak: fact.missStreak ?? 0,
+        createdAt: fact.createdAt ?? now,
+        lastTouchedAt: fact.lastTouchedAt ?? now,
+        dormantAt: fact.dormantAt ?? null,
+        prunedAt: fact.prunedAt ?? null,
       });
       
       // Check if we need to evict after each addition (if we're over capacity)
@@ -172,10 +209,125 @@ export class FactsStore {
   }
 
   /**
+   * Snapshot all facts (optionally including dormant)
+   */
+  getSnapshot(includeDormant: boolean = false): Fact[] {
+    const snapshot: Fact[] = [];
+    for (const fact of this.facts.values()) {
+      if (this.prunedFacts.has(fact.key)) {
+        continue;
+      }
+      if (!includeDormant && this.dormantFacts.has(fact.key)) {
+        continue;
+      }
+      snapshot.push({ ...fact });
+    }
+    return snapshot;
+  }
+
+  /**
+   * Alias for backwards compatibility
+   */
+  getAll(includeDormant: boolean = false): Fact[] {
+    return this.getSnapshot(includeDormant);
+  }
+
+  isDormant(key: string): boolean {
+    return this.dormantFacts.has(key);
+  }
+
+  isPruned(key: string): boolean {
+    return this.prunedFacts.has(key);
+  }
+
+  getDormantKeys(): string[] {
+    return Array.from(this.dormantFacts);
+  }
+
+  markDormant(key: string, now: number, confidenceDrop: number): boolean {
+    if (this.dormantFacts.has(key) || this.prunedFacts.has(key)) {
+      return false;
+    }
+    const fact = this.facts.get(key);
+    if (!fact) {
+      return false;
+    }
+    fact.confidence = clampConfidence(fact.confidence - confidenceDrop);
+    fact.dormantAt = now;
+    this.dormantFacts.add(key);
+    this.facts.set(key, fact);
+    return true;
+  }
+
+  reviveFromSelection(
+    key: string,
+    previousConfidence: number | undefined,
+    currentConfidence: number,
+    now: number,
+    hysteresisDelta: number
+  ): boolean {
+    const fact = this.facts.get(key);
+    if (!fact) {
+      return false;
+    }
+
+    const delta = currentConfidence - (previousConfidence ?? currentConfidence);
+    const wasDormant = this.dormantFacts.has(key);
+
+    fact.lastTouchedAt = now;
+    fact.prunedAt = null;
+
+    if (!wasDormant) {
+      this.facts.set(key, fact);
+      return false;
+    }
+
+    if (delta < hysteresisDelta) {
+      // Fact remains dormant; do not revive yet
+      this.facts.set(key, fact);
+      return false;
+    }
+
+    fact.dormantAt = null;
+    fact.missStreak = 0;
+    this.dormantFacts.delete(key);
+    this.facts.set(key, fact);
+    return true;
+  }
+
+  prune(key: string, now: number): boolean {
+    if (this.prunedFacts.has(key)) {
+      return false;
+    }
+    const fact = this.facts.get(key);
+    if (!fact) {
+      return false;
+    }
+
+    fact.prunedAt = now;
+    const lifespanMs = now - (fact.createdAt ?? now);
+    console.log(
+      `[facts] pruned fact ${key} lifespan=${Math.round(lifespanMs / 1000)}s`
+    );
+
+    this.prunedFacts.add(key);
+    this.dormantFacts.delete(key);
+    this.prunedQueue.add(key);
+    this.facts.delete(key);
+    return true;
+  }
+
+  drainPrunedKeys(): string[] {
+    const keys = Array.from(this.prunedQueue);
+    this.prunedQueue.clear();
+    return keys;
+  }
+
+  /**
    * Get all facts above a confidence threshold
    */
   getHighConfidence(threshold: number = 0.5): Fact[] {
-    return Array.from(this.facts.values()).filter((f) => f.confidence >= threshold);
+    return this.getSnapshot().filter((f) => f.confidence >= threshold);
   }
 
   /**
@@ -218,7 +370,13 @@ export class FactsStore {
    * Remove a fact
    */
   delete(key: string): boolean {
-    return this.facts.delete(key);
+    const deleted = this.facts.delete(key);
+    if (deleted) {
+      this.dormantFacts.delete(key);
+      this.prunedFacts.delete(key);
+      this.prunedQueue.delete(key);
+    }
+    return deleted;
   }
 
   /**
@@ -226,20 +384,16 @@ export class FactsStore {
    */
   clear(): void {
     this.facts.clear();
-  }
-
-  /**
-   * Get all facts
-   */
-  getAll(): Fact[] {
-    return Array.from(this.facts.values());
+    this.dormantFacts.clear();
+    this.prunedFacts.clear();
+    this.prunedQueue.clear();
   }
 
   /**
    * Get current stats
    */
   getStats() {
-    const all = Array.from(this.facts.values());
+    const all = this.getSnapshot(true);
     return {
       total: all.length,
       maxItems: this.maxItems,
@@ -298,7 +452,12 @@ export class FactsStore {
     primary.mergedFrom = Array.from(mergedSet);
     primary.mergedAt = mergedAt;
     primary.missStreak = 0;
+    primary.lastTouchedAt = Date.now();
+    primary.dormantAt = null;
+    primary.prunedAt = null;
     this.facts.set(primaryKey, primary);
+    this.dormantFacts.delete(primaryKey);
+    this.prunedFacts.delete(primaryKey);
   }
 
   mergeFact(
@@ -337,9 +496,11 @@ export class FactsStore {
 
     const preferIncoming = params.preferIncomingValue ?? true;
     const nextValue = preferIncoming ? params.value : existing.value;
-    const mergedAt = preferIncoming || mergedFromSet.size !== existing.mergedFrom.length
-      ? new Date().toISOString()
-      : existing.mergedAt;
+    const mergedAt =
+      preferIncoming || mergedFromSet.size !== existing.mergedFrom.length
+        ? new Date().toISOString()
+        : existing.mergedAt;
+    const now = Date.now();
 
     const updatedFact: Fact = {
       key,
@@ -350,9 +511,15 @@ export class FactsStore {
       mergedFrom: Array.from(mergedFromSet),
       mergedAt,
       missStreak: 0,
+      createdAt: existing.createdAt,
+      lastTouchedAt: now,
+      dormantAt: null,
+      prunedAt: null,
     };
 
     this.facts.set(key, updatedFact);
+    this.dormantFacts.delete(key);
+    this.prunedFacts.delete(key);
     return updatedFact;
   }
 }

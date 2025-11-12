@@ -128,6 +128,10 @@ export interface FactRecord {
   is_active?: boolean;
   merge_provenance?: string[];
   merged_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  dormant_at?: string | null;
+  pruned_at?: string | null;
 }
 
 export interface VectorMatchRecord {

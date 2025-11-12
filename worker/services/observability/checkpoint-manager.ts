@@ -1,5 +1,5 @@
-import type { AgentType } from '../types';
-import type { CheckpointsRepository } from '../services/supabase/checkpoints-repository';
+import type { AgentType } from '../../types';
+import type { CheckpointsRepository } from '../supabase/checkpoints-repository';
 
 export class CheckpointManager {
   constructor(private readonly checkpointsRepo: CheckpointsRepository) {}

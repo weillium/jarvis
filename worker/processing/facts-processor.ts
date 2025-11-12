@@ -1,62 +1,13 @@
 import type { EventRuntime, Fact } from '../types';
-import type { FactsBudgetSnapshot } from '../types/processing';
 import type { AgentContext, ContextBuilder } from '../context/context-builder';
 import type { Logger } from '../services/observability/logger';
 import type { MetricsCollector } from '../services/observability/metrics-collector';
 import type { CheckpointManager } from '../services/observability/checkpoint-manager';
+import type { FactsRepository } from '../services/supabase/facts-repository';
 import type { AgentRealtimeSession } from '../sessions/session-adapters';
 import { budgetFactsPrompt } from '../runtime/facts/prompt-budgeter';
 import type { FactsPromptBudgetResult } from '../runtime/facts/prompt-budgeter';
 import { checkBudgetStatus, countTokens, formatTokenBreakdown } from '../lib/text/token-counter';
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
-
-const isFactsBudgetSnapshot = (value: unknown): value is FactsBudgetSnapshot => {
-  if (!isRecord(value)) {
-    return false;
-  }
-  return (
-    typeof value.totalFacts === 'number' &&
-    typeof value.selected === 'number' &&
-    typeof value.overflow === 'number' &&
-    typeof value.summary === 'number' &&
-    typeof value.budgetTokens === 'number' &&
-    typeof value.usedTokens === 'number' &&
-    typeof value.selectionRatio === 'number' &&
-    typeof value.mergedClusters === 'number' &&
-    Array.isArray(value.mergedFacts)
-  );
-};
-
-const isFactsPromptBudgetResult = (value: unknown): value is FactsPromptBudgetResult => {
-  if (!isRecord(value)) {
-    return false;
-  }
-
-  if (
-    !Array.isArray(value.promptFacts) ||
-    !Array.isArray(value.selectedFacts) ||
-    !Array.isArray(value.overflowFacts) ||
-    !Array.isArray(value.summaryFacts)
-  ) {
-    return false;
-  }
-
-  if (!isFactsBudgetSnapshot(value.metrics)) {
-    return false;
-  }
-
-  if ('factAdjustments' in value && !Array.isArray(value.factAdjustments)) {
-    return false;
-  }
-
-  if ('mergeOperations' in value && !Array.isArray(value.mergeOperations)) {
-    return false;
-  }
-
-  return true;
-};
 
 const buildPromptFactsRecord = (
   facts: Fact[]
@@ -70,12 +21,29 @@ const buildPromptFactsRecord = (
   }, {});
 };
 
+const formatLifecycleList = (keys: string[]): string => {
+  if (keys.length === 0) {
+    return '';
+  }
+  if (keys.length <= 5) {
+    return keys.join(', ');
+  }
+  return `${keys.slice(0, 5).join(', ')} (+${keys.length - 5} more)`;
+};
+
+const FACT_DORMANT_MISS_THRESHOLD = 5;
+const FACT_DORMANT_IDLE_MS = 15 * 60 * 1000;
+const FACT_PRUNE_IDLE_MS = 60 * 60 * 1000;
+const FACT_DORMANT_CONFIDENCE_DROP = 0.05;
+const FACT_REVIVE_HYSTERESIS_DELTA = 0.05;
+
 export class FactsProcessor {
   constructor(
     private contextBuilder: ContextBuilder,
     private logger: Logger,
     private metrics: MetricsCollector,
-    private checkpointManager: CheckpointManager
+    private checkpointManager: CheckpointManager,
+    private factsRepository: FactsRepository
   ) {}
 
   async process(
@@ -89,14 +57,18 @@ export class FactsProcessor {
     }
 
     try {
+      const previousSnapshot: Fact[] = runtime.factsStore.getAll(true);
+      const previousConfidence = new Map<string, number>(
+        previousSnapshot.map((fact) => [fact.key, fact.confidence] as const)
+      );
+
       const allFacts = runtime.factsStore.getAll();
       const { context: baseContext, recentText } = this.contextBuilder.buildFactsContext(runtime);
 
       const recentTextTokens = countTokens(recentText);
       const glossaryTokens = countTokens(baseContext.glossaryContext);
 
-      /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
-      const possibleResult = budgetFactsPrompt({
+      const budgetResult: FactsPromptBudgetResult = budgetFactsPrompt({
         facts: allFacts,
         recentTranscript: recentText,
         totalBudgetTokens: 2048,
@@ -104,11 +76,9 @@ export class FactsProcessor {
         glossaryTokens,
       });
 
-      if (!isFactsPromptBudgetResult(possibleResult)) {
-        throw new Error('Facts prompt budgeter returned an invalid result');
-      }
-
-      const budgetResult = possibleResult;
+      const selectedKeySet = new Set<string>(
+        budgetResult.selectedFacts.map((fact: Fact) => fact.key)
+      );
 
       const promptFacts = budgetResult.promptFacts;
       const promptFactsRecord = buildPromptFactsRecord(promptFacts);
@@ -152,12 +122,82 @@ export class FactsProcessor {
       });
 
       const mergeTimestamp = new Date().toISOString();
-      for (const operation of budgetResult.mergeOperations) {
+      for (const operation of budgetResult.mergeOperations ?? []) {
         runtime.factsStore.recordMerge(operation.representativeKey, operation.memberKeys, mergeTimestamp);
       }
 
-      runtime.factsStore.applyConfidenceAdjustments(budgetResult.factAdjustments);
-      /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
+      runtime.factsStore.applyConfidenceAdjustments(budgetResult.factAdjustments ?? []);
+      const now = Date.now();
+      const revivedKeys: string[] = [];
+      for (const key of selectedKeySet) {
+        const currentFact = runtime.factsStore.get(key);
+        if (!currentFact) {
+          continue;
+        }
+        const revived = runtime.factsStore.reviveFromSelection(
+          key,
+          previousConfidence.get(key),
+          currentFact.confidence,
+          now,
+          FACT_REVIVE_HYSTERESIS_DELTA
+        );
+        if (revived) {
+          revivedKeys.push(key);
+        }
+      }
+
+      const dormantKeys: string[] = [];
+      const snapshotAfter: Fact[] = runtime.factsStore.getAll(true);
+      for (const fact of snapshotAfter) {
+        if (selectedKeySet.has(fact.key)) {
+          continue;
+        }
+
+        if (!runtime.factsStore.isDormant(fact.key)) {
+          const idleMs = now - fact.lastTouchedAt;
+          if (
+            fact.missStreak >= FACT_DORMANT_MISS_THRESHOLD ||
+            idleMs >= FACT_DORMANT_IDLE_MS
+          ) {
+            if (runtime.factsStore.markDormant(fact.key, now, FACT_DORMANT_CONFIDENCE_DROP)) {
+              dormantKeys.push(fact.key);
+            }
+          }
+        } else {
+          const dormantSince = fact.dormantAt ?? fact.lastTouchedAt;
+          if (now - dormantSince >= FACT_PRUNE_IDLE_MS) {
+            runtime.factsStore.prune(fact.key, now);
+          }
+        }
+      }
+
+      const prunedKeys = runtime.factsStore.drainPrunedKeys();
+      if (prunedKeys.length > 0) {
+        await this.factsRepository.updateFactActiveStatus(runtime.eventId, prunedKeys, false);
+        this.logger.log(runtime.eventId, 'facts', 'log', `[lifecycle] pruned facts: ${formatLifecycleList(prunedKeys)}`, {
+          prunedKeys,
+        });
+      }
+
+      if (dormantKeys.length > 0) {
+        this.logger.log(
+          runtime.eventId,
+          'facts',
+          'log',
+          `[lifecycle] dormant facts: ${formatLifecycleList(dormantKeys)}`,
+          { dormantKeys }
+        );
+      }
+
+      if (revivedKeys.length > 0) {
+        this.logger.log(
+          runtime.eventId,
+          'facts',
+          'log',
+          `[lifecycle] revived facts: ${formatLifecycleList(revivedKeys)}`,
+          { revivedKeys }
+        );
+      }
       await this.checkpointManager.saveCheckpoint(
         runtime.eventId,
         'facts',

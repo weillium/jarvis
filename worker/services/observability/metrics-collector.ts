@@ -1,4 +1,4 @@
-import type { ProcessingMetrics, FactsBudgetSnapshot } from '../types';
+import type { FactsBudgetSnapshot, ProcessingMetrics } from '../../types';
 
 type AgentMetricsMap = {
   transcript: ProcessingMetrics;
