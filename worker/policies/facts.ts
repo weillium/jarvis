@@ -8,7 +8,8 @@ POLICY:
 - Track stable, factual keys (agenda, decisions, deadlines, metrics, attendees, topics)
 - Don't add low-confidence or speculative items
 - Update confidence over time as facts are confirmed
-- Use consistent keys for the same concept (e.g., "agenda", "decision_1", "deadline_2025-01-15")
+- Use consistent keys for the same concept (e.g., "agenda", "pilot_decision", "deadline_launch_date")
+- Prefer natural language snake_case keys derived from the concept name. Do not append numeric or variant suffixes unless explicitly provided in the transcript.
 
 KNOWLEDGE RETRIEVAL:
 - Use the retrieve(query, top_k) tool when you need domain-specific context to better understand facts
@@ -24,7 +25,7 @@ OUTPUT FORMAT (JSON array):
     "confidence": 0.8
   },
   {
-    "key": "decision_1",
+  "key": "pilot_decision",
     "value": "Schedule field trip for next week",
     "confidence": 0.9
   }

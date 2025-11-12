@@ -2,22 +2,244 @@ import type { RealtimeFactDTO } from '../../types';
 import type { Fact } from '../../state/facts-store';
 import { computeFactSimilarity, FACT_SIMILARITY_THRESHOLD } from './similarity';
 
+const GENERIC_KEY_TERMS = new Set([
+  'topic',
+  'topics',
+  'discussion',
+  'discussion_topic',
+  'discussion_question',
+  'question',
+  'questions',
+  'note',
+  'notes',
+  'fact',
+  'facts',
+  'item',
+  'items',
+  'detail',
+  'details',
+  'update',
+  'updates',
+  'summary',
+  'info',
+  'information',
+  'point',
+  'points',
+  'idea',
+  'ideas',
+  'action',
+  'actions',
+  'task',
+  'tasks',
+  'comment',
+  'comments',
+  'observation',
+  'observations',
+]);
+
+const STOPWORDS = new Set([
+  'the',
+  'a',
+  'an',
+  'and',
+  'or',
+  'to',
+  'of',
+  'in',
+  'for',
+  'on',
+  'with',
+  'at',
+  'by',
+  'from',
+  'is',
+  'are',
+  'was',
+  'were',
+  'be',
+  'been',
+  'this',
+  'that',
+  'it',
+  'as',
+  'we',
+  'you',
+  'they',
+  'their',
+  'our',
+  'current',
+  'latest',
+  'new',
+  'today',
+  'meeting',
+  'call',
+  'session',
+  'discussion',
+  'topic',
+  'question',
+  'update',
+  'note',
+  'fact',
+  'summary',
+]);
+
+const toSnakeCase = (value: string): string =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+const tokenize = (value: string): string[] =>
+  value
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .map((token) => token.trim())
+    .filter((token) => token.length > 0);
+
+const filterMeaningfulTokens = (tokens: string[]): string[] => {
+  const seen = new Set<string>();
+  const meaningful: string[] = [];
+  for (const token of tokens) {
+    if (token.length <= 2) {
+      continue;
+    }
+    if (STOPWORDS.has(token)) {
+      continue;
+    }
+    if (seen.has(token)) {
+      continue;
+    }
+    seen.add(token);
+    meaningful.push(token);
+  }
+  return meaningful;
+};
+
+const hasMeaningfulKeyTokens = (key: string): boolean => {
+  if (!key) {
+    return false;
+  }
+  const parts = filterMeaningfulTokens(key.split('_'));
+  return parts.length >= 2;
+};
+
+const deriveKeyFromString = (value: string): string | null => {
+  const tokens = filterMeaningfulTokens(tokenize(value));
+  if (tokens.length === 0) {
+    return null;
+  }
+  const limited = tokens.slice(0, 5);
+  return toSnakeCase(limited.join(' '));
+};
+
+const deriveKeyFromObject = (value: Record<string, unknown>): string | null => {
+  const preferredFields = ['title', 'name', 'label', 'summary', 'description', 'topic'];
+  for (const field of preferredFields) {
+    const fieldValue = value[field];
+    if (typeof fieldValue === 'string') {
+      const derived = deriveKeyFromString(fieldValue);
+      if (derived) {
+        return derived;
+      }
+    }
+  }
+  // Fallback: find first string value
+  for (const fieldValue of Object.values(value)) {
+    if (typeof fieldValue === 'string') {
+      const derived = deriveKeyFromString(fieldValue);
+      if (derived) {
+        return derived;
+      }
+    }
+  }
+  return null;
+};
+
+const deriveKeyFromValue = (value: unknown): string | null => {
+  if (typeof value === 'string') {
+    return deriveKeyFromString(value);
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      if (typeof entry === 'string') {
+        const derived = deriveKeyFromString(entry);
+        if (derived) {
+          return derived;
+        }
+      } else if (entry && typeof entry === 'object') {
+        const derived = deriveKeyFromObject(entry as Record<string, unknown>);
+        if (derived) {
+          return derived;
+        }
+      }
+    }
+    return null;
+  }
+  if (value && typeof value === 'object') {
+    return deriveKeyFromObject(value as Record<string, unknown>);
+  }
+  return null;
+};
+
+interface NormalizedFactKey {
+  canonical: string;
+  original: string;
+  wasDerivedFromValue: boolean;
+}
+
+export const normalizeFactKey = (rawKey: string, rawValue: unknown): NormalizedFactKey => {
+  const original = toSnakeCase(rawKey);
+  const isGeneric = GENERIC_KEY_TERMS.has(original);
+  const keyHasMeaning = hasMeaningfulKeyTokens(original);
+
+  if (original && !isGeneric && keyHasMeaning) {
+    return {
+      canonical: original,
+      original,
+      wasDerivedFromValue: false,
+    };
+  }
+
+  const derived = deriveKeyFromValue(rawValue);
+  if (derived) {
+    return {
+      canonical: derived,
+      original: original || derived,
+      wasDerivedFromValue: true,
+    };
+  }
+
+  // If the original was non-empty but generic, transform it into a minimal snake_case descriptive key
+  if (original) {
+    const fallbackTokens = filterMeaningfulTokens(original.split('_'));
+    if (fallbackTokens.length >= 1) {
+      const fallbackKey = toSnakeCase(fallbackTokens.join('_'));
+      return {
+        canonical: fallbackKey,
+        original,
+        wasDerivedFromValue: false,
+      };
+    }
+  }
+
+  return {
+    canonical: 'general_fact',
+    original: original || 'general_fact',
+    wasDerivedFromValue: false,
+  };
+};
+
 const DUPLICATE_SIMILARITY_THRESHOLD = 0.98;
 
 export interface ValidatedFactInput {
   raw: RealtimeFactDTO;
   key: string;
+  originalKey: string;
   value: unknown;
   confidence: number;
+  derivedFromValue: boolean;
 }
-
-export const normalizeFactKey = (rawKey: string): string => {
-  return rawKey
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
-};
 
 export const sanitizeFactValue = (value: unknown): unknown => {
   if (value === null || value === undefined) {
@@ -56,13 +278,13 @@ export const validateRealtimeFact = (fact: RealtimeFactDTO): ValidatedFactInput 
     return null;
   }
 
-  const normalizedKey = normalizeFactKey(fact.key);
-  if (!normalizedKey) {
+  const sanitizedValue = sanitizeFactValue(fact.value);
+  if (typeof sanitizedValue === 'string' && sanitizedValue.length === 0) {
     return null;
   }
 
-  const sanitizedValue = sanitizeFactValue(fact.value);
-  if (typeof sanitizedValue === 'string' && sanitizedValue.length === 0) {
+  const normalized = normalizeFactKey(fact.key, sanitizedValue);
+  if (!normalized.canonical) {
     return null;
   }
 
@@ -73,9 +295,11 @@ export const validateRealtimeFact = (fact: RealtimeFactDTO): ValidatedFactInput 
 
   return {
     raw: fact,
-    key: normalizedKey,
+    key: normalized.canonical,
+    originalKey: normalized.original,
     value: sanitizedValue,
     confidence,
+    derivedFromValue: normalized.wasDerivedFromValue,
   };
 };
 

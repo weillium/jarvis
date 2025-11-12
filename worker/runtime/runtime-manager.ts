@@ -146,6 +146,7 @@ export class RuntimeManager {
       glossaryCache,
       pendingCardConcepts: new Map(),
       pendingFactSources: [],
+      factKeyAliases: new Map(),
       transcriptLastSeq: checkpoints.transcript || 0,
       cardsLastSeq,
       factsLastSeq: checkpoints.facts,

@@ -1005,6 +1005,7 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
   const handleConfirmStartSessions = (selection: { transcript: boolean; cards: boolean; facts: boolean }) => {
     startSessionsMutation.mutate(selection, {
       onSuccess: () => {
+        reconnect();
         setTimeout(() => {
           refetchSessions();
         }, 1000);

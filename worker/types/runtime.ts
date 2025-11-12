@@ -35,6 +35,7 @@ export interface EventRuntime {
   glossaryCache?: Map<string, GlossaryEntry>;
   pendingCardConcepts: Map<number, PendingCardConcept>;
   pendingFactSources: Array<{ seq: number; transcriptId: number }>;
+  factKeyAliases: Map<string, string>;
   cardsLastTriggeredAt?: number;
   cardsRateHistory?: number[];
 

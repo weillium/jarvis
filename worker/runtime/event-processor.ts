@@ -36,6 +36,9 @@ import {
   shouldTreatAsMerge,
   computeIngestSimilarity,
 } from './facts/input-guards';
+import { findBestMatchingFact } from './facts/duplicate-detector';
+import { registerAliasKey, resolveAliasKey } from './facts/alias-map';
+import type { FactAliasMap } from './facts/alias-map';
 
 type CardType = RealtimeCardDTO['card_type'];
 
@@ -542,15 +545,22 @@ export class EventProcessor {
           continue;
         }
 
-        const normalizedKey = validated.key;
         const sanitizedValue = validated.value;
         const initialConfidence = validated.confidence;
 
-        const existingFact = factsStore.get(normalizedKey);
+        const aliasMap = runtime.factKeyAliases as FactAliasMap;
+        let targetKey = resolveAliasKey(aliasMap, validated.key);
+        if (targetKey !== validated.key) {
+          registerAliasKey(aliasMap, validated.key, targetKey);
+        }
+        if (validated.originalKey && validated.originalKey !== targetKey) {
+          registerAliasKey(aliasMap, validated.originalKey, targetKey);
+        }
+        registerAliasKey(aliasMap, rawFact.key, targetKey);
 
         const now = Date.now();
         const candidateFact: Fact = {
-          key: normalizedKey,
+          key: targetKey,
           value: sanitizedValue,
           confidence: initialConfidence,
           lastSeenSeq: factSourceSeq,
@@ -564,45 +574,64 @@ export class EventProcessor {
           prunedAt: null,
         };
 
+        let existingFact = factsStore.get(targetKey);
+        if (!existingFact) {
+          const similar = findBestMatchingFact(
+            targetKey,
+            candidateFact,
+            factsStore.getAll(true)
+          );
+          if (similar) {
+            targetKey = similar.key;
+            registerAliasKey(aliasMap, validated.key, targetKey);
+            if (validated.originalKey && validated.originalKey !== targetKey) {
+              registerAliasKey(aliasMap, validated.originalKey, targetKey);
+            }
+            registerAliasKey(aliasMap, rawFact.key, targetKey);
+            candidateFact.key = targetKey;
+            existingFact = similar.fact;
+          }
+        }
+
         let updatedFact: Fact | null = null;
 
         if (existingFact) {
           const similarity = computeIngestSimilarity(existingFact, candidateFact);
 
           if (factsAreEquivalent(existingFact, sanitizedValue) || shouldTreatAsDuplicate(similarity)) {
-            const merged = factsStore.mergeFact(normalizedKey, {
+            const merged = factsStore.mergeFact(targetKey, {
               value: existingFact.value,
               confidence: initialConfidence,
               sourceSeq: factSourceSeq,
               sourceId: factSourceId,
-              mergedKeys: rawFact.key !== normalizedKey ? [rawFact.key] : [],
+              mergedKeys: rawFact.key !== targetKey ? [rawFact.key] : [],
               preferIncomingValue: false,
             });
-            updatedFact = merged ?? factsStore.get(normalizedKey) ?? null;
+            updatedFact = merged ?? factsStore.get(targetKey) ?? null;
           } else if (shouldTreatAsMerge(similarity)) {
-            const merged = factsStore.mergeFact(normalizedKey, {
+            const merged = factsStore.mergeFact(targetKey, {
               value: sanitizedValue,
               confidence: initialConfidence,
               sourceSeq: factSourceSeq,
               sourceId: factSourceId,
-              mergedKeys: rawFact.key !== normalizedKey ? [rawFact.key] : [],
+              mergedKeys: rawFact.key !== targetKey ? [rawFact.key] : [],
               preferIncomingValue: true,
             });
-            updatedFact = merged ?? factsStore.get(normalizedKey) ?? null;
+            updatedFact = merged ?? factsStore.get(targetKey) ?? null;
           } else {
-            const merged = factsStore.mergeFact(normalizedKey, {
+            const merged = factsStore.mergeFact(targetKey, {
               value: sanitizedValue,
               confidence: initialConfidence,
               sourceSeq: factSourceSeq,
               sourceId: factSourceId,
-              mergedKeys: rawFact.key !== normalizedKey ? [rawFact.key] : [],
+              mergedKeys: rawFact.key !== targetKey ? [rawFact.key] : [],
               preferIncomingValue: true,
             });
-            updatedFact = merged ?? factsStore.get(normalizedKey) ?? null;
+            updatedFact = merged ?? factsStore.get(targetKey) ?? null;
           }
         } else {
           const keysEvicted = factsStore.upsert(
-            normalizedKey,
+            targetKey,
             sanitizedValue,
             initialConfidence,
             factSourceSeq,
@@ -613,15 +642,15 @@ export class EventProcessor {
             evictedKeys.push(...keysEvicted);
           }
 
-          updatedFact = factsStore.get(normalizedKey) ?? null;
+          updatedFact = factsStore.get(targetKey) ?? null;
 
-          if (rawFact.key !== normalizedKey) {
+          if (rawFact.key !== targetKey) {
             factsStore.recordMerge(
-              normalizedKey,
+              targetKey,
               [rawFact.key],
               new Date().toISOString()
             );
-            updatedFact = factsStore.get(normalizedKey) ?? null;
+            updatedFact = factsStore.get(targetKey) ?? null;
           }
         }
 

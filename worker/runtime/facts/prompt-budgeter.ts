@@ -104,13 +104,15 @@ export function budgetFactsPrompt(options: FactsPromptBudgetOptions): FactsPromp
     };
   }
 
-  const availableBudget = Math.max(
-    minFactsBudgetTokens,
-    Math.min(
-      Math.floor(totalBudgetTokens * budgetFraction),
-      Math.max(totalBudgetTokens - transcriptTokens - glossaryTokens - safetyMarginTokens, minFactsBudgetTokens)
-    )
+  const remainingBudget = Math.max(
+    totalBudgetTokens - transcriptTokens - glossaryTokens - safetyMarginTokens,
+    0
   );
+  const fractionBudget = Math.floor(totalBudgetTokens * budgetFraction);
+  const desiredBudget = Math.min(fractionBudget, remainingBudget);
+  const minimumFeasibleBudget = Math.min(minFactsBudgetTokens, remainingBudget);
+  const availableBudget =
+    remainingBudget === 0 ? 0 : Math.max(desiredBudget, minimumFeasibleBudget);
 
   const factByKey = new Map<string, Fact>();
   for (const fact of facts) {
