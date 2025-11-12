@@ -126,6 +126,8 @@ export interface FactRecord {
   last_seen_seq: number;
   sources: number[];
   is_active?: boolean;
+  merge_provenance?: string[];
+  merged_at?: string | null;
 }
 
 export interface VectorMatchRecord {

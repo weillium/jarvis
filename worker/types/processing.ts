@@ -13,6 +13,11 @@ export interface FactsBudgetSnapshot {
   budgetTokens: number;
   usedTokens: number;
   selectionRatio: number;
+  mergedClusters: number;
+  mergeMap?: Array<{
+    representative: string;
+    members: string[];
+  }>;
 }
 
 export interface ProcessingMetrics {

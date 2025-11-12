@@ -10,6 +10,8 @@ export interface Fact {
   confidence: number; // 0-1
   lastSeenSeq: number;
   sources: number[]; // Transcript IDs that contributed
+  mergedFrom?: string[];
+  mergedAt?: number | null;
 }
 
 export class FactsStore {
@@ -94,6 +96,8 @@ export class FactsStore {
         confidence: newConfidence,
         lastSeenSeq: sourceSeq,
         sources: updatedSources,
+        mergedFrom: existing.mergedFrom,
+        mergedAt: existing.mergedAt,
       });
       return [];
     } else {
@@ -107,6 +111,8 @@ export class FactsStore {
         confidence,
         lastSeenSeq: sourceSeq,
         sources: initialSources,
+        mergedFrom: [],
+        mergedAt: null,
       });
 
       // Evict if over capacity and return evicted keys
@@ -126,6 +132,8 @@ export class FactsStore {
       confidence: number;
       lastSeenSeq: number;
       sources: number[];
+      mergedFrom?: string[];
+      mergedAt?: number | null;
     }>
   ): string[] {
     const evictedKeys: string[] = [];
@@ -137,6 +145,8 @@ export class FactsStore {
         confidence: fact.confidence,
         lastSeenSeq: fact.lastSeenSeq,
         sources: fact.sources || [],
+        mergedFrom: fact.mergedFrom ?? [],
+        mergedAt: fact.mergedAt ?? null,
       });
       
       // Check if we need to evict after each addition (if we're over capacity)

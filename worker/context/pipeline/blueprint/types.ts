@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type OpenAI from 'openai';
-import type { OpenAIUsage } from '../pricing-config';
+import type { OpenAIUsage } from '../../../utils/pricing';
 
 export type WorkerSupabaseClient = SupabaseClient;
 

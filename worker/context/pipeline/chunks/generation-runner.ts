@@ -7,8 +7,8 @@ import {
 } from '../../../prompts/context';
 import {
   calculateOpenAICost,
-} from '../pricing-config';
-import type { OpenAIUsage } from '../pricing-config';
+} from '../../utils/pricing';
+import type { OpenAIUsage } from '../../utils/pricing';
 import {
   formatBlueprintDetailsForPrompt,
   formatGlossaryHighlightsForPrompt,

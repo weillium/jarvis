@@ -1,5 +1,5 @@
 import type { ResearchChunkMetadata } from '../glossary/types';
-import type { OpenAIUsage } from '../pricing-config';
+import type { OpenAIUsage } from '../../utils/pricing';
 
 export type ChunkMetadata = ResearchChunkMetadata;
 

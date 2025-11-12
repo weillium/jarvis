@@ -12,7 +12,7 @@ import {
   calculateOpenAICost,
   getPricingVersion,
   type OpenAIUsage,
-} from './pricing-config';
+} from '../../utils/pricing';
 import {
   completeCycle,
   insertContextItem,

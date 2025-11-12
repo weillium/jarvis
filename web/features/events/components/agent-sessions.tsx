@@ -14,6 +14,7 @@ import {
   useResetSessionsMutation,
 } from '@/shared/hooks/use-mutations';
 import { TestTranscriptModal } from './test-transcript-modal';
+import { calculateOpenAICost } from '@/shared/utils/pricing';
 
 interface AgentSessionsProps {
   eventId: string;
@@ -104,6 +105,49 @@ const agentTitles: Record<AgentType, string> = {
   transcript: 'Transcript Agent',
   cards: 'Cards Agent',
   facts: 'Facts Agent',
+};
+
+const defaultAgentModels: Record<AgentType, string> = {
+  transcript: 'gpt-4o-realtime-preview',
+  cards: 'gpt-5-mini',
+  facts: 'gpt-5-mini',
+};
+
+const DEFAULT_PROMPT_SHARE = 0.5;
+
+const coerceNumber = (value: unknown): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+};
+
+const inferPromptShareFromMetrics = (metrics?: TokenMetrics): number => {
+  const breakdown = metrics?.last_request?.breakdown as Record<string, unknown> | undefined;
+  if (!breakdown) {
+    return DEFAULT_PROMPT_SHARE;
+  }
+
+  const promptEstimate =
+    coerceNumber(breakdown.prompt) +
+    coerceNumber(breakdown.input) +
+    coerceNumber(breakdown.prompt_tokens);
+
+  const completionEstimate =
+    coerceNumber(breakdown.completion) +
+    coerceNumber(breakdown.output) +
+    coerceNumber(breakdown.completion_tokens);
+
+  const total = promptEstimate + completionEstimate;
+  if (total > 0) {
+    return Math.min(Math.max(promptEstimate / total, 0), 1);
+  }
+
+  return DEFAULT_PROMPT_SHARE;
 };
 
 interface SessionStatusCardProps {
@@ -998,12 +1042,90 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
     return null;
   }, [displaySessions]);
 
-  const runtimeStatsEntries = React.useMemo(() => {
-    if (!runtimeStats) {
-      return [];
+  const runtimeCostSummary = React.useMemo(() => {
+    if (displaySessions.length === 0) {
+      return null;
     }
 
+    let totalCost = 0;
+    let totalTokens = 0;
+    let totalRequests = 0;
+
+    const breakdownMap = new Map<AgentType, { cost: number; model: string }>();
+
+    for (const session of displaySessions) {
+      const metrics = session.token_metrics;
+      if (!metrics) {
+        continue;
+      }
+
+      const totalTokensForSession = Number(metrics.total_tokens ?? 0);
+      if (!Number.isFinite(totalTokensForSession) || totalTokensForSession <= 0) {
+        continue;
+      }
+
+      const modelKey =
+        session.metadata.model && session.metadata.model.length > 0
+          ? session.metadata.model
+          : defaultAgentModels[session.agent_type];
+
+      const promptShare = inferPromptShareFromMetrics(metrics);
+      const promptTokens = Math.round(totalTokensForSession * promptShare);
+      const completionTokens = Math.max(totalTokensForSession - promptTokens, 0);
+
+      const cost = calculateOpenAICost(
+        {
+          total_tokens: totalTokensForSession,
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+        },
+        modelKey,
+        false
+      );
+
+      totalCost += cost;
+      totalTokens += totalTokensForSession;
+      totalRequests += metrics.request_count ?? 0;
+
+      const existing = breakdownMap.get(session.agent_type);
+      if (existing) {
+        existing.cost += cost;
+      } else {
+        breakdownMap.set(session.agent_type, { cost, model: modelKey });
+      }
+    }
+
+    if (totalTokens === 0) {
+      return null;
+    }
+
+    const breakdown = Array.from(breakdownMap.entries()).map(([agent, data]) => ({
+      agent,
+      cost: data.cost,
+      model: data.model,
+    }));
+
+    return {
+      totalCost,
+      totalTokens,
+      totalRequests,
+      breakdown,
+    };
+  }, [displaySessions]);
+
+  const runtimeStatsEntries = React.useMemo(() => {
     const entries: Array<{ label: string; value: string }> = [];
+
+    if (runtimeCostSummary) {
+      entries.push({
+        label: 'Runtime Cost',
+        value: `$${runtimeCostSummary.totalCost.toFixed(4)} (${runtimeCostSummary.totalTokens.toLocaleString()} tokens · ${runtimeCostSummary.totalRequests.toLocaleString()} req)`,
+      });
+    }
+
+    if (!runtimeStats) {
+      return entries;
+    }
 
     if (typeof runtimeStats.uptime_ms === 'number') {
       entries.push({
@@ -1035,7 +1157,7 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
     });
 
     return entries;
-  }, [runtimeStats]);
+  }, [runtimeStats, runtimeCostSummary]);
 
   const hasRuntimeStats = runtimeStatsEntries.length > 0;
 
@@ -1378,6 +1500,52 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
               </div>
             ))}
           </div>
+          {runtimeCostSummary?.breakdown.length ? (
+            <div
+              style={{
+                marginTop: '16px',
+              }}
+            >
+              <div
+                style={{
+                  fontSize: '11px',
+                  color: '#64748b',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.4px',
+                  fontWeight: 600,
+                  marginBottom: '8px',
+                }}
+              >
+                Cost Breakdown
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px',
+                  fontSize: '12px',
+                  color: '#475569',
+                }}
+              >
+                {runtimeCostSummary.breakdown.map(({ agent, cost, model }) => (
+                  <div
+                    key={agent}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <span>{agentTitles[agent]}</span>
+                    <span style={{ fontFamily: 'monospace' }}>
+                      ${cost.toFixed(4)}
+                      {model ? ` · ${model}` : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </section>
       )}
 

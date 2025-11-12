@@ -8,7 +8,7 @@ const sleep = (ms: number): Promise<void> =>
 import { Exa } from 'exa-js';
 import type { Blueprint } from '../blueprint/types';
 import type { ResearchResults } from '../glossary/types';
-import { getPricingVersion } from '../pricing-config';
+import { getPricingVersion } from '../../utils/pricing';
 import type { ResearchResultInsert } from '../../../types';
 import { chunkTextContent } from '../../../lib/text/llm-prompt-chunking';
 import {

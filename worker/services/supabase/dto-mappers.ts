@@ -273,6 +273,10 @@ export const mapFactRecords = (rows: unknown): FactRecord[] =>
       last_seen_seq: getNumber(record, 'last_seen_seq', 'FactRecord'),
       sources: getNumberArray(record, 'sources'),
       is_active: typeof record['is_active'] === 'boolean' ? record['is_active'] : undefined,
+      merge_provenance: Array.isArray(record['merge_provenance'])
+        ? (record['merge_provenance'] as unknown[]).filter((entry): entry is string => typeof entry === 'string')
+        : undefined,
+      merged_at: getOptionalString(record, 'merged_at') ?? undefined,
     };
   });
 

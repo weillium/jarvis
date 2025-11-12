@@ -1,5 +1,4 @@
 import type { Fact } from '../../state/facts-store';
-import type { FactsBudgetSnapshot } from '../../types/processing';
 import { countTokens } from '../../utils/token-counter';
 
 interface FactsPromptBudgetOptions {
@@ -33,20 +32,18 @@ export interface FactsPromptBudgetResult {
   selectedFacts: Fact[];
   overflowFacts: Fact[];
   summaryFacts: Fact[];
-  metrics: FactsBudgetSnapshot;
+  metrics: BudgetMetrics;
   confidenceAdjustments: ConfidenceAdjustment[];
 }
 
-export const FACTS_BUDGET_DEFAULTS = {
-  BUDGET_FRACTION: 0.6,
-  MIN_FACTS_BUDGET_TOKENS: 192,
-  SAFETY_MARGIN_TOKENS: 160,
-  SELECTED_BOOST: 0.01,
-  OVERFLOW_DECAY: 0.05,
-  MIN_CONFIDENCE: 0.1,
-  MAX_CONFIDENCE: 1.0,
-  SUMMARY_PREFIX: '__facts_summary__',
-} as const;
+const DEFAULT_BUDGET_FRACTION = 0.65;
+const DEFAULT_MIN_FACTS_BUDGET = 256;
+const DEFAULT_SAFETY_MARGIN = 128;
+const SUMMARY_PREFIX = '__facts_summary__';
+const SELECTED_BOOST = 0.01;
+const OVERFLOW_DECAY = 0.05;
+const MIN_CONFIDENCE = 0.1;
+const MAX_CONFIDENCE = 1.0;
 
 type ScoredFact = Fact & {
   score: number;
@@ -60,9 +57,9 @@ export function budgetFactsPrompt(options: FactsPromptBudgetOptions): FactsPromp
     totalBudgetTokens,
     transcriptTokens,
     glossaryTokens,
-    budgetFraction = FACTS_BUDGET_DEFAULTS.BUDGET_FRACTION,
-    minFactsBudgetTokens = FACTS_BUDGET_DEFAULTS.MIN_FACTS_BUDGET_TOKENS,
-    safetyMarginTokens = FACTS_BUDGET_DEFAULTS.SAFETY_MARGIN_TOKENS,
+    budgetFraction = DEFAULT_BUDGET_FRACTION,
+    minFactsBudgetTokens = DEFAULT_MIN_FACTS_BUDGET,
+    safetyMarginTokens = DEFAULT_SAFETY_MARGIN,
   } = options;
 
   if (facts.length === 0) {
@@ -145,24 +142,24 @@ export function budgetFactsPrompt(options: FactsPromptBudgetOptions): FactsPromp
   const confidenceAdjustments: ConfidenceAdjustment[] = [];
 
   for (const fact of selectedFacts) {
-    const boosted = clampConfidence(fact.confidence + FACTS_BUDGET_DEFAULTS.SELECTED_BOOST);
+    const boosted = clampConfidence(fact.confidence + SELECTED_BOOST);
     if (Math.abs(boosted - fact.confidence) >= 0.001) {
       confidenceAdjustments.push({ key: fact.key, newConfidence: boosted });
     }
   }
 
   for (const fact of overflowFacts) {
-    const decayed = clampConfidence(fact.confidence - FACTS_BUDGET_DEFAULTS.OVERFLOW_DECAY);
+    const decayed = clampConfidence(fact.confidence - OVERFLOW_DECAY);
     if (Math.abs(decayed - fact.confidence) >= 0.001) {
       confidenceAdjustments.push({ key: fact.key, newConfidence: decayed });
     }
   }
 
-  const metrics: FactsBudgetSnapshot = {
+  const metrics: BudgetMetrics = {
     totalFacts: facts.length,
-    selected: selectedFacts.length,
-    overflow: overflowFacts.length,
-    summary: summaryFacts.length,
+    selectedFacts: selectedFacts.length,
+    overflowFacts: overflowFacts.length,
+    summaryFacts: summaryFacts.length,
     budgetTokens: availableBudget,
     usedTokens,
     selectionRatio: selectedFacts.length / Math.max(facts.length, 1),
@@ -227,7 +224,8 @@ function factToText(fact: Fact): string {
           }
           return val;
         });
-  return `${fact.key}: ${value}`;
+  const serialized = typeof value === 'string' ? value : '';
+  return `${fact.key}: ${serialized}`;
 }
 
 function buildSummaryFact(overflowFacts: Fact[], selectedFacts: Fact[], remainingTokens: number): Fact | null {
@@ -241,7 +239,7 @@ function buildSummaryFact(overflowFacts: Fact[], selectedFacts: Fact[], remainin
 
   const summaryValue = `Summarized ${overflowFacts.length} additional facts: ${keys.join(', ')}`;
   const summaryFact: Fact = {
-    key: `${FACTS_BUDGET_DEFAULTS.SUMMARY_PREFIX}:${Date.now()}:${Math.random().toString(36).slice(2, 6)}`,
+    key: `${SUMMARY_PREFIX}:${Date.now()}:${Math.random().toString(36).slice(2, 6)}`,
     value: summaryValue,
     confidence: clampConfidence(averageConfidence),
     lastSeenSeq: selectedFacts.length > 0 ? selectedFacts[0].lastSeenSeq : Date.now(),
@@ -258,13 +256,13 @@ function buildSummaryFact(overflowFacts: Fact[], selectedFacts: Fact[], remainin
 
 function clampConfidence(value: number): number {
   if (Number.isNaN(value)) {
-    return FACTS_BUDGET_DEFAULTS.MIN_CONFIDENCE;
+    return MIN_CONFIDENCE;
   }
-  if (value < FACTS_BUDGET_DEFAULTS.MIN_CONFIDENCE) {
-    return FACTS_BUDGET_DEFAULTS.MIN_CONFIDENCE;
+  if (value < MIN_CONFIDENCE) {
+    return MIN_CONFIDENCE;
   }
-  if (value > FACTS_BUDGET_DEFAULTS.MAX_CONFIDENCE) {
-    return FACTS_BUDGET_DEFAULTS.MAX_CONFIDENCE;
+  if (value > MAX_CONFIDENCE) {
+    return MAX_CONFIDENCE;
   }
   return value;
 }
