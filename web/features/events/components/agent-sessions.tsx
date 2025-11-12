@@ -940,7 +940,11 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
   
   const { enrichment, isLoading: enrichmentLoading, error: enrichmentError, reconnect } = useAgentSessionEnrichment(
     eventId,
-    existingAgentTypes
+    existingAgentTypes,
+    {
+      refetchSessions,
+      connectWhenEmpty: true,
+    }
   );
   
   const displaySessions: AgentSessionDisplay[] = (() => {

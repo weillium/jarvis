@@ -7,6 +7,7 @@ import type {
   Fact,
   GlossaryEntry,
 } from '../types';
+import type { FactsStore } from '../state/facts-store';
 import type { CardsProcessor, CardTriggerContext } from '../processing/cards-processor';
 import type { FactsProcessor } from '../processing/facts-processor';
 import type { TranscriptProcessor } from '../processing/transcript-processor';
@@ -28,6 +29,13 @@ import {
   checkCardRateLimit,
   recordCardFire,
 } from './cards/rate-limit';
+import {
+  validateRealtimeFact,
+  factsAreEquivalent,
+  shouldTreatAsDuplicate,
+  shouldTreatAsMerge,
+  computeIngestSimilarity,
+} from './facts/input-guards';
 
 type CardType = RealtimeCardDTO['card_type'];
 
@@ -515,6 +523,7 @@ export class EventProcessor {
         return;
       }
 
+      const factsStore: FactsStore = runtime.factsStore;
       const evictedKeys: string[] = [];
       const pendingFactSources = runtime.pendingFactSources as Array<{
         seq: number;
@@ -527,54 +536,104 @@ export class EventProcessor {
       const factSourceId =
         typeof pendingSource?.transcriptId === 'number' ? pendingSource.transcriptId : undefined;
 
-      for (const fact of facts) {
-        if (!fact.key || fact.value === undefined) continue;
-
-        const initialConfidence =
-          (typeof fact.confidence === 'number' ? fact.confidence : undefined) || 0.7;
-        const keysEvicted = runtime.factsStore.upsert(
-          fact.key,
-          fact.value,
-          initialConfidence,
-          factSourceSeq,
-          factSourceId
-        );
-        
-        if (keysEvicted.length > 0) {
-          evictedKeys.push(...keysEvicted);
+      /* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment */
+      for (const rawFact of facts) {
+        const validated = validateRealtimeFact(rawFact);
+        if (!validated) {
+          continue;
         }
 
-        const storedFact = runtime.factsStore.get(fact.key);
-        const computedConfidence = storedFact?.confidence ?? initialConfidence;
-        let mergeProvenance: string[] = [];
-        let mergedAt: string | null = null;
-        let sources: number[] = [];
+        const normalizedKey = validated.key;
+        const sanitizedValue = validated.value;
+        const initialConfidence = validated.confidence;
 
-        const rawMergeProvenance: unknown = storedFact?.mergedFrom;
-        if (Array.isArray(rawMergeProvenance)) {
-          mergeProvenance = rawMergeProvenance.filter((entry): entry is string => typeof entry === 'string');
+        const existingFact = factsStore.get(normalizedKey);
+
+        const candidateFact: Fact = {
+          key: normalizedKey,
+          value: sanitizedValue,
+          confidence: initialConfidence,
+          lastSeenSeq: factSourceSeq,
+          sources: typeof factSourceId === 'number' ? [factSourceId] : [],
+          mergedFrom: [],
+          mergedAt: null,
+          missStreak: 0,
+        };
+
+        let updatedFact: Fact | null = null;
+
+        if (existingFact) {
+          const similarity = computeIngestSimilarity(existingFact, candidateFact);
+
+          if (factsAreEquivalent(existingFact, sanitizedValue) || shouldTreatAsDuplicate(similarity)) {
+            const merged = factsStore.mergeFact(normalizedKey, {
+              value: existingFact.value,
+              confidence: initialConfidence,
+              sourceSeq: factSourceSeq,
+              sourceId: factSourceId,
+              mergedKeys: rawFact.key !== normalizedKey ? [rawFact.key] : [],
+              preferIncomingValue: false,
+            });
+            updatedFact = merged ?? factsStore.get(normalizedKey) ?? null;
+          } else if (shouldTreatAsMerge(similarity)) {
+            const merged = factsStore.mergeFact(normalizedKey, {
+              value: sanitizedValue,
+              confidence: initialConfidence,
+              sourceSeq: factSourceSeq,
+              sourceId: factSourceId,
+              mergedKeys: rawFact.key !== normalizedKey ? [rawFact.key] : [],
+              preferIncomingValue: true,
+            });
+            updatedFact = merged ?? factsStore.get(normalizedKey) ?? null;
+          } else {
+            const merged = factsStore.mergeFact(normalizedKey, {
+              value: sanitizedValue,
+              confidence: initialConfidence,
+              sourceSeq: factSourceSeq,
+              sourceId: factSourceId,
+              mergedKeys: rawFact.key !== normalizedKey ? [rawFact.key] : [],
+              preferIncomingValue: true,
+            });
+            updatedFact = merged ?? factsStore.get(normalizedKey) ?? null;
+          }
+        } else {
+          const keysEvicted = factsStore.upsert(
+            normalizedKey,
+            sanitizedValue,
+            initialConfidence,
+            factSourceSeq,
+            factSourceId
+          );
+
+          if (keysEvicted.length > 0) {
+            evictedKeys.push(...keysEvicted);
+          }
+
+          updatedFact = factsStore.get(normalizedKey) ?? null;
+
+          if (rawFact.key !== normalizedKey) {
+            factsStore.recordMerge(
+              normalizedKey,
+              [rawFact.key],
+              new Date().toISOString()
+            );
+            updatedFact = factsStore.get(normalizedKey) ?? null;
+          }
         }
 
-        const rawMergedAt: unknown = storedFact?.mergedAt;
-        if (typeof rawMergedAt === 'string') {
-          mergedAt = rawMergedAt;
+        if (!updatedFact) {
+          continue;
         }
 
-        const rawSources: unknown = storedFact?.sources;
-        if (Array.isArray(rawSources)) {
-          sources = rawSources.filter((entry): entry is number => typeof entry === 'number');
-        }
-
-        const factValue: unknown = fact.value;
         const supabaseFact: FactRecord = {
           event_id: runtime.eventId,
-          fact_key: fact.key,
-          fact_value: factValue,
-          confidence: computedConfidence,
+          fact_key: updatedFact.key,
+          fact_value: updatedFact.value,
+          confidence: updatedFact.confidence,
           last_seen_seq: factSourceSeq,
-          sources,
-          merge_provenance: mergeProvenance,
-          merged_at: mergedAt,
+          sources: updatedFact.sources,
+          merge_provenance: updatedFact.mergedFrom,
+          merged_at: updatedFact.mergedAt,
         };
 
         await this.factsRepository.upsertFact(supabaseFact);
@@ -585,9 +644,15 @@ export class EventProcessor {
           agent_type: 'facts',
           for_seq: factSourceSeq,
           type: 'fact_update',
-          payload: fact,
+          payload: {
+            ...rawFact,
+            key: updatedFact.key,
+            value: updatedFact.value,
+            confidence: updatedFact.confidence,
+          },
         });
       }
+      /* eslint-enable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment */
 
       if (evictedKeys.length > 0) {
         await this.factsRepository.updateFactActiveStatus(runtime.eventId, evictedKeys, false);

@@ -92,7 +92,8 @@ export interface UseAgentSessionsReturn {
  */
 export function useAgentSessions(
   eventId: string | null,
-  shouldConnect?: () => boolean
+  shouldConnect?: () => boolean,
+  refetchSessions?: () => Promise<unknown>
 ): UseAgentSessionsReturn {
   const [cards, setCards] = useState<AgentSessionStatus | null>(null);
   const [facts, setFacts] = useState<AgentSessionStatus | null>(null);
@@ -113,13 +114,6 @@ export function useAgentSessions(
       return;
     }
 
-    // Close existing connection
-    if (eventSourceRef.current) {
-      console.log('[useAgentSessions] Closing existing connection');
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-
     setIsLoading(true);
     setError(null);
 
@@ -130,10 +124,22 @@ export function useAgentSessions(
       const eventSource = new EventSource(streamUrl);
       eventSourceRef.current = eventSource;
 
+      const triggerRefetch = async (reason: string) => {
+        if (typeof refetchSessions === 'function') {
+          try {
+            console.log(`[useAgentSessions] Triggering session refetch (${reason})`);
+            await refetchSessions();
+          } catch (err) {
+            console.error('[useAgentSessions] Failed to refetch sessions:', err);
+          }
+        }
+      };
+
       eventSource.onopen = () => {
         console.log('[useAgentSessions] SSE connection opened');
         setIsLoading(false);
         setError(null);
+        void triggerRefetch('onopen');
       };
 
       eventSource.onmessage = (event) => {
@@ -218,7 +224,7 @@ export function useAgentSessions(
           // Attempt to reconnect after 3 seconds
           reconnectTimeoutRef.current = setTimeout(() => {
             console.log('[useAgentSessions] Attempting to reconnect...');
-            connect();
+          connect();
           }, 3000);
         } else if (eventSource.readyState === EventSource.CONNECTING) {
           // Still connecting, don't set error yet
@@ -233,7 +239,7 @@ export function useAgentSessions(
       setError(error);
       setIsLoading(false);
     }
-  }, [eventId, shouldConnect]);
+  }, [eventId, shouldConnect, refetchSessions, sessionAgentTypes]);
 
   const reconnect = useCallback(() => {
     console.log('[useAgentSessions] Manual reconnect triggered');
@@ -337,15 +343,22 @@ export function useAgentSessions(
  */
 export function useAgentSessionEnrichment(
   eventId: string | null,
-  sessionAgentTypes: ('transcript' | 'cards' | 'facts')[]
+  sessionAgentTypes: ('transcript' | 'cards' | 'facts')[],
+  options?: {
+    refetchSessions?: () => Promise<unknown>;
+    connectWhenEmpty?: boolean;
+  }
 ): UseAgentSessionEnrichmentReturn {
   const [enrichment, setEnrichment] = useState<Map<'transcript' | 'cards' | 'facts', AgentSessionSSEEnrichment>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const discoveredAgentsRef = useRef<Set<'transcript' | 'cards' | 'facts'>>(new Set());
 
-  const shouldConnect = sessionAgentTypes.length > 0;
+  const refetchSessions = options?.refetchSessions;
+  const connectWhenEmpty = options?.connectWhenEmpty ?? false;
+  const shouldConnect = sessionAgentTypes.length > 0 || connectWhenEmpty;
 
   const connect = useCallback(() => {
     if (!eventId || !shouldConnect) {
@@ -370,10 +383,22 @@ export function useAgentSessionEnrichment(
       const eventSource = new EventSource(streamUrl);
       eventSourceRef.current = eventSource;
 
+      const triggerRefetch = async (reason: string) => {
+        if (typeof refetchSessions === 'function') {
+          try {
+            console.log(`[useAgentSessionEnrichment] Triggering session refetch (${reason})`);
+            await refetchSessions();
+          } catch (err) {
+            console.error('[useAgentSessionEnrichment] Failed to refetch sessions:', err);
+          }
+        }
+      };
+
       eventSource.onopen = () => {
         console.log('[useAgentSessionEnrichment] SSE connection opened');
         setIsLoading(false);
         setError(null);
+        void triggerRefetch('onopen');
       };
 
       eventSource.onmessage = (event) => {
@@ -406,6 +431,10 @@ export function useAgentSessionEnrichment(
             
             setIsLoading(false);
             setError(null);
+            if (!sessionAgentTypes.includes(enrichmentData.agent_type) && !discoveredAgentsRef.current.has(enrichmentData.agent_type)) {
+              discoveredAgentsRef.current.add(enrichmentData.agent_type);
+              void triggerRefetch(`enrichment-message-${enrichmentData.agent_type}`);
+            }
             return;
           }
 
@@ -435,6 +464,10 @@ export function useAgentSessionEnrichment(
             
             setIsLoading(false);
             setError(null);
+            if (!sessionAgentTypes.includes(enrichmentData.agent_type) && !discoveredAgentsRef.current.has(enrichmentData.agent_type)) {
+              discoveredAgentsRef.current.add(enrichmentData.agent_type);
+              void triggerRefetch(`legacy-status-message-${enrichmentData.agent_type}`);
+            }
           }
         } catch (err) {
           console.error('[useAgentSessionEnrichment] Error parsing message:', err, event.data);
@@ -461,7 +494,7 @@ export function useAgentSessionEnrichment(
       setError(error);
       setIsLoading(false);
     }
-  }, [eventId, shouldConnect]);
+  }, [eventId, shouldConnect, refetchSessions]);
 
   const reconnect = useCallback(() => {
     console.log('[useAgentSessionEnrichment] Manual reconnect triggered');
@@ -525,6 +558,19 @@ export function useAgentSessionEnrichment(
     }
     setError(null);
   }, [eventId, shouldConnect]);
+
+  useEffect(() => {
+    if (!sessionAgentTypes.length && !connectWhenEmpty) {
+      discoveredAgentsRef.current.clear();
+      return;
+    }
+
+    for (const agentType of sessionAgentTypes) {
+      if (discoveredAgentsRef.current.has(agentType)) {
+        discoveredAgentsRef.current.delete(agentType);
+      }
+    }
+  }, [sessionAgentTypes, connectWhenEmpty]);
 
   return {
     enrichment,

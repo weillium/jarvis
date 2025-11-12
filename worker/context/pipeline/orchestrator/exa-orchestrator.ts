@@ -2,7 +2,7 @@ import type { Exa } from 'exa-js';
 import type { ResearchResults } from '../glossary/types';
 import type { ResearchResultInsert } from '../../../types';
 import { insertResearchResultRow, type WorkerSupabaseClient } from './supabase-orchestrator';
-import { calculateExaResearchCost, calculateExaSearchCost } from '../../utils/pricing';
+import { calculateExaResearchCost, calculateExaSearchCost } from '../../../lib/pricing';
 import { chunkTextContent } from '../../../lib/text/llm-prompt-chunking';
 import { isRecord } from '../../../lib/context-normalization';
 

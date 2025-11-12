@@ -300,6 +300,61 @@ export class FactsStore {
     primary.missStreak = 0;
     this.facts.set(primaryKey, primary);
   }
+
+  mergeFact(
+    key: string,
+    params: {
+      value: unknown;
+      confidence: number;
+      sourceSeq: number;
+      sourceId?: number;
+      mergedKeys?: string[];
+      preferIncomingValue?: boolean;
+    }
+  ): Fact | null {
+    const existing = this.facts.get(key);
+    if (!existing) {
+      return null;
+    }
+
+    const sourcesSet = new Set(existing.sources);
+    if (typeof params.sourceId === 'number' && Number.isFinite(params.sourceId)) {
+      sourcesSet.add(params.sourceId);
+    }
+
+    const mergedFromSet = new Set(existing.mergedFrom);
+    if (Array.isArray(params.mergedKeys)) {
+      for (const mergedKey of params.mergedKeys) {
+        if (mergedKey && mergedKey !== key) {
+          mergedFromSet.add(mergedKey);
+        }
+      }
+    }
+
+    const updatedConfidence = clampConfidence(
+      (existing.confidence + params.confidence) / 2
+    );
+
+    const preferIncoming = params.preferIncomingValue ?? true;
+    const nextValue = preferIncoming ? params.value : existing.value;
+    const mergedAt = preferIncoming || mergedFromSet.size !== existing.mergedFrom.length
+      ? new Date().toISOString()
+      : existing.mergedAt;
+
+    const updatedFact: Fact = {
+      key,
+      value: nextValue,
+      confidence: updatedConfidence,
+      lastSeenSeq: params.sourceSeq,
+      sources: Array.from(sourcesSet),
+      mergedFrom: Array.from(mergedFromSet),
+      mergedAt,
+      missStreak: 0,
+    };
+
+    this.facts.set(key, updatedFact);
+    return updatedFact;
+  }
 }
 
 const clampConfidence = (value: number): number => {

@@ -12,7 +12,7 @@
 import {
   calculateOpenAICost,
   getPricingVersion,
-} from '../../utils/pricing';
+} from '../../lib/pricing';
 import type {
   Blueprint,
   BlueprintGeneratorOptions,

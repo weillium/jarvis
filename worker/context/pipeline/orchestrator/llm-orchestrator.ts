@@ -3,7 +3,7 @@ import {
   STUB_RESEARCH_SYSTEM_PROMPT,
   createStubResearchUserPrompt,
 } from '../../../prompts';
-import { calculateOpenAICost, type OpenAIUsage } from '../../utils/pricing';
+import { calculateOpenAICost, type OpenAIUsage } from '../../../lib/pricing';
 import { isRecord } from '../../../lib/context-normalization';
 
 export async function generateStubResearchChunks(

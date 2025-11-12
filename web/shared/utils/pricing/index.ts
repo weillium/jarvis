@@ -1,2 +1,2 @@
-export * from '../../../../worker/utils/pricing/index';
+export * from '../../../../worker/lib/pricing/index';
 

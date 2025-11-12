@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSSEStream } from '@/shared/hooks/use-sse-stream';
 import type {
   SSEMessage,
@@ -15,7 +15,7 @@ import { CardDisplay } from './card-display';
 import type { CardPayload } from '@/shared/types/card';
 import { useCardsQuery } from '@/shared/hooks/use-cards-query';
 import { useQueryClient } from '@tanstack/react-query';
-import { CardModerationPanel } from './card-moderation-panel';
+import { CardModerationModal } from './card-moderation-modal';
 
 interface LiveCardsProps {
   eventId: string;
@@ -27,11 +27,24 @@ interface LiveCardsProps {
  */
 export function LiveCards({ eventId }: LiveCardsProps) {
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
+  const [moderationCardId, setModerationCardId] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
 
   const { data: cardsData, isLoading } = useCardsQuery(eventId);
 
   const cards = useMemo(() => cardsData ?? [], [cardsData]);
+  const canScroll = cards.length > 1;
+  const moderationTarget = useMemo(() => {
+    if (!moderationCardId) {
+      return null;
+    }
+    return cards.find((card) => card.id === moderationCardId) ?? null;
+  }, [cards, moderationCardId]);
+  const moderationTargetPayload = useMemo(() => {
+    const payload = moderationTarget?.payload as CardPayload | null | undefined;
+    return payload ?? null;
+  }, [moderationTarget]);
 
   const upsertCard = (card: CardSnapshot) => {
     queryClient.setQueryData<Card[]>(['cards', eventId], (previousCards = []) => {
@@ -114,124 +127,246 @@ export function LiveCards({ eventId }: LiveCardsProps) {
     }
   }, [isConnected, isConnecting]);
 
+  const handleScroll = (direction: 'prev' | 'next') => {
+    if (!scrollerRef.current) {
+      return;
+    }
+
+    const firstCard = scrollerRef.current.querySelector<HTMLElement>('[data-card-shell]');
+    const cardWidth = firstCard?.getBoundingClientRect().width ?? 360;
+    const gap = 24;
+    scrollerRef.current.scrollBy({
+      left: (cardWidth + gap) * (direction === 'next' ? 1 : -1),
+      behavior: 'smooth',
+    });
+  };
+
   return (
-    <div>
-      {/* Connection Status */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div
         style={{
-          marginBottom: '20px',
-          padding: '12px 16px',
-          background: connectionStatus === 'connected' ? '#f0fdf4' : connectionStatus === 'connecting' ? '#fffbeb' : '#fef2f2',
-          border: `1px solid ${connectionStatus === 'connected' ? '#86efac' : connectionStatus === 'connecting' ? '#fde047' : '#fca5a5'}`,
-          borderRadius: '8px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          background: connectionStatus === 'connected' ? 'rgba(34, 197, 94, 0.08)' : connectionStatus === 'connecting' ? 'rgba(250, 204, 21, 0.12)' : 'rgba(248, 113, 113, 0.12)',
+          borderRadius: '16px',
+          padding: '14px 18px',
+          border: `1px solid ${
+            connectionStatus === 'connected'
+              ? 'rgba(22, 163, 74, 0.3)'
+              : connectionStatus === 'connecting'
+              ? 'rgba(202, 138, 4, 0.3)'
+              : 'rgba(220, 38, 38, 0.3)'
+          }`,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div
             style={{
-              width: '8px',
-              height: '8px',
+              width: '10px',
+              height: '10px',
               borderRadius: '50%',
-              background: connectionStatus === 'connected' ? '#22c55e' : connectionStatus === 'connecting' ? '#eab308' : '#ef4444',
+              background:
+                connectionStatus === 'connected'
+                  ? '#16a34a'
+                  : connectionStatus === 'connecting'
+                  ? '#ca8a04'
+                  : '#dc2626',
             }}
           />
           <span
             style={{
               fontSize: '14px',
-              fontWeight: '500',
-              color: connectionStatus === 'connected' ? '#166534' : connectionStatus === 'connecting' ? '#854d0e' : '#991b1b',
+              fontWeight: 600,
+              color:
+                connectionStatus === 'connected'
+                  ? '#166534'
+                  : connectionStatus === 'connecting'
+                  ? '#854d0e'
+                  : '#991b1b',
             }}
           >
             {connectionStatus === 'connected'
-              ? 'Connected - Receiving live updates'
+              ? 'Connected — receiving live updates'
               : connectionStatus === 'connecting'
-              ? 'Connecting...'
-              : 'Disconnected'}
+              ? 'Connecting to live stream…'
+              : 'Disconnected from stream'}
           </span>
         </div>
-        {connectionStatus === 'disconnected' && (
-          <button
-            onClick={reconnect}
-            style={{
-              padding: '6px 12px',
-              background: '#1e293b',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '12px',
-              fontWeight: '500',
-              cursor: 'pointer',
-            }}
-          >
-            Reconnect
-          </button>
-        )}
-        {error && (
-          <span style={{ fontSize: '12px', color: '#ef4444', marginLeft: '12px' }}>
-            {error.message}
-          </span>
-        )}
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          {connectionStatus === 'disconnected' && (
+            <button
+              onClick={reconnect}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '999px',
+                background: '#0f172a',
+                color: '#f8fafc',
+                border: 'none',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Reconnect
+            </button>
+          )}
+          {error && (
+            <span
+              style={{
+                fontSize: '12px',
+                color: '#dc2626',
+              }}
+            >
+              {error.message}
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Cards List */}
-      <div>
-        {isLoading ? (
-          <div
-            style={{
-              padding: '48px 24px',
-              textAlign: 'center',
-              color: '#94a3b8',
-              fontSize: '14px',
-            }}
-          >
-            Loading cards...
-          </div>
-        ) : cards.length === 0 ? (
-          <div
-            style={{
-              padding: '48px 24px',
-              textAlign: 'center',
-              color: '#94a3b8',
-              fontSize: '14px',
-            }}
-          >
-            {connectionStatus === 'connecting'
-              ? 'Waiting for connection...'
-              : connectionStatus === 'connected'
-              ? 'No cards yet. Waiting for updates...'
-              : 'Disconnected. Click reconnect to try again.'}
-          </div>
-        ) : (
-          cards.map((card) => {
-            const payload = card.payload as CardPayload | null;
-            if (!payload) {
-              return null;
-            }
-
-            return (
-              <div
-                key={card.id}
+      {isLoading ? (
+        <div
+          style={{
+            padding: '64px 24px',
+            textAlign: 'center',
+            color: '#94a3b8',
+            fontSize: '15px',
+            borderRadius: '20px',
+            border: '1px dashed rgba(148, 163, 184, 0.4)',
+          }}
+        >
+          Loading cards…
+        </div>
+      ) : cards.length === 0 ? (
+        <div
+          style={{
+            padding: '64px 24px',
+            textAlign: 'center',
+            color: '#94a3b8',
+            fontSize: '15px',
+            borderRadius: '20px',
+            border: '1px dashed rgba(148, 163, 184, 0.4)',
+          }}
+        >
+          {connectionStatus === 'connecting'
+            ? 'Waiting for connection…'
+            : connectionStatus === 'connected'
+            ? 'No cards yet. Cards will appear as the event progresses.'
+            : 'Disconnected. Click reconnect to try again.'}
+        </div>
+      ) : (
+        <div style={{ position: 'relative' }}>
+          {canScroll && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '50%',
+                left: '-32px',
+                transform: 'translateY(-50%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                pointerEvents: 'none',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => handleScroll('prev')}
                 style={{
-                  marginBottom: '16px',
-                  padding: '16px',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '8px',
+                  pointerEvents: 'auto',
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '999px',
+                  border: 'none',
                   background: '#ffffff',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '12px',
+                  boxShadow: '0 10px 30px rgba(15, 23, 42, 0.18)',
+                  fontSize: '20px',
+                  fontWeight: 700,
+                  color: '#1e293b',
+                  cursor: 'pointer',
                 }}
               >
-                <CardDisplay card={payload} timestamp={card.emitted_at} />
-                <CardModerationPanel eventId={eventId} cardId={card.id} />
-              </div>
-            );
-          })
-        )}
-      </div>
+                ‹
+              </button>
+            </div>
+          )}
+
+          {canScroll && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '50%',
+                right: '-32px',
+                transform: 'translateY(-50%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                pointerEvents: 'none',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => handleScroll('next')}
+                style={{
+                  pointerEvents: 'auto',
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '999px',
+                  border: 'none',
+                  background: '#ffffff',
+                  boxShadow: '0 10px 30px rgba(15, 23, 42, 0.18)',
+                  fontSize: '20px',
+                  fontWeight: 700,
+                  color: '#1e293b',
+                  cursor: 'pointer',
+                }}
+              >
+                ›
+              </button>
+            </div>
+          )}
+
+          <div
+            ref={scrollerRef}
+            style={{
+              display: 'flex',
+              gap: '24px',
+              overflowX: 'auto',
+              padding: '12px 4px 12px 4px',
+              scrollSnapType: 'x mandatory',
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none',
+            }}
+          >
+            {cards.map((card) => {
+              const payload = card.payload as CardPayload | null;
+              if (!payload) {
+                return null;
+              }
+
+              return (
+                <CardDisplay
+                  key={card.id}
+                  card={payload}
+                  timestamp={card.emitted_at}
+                  onModerate={() => setModerationCardId(card.id)}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {moderationTarget && moderationTargetPayload && (
+        <CardModerationModal
+          eventId={eventId}
+          cardId={moderationTarget.id}
+          cardPayload={moderationTargetPayload}
+          timestamp={moderationTarget.emitted_at}
+          isOpen={Boolean(moderationTarget)}
+          onClose={() => setModerationCardId(null)}
+        />
+      )}
     </div>
   );
 }

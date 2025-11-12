@@ -22,7 +22,7 @@ The worker hosts the long-running agents that ingest context, orchestrate pipeli
   - `pipeline/chunks` loads sources, chunks prompts, and manages chunk persistence.
   - `pipeline/glossary` and `glossary-builder.ts` manage term extraction, merging, and storage.
   - `pipeline/orchestrator` coordinates phase sequencing and status reporting.
-  - `utils/pricing` tracks budget constraints per event.
+  - `lib/pricing` tracks budget constraints per event.
 - `enrichment/` – pre-context data gathering enrichers and shared contracts.
   - `enrichers/` contains individual adapters (web search, Wikipedia, document extractors).
 - `lib/` – reusable domain utilities (context normalization, document helpers, text transforms, card payload shaping).

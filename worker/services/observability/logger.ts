@@ -1,5 +1,5 @@
 import type { LogEntry, AgentType, LogContext } from '../types';
-import { isRecord } from '../lib/context-normalization';
+import { isRecord } from '../../lib/context-normalization';
 
 export class Logger {
   private readonly logBuffers = new Map<string, LogEntry[]>();
