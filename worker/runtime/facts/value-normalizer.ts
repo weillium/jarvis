@@ -192,11 +192,91 @@ const serializeNormalized = (
 const hashNormalized = (serialized: string): string =>
   crypto.createHash('sha1').update(serialized).digest('hex');
 
-const tokenize = (input: string): string[] =>
-  input
+const REPORTING_SUBJECTS = new Set([
+  'speaker',
+  'moderator',
+  'presenter',
+  'panelist',
+  'panelists',
+  'participants',
+  'attendees',
+  'he',
+  'she',
+  'they',
+  'we',
+]);
+
+const REPORTING_VERBS = new Set([
+  'said',
+  'asked',
+  'noted',
+  'stated',
+  'emphasized',
+  'highlighted',
+  'shared',
+  'added',
+  'announced',
+  'intends',
+  'intend',
+  'intended',
+  'planned',
+  'explained',
+  'observed',
+  'remarked',
+]);
+
+const tokenize = (input: string): string[] => {
+  const rawTokens = input
     .toLowerCase()
     .split(/[^a-z0-9.%]+/g)
     .filter((token) => token.length > 0);
+
+  const stripped = stripReportingTokens(rawTokens);
+  return stripped
+    .map(stemToken)
+    .filter((token) => token.length > 0);
+};
+
+const stripReportingTokens = (tokens: string[]): string[] => {
+  if (tokens.length === 0) {
+    return tokens;
+  }
+
+  let index = 0;
+
+  if (tokens[index] === 'the' && tokens.length > index + 1) {
+    if (REPORTING_SUBJECTS.has(tokens[index + 1])) {
+      index += 2;
+    }
+  } else if (REPORTING_SUBJECTS.has(tokens[index])) {
+    index += 1;
+  }
+
+  if (index < tokens.length && REPORTING_VERBS.has(tokens[index])) {
+    index += 1;
+  }
+
+  if (index < tokens.length && tokens[index] === 'that') {
+    index += 1;
+  }
+
+  return tokens.slice(index);
+};
+
+const stemToken = (token: string): string => {
+  if (token.length <= 3) {
+    return token;
+  }
+
+  const suffixes = ['ing', 'ed', 'es', 's'];
+  for (const suffix of suffixes) {
+    if (token.endsWith(suffix) && token.length - suffix.length >= 3) {
+      return token.slice(0, -suffix.length);
+    }
+  }
+
+  return token;
+};
 
 const extractNumeric = (
   serialized: string

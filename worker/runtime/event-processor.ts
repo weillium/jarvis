@@ -552,6 +552,7 @@ export class EventProcessor {
           ? normalizeFactValue(finalValue)
           : validated.normalizedValue;
         const initialConfidence = validated.confidence;
+        const declaredStatus = validated.declaredStatus;
 
         const aliasMap = runtime.factKeyAliases as FactAliasMap;
         let targetKey = resolveAliasKey(aliasMap, validated.key);
@@ -584,6 +585,26 @@ export class EventProcessor {
         };
 
         let existingFact = factsStore.get(targetKey);
+        if (!existingFact && declaredStatus !== 'create') {
+          // Attempt to honor declared update by searching for the closest match first.
+          const similar = findBestMatchingFact(
+            targetKey,
+            candidateFact,
+            normalizedValue,
+            factsStore.getAll(true)
+          );
+          if (similar) {
+            targetKey = similar.key;
+            registerAliasKey(aliasMap, validated.key, targetKey);
+            if (validated.originalKey && validated.originalKey !== targetKey) {
+              registerAliasKey(aliasMap, validated.originalKey, targetKey);
+            }
+            registerAliasKey(aliasMap, rawFact.key, targetKey);
+            candidateFact.key = targetKey;
+            existingFact = similar.fact;
+          }
+        }
+
         if (!existingFact) {
           const similar = findBestMatchingFact(
             targetKey,

@@ -3,11 +3,25 @@ import type { ClassifiedFact, FactKind } from './fact-types';
 
 const QUESTION_REGEX = /(\?|^who\b|^what\b|^when\b|^where\b|^why\b|^how\b)/i;
 const META_PREFIXES = [/^(let['’]?s|please|remember|note)/i, /^agenda:/i, /^housekeeping/i];
-
+const REPORTING_PATTERNS: RegExp[] = [
+  /^(?:the\s+)?speaker\s+(?:said|asked|noted|stated|emphasized|highlighted|shared|added|announced|intends?|planned|explained)\s+(?:that\s+)?/i,
+  /^(?:he|she|they)\s+(?:said|asked|noted|stated|emphasized|highlighted|shared|added|announced|intends?|planned|explained)\s+(?:that\s+)?/i,
+  /^(?:participants|attendees|panelists|moderators?)\s+(?:said|asked|noted|stated|emphasized|highlighted|shared|added|announced|intends?|planned|explained)\s+(?:that\s+)?/i,
+  /^(?:speaker|moderator)\s*:\s*/i,
+];
 const MAX_REWRITE_TOKENS = 60;
 
 export const classifyNormalizedFact = (normalized: NormalizedFactValue): ClassifiedFact => {
   const kind = detectKind(normalized);
+
+  const reportingRewrite = rewriteReportingScaffolding(normalized);
+  if (reportingRewrite) {
+    return {
+      kind: 'claim',
+      rewrittenValue: reportingRewrite,
+    };
+  }
+
   if (kind === 'question') {
     const rewritten = rewriteQuestion(normalized);
     if (!rewritten) {
@@ -90,5 +104,36 @@ const stripTrailing = (value: string, char: string): string => {
     return value.slice(0, -char.length);
   }
   return value;
+};
+
+const rewriteReportingScaffolding = (normalized: NormalizedFactValue): string | null => {
+  if (typeof normalized.raw !== 'string') {
+    return null;
+  }
+  let candidate = normalized.raw.trim();
+  let changed = false;
+
+  for (const pattern of REPORTING_PATTERNS) {
+    if (pattern.test(candidate)) {
+      candidate = candidate.replace(pattern, '');
+      changed = true;
+      break;
+    }
+  }
+
+  if (!changed) {
+    return null;
+  }
+
+  candidate = candidate.replace(/^["'“”]+/, '').trim();
+  if (!candidate) {
+    return null;
+  }
+
+  candidate = candidate.charAt(0).toUpperCase() + candidate.slice(1);
+  if (!/[.!?]$/.test(candidate)) {
+    candidate = `${candidate}.`;
+  }
+  return candidate;
 };
 

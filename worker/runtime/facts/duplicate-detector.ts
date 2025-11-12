@@ -107,6 +107,15 @@ export const findBestMatchingFact = (
       new Set(candidateNormalized.tokens),
       new Set(normalizedExisting.tokens)
     );
+    if (valueTokenSimilarity >= 0.85) {
+      return {
+        key: fact.key,
+        fact,
+        keySimilarity,
+        factSimilarity: valueTokenSimilarity,
+      };
+    }
+
     const factSimilarity = Math.max(
       valueTokenSimilarity,
       computeFactSimilarity(fact, candidateFact)

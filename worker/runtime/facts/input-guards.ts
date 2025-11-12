@@ -246,6 +246,7 @@ export interface ValidatedFactInput {
   excludeFromPrompt: boolean;
   confidence: number;
   derivedFromValue: boolean;
+  declaredStatus?: 'create' | 'update';
 }
 
 export const validateRealtimeFact = (fact: RealtimeFactDTO): ValidatedFactInput | null => {
@@ -273,6 +274,10 @@ export const validateRealtimeFact = (fact: RealtimeFactDTO): ValidatedFactInput 
       ? fact.confidence
       : 0.7;
 
+  const statusRaw = fact['status'];
+  const declaredStatus =
+    statusRaw === 'update' || statusRaw === 'create' ? statusRaw : undefined;
+
   return {
     raw: fact,
     key: normalized.canonical,
@@ -284,6 +289,7 @@ export const validateRealtimeFact = (fact: RealtimeFactDTO): ValidatedFactInput 
     excludeFromPrompt: classification.excludeFromPrompt ?? false,
     confidence,
     derivedFromValue: normalized.wasDerivedFromValue,
+    declaredStatus,
   };
 };
 
