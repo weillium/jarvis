@@ -540,9 +540,20 @@ export class EventProcessor {
       const factSourceId =
         typeof pendingSource?.transcriptId === 'number' ? pendingSource.transcriptId : undefined;
 
+      const rejectedForValidation: Array<{ key: string; value: unknown; reason: string }> = [];
+
       for (const rawFact of facts) {
         const validated = validateRealtimeFact(rawFact);
         if (!validated) {
+          continue;
+        }
+
+        if (validated.validationError) {
+          rejectedForValidation.push({
+            key: rawFact.key,
+            value: rawFact.value,
+            reason: validated.validationError,
+          });
           continue;
         }
 
@@ -787,6 +798,16 @@ export class EventProcessor {
         console.log(
           `[event-processor] Marked ${evictedKeys.length} evicted facts as inactive for event ${runtime.eventId}`
         );
+      }
+
+      if (rejectedForValidation.length > 0) {
+        console.log('[facts][validation] rejected facts', {
+          eventId: runtime.eventId,
+          rejections: rejectedForValidation.map((entry) => ({
+            key: entry.key,
+            reason: entry.reason,
+          })),
+        });
       }
 
       console.log(`[facts] ${facts.length} facts updated from Realtime API`);

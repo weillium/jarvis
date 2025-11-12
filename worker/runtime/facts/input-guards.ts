@@ -4,6 +4,7 @@ import { computeFactSimilarity, FACT_SIMILARITY_THRESHOLD } from './similarity';
 import { normalizeFactValue, type NormalizedFactValue } from './value-normalizer';
 import { classifyNormalizedFact } from './fact-classifier';
 import type { FactKind } from './fact-types';
+import { validateFactSentence } from './fact-validators';
 
 const GENERIC_KEY_TERMS = new Set([
   'topic',
@@ -247,6 +248,7 @@ export interface ValidatedFactInput {
   confidence: number;
   derivedFromValue: boolean;
   declaredStatus?: 'create' | 'update';
+  validationError?: string;
 }
 
 export const validateRealtimeFact = (fact: RealtimeFactDTO): ValidatedFactInput | null => {
@@ -269,6 +271,21 @@ export const validateRealtimeFact = (fact: RealtimeFactDTO): ValidatedFactInput 
 
   const classification = classifyNormalizedFact(normalizedValue);
 
+  let validationError: string | undefined;
+  const candidateSentence =
+    typeof classification.rewrittenValue === 'string'
+      ? classification.rewrittenValue
+      : typeof normalizedValue.raw === 'string'
+        ? normalizedValue.raw
+        : null;
+
+  if (candidateSentence) {
+    const validation = validateFactSentence(candidateSentence);
+    if (!validation.valid) {
+      validationError = validation.reason ?? 'Fact sentence failed validation.';
+    }
+  }
+
   const confidence =
     typeof fact.confidence === 'number' && fact.confidence >= 0 && fact.confidence <= 1
       ? fact.confidence
@@ -290,6 +307,7 @@ export const validateRealtimeFact = (fact: RealtimeFactDTO): ValidatedFactInput 
     confidence,
     derivedFromValue: normalized.wasDerivedFromValue,
     declaredStatus,
+    validationError,
   };
 };
 

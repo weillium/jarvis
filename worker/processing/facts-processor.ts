@@ -147,6 +147,11 @@ export class FactsProcessor {
 
       runtime.factsStore.applyConfidenceAdjustments(budgetResult.factAdjustments ?? []);
       const now = Date.now();
+
+      for (const demoted of demotedFacts) {
+        runtime.factsStore.markDormant(demoted.key, now, FACT_DORMANT_CONFIDENCE_DROP);
+      }
+
       const revivedKeys: string[] = [];
       for (const key of selectedKeySet) {
         const currentFact = runtime.factsStore.get(key);
