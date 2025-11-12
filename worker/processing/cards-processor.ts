@@ -1,18 +1,10 @@
-import { randomUUID } from 'node:crypto';
 import type { EventRuntime, TranscriptChunk, CardRecord, GlossaryEntry } from '../types';
-import type { ContextBuilder, AgentContext } from '../context/context-builder';
-import type { OpenAIService } from '../services/openai-service';
+import type { ContextBuilder } from '../context/context-builder';
 import type { Logger } from '../services/observability/logger';
 import type { MetricsCollector } from '../services/observability/metrics-collector';
 import type { CheckpointManager } from '../services/observability/checkpoint-manager';
 import type { AgentRealtimeSession } from '../sessions/session-adapters';
-import { getPolicy } from '../policies';
-import { createCardGenerationUserPrompt } from '../prompts';
 import { checkBudgetStatus, formatTokenBreakdown } from '../lib/text/token-counter';
-import type { AgentOutputsRepository } from '../services/supabase/agent-outputs-repository';
-import type { CardsRepository } from '../services/supabase/cards-repository';
-import { isRecord } from '../lib/context-normalization';
-import { formatResearchSummaryForPrompt } from '../lib/text/llm-prompt-formatting';
 
 export interface CardTriggerSupportingContext {
   facts: Array<{ key: string; value: unknown; confidence: number }>;
@@ -28,31 +20,12 @@ export interface CardTriggerContext {
   supportingContext: CardTriggerSupportingContext;
 }
 
-interface GeneratedCardPayload {
-  card_type?: 'text' | 'text_visual' | 'visual';
-  title?: string;
-  body?: string | null;
-  label?: string;
-  image_url?: string | null;
-  source_seq?: number;
-  [key: string]: unknown;
-}
-
-type DetermineCardTypeFn = (
-  card: GeneratedCardPayload,
-  transcriptText: string
-) => 'text' | 'text_visual' | 'visual';
-
 export class CardsProcessor {
   constructor(
     private contextBuilder: ContextBuilder,
-    private readonly agentOutputs: AgentOutputsRepository,
-    private readonly cardsRepository: CardsRepository,
-    private openai: OpenAIService,
     private logger: Logger,
     private metrics: MetricsCollector,
-    private checkpointManager: CheckpointManager,
-    private determineCardType: DetermineCardTypeFn
+    private checkpointManager: CheckpointManager
   ) {}
 
   async process(
@@ -111,8 +84,6 @@ export class CardsProcessor {
 
       await session.sendMessage(chunk.text, messageContext);
 
-      await this.generateCardFallback(runtime, chunk, context, triggerContext);
-
       await this.checkpointManager.saveCheckpoint(
         runtime.eventId,
         'cards',
@@ -124,170 +95,4 @@ export class CardsProcessor {
     }
   }
 
-  private async generateCardFallback(
-    runtime: EventRuntime,
-    chunk: TranscriptChunk,
-    context: AgentContext,
-    triggerContext?: CardTriggerContext
-  ): Promise<void> {
-    const policy = getPolicy('cards', 1);
-
-    const joinedBullets = formatResearchSummaryForPrompt(
-      context.bullets.map((text) => ({ text })),
-      2048
-    );
-
-    const supportingRecentCards = triggerContext?.supportingContext.recentCards ?? [];
-    const recentCardsSummary =
-      supportingRecentCards
-        .map((card) => {
-          const title = typeof card.metadata?.title === 'string' ? card.metadata.title : 'untitled';
-          return `- ${card.conceptLabel} (${card.cardType ?? 'text'}) @ seq ${card.sourceSeq} — ${title}`;
-        })
-        .join('\n') || 'None';
-
-    const factsForPrompt =
-      triggerContext?.supportingContext.facts.length
-        ? triggerContext.supportingContext.facts
-        : Object.entries(context.facts).map(([key, value]) => ({
-            key,
-            value,
-            confidence: 0.5,
-          }));
-
-    const userPrompt = createCardGenerationUserPrompt(
-      chunk.text,
-      joinedBullets,
-      JSON.stringify(factsForPrompt, null, 2),
-      [
-        context.glossaryContext,
-        triggerContext?.supportingContext.glossaryEntries
-          .map((entry) => `- ${entry.term}: ${entry.definition ?? ''}`)
-          .join('\n') ?? '',
-        triggerContext?.supportingContext.contextBullets.join('\n') ?? '',
-        `Recent Cards:\n${recentCardsSummary}`,
-      ]
-        .filter(Boolean)
-        .join('\n'),
-      triggerContext
-        ? `Focus concept: ${triggerContext.conceptLabel} (id: ${triggerContext.conceptId}, source: ${triggerContext.matchSource}).`
-        : undefined
-    );
-
-    try {
-      const response = await this.openai.createChatCompletion(
-        [
-          { role: 'system', content: policy },
-          { role: 'user', content: userPrompt },
-        ],
-        {
-          responseFormat: { type: 'json_object' },
-        }
-      );
-
-      const cardJson = response.choices[0]?.message?.content;
-      if (!cardJson) return;
-
-      const parsedCard: unknown = JSON.parse(cardJson);
-      if (!isRecord(parsedCard)) {
-        this.logger.log(runtime.eventId, 'cards', 'warn', 'Card payload missing expected object shape', { seq: chunk.seq });
-        return;
-      }
-
-      const card: GeneratedCardPayload = { ...parsedCard };
-      card.source_seq = chunk.seq;
-
-      if (triggerContext) {
-        (card as GeneratedCardPayload & { concept_id?: string; concept_label?: string }).concept_id =
-          triggerContext.conceptId;
-        (card as GeneratedCardPayload & { concept_id?: string; concept_label?: string }).concept_label =
-          triggerContext.conceptLabel;
-      }
-
-      if (!card.card_type || !['text', 'text_visual', 'visual'].includes(card.card_type)) {
-        card.card_type = this.determineCardType(card, chunk.text);
-      }
-
-      if (card.card_type === 'visual') {
-        if (!card.label) card.label = card.title || 'Image';
-        if (!card.body) card.body = null;
-      } else if (card.card_type === 'text_visual') {
-        if (!card.body) card.body = card.title || 'Definition';
-      } else {
-        if (!card.body) card.body = card.title || 'Definition';
-        card.image_url = null;
-      }
-
-      const cardId = randomUUID();
-      const chunkSeq =
-        typeof chunk.seq === 'number' && Number.isFinite(chunk.seq) ? Math.trunc(chunk.seq) : undefined;
-      const sourceSeqValue =
-        typeof card.source_seq === 'number' && Number.isFinite(card.source_seq)
-          ? Math.trunc(card.source_seq)
-          : chunkSeq ?? null;
-      const runtimeCardsSeq =
-        typeof runtime.cardsLastSeq === 'number' && Number.isFinite(runtime.cardsLastSeq)
-          ? runtime.cardsLastSeq
-          : 0;
-      const lastSeenSeq = chunkSeq ?? (sourceSeqValue ?? runtimeCardsSeq ?? 0);
-      const sources =
-        chunkSeq !== undefined
-          ? [chunkSeq]
-          : sourceSeqValue !== null
-          ? [sourceSeqValue]
-          : [];
-
-      await this.agentOutputs.insertAgentOutput({
-        id: cardId,
-        event_id: runtime.eventId,
-        agent_id: runtime.agentId,
-        agent_type: 'cards',
-        for_seq: lastSeenSeq,
-        type: 'card',
-        payload: card,
-      });
-
-      await this.cardsRepository.upsertCard({
-        event_id: runtime.eventId,
-        card_id: cardId,
-        card_kind: typeof card.kind === 'string' ? card.kind : null,
-        card_type: typeof card.card_type === 'string' ? card.card_type : null,
-        payload: card,
-        source_seq: sourceSeqValue,
-        last_seen_seq: typeof lastSeenSeq === 'number' ? lastSeenSeq : runtimeCardsSeq,
-        sources,
-        is_active: true,
-      });
-
-      if (triggerContext && chunk.seq) {
-        runtime.cardsStore.add({
-          conceptId: triggerContext.conceptId,
-          conceptLabel: triggerContext.conceptLabel,
-          cardType: card.card_type ?? 'text',
-          sourceSeq: chunk.seq,
-          createdAt: Date.now(),
-          metadata: {
-            title: typeof card.title === 'string' ? card.title : undefined,
-            body: card.body ?? null,
-            label: card.label ?? null,
-            imageUrl: card.image_url ?? null,
-          },
-        });
-      }
-      if (chunk.seq) {
-        runtime.pendingCardConcepts.delete(chunk.seq);
-      }
-
-      this.logger.log(
-        runtime.eventId,
-        'cards',
-        'log',
-        `Generated card for seq ${chunk.seq} (event: ${runtime.eventId}, type: ${card.card_type})`,
-        { seq: chunk.seq }
-      );
-      // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
-    } catch (err: unknown) {
-      console.error("[worker] error:", String(err));
-    }
-  }
 }

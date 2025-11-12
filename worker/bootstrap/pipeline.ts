@@ -97,13 +97,9 @@ export const createWorkerProcessingPipeline = (
 
   const cardsProcessor = new CardsProcessor(
     contextBuilder,
-    infrastructure.repositories.agentOutputs,
-    infrastructure.repositories.cards,
-    infrastructure.openaiService,
     infrastructure.logger,
     infrastructure.metricsCollector,
-    infrastructure.checkpointManager,
-    determineCardType
+    infrastructure.checkpointManager
   );
 
   const factsProcessor = new FactsProcessor(
