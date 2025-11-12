@@ -545,7 +545,8 @@ export class EventProcessor {
           continue;
         }
 
-        const sanitizedValue = validated.value;
+        const normalizedValue = validated.normalizedValue;
+        const sanitizedValue = normalizedValue.raw;
         const initialConfidence = validated.confidence;
 
         const aliasMap = runtime.factKeyAliases as FactAliasMap;
@@ -572,6 +573,7 @@ export class EventProcessor {
           lastTouchedAt: now,
           dormantAt: null,
           prunedAt: null,
+          normalizedHash: normalizedValue.hash,
         };
 
         let existingFact = factsStore.get(targetKey);
@@ -579,6 +581,7 @@ export class EventProcessor {
           const similar = findBestMatchingFact(
             targetKey,
             candidateFact,
+            normalizedValue,
             factsStore.getAll(true)
           );
           if (similar) {
@@ -596,6 +599,20 @@ export class EventProcessor {
         let updatedFact: Fact | null = null;
 
         if (existingFact) {
+          if (existingFact.normalizedHash && existingFact.normalizedHash === normalizedValue.hash) {
+            const merged = factsStore.mergeFact(targetKey, {
+              value: existingFact.value,
+              confidence: initialConfidence,
+              sourceSeq: factSourceSeq,
+              sourceId: factSourceId,
+              mergedKeys: rawFact.key !== targetKey ? [rawFact.key] : [],
+              preferIncomingValue: false,
+              normalizedHash: normalizedValue.hash,
+            });
+            updatedFact = merged ?? factsStore.get(targetKey) ?? null;
+            continue;
+          }
+
           const similarity = computeIngestSimilarity(existingFact, candidateFact);
 
           if (factsAreEquivalent(existingFact, sanitizedValue) || shouldTreatAsDuplicate(similarity)) {
@@ -606,6 +623,7 @@ export class EventProcessor {
               sourceId: factSourceId,
               mergedKeys: rawFact.key !== targetKey ? [rawFact.key] : [],
               preferIncomingValue: false,
+              normalizedHash: normalizedValue.hash,
             });
             updatedFact = merged ?? factsStore.get(targetKey) ?? null;
           } else if (shouldTreatAsMerge(similarity)) {
@@ -616,6 +634,7 @@ export class EventProcessor {
               sourceId: factSourceId,
               mergedKeys: rawFact.key !== targetKey ? [rawFact.key] : [],
               preferIncomingValue: true,
+              normalizedHash: normalizedValue.hash,
             });
             updatedFact = merged ?? factsStore.get(targetKey) ?? null;
           } else {
@@ -626,6 +645,7 @@ export class EventProcessor {
               sourceId: factSourceId,
               mergedKeys: rawFact.key !== targetKey ? [rawFact.key] : [],
               preferIncomingValue: true,
+              normalizedHash: normalizedValue.hash,
             });
             updatedFact = merged ?? factsStore.get(targetKey) ?? null;
           }
@@ -635,7 +655,8 @@ export class EventProcessor {
             sanitizedValue,
             initialConfidence,
             factSourceSeq,
-            factSourceId
+            factSourceId,
+            normalizedValue.hash
           );
 
           if (keysEvicted.length > 0) {
@@ -667,6 +688,7 @@ export class EventProcessor {
           sources: updatedFact.sources,
           merge_provenance: updatedFact.mergedFrom,
           merged_at: updatedFact.mergedAt,
+          normalized_hash: updatedFact.normalizedHash ?? normalizedValue.hash,
         };
 
         await this.factsRepository.upsertFact(supabaseFact);

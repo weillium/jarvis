@@ -1,5 +1,6 @@
 import type { Fact } from '../../state/facts-store';
 import { computeFactSimilarity } from './similarity';
+import { normalizeFactValue, type NormalizedFactValue } from './value-normalizer';
 
 interface SimilarFactCandidate {
   key: string;
@@ -78,19 +79,38 @@ const FACT_SIMILARITY_THRESHOLD = 0.85;
 export const findBestMatchingFact = (
   candidateKey: string,
   candidateFact: Fact,
+  candidateNormalized: NormalizedFactValue,
   existingFacts: Fact[]
 ): SimilarFactCandidate | null => {
+  const candidateHash = candidateNormalized.hash;
   const candidateTokens = new Set(tokenizeKey(candidateKey));
   let bestMatch: SimilarFactCandidate | null = null;
 
   for (const fact of existingFacts) {
+    if (fact.normalizedHash && fact.normalizedHash === candidateHash) {
+      return {
+        key: fact.key,
+        fact,
+        keySimilarity: 1,
+        factSimilarity: 1,
+      };
+    }
+
     const factTokens = new Set(tokenizeKey(fact.key));
     const keySimilarity = jaccardSimilarity(candidateTokens, factTokens);
     if (keySimilarity < KEY_SIMILARITY_THRESHOLD) {
       continue;
     }
 
-    const factSimilarity = computeFactSimilarity(fact, candidateFact);
+    const normalizedExisting = normalizeFactValue(fact.value);
+    const valueTokenSimilarity = jaccardSimilarity(
+      new Set(candidateNormalized.tokens),
+      new Set(normalizedExisting.tokens)
+    );
+    const factSimilarity = Math.max(
+      valueTokenSimilarity,
+      computeFactSimilarity(fact, candidateFact)
+    );
     if (factSimilarity < FACT_SIMILARITY_THRESHOLD) {
       continue;
     }

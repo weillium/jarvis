@@ -1,6 +1,7 @@
 import type { RealtimeFactDTO } from '../../types';
 import type { Fact } from '../../state/facts-store';
 import { computeFactSimilarity, FACT_SIMILARITY_THRESHOLD } from './similarity';
+import { normalizeFactValue, type NormalizedFactValue } from './value-normalizer';
 
 const GENERIC_KEY_TERMS = new Set([
   'topic',
@@ -237,53 +238,25 @@ export interface ValidatedFactInput {
   key: string;
   originalKey: string;
   value: unknown;
+  normalizedValue: NormalizedFactValue;
   confidence: number;
   derivedFromValue: boolean;
 }
-
-export const sanitizeFactValue = (value: unknown): unknown => {
-  if (value === null || value === undefined) {
-    return '';
-  }
-
-  if (typeof value === 'string') {
-    return value.trim();
-  }
-
-  if (typeof value === 'number' || typeof value === 'boolean') {
-    return value;
-  }
-
-  if (typeof value === 'bigint' || typeof value === 'symbol') {
-    return value.toString();
-  }
-
-  if (typeof value === 'function') {
-    return value.name ? `[Function ${value.name}]` : '[Function]';
-  }
-
-  if (Array.isArray(value)) {
-    return value;
-  }
-
-  if (typeof value === 'object') {
-    return value;
-  }
-
-  return '';
-};
 
 export const validateRealtimeFact = (fact: RealtimeFactDTO): ValidatedFactInput | null => {
   if (!fact || typeof fact.key !== 'string') {
     return null;
   }
 
-  const sanitizedValue = sanitizeFactValue(fact.value);
-  if (typeof sanitizedValue === 'string' && sanitizedValue.length === 0) {
+  const normalizedValue = normalizeFactValue(fact.value);
+  if (
+    normalizedValue.normalized === null ||
+    (typeof normalizedValue.normalized === 'string' && normalizedValue.normalized.length === 0)
+  ) {
     return null;
   }
 
-  const normalized = normalizeFactKey(fact.key, sanitizedValue);
+  const normalized = normalizeFactKey(fact.key, normalizedValue.normalized);
   if (!normalized.canonical) {
     return null;
   }
@@ -297,7 +270,8 @@ export const validateRealtimeFact = (fact: RealtimeFactDTO): ValidatedFactInput 
     raw: fact,
     key: normalized.canonical,
     originalKey: normalized.original,
-    value: sanitizedValue,
+    value: normalizedValue.raw,
+    normalizedValue,
     confidence,
     derivedFromValue: normalized.wasDerivedFromValue,
   };

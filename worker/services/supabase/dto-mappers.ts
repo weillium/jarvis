@@ -279,6 +279,7 @@ export const mapFactRecords = (rows: unknown): FactRecord[] =>
       updated_at: getOptionalString(record, 'updated_at') ?? undefined,
       dormant_at: getOptionalString(record, 'dormant_at') ?? undefined,
       pruned_at: getOptionalString(record, 'pruned_at') ?? undefined,
+      normalized_hash: getOptionalString(record, 'normalized_hash') ?? undefined,
     };
   });
 

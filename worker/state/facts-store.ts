@@ -17,6 +17,7 @@ export interface Fact {
   lastTouchedAt: number;
   dormantAt: number | null;
   prunedAt: number | null;
+  normalizedHash?: string;
 }
 
 export class FactsStore {
@@ -84,7 +85,8 @@ export class FactsStore {
     value: unknown,
     confidence: number,
     sourceSeq: number,
-    sourceId?: number
+    sourceId?: number,
+    normalizedHash?: string
   ): string[] {
     const existing = this.facts.get(key);
     const now = Date.now();
@@ -115,6 +117,7 @@ export class FactsStore {
         lastTouchedAt: now,
         dormantAt: null,
         prunedAt: null,
+        normalizedHash: normalizedHash ?? existing.normalizedHash,
       });
       this.dormantFacts.delete(key);
       this.prunedFacts.delete(key);
@@ -138,6 +141,7 @@ export class FactsStore {
         lastTouchedAt: now,
         dormantAt: null,
         prunedAt: null,
+        normalizedHash,
       });
       this.dormantFacts.delete(key);
       this.prunedFacts.delete(key);
@@ -167,6 +171,7 @@ export class FactsStore {
       lastTouchedAt?: number;
       dormantAt?: number | null;
       prunedAt?: number | null;
+      normalizedHash?: string;
     }>
   ): string[] {
     const evictedKeys: string[] = [];
@@ -189,6 +194,7 @@ export class FactsStore {
         lastTouchedAt: fact.lastTouchedAt ?? now,
         dormantAt: fact.dormantAt ?? null,
         prunedAt: fact.prunedAt ?? null,
+        normalizedHash: fact.normalizedHash,
       });
       
       // Check if we need to evict after each addition (if we're over capacity)
@@ -469,6 +475,7 @@ export class FactsStore {
       sourceId?: number;
       mergedKeys?: string[];
       preferIncomingValue?: boolean;
+      normalizedHash?: string;
     }
   ): Fact | null {
     const existing = this.facts.get(key);
@@ -515,6 +522,7 @@ export class FactsStore {
       lastTouchedAt: now,
       dormantAt: null,
       prunedAt: null,
+      normalizedHash: params.normalizedHash ?? existing.normalizedHash,
     };
 
     this.facts.set(key, updatedFact);

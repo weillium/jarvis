@@ -92,6 +92,7 @@ export class RuntimeManager {
           lastTouchedAt: Number.isFinite(updatedAtMs) ? updatedAtMs : Date.now(),
           dormantAt: null,
           prunedAt: null,
+          normalizedHash: typeof f.normalized_hash === 'string' ? f.normalized_hash : undefined,
         };
       });
       const evictedKeys = factsStore.loadFacts(formattedFacts);
