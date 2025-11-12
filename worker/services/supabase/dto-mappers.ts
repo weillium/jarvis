@@ -280,6 +280,10 @@ export const mapFactRecords = (rows: unknown): FactRecord[] =>
       dormant_at: getOptionalString(record, 'dormant_at') ?? undefined,
       pruned_at: getOptionalString(record, 'pruned_at') ?? undefined,
       normalized_hash: getOptionalString(record, 'normalized_hash') ?? undefined,
+      fact_kind: getOptionalString(record, 'fact_kind') ?? undefined,
+      original_fact_value: record['original_fact_value'],
+      exclude_from_prompt:
+        typeof record['exclude_from_prompt'] === 'boolean' ? record['exclude_from_prompt'] : undefined,
     };
   });
 

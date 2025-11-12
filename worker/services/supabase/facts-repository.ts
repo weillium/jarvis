@@ -21,7 +21,10 @@ export class FactsRepository {
   }
 
   async supportsNormalizedHashColumn(): Promise<boolean> {
-    const { error } = await this.client.from('facts').select('normalized_hash').limit(1);
+    const { error } = await this.client
+      .from('facts')
+      .select('normalized_hash,fact_kind,exclude_from_prompt,original_fact_value')
+      .limit(1);
     return !error;
   }
 

@@ -2,6 +2,8 @@ import type { RealtimeFactDTO } from '../../types';
 import type { Fact } from '../../state/facts-store';
 import { computeFactSimilarity, FACT_SIMILARITY_THRESHOLD } from './similarity';
 import { normalizeFactValue, type NormalizedFactValue } from './value-normalizer';
+import { classifyNormalizedFact } from './fact-classifier';
+import type { FactKind } from './fact-types';
 
 const GENERIC_KEY_TERMS = new Set([
   'topic',
@@ -239,6 +241,9 @@ export interface ValidatedFactInput {
   originalKey: string;
   value: unknown;
   normalizedValue: NormalizedFactValue;
+  kind: FactKind;
+  rewrittenValue?: string;
+  excludeFromPrompt: boolean;
   confidence: number;
   derivedFromValue: boolean;
 }
@@ -261,6 +266,8 @@ export const validateRealtimeFact = (fact: RealtimeFactDTO): ValidatedFactInput 
     return null;
   }
 
+  const classification = classifyNormalizedFact(normalizedValue);
+
   const confidence =
     typeof fact.confidence === 'number' && fact.confidence >= 0 && fact.confidence <= 1
       ? fact.confidence
@@ -272,6 +279,9 @@ export const validateRealtimeFact = (fact: RealtimeFactDTO): ValidatedFactInput 
     originalKey: normalized.original,
     value: normalizedValue.raw,
     normalizedValue,
+    kind: classification.kind,
+    rewrittenValue: classification.rewrittenValue,
+    excludeFromPrompt: classification.excludeFromPrompt ?? false,
     confidence,
     derivedFromValue: normalized.wasDerivedFromValue,
   };

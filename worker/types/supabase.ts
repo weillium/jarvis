@@ -133,6 +133,9 @@ export interface FactRecord {
   dormant_at?: string | null;
   pruned_at?: string | null;
   normalized_hash?: string | null;
+  fact_kind?: string | null;
+  original_fact_value?: unknown;
+  exclude_from_prompt?: boolean;
 }
 
 export interface VectorMatchRecord {

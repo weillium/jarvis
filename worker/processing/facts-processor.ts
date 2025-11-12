@@ -63,13 +63,15 @@ export class FactsProcessor {
       );
 
       const allFacts = runtime.factsStore.getAll();
+      const eligibleFacts = allFacts.filter((fact) => !fact.excludeFromPrompt);
+      const excludedCount = allFacts.length - eligibleFacts.length;
       const { context: baseContext, recentText } = this.contextBuilder.buildFactsContext(runtime);
 
       const recentTextTokens = countTokens(recentText);
       const glossaryTokens = countTokens(baseContext.glossaryContext);
 
       const budgetResult: FactsPromptBudgetResult = budgetFactsPrompt({
-        facts: allFacts,
+        facts: eligibleFacts,
         recentTranscript: recentText,
         totalBudgetTokens: 2048,
         transcriptTokens: recentTextTokens,
@@ -104,7 +106,10 @@ export class FactsProcessor {
       }
 
       const logMessage = `${logPrefix} Facts Agent (seq ${runtime.factsLastSeq}): ${tokenBreakdown.total}/2048 tokens (${budgetStatus.percentage}%) - ${breakdownStr} | selected ${budgetResult.metrics.selected}/${budgetResult.metrics.totalFacts} (summary ${budgetResult.metrics.summary}) | merged ${budgetResult.metrics.mergedClusters}`;
-      this.logger.log(runtime.eventId, 'facts', logLevel, logMessage, { seq: runtime.factsLastSeq });
+      this.logger.log(runtime.eventId, 'facts', logLevel, logMessage, {
+        seq: runtime.factsLastSeq,
+        excludedFacts: excludedCount,
+      });
 
       this.metrics.recordTokens(
         runtime.eventId,

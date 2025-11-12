@@ -1,3 +1,5 @@
+import type { FactKind } from '../runtime/facts/fact-types';
+
 /**
  * In-memory Facts Store
  * Maintains a compact key-value store of stable facts extracted during events
@@ -18,6 +20,9 @@ export interface Fact {
   dormantAt: number | null;
   prunedAt: number | null;
   normalizedHash?: string;
+  kind: FactKind;
+  originalValue?: unknown;
+  excludeFromPrompt?: boolean;
 }
 
 export class FactsStore {
@@ -86,7 +91,10 @@ export class FactsStore {
     confidence: number,
     sourceSeq: number,
     sourceId?: number,
-    normalizedHash?: string
+    normalizedHash?: string,
+    kind: FactKind = 'claim',
+    originalValue?: unknown,
+    excludeFromPrompt: boolean = false
   ): string[] {
     const existing = this.facts.get(key);
     const now = Date.now();
@@ -118,6 +126,9 @@ export class FactsStore {
         dormantAt: null,
         prunedAt: null,
         normalizedHash: normalizedHash ?? existing.normalizedHash,
+        kind: kind ?? existing.kind,
+        originalValue: originalValue ?? existing.originalValue,
+        excludeFromPrompt,
       });
       this.dormantFacts.delete(key);
       this.prunedFacts.delete(key);
@@ -142,6 +153,9 @@ export class FactsStore {
         dormantAt: null,
         prunedAt: null,
         normalizedHash,
+        kind,
+        originalValue,
+        excludeFromPrompt,
       });
       this.dormantFacts.delete(key);
       this.prunedFacts.delete(key);
@@ -172,6 +186,9 @@ export class FactsStore {
       dormantAt?: number | null;
       prunedAt?: number | null;
       normalizedHash?: string;
+      kind?: FactKind;
+      originalValue?: unknown;
+      excludeFromPrompt?: boolean;
     }>
   ): string[] {
     const evictedKeys: string[] = [];
@@ -195,6 +212,9 @@ export class FactsStore {
         dormantAt: fact.dormantAt ?? null,
         prunedAt: fact.prunedAt ?? null,
         normalizedHash: fact.normalizedHash,
+        kind: fact.kind ?? 'claim',
+        originalValue: fact.originalValue,
+        excludeFromPrompt: fact.excludeFromPrompt ?? false,
       });
       
       // Check if we need to evict after each addition (if we're over capacity)
@@ -333,7 +353,9 @@ export class FactsStore {
    * Get all facts above a confidence threshold
    */
   getHighConfidence(threshold: number = 0.5): Fact[] {
-    return this.getSnapshot().filter((f) => f.confidence >= threshold);
+    return this.getSnapshot().filter(
+      (f) => f.confidence >= threshold && !f.excludeFromPrompt
+    );
   }
 
   /**
@@ -476,6 +498,9 @@ export class FactsStore {
       mergedKeys?: string[];
       preferIncomingValue?: boolean;
       normalizedHash?: string;
+      kind?: FactKind;
+      originalValue?: unknown;
+      excludeFromPrompt?: boolean;
     }
   ): Fact | null {
     const existing = this.facts.get(key);
@@ -523,6 +548,9 @@ export class FactsStore {
       dormantAt: null,
       prunedAt: null,
       normalizedHash: params.normalizedHash ?? existing.normalizedHash,
+      kind: params.kind ?? existing.kind,
+      originalValue: params.originalValue ?? existing.originalValue,
+      excludeFromPrompt: params.excludeFromPrompt ?? existing.excludeFromPrompt ?? false,
     };
 
     this.facts.set(key, updatedFact);

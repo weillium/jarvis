@@ -37,7 +37,10 @@ export class ContextBuilder {
     recentText: string;
   } {
     const recentText = runtime.ringBuffer.getRecentText(20, 2048);
-    const currentFacts = runtime.factsStore.getAll();
+    const currentFacts = runtime
+      .factsStore
+      .getAll()
+      .filter((fact) => !fact.excludeFromPrompt);
     const glossaryTerms = this.glossaryManager.extractRelevantTerms(
       recentText,
       runtime.glossaryCache ?? new Map<string, GlossaryEntry>()

@@ -11,6 +11,7 @@ import type { TranscriptsRepository } from '../services/supabase/transcripts-rep
 import type { AgentsRepository } from '../services/supabase/agents-repository';
 import type { CardsRepository } from '../services/supabase/cards-repository';
 import { normalizeCardStateRecord } from '../lib/cards/payload-normalizer';
+import type { FactKind } from './facts/fact-types';
 
 export class RuntimeManager {
   private readonly runtimes: Map<string, EventRuntime> = new Map();
@@ -85,6 +86,13 @@ export class RuntimeManager {
           }
         }
 
+        const kind: FactKind =
+          typeof f.fact_kind === 'string' && (['claim', 'question', 'meta'] as FactKind[]).includes(
+            f.fact_kind as FactKind
+          )
+            ? (f.fact_kind as FactKind)
+            : 'claim';
+
         return {
           key: f.fact_key,
           value,
@@ -99,6 +107,9 @@ export class RuntimeManager {
           dormantAt: null,
           prunedAt: null,
           normalizedHash: typeof f.normalized_hash === 'string' ? f.normalized_hash : undefined,
+          kind,
+          originalValue: f.original_fact_value,
+          excludeFromPrompt: typeof f.exclude_from_prompt === 'boolean' ? f.exclude_from_prompt : false,
         };
       });
       if (
