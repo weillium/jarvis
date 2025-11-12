@@ -1,7 +1,7 @@
 import type { EventRuntime, GlossaryEntry } from '../types';
 import type { Fact } from '../state/facts-store';
 import type { GlossaryManager } from './glossary-manager';
-import { countTokens } from '../utils/token-counter';
+import { countTokens } from '../lib/text/token-counter';
 
 type FactsRecord = Record<string, unknown>;
 type FactConfidenceRecord = Record<string, { value: unknown; confidence: number }>;

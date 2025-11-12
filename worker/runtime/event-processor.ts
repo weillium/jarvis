@@ -13,6 +13,7 @@ import type { TranscriptProcessor } from '../processing/transcript-processor';
 import type { AgentOutputsRepository } from '../services/supabase/agent-outputs-repository';
 import type { CardsRepository } from '../services/supabase/cards-repository';
 import type { FactsRepository } from '../services/supabase/facts-repository';
+import type { FactRecord } from '../services/supabase/types';
 import {
   extractConcepts,
   normalizeConcept,
@@ -545,15 +546,38 @@ export class EventProcessor {
 
         const storedFact = runtime.factsStore.get(fact.key);
         const computedConfidence = storedFact?.confidence ?? initialConfidence;
+        let mergeProvenance: string[] = [];
+        let mergedAt: string | null = null;
+        let sources: number[] = [];
 
-        await this.factsRepository.upsertFact({
+        const rawMergeProvenance: unknown = storedFact?.mergedFrom;
+        if (Array.isArray(rawMergeProvenance)) {
+          mergeProvenance = rawMergeProvenance.filter((entry): entry is string => typeof entry === 'string');
+        }
+
+        const rawMergedAt: unknown = storedFact?.mergedAt;
+        if (typeof rawMergedAt === 'string') {
+          mergedAt = rawMergedAt;
+        }
+
+        const rawSources: unknown = storedFact?.sources;
+        if (Array.isArray(rawSources)) {
+          sources = rawSources.filter((entry): entry is number => typeof entry === 'number');
+        }
+
+        const factValue: unknown = fact.value;
+        const supabaseFact: FactRecord = {
           event_id: runtime.eventId,
           fact_key: fact.key,
-          fact_value: fact.value,
+          fact_value: factValue,
           confidence: computedConfidence,
           last_seen_seq: factSourceSeq,
-          sources: storedFact?.sources || [],
-        });
+          sources,
+          merge_provenance: mergeProvenance,
+          merged_at: mergedAt,
+        };
+
+        await this.factsRepository.upsertFact(supabaseFact);
 
         await this.agentOutputs.insertAgentOutput({
           event_id: runtime.eventId,

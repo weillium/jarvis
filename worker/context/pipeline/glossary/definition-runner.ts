@@ -7,7 +7,7 @@ import {
   EXA_ANSWER_POLISH_SYSTEM_PROMPT,
   createExaAnswerPolishUserPrompt,
 } from '../../../prompts';
-import { calculateExaAnswerCost, calculateOpenAICost } from '../../../utils/pricing';
+import { calculateExaAnswerCost, calculateOpenAICost } from '../../../lib/pricing';
 import { normalizeGlossaryDefinitions } from '../../../lib/context-normalization';
 import { selectRelevantSnippets } from './snippet-selector';
 import type {

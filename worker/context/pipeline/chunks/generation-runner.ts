@@ -5,10 +5,8 @@ import {
   CONTEXT_CHUNKS_GENERATION_SYSTEM_PROMPT,
   createContextChunksUserPrompt,
 } from '../../../prompts/context';
-import {
-  calculateOpenAICost,
-} from '../../utils/pricing';
-import type { OpenAIUsage } from '../../utils/pricing';
+import { calculateOpenAICost } from '../../../lib/pricing';
+import type { OpenAIUsage } from '../../../lib/pricing';
 import {
   formatBlueprintDetailsForPrompt,
   formatGlossaryHighlightsForPrompt,

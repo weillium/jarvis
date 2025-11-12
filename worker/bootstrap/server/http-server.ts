@@ -1,8 +1,8 @@
 import http from 'http';
 import { URL } from 'url';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Orchestrator } from '../runtime/orchestrator';
-import { getBlueprintPromptPreview } from '../context/pipeline/blueprint-generator';
+import type { Orchestrator } from '../../runtime/orchestrator';
+import { getBlueprintPromptPreview } from '../../context/pipeline/blueprint-generator';
 
 interface WorkerServerDeps {
   orchestrator: Orchestrator;

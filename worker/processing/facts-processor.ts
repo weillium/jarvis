@@ -1,14 +1,14 @@
 import type { EventRuntime, Fact } from '../types';
 import type { FactsStore } from '../state/facts-store';
 import type { AgentContext, ContextBuilder } from '../context/context-builder';
-import type { Logger } from '../monitoring/logger';
-import type { MetricsCollector } from '../monitoring/metrics-collector';
-import type { CheckpointManager } from '../monitoring/checkpoint-manager';
+import type { Logger } from '../services/observability/logger';
+import type { MetricsCollector } from '../services/observability/metrics-collector';
+import type { CheckpointManager } from '../services/observability/checkpoint-manager';
 import type { AgentRealtimeSession } from '../sessions/session-adapters';
 import { budgetFactsPrompt } from '../runtime/facts/prompt-budgeter';
 import type { FactsPromptBudgetResult } from '../runtime/facts/prompt-budgeter';
 import type { ConfidenceAdjustment } from '../runtime/facts/prompt-budgeter';
-import { checkBudgetStatus, countTokens, formatTokenBreakdown } from '../utils/token-counter';
+import { checkBudgetStatus, countTokens, formatTokenBreakdown } from '../lib/text/token-counter';
 
 const buildPromptFactsRecord = (
   facts: Fact[]

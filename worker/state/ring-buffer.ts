@@ -4,7 +4,7 @@
  * Enforces token budget limits to prevent prompt bloat
  */
 
-import { countTokens, countTokensArray } from '../utils/token-counter';
+import { countTokens, countTokensArray } from '../lib/text/token-counter';
 
 export interface TranscriptChunk {
   seq: number;

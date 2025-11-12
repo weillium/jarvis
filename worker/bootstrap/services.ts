@@ -3,10 +3,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { ModelSelectionService } from '../services/model-selection-service';
 import { OpenAIService } from '../services/openai-service';
 import { SSEService } from '../services/sse-service';
-import { Logger } from '../monitoring/logger';
-import { MetricsCollector } from '../monitoring/metrics-collector';
-import { StatusUpdater } from '../monitoring/status-updater';
-import { CheckpointManager } from '../monitoring/checkpoint-manager';
+import { Logger } from '../services/observability/logger';
+import { MetricsCollector } from '../services/observability/metrics-collector';
+import { StatusUpdater } from '../services/observability/status-updater';
+import { CheckpointManager } from '../services/observability/checkpoint-manager';
 import {
   createSupabaseClient,
   AgentsRepository,

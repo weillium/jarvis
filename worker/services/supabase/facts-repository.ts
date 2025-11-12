@@ -9,6 +9,8 @@ export class FactsRepository {
     const factWithActive = {
       ...fact,
       is_active: fact.is_active !== undefined ? fact.is_active : true,
+      merge_provenance: fact.merge_provenance ?? [],
+      merged_at: fact.merged_at ?? null,
     };
 
     const { error } = await this.client

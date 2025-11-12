@@ -8,7 +8,7 @@ The worker hosts the long-running agents that ingest context, orchestrate pipeli
 - See `QUICKSTART.md` for environment requirements and detailed workflows.
 
 ## Entry Points
-- `server/run-worker.ts` boots the HTTP interface that the platform uses to coordinate workers.
+- `bootstrap/server/run-worker.ts` boots the HTTP interface that the platform uses to coordinate workers.
 - `runtime/runtime-manager.ts` is the in-memory orchestrator that wires processors, sessions, and monitoring.
 - `index.ts` exposes public worker APIs so other packages can drive pipelines programmatically.
 
@@ -28,7 +28,7 @@ The worker hosts the long-running agents that ingest context, orchestrate pipeli
 - `lib/` – reusable domain utilities (context normalization, document helpers, text transforms, card payload shaping).
   - `context-normalization.ts` standardizes context payload formats.
   - `documents/` and `text/` provide parsing, chunking, and prompt-formatting helpers.
-- `monitoring/` – observability primitives (structured logging, metrics, checkpoints, status updates).
+- `services/observability/` – observability primitives (structured logging, metrics, checkpoints, status updates).
   - `checkpoint-manager.ts` resumes pipelines after interruptions.
   - `status-updater.ts` pushes progress to external systems.
 - `policies/` – runtime policy definitions for cards, facts, and transcripts agents.
@@ -44,7 +44,7 @@ The worker hosts the long-running agents that ingest context, orchestrate pipeli
   - `facts/` and `cards/` hold specialized budgeters and salience logic.
   - `orchestrator/` provides session orchestration (coordinators, status services).
 - `scripts/` – local maintenance and debugging scripts (PCM generation, setup validation).
-- `server/` – thin HTTP server wrapper that exposes worker functionality.
+- `bootstrap/server/` – worker HTTP server wrapper and CLI entry point.
   - `run-worker.ts` is the CLI entry, `http-server.ts` hosts the request handlers.
 - `services/` – external service integrations (model selection, OpenAI, SSE, Supabase repositories).
   - `model-management/` resolves provider metadata and model availability.
@@ -56,7 +56,6 @@ The worker hosts the long-running agents that ingest context, orchestrate pipeli
 - `tests/` – worker-specific automated tests.
 - `types/` – shared TypeScript types for runtime, sessions, Supabase DTOs, and OpenAI signatures.
   - Includes ambient `.d.ts` shims (e.g., `pdf-parse.d.ts`).
-- `utils/` – low-level utilities not yet promoted into `lib/` (e.g., token counting helpers).
 
 ## Cross-Cutting Patterns
 - DTO-first contracts at every I/O boundary (Supabase, OpenAI, WebSocket) with runtime validation.

@@ -1,5 +1,5 @@
 import type { RuntimeManager } from '../runtime-manager';
-import type { StatusUpdater } from '../../monitoring/status-updater';
+import type { StatusUpdater } from '../../services/observability/status-updater';
 import type { AgentSessionStatus, EventRuntime } from '../../types';
 
 export class OrchestratorStatusService {

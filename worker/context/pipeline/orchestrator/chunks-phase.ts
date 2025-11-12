@@ -1,6 +1,6 @@
 import type { Blueprint } from '../blueprint/types';
 import { buildContextChunks } from '../chunks-builder';
-import { getPricingVersion } from '../../utils/pricing';
+import { getPricingVersion } from '../../../lib/pricing';
 import type { GenerationContext, PhaseOptions } from './phase-context';
 import type { StatusManager } from './status-manager';
 

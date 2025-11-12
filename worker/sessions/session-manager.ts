@@ -6,7 +6,7 @@ import type {
   RealtimeAudioChunk,
 } from './session-adapters';
 import type { SessionFactory } from './session-factory';
-import type { Logger } from '../monitoring/logger';
+import type { Logger } from '../services/observability/logger';
 
 export type TranscriptAudioOptions = RealtimeAudioChunk;
 

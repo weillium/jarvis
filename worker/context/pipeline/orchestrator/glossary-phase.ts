@@ -1,6 +1,6 @@
 import type { Blueprint } from '../blueprint/types';
 import { buildGlossary } from '../glossary-builder';
-import { getPricingVersion } from '../../utils/pricing';
+import { getPricingVersion } from '../../../lib/pricing';
 import type { GenerationContext, PhaseOptions } from './phase-context';
 import type { StatusManager } from './status-manager';
 

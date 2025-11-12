@@ -10,7 +10,7 @@ import type { Blueprint } from './blueprint/types';
 import type {
   SupabaseMutationResult,
 } from './blueprint/types';
-import { getPricingVersion } from '../../utils/pricing';
+import { getPricingVersion } from '../../lib/pricing';
 import type { WorkerSupabaseClient } from '../../services/supabase';
 import {
   fetchActiveResearchResults,

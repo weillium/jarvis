@@ -7,7 +7,7 @@
 /**
  * Count tokens in a text string
  * Approximation: ~4 characters per token (conservative estimate)
- * 
+ *
  * @param text - Text to count tokens for
  * @returns Estimated token count
  */
@@ -27,7 +27,7 @@ export function countTokens(text: string): number {
 
 /**
  * Count tokens in an array of strings
- * 
+ *
  * @param texts - Array of text strings
  * @returns Total estimated token count
  */
@@ -37,28 +37,28 @@ export function countTokensArray(texts: string[]): number {
 
 /**
  * Truncate text to fit within token budget
- * 
+ *
  * @param text - Text to truncate
  * @param maxTokens - Maximum token budget
  * @returns Truncated text that fits within budget
  */
 export function truncateToTokenBudget(text: string, maxTokens: number): string {
   const estimatedTokens = countTokens(text);
-  
+
   if (estimatedTokens <= maxTokens) {
     return text;
   }
 
   // Calculate target character count (conservative)
   const targetChars = maxTokens * 4;
-  
+
   // Truncate and add ellipsis
   return text.slice(0, targetChars - 3) + '...';
 }
 
 /**
  * Get token budget breakdown for logging
- * 
+ *
  * @param components - Object with component names and their text
  * @returns Breakdown object with token counts per component
  */
@@ -80,7 +80,7 @@ export function getTokenBreakdown(components: Record<string, string>): {
 
 /**
  * Check if token usage is approaching budget limit
- * 
+ *
  * @param used - Current token usage
  * @param budget - Token budget limit
  * @returns Object with warning status and percentage
@@ -93,7 +93,7 @@ export function checkBudgetStatus(used: number, budget: number): {
 } {
   const percentage = (used / budget) * 100;
   const remaining = budget - used;
-  
+
   return {
     warning: percentage >= 80,
     critical: percentage >= 95,
@@ -104,7 +104,7 @@ export function checkBudgetStatus(used: number, budget: number): {
 
 /**
  * Format token breakdown for logging
- * 
+ *
  * @param breakdown - Token breakdown object
  * @param maxLength - Maximum length for each component name
  * @returns Formatted string
@@ -114,12 +114,13 @@ export function formatTokenBreakdown(
   maxLength: number = 12
 ): string {
   const parts: string[] = [];
-  
+
   for (const [name, tokens] of Object.entries(breakdown)) {
     const paddedName = name.padEnd(maxLength);
     parts.push(`${paddedName}: ${tokens}`);
   }
-  
+
   return parts.join(', ');
 }
+
 

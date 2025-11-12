@@ -324,3 +324,4 @@ export function calculateCost(request: CostRequest): number {
   return calculateExaResearchCost(request.usage);
 }
 
+

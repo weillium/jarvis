@@ -3,9 +3,9 @@ import { RingBuffer } from '../state/ring-buffer';
 import { FactsStore } from '../state/facts-store';
 import { CardsStore, type CardRecord } from '../state/cards-store';
 import type { GlossaryManager } from '../context/glossary-manager';
-import type { CheckpointManager } from '../monitoring/checkpoint-manager';
-import type { MetricsCollector } from '../monitoring/metrics-collector';
-import type { Logger } from '../monitoring/logger';
+import type { CheckpointManager } from '../services/observability/checkpoint-manager';
+import type { MetricsCollector } from '../services/observability/metrics-collector';
+import type { Logger } from '../services/observability/logger';
 import type { FactsRepository } from '../services/supabase/facts-repository';
 import type { TranscriptsRepository } from '../services/supabase/transcripts-repository';
 import type { AgentsRepository } from '../services/supabase/agents-repository';
@@ -50,15 +50,32 @@ export class RuntimeManager {
     const factsStore = new FactsStore(50);
     const activeFacts = await this.factsRepository.getFacts(eventId, true);
     if (activeFacts.length > 0) {
-      const evictedKeys = factsStore.loadFacts(
-        activeFacts.map((f) => ({
+      type LoadableFact = Parameters<FactsStore['loadFacts']>[0][number];
+      const formattedFacts: LoadableFact[] = activeFacts.map((f) => {
+        const value: unknown = f.fact_value;
+        const rawSources: unknown = f.sources;
+        const sources: number[] = Array.isArray(rawSources)
+          ? rawSources.filter((entry): entry is number => typeof entry === 'number')
+          : [];
+        const rawMergeProvenance: unknown = f.merge_provenance;
+        const mergeProvenance: string[] = Array.isArray(rawMergeProvenance)
+          ? rawMergeProvenance.filter((entry): entry is string => typeof entry === 'string')
+          : [];
+        const rawMergedAt: unknown = f.merged_at;
+        const mergedAt: string | null = typeof rawMergedAt === 'string' ? rawMergedAt : null;
+
+        return {
           key: f.fact_key,
-          value: f.fact_value,
+          value,
           confidence: f.confidence,
           lastSeenSeq: f.last_seen_seq,
-          sources: f.sources || [],
-        }))
-      );
+          sources,
+          mergedFrom: mergeProvenance,
+          mergedAt,
+          missStreak: 0,
+        };
+      });
+      const evictedKeys = factsStore.loadFacts(formattedFacts);
 
       if (evictedKeys.length > 0) {
         await this.factsRepository.updateFactActiveStatus(eventId, evictedKeys, false);

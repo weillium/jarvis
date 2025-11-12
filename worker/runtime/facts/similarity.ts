@@ -1,148 +1,204 @@
 import type { Fact } from '../../state/facts-store';
 
 const DEFAULT_SIMILARITY_THRESHOLD = 0.85;
+const STOPWORDS = new Set([
+  'the',
+  'a',
+  'an',
+  'and',
+  'or',
+  'to',
+  'of',
+  'in',
+  'for',
+  'on',
+  'with',
+  'at',
+  'by',
+  'from',
+  'is',
+  'are',
+  'was',
+  'were',
+  'be',
+  'this',
+  'that',
+  'it',
+  'as',
+  'we',
+  'you',
+  'they',
+  'their',
+  'our',
+]);
 
-const tokenize = (text: string): string[] => {
-  return text
+export const FACT_SIMILARITY_THRESHOLD = DEFAULT_SIMILARITY_THRESHOLD;
+
+type TokenSet = {
+  tokens: Set<string>;
+  magnitude: number;
+};
+
+const tokenize = (text: string): TokenSet => {
+  const rawTokens = text
     .toLowerCase()
     .split(/[^a-z0-9]+/g)
-    .filter(Boolean);
-};
+    .filter((token) => token.length > 0 && !STOPWORDS.has(token));
 
-const buildFrequencyMap = (tokens: string[]): Map<string, number> => {
-  const map = new Map<string, number>();
-  for (const token of tokens) {
-    map.set(token, (map.get(token) ?? 0) + 1);
-  }
-  return map;
-};
-
-const cosineSimilarity = (a: Map<string, number>, b: Map<string, number>): number => {
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-
-  a.forEach((value, key) => {
-    normA += value * value;
-    if (b.has(key)) {
-      dot += value * (b.get(key) ?? 0);
-    }
-  });
-
-  b.forEach((value) => {
-    normB += value * value;
-  });
-
-  if (normA === 0 || normB === 0) {
-    return 0;
+  const tokenCounts = new Map<string, number>();
+  for (const token of rawTokens) {
+    tokenCounts.set(token, (tokenCounts.get(token) ?? 0) + 1);
   }
 
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
-};
-
-const jaccardSimilarity = (aTokens: string[], bTokens: string[]): number => {
-  if (aTokens.length === 0 || bTokens.length === 0) {
-    return 0;
+  let magnitudeSq = 0;
+  for (const count of tokenCounts.values()) {
+    magnitudeSq += count * count;
   }
 
-  const aSet = new Set(aTokens);
-  const bSet = new Set(bTokens);
-
-  let intersection = 0;
-  aSet.forEach((token) => {
-    if (bSet.has(token)) {
-      intersection += 1;
-    }
-  });
-
-  const union = aSet.size + bSet.size - intersection;
-  if (union === 0) {
-    return 0;
-  }
-
-  return intersection / union;
+  return {
+    tokens: new Set(tokenCounts.keys()),
+    magnitude: Math.sqrt(magnitudeSq),
+  };
 };
 
-const factToText = (fact: Fact): string => {
+const factToComparableText = (fact: Fact): string => {
   if (typeof fact.value === 'string') {
-    return `${fact.key}: ${fact.value}`;
+    return `${fact.key} ${fact.value}`;
   }
+
   try {
-    return `${fact.key}: ${JSON.stringify(fact.value)}`;
+    return `${fact.key} ${JSON.stringify(fact.value)}`;
   } catch {
     return fact.key;
   }
 };
 
-export interface FactCluster {
-  representative: Fact;
-  members: Fact[];
-  similarity: number;
-}
+const jaccardSimilarity = (setA: Set<string>, setB: Set<string>): number => {
+  if (setA.size === 0 || setB.size === 0) {
+    return 0;
+  }
 
-export const computeFactSimilarity = (a: Fact, b: Fact): number => {
-  const aTokens = tokenize(factToText(a));
-  const bTokens = tokenize(factToText(b));
+  let intersectionCount = 0;
+  for (const token of setA) {
+    if (setB.has(token)) {
+      intersectionCount += 1;
+    }
+  }
 
-  const cosine = cosineSimilarity(buildFrequencyMap(aTokens), buildFrequencyMap(bTokens));
-  const jaccard = jaccardSimilarity(aTokens, bTokens);
+  const unionCount = setA.size + setB.size - intersectionCount;
+  return unionCount === 0 ? 0 : intersectionCount / unionCount;
+};
 
-  // Weighted average favoring cosine but keeping jaccard in play
-  return cosine * 0.7 + jaccard * 0.3;
+const cosineSimilarity = (
+  tokensA: Map<string, number>,
+  tokensB: Map<string, number>,
+  magnitudeA: number,
+  magnitudeB: number
+): number => {
+  if (magnitudeA === 0 || magnitudeB === 0) {
+    return 0;
+  }
+
+  let dotProduct = 0;
+  for (const [token, countA] of tokensA) {
+    const countB = tokensB.get(token);
+    if (countB !== undefined) {
+      dotProduct += countA * countB;
+    }
+  }
+
+  return dotProduct / (magnitudeA * magnitudeB);
+};
+
+const buildTokenStats = (fact: Fact): { set: Set<string>; counts: Map<string, number>; magnitude: number } => {
+  const comparable = factToComparableText(fact);
+  const rawTokens = comparable
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .filter((token) => token.length > 0 && !STOPWORDS.has(token));
+
+  const counts = new Map<string, number>();
+  for (const token of rawTokens) {
+    counts.set(token, (counts.get(token) ?? 0) + 1);
+  }
+
+  let magnitudeSq = 0;
+  for (const count of counts.values()) {
+    magnitudeSq += count * count;
+  }
+
+  return {
+    set: new Set(counts.keys()),
+    counts,
+    magnitude: Math.sqrt(magnitudeSq),
+  };
+};
+
+export const computeFactSimilarity = (factA: Fact, factB: Fact): number => {
+  const statsA = buildTokenStats(factA);
+  const statsB = buildTokenStats(factB);
+
+  const jaccard = jaccardSimilarity(statsA.set, statsB.set);
+  const cosine = cosineSimilarity(statsA.counts, statsB.counts, statsA.magnitude, statsB.magnitude);
+
+  // Weighted blend to favor strict overlap while considering frequency patterns.
+  return jaccard * 0.6 + cosine * 0.4;
 };
 
 export const groupSimilarFacts = (
   facts: Fact[],
-  threshold: number = DEFAULT_SIMILARITY_THRESHOLD
-): FactCluster[] => {
-  const visited = new Set<string>();
-  const clusters: FactCluster[] = [];
+  threshold: number = FACT_SIMILARITY_THRESHOLD
+): Fact[][] => {
+  if (facts.length === 0) {
+    return [];
+  }
 
-  for (const fact of facts) {
-    if (visited.has(fact.key)) {
+  const tokenStats = facts.map((fact) => buildTokenStats(fact));
+  const visited = new Set<number>();
+  const clusters: Fact[][] = [];
+
+  for (let i = 0; i < facts.length; i += 1) {
+    if (visited.has(i)) {
       continue;
     }
 
-    const clusterMembers: Fact[] = [];
-    let bestRepresentative = fact;
-    visited.add(fact.key);
+    const queue: number[] = [i];
+    visited.add(i);
+    const clusterIndices: number[] = [];
 
-    for (const other of facts) {
-      if (other.key === fact.key || visited.has(other.key)) {
-        continue;
-      }
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      clusterIndices.push(current);
 
-      const similarity = computeFactSimilarity(fact, other);
-      if (similarity >= threshold) {
-        clusterMembers.push(other);
-        visited.add(other.key);
-        // Prefer representative with higher confidence or recency
-        if (
-          other.confidence > bestRepresentative.confidence ||
-          (other.confidence === bestRepresentative.confidence && other.lastSeenSeq > bestRepresentative.lastSeenSeq)
-        ) {
-          bestRepresentative = other;
+      for (let j = 0; j < facts.length; j += 1) {
+        if (visited.has(j)) {
+          continue;
+        }
+
+        const jaccard = jaccardSimilarity(tokenStats[current].set, tokenStats[j].set);
+        if (jaccard < threshold) {
+          continue;
+        }
+
+        // Additional cosine check to reduce false positives.
+        const cosine = cosineSimilarity(
+          tokenStats[current].counts,
+          tokenStats[j].counts,
+          tokenStats[current].magnitude,
+          tokenStats[j].magnitude
+        );
+
+        const blended = jaccard * 0.6 + cosine * 0.4;
+        if (blended >= threshold) {
+          visited.add(j);
+          queue.push(j);
         }
       }
     }
 
-    if (clusterMembers.length === 0) {
-      clusters.push({
-        representative: fact,
-        members: [],
-        similarity: 1,
-      });
-    } else {
-      clusters.push({
-        representative: bestRepresentative,
-        members: clusterMembers,
-        similarity: 1,
-      });
-    }
+    const cluster = clusterIndices.map((index) => facts[index]);
+    clusters.push(cluster);
   }
 
   return clusters;
 };
-
-export const FACT_SIMILARITY_THRESHOLD = DEFAULT_SIMILARITY_THRESHOLD;
-

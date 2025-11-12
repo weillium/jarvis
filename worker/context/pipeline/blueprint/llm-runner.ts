@@ -4,7 +4,7 @@ import { ensureBlueprintShape } from '../../../lib/context-normalization';
 import { postProcessBlueprint } from './post-processing';
 import { buildBlueprintPrompts } from './prompt-builder';
 import type { BlueprintWithUsage } from './types';
-import type { OpenAIUsage } from '../../../utils/pricing';
+import type { OpenAIUsage } from '../../../lib/pricing';
 
 interface BlueprintLLMContext {
   eventTitle: string;

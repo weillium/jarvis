@@ -4,7 +4,7 @@ import type { ModelSelectionService } from '../../services/model-selection-servi
 import type { SessionLifecycle } from '../session-lifecycle';
 import type { RuntimeManager } from '../runtime-manager';
 import type { EventProcessor } from '../event-processor';
-import type { StatusUpdater } from '../../monitoring/status-updater';
+import type { StatusUpdater } from '../../services/observability/status-updater';
 import type { AgentSelection, AgentTransport, AgentType, EventRuntime } from '../../types';
 import type { AgentSessionRecord } from '../../services/supabase/types';
 import { agentTransportProfiles } from '../../sessions/agent-profiles/registry';

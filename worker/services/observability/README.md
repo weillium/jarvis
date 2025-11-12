@@ -1,6 +1,6 @@
-# Monitoring Module
+# Observability Services
 
-Provides observability utilities for the worker runtime.
+Provides observability utilities for the worker runtime, now colocated with other external service adapters.
 
 - **logger.ts** standardizes structured logging for pipeline phases and sessions.
 - **metrics-collector.ts** emits performance metrics consumed by dashboards or alerts.

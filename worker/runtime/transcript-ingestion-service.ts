@@ -4,11 +4,11 @@ import type { EventProcessor } from './event-processor';
 import type { EventRuntime } from '../types';
 import type { TranscriptsRepository } from '../services/supabase/transcripts-repository';
 import type { TranscriptRecord } from '../types';
-import type { MetricsCollector } from '../monitoring/metrics-collector';
-import type { Logger } from '../monitoring/logger';
-import type { StatusUpdater } from '../monitoring/status-updater';
+import type { MetricsCollector } from '../services/observability/metrics-collector';
+import type { Logger } from '../services/observability/logger';
+import type { StatusUpdater } from '../services/observability/status-updater';
 import type { RealtimeTranscriptionUsageDTO } from '../types';
-import { checkBudgetStatus, formatTokenBreakdown } from '../utils/token-counter';
+import { checkBudgetStatus, formatTokenBreakdown } from '../lib/text/token-counter';
 
 export interface TranscriptAudioChunk {
   audioBase64: string;

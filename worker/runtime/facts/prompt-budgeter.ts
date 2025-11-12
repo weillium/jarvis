@@ -1,5 +1,6 @@
 import type { Fact } from '../../state/facts-store';
-import { countTokens } from '../../utils/token-counter';
+import type { FactsBudgetSnapshot } from '../../types/processing';
+import { countTokens } from '../../lib/text/token-counter';
 
 interface FactsPromptBudgetOptions {
   facts: Fact[];
@@ -15,16 +16,6 @@ interface FactsPromptBudgetOptions {
 export interface ConfidenceAdjustment {
   key: string;
   newConfidence: number;
-}
-
-interface BudgetMetrics {
-  totalFacts: number;
-  selectedFacts: number;
-  overflowFacts: number;
-  summaryFacts: number;
-  budgetTokens: number;
-  usedTokens: number;
-  selectionRatio: number;
 }
 
 export interface FactsPromptBudgetResult {
