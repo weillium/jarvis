@@ -22,6 +22,14 @@ export const classifyNormalizedFact = (normalized: NormalizedFactValue): Classif
     };
   }
 
+  const atomicRewrite = enforceAtomicSentence(normalized);
+  if (atomicRewrite) {
+    return {
+      kind: 'claim',
+      rewrittenValue: atomicRewrite,
+    };
+  }
+
   if (kind === 'question') {
     const rewritten = rewriteQuestion(normalized);
     if (!rewritten) {
@@ -135,5 +143,28 @@ const rewriteReportingScaffolding = (normalized: NormalizedFactValue): string | 
     candidate = `${candidate}.`;
   }
   return candidate;
+};
+
+const enforceAtomicSentence = (normalized: NormalizedFactValue): string | null => {
+  if (typeof normalized.raw !== 'string') {
+    return null;
+  }
+  const text = normalized.raw.trim();
+  if (!text || !/[;]| and | but /i.test(text)) {
+    return null;
+  }
+
+  const firstClause = text.split(/(?:\.\s+|;\s+|\s+and\s+(?=[A-Z]))/)[0]?.trim();
+  if (!firstClause || firstClause.length === text.length) {
+    return null;
+  }
+
+  const normalizedClause = firstClause.replace(/[;]+$/, '').trim();
+  if (!normalizedClause) {
+    return null;
+  }
+
+  const sentence = /[.!?]$/.test(normalizedClause) ? normalizedClause : `${normalizedClause}.`;
+  return sentence;
 };
 

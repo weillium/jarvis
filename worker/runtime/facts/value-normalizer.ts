@@ -7,11 +7,19 @@ export interface NormalizedFactValue {
   normalized: Primitive | NormalizedObject | NormalizedArray;
   asString: string;
   hash: string;
+  fingerprint: string;
   tokens: string[];
   numeric?: {
     value: number;
     unit?: string;
   };
+  triple?: FactTriple | null;
+}
+
+export interface FactTriple {
+  subject: string;
+  predicate: string;
+  objects: string[];
 }
 
 type NormalizedObject = {
@@ -31,15 +39,19 @@ export const normalizeFactValue = (value: unknown): NormalizedFactValue => {
   const asString = serializeNormalized(normalized);
   const hash = hashNormalized(asString);
   const tokens = tokenize(asString);
+  const fingerprint = hashNormalized(tokens.slice().sort().join(' '));
   const numeric = extractNumeric(asString);
+  const triple = deriveTriple(asString);
 
   return {
     raw: value,
     normalized,
     asString,
     hash,
+    fingerprint,
     tokens,
     numeric,
+    triple,
   };
 };
 
@@ -276,6 +288,39 @@ const stemToken = (token: string): string => {
   }
 
   return token;
+};
+
+const deriveTriple = (sentence: string): FactTriple | null => {
+  const cleaned = sentence.replace(/["“”]/g, '').trim();
+  if (!cleaned) {
+    return null;
+  }
+
+  const clause = cleaned.split(/[.?!]/)[0];
+  const match = clause.match(
+    /^(?<subject>[A-Za-z0-9\s\-&]+?)\s+(?<predicate>is|are|was|were|remains|remain|seems?|appears?|plans?|expects?|intends?|targets?|says|speak|points?|notes?|announces?)\s+(?<objects>.+)$/
+  );
+
+  if (!match || !match.groups) {
+    return null;
+  }
+
+  const subject = match.groups.subject.trim().toLowerCase();
+  const predicate = match.groups.predicate.trim().toLowerCase();
+  const objectsRaw = match.groups.objects
+    .split(/,\s+|and\s+|;\s+/)
+    .map((entry) => entry.trim().toLowerCase())
+    .filter((entry) => entry.length > 0);
+
+  if (!subject || objectsRaw.length === 0) {
+    return null;
+  }
+
+  return {
+    subject,
+    predicate,
+    objects: objectsRaw,
+  };
 };
 
 const extractNumeric = (

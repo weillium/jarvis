@@ -582,6 +582,10 @@ export class EventProcessor {
           kind: validated.kind,
           originalValue,
           excludeFromPrompt: validated.excludeFromPrompt,
+          fingerprintHash: normalizedValue.fingerprint,
+          subject: normalizedValue.triple?.subject,
+          predicate: normalizedValue.triple?.predicate,
+          objects: normalizedValue.triple?.objects,
         };
 
         let existingFact = factsStore.get(targetKey);
@@ -658,6 +662,10 @@ export class EventProcessor {
               kind: validated.kind,
               originalValue,
               excludeFromPrompt: validated.excludeFromPrompt,
+              fingerprintHash: normalizedValue.fingerprint,
+              subject: normalizedValue.triple?.subject,
+              predicate: normalizedValue.triple?.predicate,
+              objects: normalizedValue.triple?.objects,
             });
             updatedFact = merged ?? factsStore.get(targetKey) ?? null;
           } else if (shouldTreatAsMerge(similarity)) {
@@ -672,6 +680,10 @@ export class EventProcessor {
               kind: validated.kind,
               originalValue,
               excludeFromPrompt: validated.excludeFromPrompt,
+              fingerprintHash: normalizedValue.fingerprint,
+              subject: normalizedValue.triple?.subject,
+              predicate: normalizedValue.triple?.predicate,
+              objects: normalizedValue.triple?.objects,
             });
             updatedFact = merged ?? factsStore.get(targetKey) ?? null;
           } else {
@@ -686,6 +698,10 @@ export class EventProcessor {
               kind: validated.kind,
               originalValue,
               excludeFromPrompt: validated.excludeFromPrompt,
+              fingerprintHash: normalizedValue.fingerprint,
+              subject: normalizedValue.triple?.subject,
+              predicate: normalizedValue.triple?.predicate,
+              objects: normalizedValue.triple?.objects,
             });
             updatedFact = merged ?? factsStore.get(targetKey) ?? null;
           }
@@ -697,9 +713,13 @@ export class EventProcessor {
             factSourceSeq,
             factSourceId,
             normalizedValue.hash,
+            normalizedValue.fingerprint,
             validated.kind,
             originalValue,
-            validated.excludeFromPrompt
+            validated.excludeFromPrompt,
+            normalizedValue.triple?.subject,
+            normalizedValue.triple?.predicate,
+            normalizedValue.triple?.objects
           );
 
           if (keysEvicted.length > 0) {
@@ -737,6 +757,10 @@ export class EventProcessor {
           supabaseFact.fact_kind = updatedFact.kind;
           supabaseFact.original_fact_value = updatedFact.originalValue ?? null;
           supabaseFact.exclude_from_prompt = updatedFact.excludeFromPrompt ?? false;
+          supabaseFact.fingerprint_hash = updatedFact.fingerprintHash ?? normalizedValue.fingerprint;
+          supabaseFact.fact_subject = updatedFact.subject ?? null;
+          supabaseFact.fact_predicate = updatedFact.predicate ?? null;
+          supabaseFact.fact_objects = Array.isArray(updatedFact.objects) ? updatedFact.objects : null;
         }
 
         await this.factsRepository.upsertFact(supabaseFact);

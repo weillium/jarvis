@@ -107,14 +107,24 @@ export class RuntimeManager {
           dormantAt: null,
           prunedAt: null,
           normalizedHash: typeof f.normalized_hash === 'string' ? f.normalized_hash : undefined,
+          fingerprintHash: typeof f.fingerprint_hash === 'string' ? f.fingerprint_hash : undefined,
           kind,
           originalValue: f.original_fact_value,
           excludeFromPrompt: typeof f.exclude_from_prompt === 'boolean' ? f.exclude_from_prompt : false,
+          subject: typeof f.fact_subject === 'string' ? f.fact_subject : undefined,
+          predicate: typeof f.fact_predicate === 'string' ? f.fact_predicate : undefined,
+          objects: Array.isArray(f.fact_objects)
+            ? f.fact_objects.filter((entry): entry is string => typeof entry === 'string')
+            : undefined,
         };
       });
       if (
         !normalizedHashSupported &&
-        formattedFacts.some((fact) => typeof fact.normalizedHash === 'string')
+        formattedFacts.some(
+          (fact) =>
+            typeof fact.normalizedHash === 'string' ||
+            typeof fact.fingerprintHash === 'string'
+        )
       ) {
         normalizedHashSupported = true;
       }

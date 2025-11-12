@@ -284,6 +284,12 @@ export const mapFactRecords = (rows: unknown): FactRecord[] =>
       original_fact_value: record['original_fact_value'],
       exclude_from_prompt:
         typeof record['exclude_from_prompt'] === 'boolean' ? record['exclude_from_prompt'] : undefined,
+      fingerprint_hash: getOptionalString(record, 'fingerprint_hash') ?? undefined,
+      fact_subject: getOptionalString(record, 'fact_subject') ?? undefined,
+      fact_predicate: getOptionalString(record, 'fact_predicate') ?? undefined,
+      fact_objects: Array.isArray(record['fact_objects'])
+        ? record['fact_objects'].filter((entry): entry is string => typeof entry === 'string')
+        : undefined,
     };
   });
 

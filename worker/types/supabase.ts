@@ -136,6 +136,10 @@ export interface FactRecord {
   fact_kind?: string | null;
   original_fact_value?: unknown;
   exclude_from_prompt?: boolean;
+  fingerprint_hash?: string | null;
+  fact_subject?: string | null;
+  fact_predicate?: string | null;
+  fact_objects?: string[] | null;
 }
 
 export interface VectorMatchRecord {

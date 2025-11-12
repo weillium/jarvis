@@ -23,6 +23,10 @@ export interface Fact {
   kind: FactKind;
   originalValue?: unknown;
   excludeFromPrompt?: boolean;
+  fingerprintHash?: string;
+  subject?: string;
+  predicate?: string;
+  objects?: string[];
 }
 
 export class FactsStore {
@@ -92,9 +96,13 @@ export class FactsStore {
     sourceSeq: number,
     sourceId?: number,
     normalizedHash?: string,
+    fingerprintHash?: string,
     kind: FactKind = 'claim',
     originalValue?: unknown,
-    excludeFromPrompt: boolean = false
+    excludeFromPrompt: boolean = false,
+    subject?: string,
+    predicate?: string,
+    objects?: string[]
   ): string[] {
     const existing = this.facts.get(key);
     const now = Date.now();
@@ -126,9 +134,13 @@ export class FactsStore {
         dormantAt: null,
         prunedAt: null,
         normalizedHash: normalizedHash ?? existing.normalizedHash,
+        fingerprintHash: fingerprintHash ?? existing.fingerprintHash,
         kind: kind ?? existing.kind,
         originalValue: originalValue ?? existing.originalValue,
         excludeFromPrompt,
+        subject: subject ?? existing.subject,
+        predicate: predicate ?? existing.predicate,
+        objects: objects ?? existing.objects,
       });
       this.dormantFacts.delete(key);
       this.prunedFacts.delete(key);
@@ -153,9 +165,13 @@ export class FactsStore {
         dormantAt: null,
         prunedAt: null,
         normalizedHash,
+        fingerprintHash,
         kind,
         originalValue,
         excludeFromPrompt,
+        subject,
+        predicate,
+        objects,
       });
       this.dormantFacts.delete(key);
       this.prunedFacts.delete(key);
@@ -186,6 +202,10 @@ export class FactsStore {
       dormantAt?: number | null;
       prunedAt?: number | null;
       normalizedHash?: string;
+      fingerprintHash?: string;
+      subject?: string;
+      predicate?: string;
+      objects?: string[];
       kind?: FactKind;
       originalValue?: unknown;
       excludeFromPrompt?: boolean;
@@ -212,6 +232,10 @@ export class FactsStore {
         dormantAt: fact.dormantAt ?? null,
         prunedAt: fact.prunedAt ?? null,
         normalizedHash: fact.normalizedHash,
+        fingerprintHash: fact.fingerprintHash,
+        subject: fact.subject,
+        predicate: fact.predicate,
+        objects: fact.objects,
         kind: fact.kind ?? 'claim',
         originalValue: fact.originalValue,
         excludeFromPrompt: fact.excludeFromPrompt ?? false,
@@ -498,9 +522,13 @@ export class FactsStore {
       mergedKeys?: string[];
       preferIncomingValue?: boolean;
       normalizedHash?: string;
+      fingerprintHash?: string;
       kind?: FactKind;
       originalValue?: unknown;
       excludeFromPrompt?: boolean;
+      subject?: string;
+      predicate?: string;
+      objects?: string[];
     }
   ): Fact | null {
     const existing = this.facts.get(key);
@@ -548,9 +576,13 @@ export class FactsStore {
       dormantAt: null,
       prunedAt: null,
       normalizedHash: params.normalizedHash ?? existing.normalizedHash,
+      fingerprintHash: params.fingerprintHash ?? existing.fingerprintHash,
       kind: params.kind ?? existing.kind,
       originalValue: params.originalValue ?? existing.originalValue,
       excludeFromPrompt: params.excludeFromPrompt ?? existing.excludeFromPrompt ?? false,
+      subject: params.subject ?? existing.subject,
+      predicate: params.predicate ?? existing.predicate,
+      objects: params.objects ?? existing.objects,
     };
 
     this.facts.set(key, updatedFact);

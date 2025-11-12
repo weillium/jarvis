@@ -83,10 +83,20 @@ export const findBestMatchingFact = (
   existingFacts: Fact[]
 ): SimilarFactCandidate | null => {
   const candidateHash = candidateNormalized.hash;
+  const candidateFingerprint = candidateNormalized.fingerprint;
   const candidateTokens = new Set(tokenizeKey(candidateKey));
   let bestMatch: SimilarFactCandidate | null = null;
 
   for (const fact of existingFacts) {
+    if (fact.fingerprintHash && fact.fingerprintHash === candidateFingerprint) {
+      return {
+        key: fact.key,
+        fact,
+        keySimilarity: 1,
+        factSimilarity: 1,
+      };
+    }
+
     if (fact.normalizedHash && fact.normalizedHash === candidateHash) {
       return {
         key: fact.key,
@@ -116,6 +126,20 @@ export const findBestMatchingFact = (
       };
     }
 
+    const tripleMatch = tripleSimilarity(candidateNormalized.triple, {
+      subject: fact.subject ?? null,
+      predicate: fact.predicate ?? null,
+      objects: fact.objects ?? null,
+    });
+    if (tripleMatch) {
+      return {
+        key: fact.key,
+        fact,
+        keySimilarity,
+        factSimilarity: 0.9,
+      };
+    }
+
     const factSimilarity = Math.max(
       valueTokenSimilarity,
       computeFactSimilarity(fact, candidateFact)
@@ -135,5 +159,30 @@ export const findBestMatchingFact = (
   }
 
   return bestMatch;
+};
+
+const tripleSimilarity = (
+  candidate: NormalizedFactValue['triple'],
+  existing: { subject: string | null; predicate: string | null; objects: string[] | null }
+): boolean => {
+  if (!candidate) {
+    return false;
+  }
+  if (!existing.subject || !existing.predicate || !existing.objects?.length) {
+    return false;
+  }
+
+  if (candidate.subject !== existing.subject) {
+    return false;
+  }
+  if (candidate.predicate !== existing.predicate) {
+    return false;
+  }
+
+  const overlap = candidate.objects.filter((object) =>
+    existing.objects!.includes(object)
+  );
+
+  return overlap.length > 0;
 };
 
