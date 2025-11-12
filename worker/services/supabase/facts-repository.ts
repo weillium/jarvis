@@ -20,6 +20,11 @@ export class FactsRepository {
     if (error) throw error;
   }
 
+  async supportsNormalizedHashColumn(): Promise<boolean> {
+    const { error } = await this.client.from('facts').select('normalized_hash').limit(1);
+    return !error;
+  }
+
   async getFacts(eventId: string, activeOnly: boolean = true): Promise<FactRecord[]> {
     let query = this.client.from('facts').select('*').eq('event_id', eventId);
 

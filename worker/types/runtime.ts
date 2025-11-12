@@ -36,6 +36,7 @@ export interface EventRuntime {
   pendingCardConcepts: Map<number, PendingCardConcept>;
   pendingFactSources: Array<{ seq: number; transcriptId: number }>;
   factKeyAliases: Map<string, string>;
+  factsNormalizedHashEnabled: boolean;
   cardsLastTriggeredAt?: number;
   cardsRateHistory?: number[];
 

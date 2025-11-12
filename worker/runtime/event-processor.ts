@@ -688,8 +688,10 @@ export class EventProcessor {
           sources: updatedFact.sources,
           merge_provenance: updatedFact.mergedFrom,
           merged_at: updatedFact.mergedAt,
-          normalized_hash: updatedFact.normalizedHash ?? normalizedValue.hash,
         };
+        if (runtime.factsNormalizedHashEnabled) {
+          supabaseFact.normalized_hash = updatedFact.normalizedHash ?? normalizedValue.hash;
+        }
 
         await this.factsRepository.upsertFact(supabaseFact);
 

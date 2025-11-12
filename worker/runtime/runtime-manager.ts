@@ -41,6 +41,12 @@ export class RuntimeManager {
   async createRuntime(eventId: string, agentId: string): Promise<EventRuntime> {
     const checkpoints = await this.checkpointManager.loadCheckpoints(eventId);
     const glossaryCache = await this.glossaryManager.loadGlossary(eventId);
+    let normalizedHashSupported = false;
+    try {
+      normalizedHashSupported = await this.factsRepository.supportsNormalizedHashColumn();
+    } catch {
+      normalizedHashSupported = false;
+    }
 
     this.metrics.clear(eventId);
     this.logger.clearLogs(eventId, 'transcript');
@@ -95,6 +101,12 @@ export class RuntimeManager {
           normalizedHash: typeof f.normalized_hash === 'string' ? f.normalized_hash : undefined,
         };
       });
+      if (
+        !normalizedHashSupported &&
+        formattedFacts.some((fact) => typeof fact.normalizedHash === 'string')
+      ) {
+        normalizedHashSupported = true;
+      }
       const evictedKeys = factsStore.loadFacts(formattedFacts);
 
       if (evictedKeys.length > 0) {
@@ -148,6 +160,7 @@ export class RuntimeManager {
       pendingCardConcepts: new Map(),
       pendingFactSources: [],
       factKeyAliases: new Map(),
+      factsNormalizedHashEnabled: normalizedHashSupported,
       transcriptLastSeq: checkpoints.transcript || 0,
       cardsLastSeq,
       factsLastSeq: checkpoints.facts,
