@@ -8,6 +8,7 @@ import type { AgentRealtimeSession } from '../sessions/session-adapters';
 import { budgetFactsPrompt } from '../runtime/facts/prompt-budgeter';
 import type { FactsPromptBudgetResult } from '../runtime/facts/prompt-budgeter';
 import { checkBudgetStatus, countTokens, formatTokenBreakdown } from '../lib/text/token-counter';
+import { filterTranscriptForFacts } from '../lib/text/transcript-filter';
 
 const buildPromptFactsRecord = (
   facts: Fact[]
@@ -36,6 +37,7 @@ const FACT_DORMANT_IDLE_MS = 15 * 60 * 1000;
 const FACT_PRUNE_IDLE_MS = 60 * 60 * 1000;
 const FACT_DORMANT_CONFIDENCE_DROP = 0.05;
 const FACT_REVIVE_HYSTERESIS_DELTA = 0.05;
+const FACT_PROMPT_LIMIT = 50;
 
 export class FactsProcessor {
   constructor(
@@ -67,12 +69,20 @@ export class FactsProcessor {
       const excludedCount = allFacts.length - eligibleFacts.length;
       const { context: baseContext, recentText } = this.contextBuilder.buildFactsContext(runtime);
 
-      const recentTextTokens = countTokens(recentText);
+      const cleanedTranscript = filterTranscriptForFacts(recentText);
+      const recentTextForPrompt = cleanedTranscript.length > 0 ? cleanedTranscript : recentText;
+
+      const { activeFacts, demotedFacts } = selectTopFactsForPrompt(
+        eligibleFacts,
+        FACT_PROMPT_LIMIT
+      );
+
+      const recentTextTokens = countTokens(recentTextForPrompt);
       const glossaryTokens = countTokens(baseContext.glossaryContext);
 
       const budgetResult: FactsPromptBudgetResult = budgetFactsPrompt({
-        facts: eligibleFacts,
-        recentTranscript: recentText,
+        facts: activeFacts,
+        recentTranscript: recentTextForPrompt,
         totalBudgetTokens: 2048,
         transcriptTokens: recentTextTokens,
         glossaryTokens,
@@ -90,7 +100,10 @@ export class FactsProcessor {
         glossaryContext: baseContext.glossaryContext,
       };
 
-      const tokenBreakdown = this.contextBuilder.getFactsTokenBreakdown(promptContext, recentText);
+      const tokenBreakdown = this.contextBuilder.getFactsTokenBreakdown(
+        promptContext,
+        recentTextForPrompt
+      );
       const budgetStatus = checkBudgetStatus(tokenBreakdown.total, 2048);
       const breakdownStr = formatTokenBreakdown(tokenBreakdown.breakdown);
 
@@ -109,6 +122,7 @@ export class FactsProcessor {
       this.logger.log(runtime.eventId, 'facts', logLevel, logMessage, {
         seq: runtime.factsLastSeq,
         excludedFacts: excludedCount,
+        demotedFacts: demotedFacts.length,
       });
 
       this.metrics.recordTokens(
@@ -120,8 +134,8 @@ export class FactsProcessor {
         budgetResult.metrics
       );
 
-      await session.sendMessage(recentText, {
-        recentText,
+      await session.sendMessage(recentTextForPrompt, {
+        recentText: recentTextForPrompt,
         facts: promptFacts,
         glossaryContext: baseContext.glossaryContext,
       });
@@ -216,3 +230,37 @@ export class FactsProcessor {
   }
 
 }
+
+const selectTopFactsForPrompt = (facts: Fact[], limit: number): {
+  activeFacts: Fact[];
+  demotedFacts: Fact[];
+} => {
+  if (facts.length <= limit) {
+    return {
+      activeFacts: facts.slice(),
+      demotedFacts: [],
+    };
+  }
+
+  const sorted = facts.slice().sort(compareFactPriority);
+  return {
+    activeFacts: sorted.slice(0, limit),
+    demotedFacts: sorted.slice(limit),
+  };
+};
+
+const compareFactPriority = (a: Fact, b: Fact): number => {
+  if (b.confidence !== a.confidence) {
+    return b.confidence - a.confidence;
+  }
+
+  if (b.lastTouchedAt !== a.lastTouchedAt) {
+    return b.lastTouchedAt - a.lastTouchedAt;
+  }
+
+  if (b.lastSeenSeq !== a.lastSeenSeq) {
+    return b.lastSeenSeq - a.lastSeenSeq;
+  }
+
+  return (b.createdAt ?? 0) - (a.createdAt ?? 0);
+};
