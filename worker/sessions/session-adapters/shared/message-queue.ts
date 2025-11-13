@@ -2,10 +2,6 @@ import type {
   ConversationItemCreateEvent,
   RealtimeClientEvent,
 } from 'openai/resources/realtime/realtime';
-import {
-  createRealtimeCardsUserPrompt,
-  createRealtimeFactsUserPrompt,
-} from '../../../prompts';
 import type { RealtimeMessageContext, RealtimeSessionConfig } from '../types';
 import { extractErrorMessage } from './payload-utils';
 
@@ -148,26 +144,6 @@ export class MessageQueueManager {
     message: string,
     context?: RealtimeMessageContext
   ): ConversationItemCreateEvent {
-    if (this.config.agentType === 'cards') {
-      return {
-        type: 'conversation.item.create',
-        item: {
-          type: 'message',
-          role: 'user',
-          content: [
-            {
-              type: 'input_text',
-              text: createRealtimeCardsUserPrompt(
-                message,
-                (context?.bullets ?? []).join('\n'),
-                context?.glossaryContext ?? ''
-              ),
-            },
-          ],
-        },
-      } satisfies ConversationItemCreateEvent;
-    }
-
     if (this.config.agentType === 'transcript') {
       return {
         type: 'conversation.item.create',
@@ -184,30 +160,6 @@ export class MessageQueueManager {
       } satisfies ConversationItemCreateEvent;
     }
 
-      const recentText = context?.recentText ?? '';
-      const factsPayload = context?.facts;
-      const factsString = Array.isArray(factsPayload)
-        ? factsPayload
-            .map((fact) => {
-              if (!fact) {
-                return '';
-              }
-              if (typeof fact === 'string') {
-                return fact;
-              }
-              if (typeof fact === 'object') {
-                return JSON.stringify(fact);
-              }
-              return '';
-            })
-            .filter((value) => value.length > 0)
-            .join('\n')
-        : typeof factsPayload === 'object' && factsPayload !== null
-        ? JSON.stringify(factsPayload)
-        : '';
-
-      const factsPrompt = createRealtimeFactsUserPrompt(message, recentText, factsString);
-
     return {
       type: 'conversation.item.create',
       item: {
@@ -216,7 +168,7 @@ export class MessageQueueManager {
         content: [
           {
             type: 'input_text',
-            text: factsPrompt,
+            text: message,
           },
         ],
       },

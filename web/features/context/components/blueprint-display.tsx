@@ -10,6 +10,15 @@ import {
   type BlueprintResearchPlan,
 } from '@/shared/hooks/use-blueprint-full-query';
 
+interface BlueprintAudienceProfile {
+  audience_summary: string;
+  primary_roles: string[];
+  core_needs: string[];
+  desired_outcomes: string[];
+  tone_and_voice: string;
+  cautionary_notes: string[];
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -209,6 +218,28 @@ const formatCurrency = (value: number | undefined) =>
 const formatPurpose = (purpose: string[] | undefined) =>
   Array.isArray(purpose) && purpose.length > 0 ? purpose.join(', ') : '—';
 
+const isAudienceProfile = (value: unknown): value is BlueprintAudienceProfile =>
+  isRecord(value) &&
+  typeof value.audience_summary === 'string' &&
+  isStringArray(value.primary_roles ?? []) &&
+  isStringArray(value.core_needs ?? []) &&
+  isStringArray(value.desired_outcomes ?? []) &&
+  typeof value.tone_and_voice === 'string' &&
+  isStringArray(value.cautionary_notes ?? []);
+
+const asAudienceProfile = (
+  primary: unknown,
+  fallback?: unknown
+): BlueprintAudienceProfile | undefined => {
+  if (isAudienceProfile(primary)) {
+    return primary;
+  }
+  if (isAudienceProfile(fallback)) {
+    return fallback;
+  }
+  return undefined;
+};
+
 interface BlueprintDisplayProps {
   eventId: string;
   onRegenerate?: () => void;
@@ -310,6 +341,10 @@ export function BlueprintDisplay({
   const agentAlignment = asAgentAlignment(
     blueprint.agent_alignment,
     blueprintJson ? blueprintJson['agent_alignment'] : undefined
+  );
+
+  const audienceProfile = asAudienceProfile(
+    blueprintJson ? blueprintJson['audience_profile'] : undefined
   );
 
   const costBreakdown = isRecord(blueprint.cost_breakdown)
@@ -427,6 +462,86 @@ export function BlueprintDisplay({
       {/* Expandable details */}
       {expanded && (
         <div style={{ marginTop: '20px' }}>
+          {/* Important Details */}
+          {audienceProfile && (
+            <div style={{ marginBottom: '20px' }}>
+              <h5
+                style={{
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  color: '#0f172a',
+                  marginBottom: '8px',
+                }}
+              >
+                Audience Profile
+              </h5>
+              <div
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  padding: '16px',
+                  color: '#475569',
+                  fontSize: '13px',
+                  display: 'grid',
+                  gap: '12px',
+                }}
+              >
+                <div>{audienceProfile.audience_summary}</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {audienceProfile.primary_roles.map((role, idx) => (
+                    <span
+                      key={`audience-role-${idx}`}
+                      style={{
+                        display: 'inline-block',
+                        padding: '4px 10px',
+                        background: '#ecfeff',
+                        color: '#0f766e',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                      }}
+                    >
+                      {role}
+                    </span>
+                  ))}
+                </div>
+                <div>
+                  <strong>Core Needs</strong>
+                  <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                    {audienceProfile.core_needs.map((need, idx) => (
+                      <li key={`audience-need-${idx}`} style={{ marginBottom: '4px' }}>
+                        {need}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <strong>Desired Outcomes</strong>
+                  <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                    {audienceProfile.desired_outcomes.map((outcome, idx) => (
+                      <li key={`audience-outcome-${idx}`} style={{ marginBottom: '4px' }}>
+                        {outcome}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <strong>Tone & Voice:</strong> {audienceProfile.tone_and_voice}
+                </div>
+                <div>
+                  <strong>Cautionary Notes</strong>
+                  <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                    {audienceProfile.cautionary_notes.map((note, idx) => (
+                      <li key={`audience-note-${idx}`} style={{ marginBottom: '4px' }}>
+                        {note}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Important Details */}
           {importantDetails && importantDetails.length > 0 && (
             <div style={{ marginBottom: '20px' }}>

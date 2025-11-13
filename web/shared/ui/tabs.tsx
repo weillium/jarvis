@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, ReactNode } from 'react';
+import { ReactNode } from 'react';
+import { useTabs } from '@jarvis/ui-core';
 
 interface Tab {
   id: string;
@@ -14,9 +15,8 @@ interface TabsProps {
 }
 
 export function Tabs({ tabs, defaultTab }: TabsProps) {
-  const [activeTab, setActiveTab] = useState(defaultTab || tabs[0]?.id);
-
-  const activeTabContent = tabs.find(tab => tab.id === activeTab)?.content;
+  const { activeTabId, selectTab, activeTab } = useTabs(tabs, { defaultTabId: defaultTab });
+  const activeTabContent = activeTab?.content;
 
   return (
     <div style={{
@@ -33,11 +33,11 @@ export function Tabs({ tabs, defaultTab }: TabsProps) {
         overflowX: 'auto',
       }}>
         {tabs.map((tab) => {
-          const isActive = activeTab === tab.id;
+          const isActive = activeTabId === tab.id;
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => selectTab(tab.id)}
               style={{
                 padding: '12px 24px',
                 border: 'none',
@@ -84,9 +84,8 @@ interface SubTabsProps {
 }
 
 export function SubTabs({ tabs, defaultTab }: SubTabsProps) {
-  const [activeTab, setActiveTab] = useState(defaultTab || tabs[0]?.id);
-
-  const activeTabContent = tabs.find(tab => tab.id === activeTab)?.content;
+  const { activeTabId, selectTab, activeTab } = useTabs(tabs, { defaultTabId: defaultTab });
+  const activeTabContent = activeTab?.content;
 
   return (
     <div>
@@ -98,11 +97,11 @@ export function SubTabs({ tabs, defaultTab }: SubTabsProps) {
         overflowX: 'auto',
       }}>
         {tabs.map((tab) => {
-          const isActive = activeTab === tab.id;
+          const isActive = activeTabId === tab.id;
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => selectTab(tab.id)}
               style={{
                 padding: '10px 20px',
                 border: 'none',

@@ -5,7 +5,7 @@ alwaysApply: true
 # Project Rules
 
 ## scope
-- Work within `/worker`, `/web`, `/supabase`, and `/dev_docs` only.
+- Work within `/worker`, `/web`, `/supabase`, `/mobile`, `/packages`, and `/dev_docs` only.
 - Preserve existing in-progress changes; do not revert without explicit approval.
 - Confirm assumptions before aggressive refactors while we’re inside the active wave.
 
@@ -25,6 +25,7 @@ alwaysApply: true
 
 ## supabase
 - every DB change is done via: `supabase migration new <name>`
+- every DB change implementation is done via: `supabase migration up`
 - pair every migration with required **indexes** and **RLS** policies.
 
 ## docs

@@ -1,5 +1,6 @@
-import { PropsWithChildren, useState } from 'react';
+import { PropsWithChildren } from 'react';
 import { StyleSheet, TouchableOpacity } from 'react-native';
+import { useCollapsible } from '@jarvis/ui-core';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -8,14 +9,14 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export function Collapsible({ children, title }: PropsWithChildren & { title: string }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const { isOpen, toggle } = useCollapsible();
   const theme = useColorScheme() ?? 'light';
 
   return (
     <ThemedView>
       <TouchableOpacity
         style={styles.heading}
-        onPress={() => setIsOpen((value) => !value)}
+        onPress={toggle}
         activeOpacity={0.8}>
         <IconSymbol
           name="chevron.right"
