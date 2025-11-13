@@ -2,9 +2,9 @@ import type { TemplatePlan } from '../sessions/agent-profiles/cards/templates/ty
 
 export interface CardGenerationPromptInputs {
   transcriptSegment: string;
-  transcriptSummary: string;
+  transcriptSummary?: string;
   factsSnapshot: string;
-  glossaryContext: string;
+  glossaryContext?: string;
   supportingFacts?: string;
   supportingGlossary?: string;
   transcriptBullets?: string;
@@ -88,8 +88,7 @@ ${audienceSection}
 TRANSCRIPT SEGMENT
 ${transcriptSegment}
 
-TRANSCRIPT SUMMARY
-${transcriptSummary}
+${transcriptSummary && transcriptSummary.trim().length > 0 ? `TRANSCRIPT SUMMARY\n${transcriptSummary}\n` : ''}
 
 FACTS SNAPSHOT
 ${factsSnapshot}
@@ -97,7 +96,7 @@ ${factsSnapshot}
 SUPPORTING FACTS
 ${supportingFactsSection}
 
-GLOSSARY CONTEXT
+FOCUSED GLOSSARY
 ${supportingGlossarySection}
 
 TRANSCRIPT BULLETS

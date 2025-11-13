@@ -2,7 +2,6 @@ import type { RealtimeMessageContext, RealtimeModelResponseDTO } from '../../../
 import type { RealtimeCardDTO } from '../../../../types';
 import { getPolicy } from '../../../../policies';
 import { createCardGenerationUserPrompt } from '../../../../prompts';
-import { formatResearchSummaryForPrompt } from '../../../../lib/text/llm-prompt-formatting';
 import { mapCardPayload } from '../../../session-adapters/shared/payload-utils';
 import type { OpenAIService } from '../../../../services/openai-service';
 import { isRecord } from '../../../../lib/context-normalization';
@@ -40,10 +39,6 @@ export class PromptCardGenerator implements CardGenerator {
     const policy = getPolicy('cards', 1);
     const rawBullets = input.messageContext?.bullets;
     const bullets = Array.isArray(rawBullets) ? rawBullets : [];
-    const bulletSummary = formatResearchSummaryForPrompt(
-      bullets.map((text) => ({ text })),
-      2048
-    );
 
     const supportingContext = input.messageContext?.supportingContext;
 
@@ -59,11 +54,6 @@ export class PromptCardGenerator implements CardGenerator {
         : '';
 
     const factsJson = [supportingFactsJson, baseFactsJson].filter(Boolean).join('\n');
-
-    const glossaryContext =
-      typeof input.messageContext?.glossaryContext === 'string'
-        ? input.messageContext.glossaryContext
-        : '';
 
     const supportingGlossary =
       supportingContext?.glossaryEntries && supportingContext.glossaryEntries.length > 0
@@ -158,10 +148,6 @@ export class PromptCardGenerator implements CardGenerator {
         }, source: ${input.messageContext.concept.source ?? 'unknown'})`
       : undefined;
 
-    const combinedGlossary = [glossaryContext, supportingGlossary, contextBullets]
-      .filter(Boolean)
-      .join('\n');
-
     const audienceProfile =
       typeof input.messageContext?.audienceProfile === 'string'
         ? input.messageContext.audienceProfile
@@ -171,9 +157,8 @@ export class PromptCardGenerator implements CardGenerator {
 
     const userPrompt = createCardGenerationUserPrompt({
       transcriptSegment: input.recentTranscript,
-      transcriptSummary: bulletSummary || 'No transcript summary available.',
       factsSnapshot: factsJson || 'No facts snapshot available.',
-      glossaryContext: glossaryContext || 'No glossary context available.',
+      glossaryContext: undefined,
       supportingFacts: supportingFactsSummary,
       supportingGlossary,
       transcriptBullets: contextBullets,
