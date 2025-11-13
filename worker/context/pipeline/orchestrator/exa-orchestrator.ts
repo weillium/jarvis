@@ -5,6 +5,7 @@ import type { ResearchResultInsert } from '../../../types';
 import { insertResearchResultRow, type WorkerSupabaseClient } from './supabase-orchestrator';
 import { calculateExaResearchCost, calculateExaSearchCost } from '../../../lib/pricing';
 import { chunkTextContent } from '../../../lib/text/llm-prompt-chunking';
+import { cleanResearchText } from '../../../lib/text/boilerplate-filter';
 import { isRecord } from '../../../lib/context-normalization';
 
 type BlueprintResearchQuery = Blueprint['research_plan']['queries'][number];
@@ -61,21 +62,31 @@ const isExaResearchTaskStatus = (value: unknown): value is ExaResearchTaskStatus
 
 const normalizeResearchOutput = (output: unknown): NormalizedResearchOutput | null => {
   if (typeof output === 'string') {
-    const trimmed = output.trim();
-    if (!trimmed) {
+    const originalTrimmed = output.trim();
+    if (!originalTrimmed) {
       return null;
     }
 
-    try {
-      const parsed: unknown = JSON.parse(trimmed);
-      if (isRecord(parsed)) {
-        return normalizeResearchOutput(parsed);
+    const cleaned = cleanResearchText(originalTrimmed).text || originalTrimmed;
+    const parseCandidates = [cleaned, originalTrimmed];
+
+    for (const candidate of parseCandidates) {
+      const candidateTrimmed = candidate.trim();
+      if (!candidateTrimmed || (candidateTrimmed[0] !== '{' && candidateTrimmed[0] !== '[')) {
+        continue;
       }
-    } catch {
-      // Treat as plain text
+
+      try {
+        const parsed: unknown = JSON.parse(candidateTrimmed);
+        if (isRecord(parsed)) {
+          return normalizeResearchOutput(parsed);
+        }
+      } catch {
+        // continue trying fallback candidates
+      }
     }
 
-    return { summary: trimmed, keyPoints: [] };
+    return { summary: cleaned.trim(), keyPoints: [] };
   }
 
   if (!isRecord(output)) {
@@ -299,7 +310,29 @@ export const processCompletedResearchTask = async (
       ? '\n\nKey Points:\n' + normalizedOutput.keyPoints.map((kp, i) => `${i + 1}. ${kp}`).join('\n')
       : '');
 
-  const textChunks = chunkTextContent(researchText, 200, 400);
+  const originalDraft = researchText.trim();
+  const cleanupResult = cleanResearchText(originalDraft);
+  let effectiveResearchText = cleanupResult.text.trim();
+  let cleanupApplied = true;
+
+  if (!effectiveResearchText) {
+    if (cleanupResult.removedFragments.length > 0 && originalDraft.length > 0) {
+      console.warn(
+        `[research-poll] ${queryProgress} Cleaned research output removed all content for "${queryItem.query}". Skipping chunk insertion.`
+      );
+      return;
+    }
+    cleanupApplied = false;
+    effectiveResearchText = originalDraft;
+  } else if (
+    effectiveResearchText.length < 100 &&
+    originalDraft.length > 200
+  ) {
+    cleanupApplied = false;
+    effectiveResearchText = originalDraft;
+  }
+
+  const textChunks = chunkTextContent(effectiveResearchText, 200, 400);
 
   for (const chunkText of textChunks) {
     const qualityScore = 0.95;
@@ -320,6 +353,10 @@ export const processCompletedResearchTask = async (
           ? queryItem.agent_utility
           : [],
     };
+
+    if (cleanupApplied && cleanupResult.removedFragments.length > 0) {
+      metadata.cleanup_removed_count = cleanupResult.removedFragments.length;
+    }
 
     const insertResult = await insertResearchResultRow(supabase, {
       event_id: eventId,
@@ -434,8 +471,40 @@ export const executeExaSearch = async (
         continue;
       }
 
+      const originalText = text.trim();
+      if (!originalText) {
+        skippedResults++;
+        continue;
+      }
+
+      const cleanupResult = cleanResearchText(originalText);
+      let effectiveText = cleanupResult.text.trim();
+      let cleanupApplied = true;
+
+      if (!effectiveText) {
+        if (cleanupResult.removedFragments.length > 0 && originalText.length > 0) {
+          console.warn(
+            `[research] Exa /search: Skipping boilerplate-only result for "${queryItem.query}" (URL: ${getStringField(result, 'url') || 'unknown'})`
+          );
+          skippedResults++;
+          continue;
+        }
+        cleanupApplied = false;
+        effectiveText = originalText;
+      } else if (
+        effectiveText.length < 120 &&
+        originalText.length > 200
+      ) {
+        cleanupApplied = false;
+        effectiveText = originalText;
+      } else if (cleanupResult.removedFragments.length > 0) {
+        console.log(
+          `[research] Exa /search: Trimmed ${cleanupResult.removedFragments.length} boilerplate fragment(s) for "${queryItem.query}" (URL: ${getStringField(result, 'url') || 'unknown'})`
+        );
+      }
+
       processedResults++;
-      const textChunks = chunkTextContent(text, 200, 400);
+      const textChunks = chunkTextContent(effectiveText, 200, 400);
       const url = getStringField(result, 'url');
       const metadataFields: ExaSearchMetadata = {
         title: getStringField(result, 'title'),
@@ -458,6 +527,10 @@ export const executeExaSearch = async (
           provenance_hint: provenanceHint,
           agent_utility: agentUtilityTargets,
         };
+
+        if (cleanupApplied && cleanupResult.removedFragments.length > 0) {
+          metadata.cleanup_removed_count = cleanupResult.removedFragments.length;
+        }
 
         const insertResult = await insertResearchResultRow(supabase, {
           event_id: eventId,
