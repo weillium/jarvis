@@ -9,3 +9,4 @@ export * from './transcripts-repository';
 export * from './glossary-repository';
 export * from './facts-repository';
 export * from './vector-search-gateway';
+export * from './context-blueprint-repository';

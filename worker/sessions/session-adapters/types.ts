@@ -84,8 +84,16 @@ export interface RealtimeMessageContext {
     }>;
     glossaryEntries?: Array<{ term: string; definition?: string }>;
     contextBullets?: string[];
+    contextChunks?: Array<{
+      id: string;
+      text: string;
+      similarity: number;
+      tokenCount: number;
+    }>;
+    audienceProfile?: string;
   };
   templatePlan?: TemplatePlan;
+  audienceProfile?: string;
 }
 
 export type RealtimeSessionEvent = 'card' | 'response' | 'facts' | 'transcript' | 'error';

@@ -8,6 +8,14 @@ export interface Blueprint {
   important_details: string[];
   inferred_topics: string[];
   key_terms: string[];
+  audience_profile: {
+    audience_summary: string;
+    primary_roles: string[];
+    core_needs: string[];
+    desired_outcomes: string[];
+    tone_and_voice: string;
+    cautionary_notes: string[];
+  };
   research_plan: {
     queries: Array<{
       query: string;

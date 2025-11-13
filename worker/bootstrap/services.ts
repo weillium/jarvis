@@ -18,6 +18,7 @@ import {
   GlossaryRepository,
   TranscriptsRepository,
   VectorSearchGateway,
+  ContextBlueprintRepository,
 } from '../services/supabase';
 import type { WorkerEnvConfig } from './env';
 
@@ -31,6 +32,7 @@ export interface WorkerRepositories {
   cards: CardsRepository;
   facts: FactsRepository;
   vectorSearchGateway: VectorSearchGateway;
+  contextBlueprints: ContextBlueprintRepository;
 }
 
 export interface WorkerInfrastructure {
@@ -58,6 +60,7 @@ const buildRepositories = (
   cards: new CardsRepository(supabaseClient),
   facts: new FactsRepository(supabaseClient),
   vectorSearchGateway: new VectorSearchGateway(supabaseClient),
+  contextBlueprints: new ContextBlueprintRepository(supabaseClient),
 });
 
 export const createWorkerInfrastructure = (

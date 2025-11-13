@@ -10,9 +10,11 @@ import type { FactsRepository } from '../services/supabase/facts-repository';
 import type { TranscriptsRepository } from '../services/supabase/transcripts-repository';
 import type { AgentsRepository } from '../services/supabase/agents-repository';
 import type { CardsRepository } from '../services/supabase/cards-repository';
+import type { ContextBlueprintRepository } from '../services/supabase/context-blueprint-repository';
 import { normalizeCardStateRecord } from '../lib/cards/payload-normalizer';
 import type { FactKind } from './facts/fact-types';
 import { registerAliasKey } from './facts/alias-map';
+import type { Blueprint } from '../context/pipeline/blueprint/types';
 
 export class RuntimeManager {
   private readonly runtimes: Map<string, EventRuntime> = new Map();
@@ -22,6 +24,7 @@ export class RuntimeManager {
     private readonly cardsRepository: CardsRepository,
     private readonly factsRepository: FactsRepository,
     private readonly transcriptsRepository: TranscriptsRepository,
+    private readonly contextBlueprintRepository: ContextBlueprintRepository,
     private readonly glossaryManager: GlossaryManager,
     private readonly checkpointManager: CheckpointManager,
     private readonly metrics: MetricsCollector,
@@ -48,6 +51,19 @@ export class RuntimeManager {
       normalizedHashSupported = await this.factsRepository.supportsNormalizedHashColumn();
     } catch {
       normalizedHashSupported = false;
+    }
+
+    let audienceProfile: string | undefined;
+    try {
+      const profile = await this.contextBlueprintRepository.getAudienceProfile(eventId);
+      if (profile) {
+        audienceProfile = this.formatAudienceProfile(profile);
+      }
+    } catch (err) {
+      console.error('[runtime-manager] Failed to load audience profile', {
+        eventId,
+        error: String(err),
+      });
     }
 
     this.metrics.clear(eventId);
@@ -205,6 +221,7 @@ export class RuntimeManager {
       pendingFactSources: [],
       factKeyAliases,
       factsNormalizedHashEnabled: normalizedHashSupported,
+      audienceProfile,
       transcriptLastSeq: checkpoints.transcript || 0,
       cardsLastSeq,
       factsLastSeq: checkpoints.facts,
@@ -215,6 +232,41 @@ export class RuntimeManager {
 
     this.runtimes.set(eventId, runtime);
     return runtime;
+  }
+
+  private formatAudienceProfile(profile: Blueprint['audience_profile']): string {
+    const sections: string[] = [];
+
+    const summary = profile.audience_summary.trim();
+    if (summary.length > 0) {
+      sections.push(summary);
+    }
+
+    const formatList = (label: string, values: string[]) => {
+      if (!values || values.length === 0) {
+        return;
+      }
+      const normalized = values
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0);
+      if (normalized.length === 0) {
+        return;
+      }
+      sections.push(`${label}:\n${normalized.map((value) => `- ${value}`).join('\n')}`);
+    };
+
+    formatList('Primary Roles', profile.primary_roles);
+    formatList('Core Needs', profile.core_needs);
+    formatList('Desired Outcomes', profile.desired_outcomes);
+
+    const tone = profile.tone_and_voice.trim();
+    if (tone.length > 0) {
+      sections.push(`Tone & Voice: ${tone}`);
+    }
+
+    formatList('Cautionary Notes', profile.cautionary_notes);
+
+    return sections.join('\n\n');
   }
 
   async replayTranscripts(runtime: EventRuntime): Promise<void> {

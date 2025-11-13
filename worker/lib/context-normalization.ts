@@ -280,6 +280,21 @@ const isCostBreakdown = (
   typeof value.chunks === 'number' &&
   typeof value.total === 'number';
 
+const isAudienceProfile = (
+  value: unknown
+): value is Blueprint['audience_profile'] =>
+  isRecord(value) &&
+  typeof value.audience_summary === 'string' &&
+  Array.isArray(value.primary_roles) &&
+  value.primary_roles.every((entry) => typeof entry === 'string') &&
+  Array.isArray(value.core_needs) &&
+  value.core_needs.every((entry) => typeof entry === 'string') &&
+  Array.isArray(value.desired_outcomes) &&
+  value.desired_outcomes.every((entry) => typeof entry === 'string') &&
+  typeof value.tone_and_voice === 'string' &&
+  Array.isArray(value.cautionary_notes) &&
+  value.cautionary_notes.every((entry) => typeof entry === 'string');
+
 const isAgentAlignment = (
   value: unknown
 ): value is Blueprint['agent_alignment'] =>
@@ -296,6 +311,7 @@ const isBlueprint = (value: unknown): value is Blueprint =>
   isStringArray(value.important_details) &&
   isStringArray(value.inferred_topics) &&
   isStringArray(value.key_terms) &&
+  isAudienceProfile(value.audience_profile) &&
   isResearchPlan(value.research_plan) &&
   isGlossaryPlan(value.glossary_plan) &&
   isChunksPlan(value.chunks_plan) &&
@@ -313,6 +329,20 @@ export const ensureBlueprintShape = (value: unknown): Blueprint => {
         glossary_plan: normalizedGlossary,
       };
     }
+  }
+
+  if (isRecord(candidate) && !isAudienceProfile(candidate.audience_profile)) {
+    candidate = {
+      ...candidate,
+      audience_profile: {
+        audience_summary: '',
+        primary_roles: [],
+        core_needs: [],
+        desired_outcomes: [],
+        tone_and_voice: '',
+        cautionary_notes: [],
+      },
+    };
   }
 
   if (isBlueprint(candidate)) {
@@ -339,6 +369,9 @@ export const ensureBlueprintShape = (value: unknown): Blueprint => {
     }
     if (!isGlossaryPlan(record.glossary_plan)) {
       issues.push('glossary_plan is missing required fields or term entries are invalid');
+    }
+    if (!isAudienceProfile(record.audience_profile)) {
+      issues.push('audience_profile is missing required fields or contains invalid values');
     }
     if (!isChunksPlan(record.chunks_plan)) {
       issues.push('chunks_plan is missing required fields or contains invalid sources');

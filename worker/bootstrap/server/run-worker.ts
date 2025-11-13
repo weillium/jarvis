@@ -38,6 +38,7 @@ export const startWorker = async (env: WorkerEnvConfig): Promise<WorkerRuntime> 
     infrastructure.repositories.cards,
     infrastructure.repositories.facts,
     infrastructure.repositories.transcripts,
+    infrastructure.repositories.contextBlueprints,
     pipeline.glossaryManager,
     infrastructure.checkpointManager,
     infrastructure.metricsCollector,

@@ -21,6 +21,7 @@ export interface CardTriggerSupportingContext {
   glossaryEntries: Array<Pick<GlossaryEntry, 'term' | 'definition'>>;
   contextBullets: string[];
   contextChunks: CardSupportingContextChunk[];
+  audienceProfile?: string;
 }
 
 export interface CardTriggerContext {
@@ -113,6 +114,8 @@ export class CardsProcessor {
             }
           : undefined,
         supportingContext: triggerContext?.supportingContext,
+        audienceProfile:
+          triggerContext?.supportingContext?.audienceProfile ?? runtime.audienceProfile,
         templatePlan,
       };
 

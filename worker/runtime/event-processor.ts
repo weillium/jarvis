@@ -371,6 +371,7 @@ export class EventProcessor {
     const recentCards = runtime.cardsStore.getRecent(this.CARD_RECENT_LIMIT);
     const glossaryEntries = this.getRelevantGlossaryEntries(runtime.glossaryCache, concept);
     const contextChunks = await this.getRelevantContextChunks(runtime, concept);
+    const audienceProfile = runtime.audienceProfile;
 
     return {
       facts,
@@ -378,6 +379,7 @@ export class EventProcessor {
       glossaryEntries,
       contextBullets,
       contextChunks,
+      audienceProfile,
     };
   }
   private async getRelevantContextChunks(

@@ -80,12 +80,15 @@ export class PromptCardGenerator implements CardGenerator {
     const supportingFactsSummary =
       supportingContext?.facts && supportingContext.facts.length > 0
         ? supportingContext.facts
-            .map(
-              (fact) =>
-                `- ${fact.key} (confidence ${fact.confidence?.toFixed?.(2) ?? fact.confidence ?? 'n/a'}): ${
-                  typeof fact.value === 'string' ? fact.value : JSON.stringify(fact.value)
-                }`
-            )
+            .map((fact) => {
+              const confidence =
+                typeof fact.confidence === 'number'
+                  ? fact.confidence.toFixed(2)
+                  : fact.confidence ?? 'n/a';
+              const value =
+                typeof fact.value === 'string' ? fact.value : JSON.stringify(fact.value);
+              return `- ${fact.key} (confidence ${confidence}): ${value}`;
+            })
             .join('\n')
         : '';
 

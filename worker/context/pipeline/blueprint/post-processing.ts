@@ -9,6 +9,20 @@ export const postProcessBlueprint = (input: Blueprint, topic: string): Blueprint
     important_details: [...input.important_details],
     inferred_topics: [...input.inferred_topics],
     key_terms: [...input.key_terms],
+    audience_profile: {
+      audience_summary:
+        typeof input.audience_profile?.audience_summary === 'string'
+          ? input.audience_profile.audience_summary.trim()
+          : '',
+      primary_roles: [...(input.audience_profile?.primary_roles ?? [])],
+      core_needs: [...(input.audience_profile?.core_needs ?? [])],
+      desired_outcomes: [...(input.audience_profile?.desired_outcomes ?? [])],
+      tone_and_voice:
+        typeof input.audience_profile?.tone_and_voice === 'string'
+          ? input.audience_profile.tone_and_voice.trim()
+          : '',
+      cautionary_notes: [...(input.audience_profile?.cautionary_notes ?? [])],
+    },
     research_plan: {
       ...input.research_plan,
       queries: [...input.research_plan.queries],
@@ -62,6 +76,41 @@ export const postProcessBlueprint = (input: Blueprint, topic: string): Blueprint
     );
     blueprint.key_terms = [topic];
   }
+
+  blueprint.audience_profile.audience_summary =
+    blueprint.audience_profile.audience_summary && blueprint.audience_profile.audience_summary.length > 0
+      ? blueprint.audience_profile.audience_summary
+      : `Audience profile missing; assume mixed professional audience for ${topic}.`;
+
+  const normalizeAudienceArray = (values: string[], fallback: string[]): string[] => {
+    const normalized = values.map((value) => value.trim()).filter(isMeaningfulString);
+    return normalized.length > 0 ? normalized : fallback;
+  };
+
+  blueprint.audience_profile.primary_roles = normalizeAudienceArray(
+    blueprint.audience_profile.primary_roles,
+    ['Executives', 'Practitioners']
+  );
+
+  blueprint.audience_profile.core_needs = normalizeAudienceArray(
+    blueprint.audience_profile.core_needs,
+    ['Understand implications quickly', 'Identify next best actions']
+  );
+
+  blueprint.audience_profile.desired_outcomes = normalizeAudienceArray(
+    blueprint.audience_profile.desired_outcomes,
+    ['Leave with clear actions', 'Spot key opportunities or risks']
+  );
+
+  blueprint.audience_profile.cautionary_notes = normalizeAudienceArray(
+    blueprint.audience_profile.cautionary_notes,
+    ['Avoid speculation; focus on verified facts']
+  );
+
+  blueprint.audience_profile.tone_and_voice =
+    blueprint.audience_profile.tone_and_voice && blueprint.audience_profile.tone_and_voice.length > 0
+      ? blueprint.audience_profile.tone_and_voice
+      : 'Confident, concise, and audience-first.';
 
   if (blueprint.research_plan.queries.length === 0) {
     blueprint.research_plan.queries = [

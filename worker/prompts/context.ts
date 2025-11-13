@@ -11,6 +11,7 @@ Guidelines:
 - Include specific details, examples, and explanations where possible
 - Cite source metadata when provided
 - Maintain professional tone suitable for business/technical audience
+- Reflect the stated audience profile: emphasize what helps them act, decide, or communicate.
 - Avoid redundancy: each chunk should focus on distinct aspects
 - Use "llm_generation" as source if content is generated from research summary
 - Ensure content is factual and accurate
@@ -20,7 +21,8 @@ Output format: Return JSON array of context chunks.`;
 export function createContextChunksUserPrompt(
   researchSummary: string,
   blueprintDetails: string,
-  glossaryHighlights: string
+  glossaryHighlights: string,
+  audienceProfile?: string
 ): string {
   return `Generate high-quality context chunks for the event topic using the information below:
 
@@ -32,6 +34,9 @@ ${blueprintDetails}
 
 Glossary Highlights:
 ${glossaryHighlights}
+
+Audience Profile:
+${audienceProfile && audienceProfile.trim().length > 0 ? audienceProfile : 'Audience profile not provided; assume pragmatic senior professionals who expect concise, actionable insight.'}
 
 Requirements:
 - Produce 500-1000 chunks depending on blueprint target

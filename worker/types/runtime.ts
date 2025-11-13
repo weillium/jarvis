@@ -39,6 +39,7 @@ export interface EventRuntime {
   factsNormalizedHashEnabled: boolean;
   cardsLastTriggeredAt?: number;
   cardsRateHistory?: number[];
+  audienceProfile?: string;
 
   // Realtime sessions
   transcriptSession?: AgentRealtimeSession;

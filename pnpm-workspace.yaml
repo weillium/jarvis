@@ -1,5 +1,8 @@
 packages:
-  - "worker"
-  - "web"
-  - "supabase"
-  - "packages/*"
+  - worker
+  - web
+  - supabase
+  - mobile
+  - packages/*
+
+nodeLinker: hoisted
