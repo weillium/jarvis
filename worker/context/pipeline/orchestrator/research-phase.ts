@@ -43,6 +43,11 @@ const EXA_SCHEMA_VALIDATION_SIGNATURES = [
   'json schema validation failed',
 ];
 
+const EXA_CREDIT_LIMIT_SIGNATURES = [
+  'exaerror: you have exceeded your credits limit',
+  'exceeded your credits limit',
+];
+
 export class ExaSchemaValidationError extends Error {
   constructor(readonly detail: string) {
     super('Exa schema validation failure');
@@ -56,6 +61,13 @@ export function isExaSchemaValidationFailure(errorText: string): boolean {
     normalized.includes(signature)
   );
 }
+
+const isExaCreditsLimitError = (errorText: string): boolean => {
+  const normalized = errorText.toLowerCase();
+  return EXA_CREDIT_LIMIT_SIGNATURES.some((signature) =>
+    normalized.includes(signature)
+  );
+};
 
 export interface ResearchPhaseOptions extends PhaseOptions {
   statusManager: StatusManager;
@@ -127,6 +139,60 @@ export async function runResearchPhase(
         ? queryItem.provenance_hint
         : null;
 
+    const runPriorityOneStubFallback = async (reason: string): Promise<void> => {
+      console.warn(
+        `[research] ${queryProgress} ${reason} - using LLM stub fallback for priority 1 query: "${queryItem.query}"`
+      );
+      const startTime = Date.now();
+
+      try {
+        const fallbackModel = stubResearchModel ?? genModel;
+        const stubChunks = await generateStubResearchChunks(
+          queryItem.query,
+          openai,
+          fallbackModel,
+          costBreakdown
+        );
+        const duration = Date.now() - startTime;
+        console.log(
+          `[research] ${queryProgress} LLM stub generated ${stubChunks.length} chunks in ${duration}ms for query: "${queryItem.query}"`
+        );
+
+        for (const chunkText of stubChunks) {
+          insertedCount.value++;
+          chunks.push({
+            text: chunkText,
+            source: 'llm_stub',
+            metadata: {
+              api: 'exa_stub',
+              query: queryItem.query,
+              priority: queryItem.priority,
+              query_priority: queryItem.priority,
+              agent_utility: agentUtilityTargets,
+              provenance_hint: provenanceHint,
+            },
+          });
+        }
+      } catch (err: unknown) {
+        const errString = String(err);
+        console.error('[orchestrator] error:', errString);
+        if (isExaSchemaValidationFailure(errString)) {
+          console.error(
+            `[research] ${queryProgress} Exa schema validation failed. Per Exa Research FAQ, schema validation failure terminates the task. Adjust the output schema to remove unsupported keywords. Details: ${errString}`
+          );
+          throw new ExaSchemaValidationError(errString);
+        }
+      }
+
+      await statusManager.updateCycle(generationCycleId, {
+        progress_current: queryNumber,
+      });
+
+      console.log(
+        `[research] ${queryProgress} Query processing complete. Total chunks so far: ${insertedCount.value}`
+      );
+    };
+
     console.log(
       `[research] ${queryProgress} Starting query: "${queryItem.query}" (API: ${queryItem.api}, Priority: ${queryItem.priority})`
     );
@@ -179,57 +245,7 @@ export async function runResearchPhase(
         );
 
         if (!exa) {
-          console.warn(
-            `[research] ${queryProgress} Exa API key not available - using LLM stub fallback for priority 1 query: "${queryItem.query}"`
-          );
-          const startTime = Date.now();
-
-          try {
-            const fallbackModel = stubResearchModel ?? genModel;
-            const stubChunks = await generateStubResearchChunks(
-              queryItem.query,
-              openai,
-              fallbackModel,
-              costBreakdown
-            );
-            const duration = Date.now() - startTime;
-            console.log(
-              `[research] ${queryProgress} LLM stub generated ${stubChunks.length} chunks in ${duration}ms for query: "${queryItem.query}"`
-            );
-
-            for (const chunkText of stubChunks) {
-              insertedCount.value++;
-              chunks.push({
-                text: chunkText,
-                source: 'llm_stub',
-                metadata: {
-                  api: 'exa_stub',
-                  query: queryItem.query,
-                  priority: queryItem.priority,
-                  query_priority: queryItem.priority,
-                  agent_utility: agentUtilityTargets,
-                  provenance_hint: provenanceHint,
-                },
-              });
-            }
-          } catch (err: unknown) {
-            const errString = String(err);
-            console.error('[orchestrator] error:', errString);
-            if (isExaSchemaValidationFailure(errString)) {
-              console.error(
-                `[research] ${queryProgress} Exa schema validation failed. Per Exa Research FAQ, schema validation failure terminates the task. Adjust the output schema to remove unsupported keywords. Details: ${errString}`
-              );
-              throw new ExaSchemaValidationError(errString);
-            }
-          }
-
-          await statusManager.updateCycle(generationCycleId, {
-            progress_current: queryNumber,
-          });
-
-          console.log(
-            `[research] ${queryProgress} Query processing complete. Total chunks so far: ${insertedCount.value}`
-          );
+          await runPriorityOneStubFallback('Exa API key not available');
           continue;
         }
 
@@ -368,7 +384,18 @@ TONE & SCOPE:
           );
           continue;
         } catch (err: unknown) {
-          console.error('[orchestrator] error:', String(err));
+          const errString = String(err);
+          console.error('[orchestrator] error:', errString);
+          if (isExaSchemaValidationFailure(errString)) {
+            console.error(
+              `[research] ${queryProgress} Exa schema validation failed. Per Exa Research FAQ, schema validation failure terminates the task. Adjust the output schema to remove unsupported keywords. Details: ${errString}`
+            );
+            throw new ExaSchemaValidationError(errString);
+          }
+          if (isExaCreditsLimitError(errString)) {
+            await runPriorityOneStubFallback('Exa credits exhausted');
+            continue;
+          }
         }
       } else if (priorityLevel === 2) {
         const shouldUseWikipedia = queryItem.api === 'wikipedia' || !exa;
@@ -406,7 +433,15 @@ TONE & SCOPE:
             `[research] ${queryProgress} ✓ Exa /search completed in ${duration}ms for query: "${queryItem.query}"`
           );
         } catch (err: unknown) {
-          console.error('[orchestrator] error:', String(err));
+          const errString = String(err);
+          console.error('[orchestrator] error:', errString);
+          if (isExaCreditsLimitError(errString)) {
+            console.warn(
+              `[research] ${queryProgress} Exa credits exhausted - rerouting to Wikipedia for priority 2 query: "${queryItem.query}"`
+            );
+            await runWikipediaFlow();
+            continue;
+          }
         }
 
         await statusManager.updateCycle(generationCycleId, {
