@@ -24,7 +24,6 @@ import {
   extractConcepts,
   normalizeConcept,
   type ConceptCandidate,
-  type ConceptMatchSource,
 } from '../lib/text/concept-extractor';
 import {
   CARD_SALIENCE_THRESHOLD,

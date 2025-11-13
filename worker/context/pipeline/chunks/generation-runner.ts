@@ -1,5 +1,4 @@
-import type OpenAI from 'openai';
-import type { ChunkCandidate, ChunkWithRank, ChunksCostBreakdown } from './types';
+import type { ChunkCandidate, ChunkWithRank } from './types';
 
 export const rankChunks = (chunks: ChunkCandidate[]): ChunkWithRank[] => {
   const sourcePriority: Record<string, number> = {

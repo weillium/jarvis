@@ -76,7 +76,7 @@ export class MessageQueueManager {
     }
 
     this.currentMessage = next;
-    const formattedMessage = this.formatMessage(next.message, next.context);
+    const formattedMessage = this.formatMessage(next.message);
 
     const isTranscriptAgent = this.config.agentType === 'transcript';
 
@@ -140,10 +140,7 @@ export class MessageQueueManager {
     return this.queue.length;
   }
 
-  private formatMessage(
-    message: string,
-    context?: RealtimeMessageContext
-  ): ConversationItemCreateEvent {
+  private formatMessage(message: string): ConversationItemCreateEvent {
     if (this.config.agentType === 'transcript') {
       return {
         type: 'conversation.item.create',

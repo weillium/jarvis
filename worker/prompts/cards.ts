@@ -41,7 +41,6 @@ export function createCardGenerationUserPrompt({
   transcriptSegment,
   transcriptSummary,
   factsSnapshot,
-  glossaryContext,
   supportingFacts,
   supportingGlossary,
   transcriptBullets,
