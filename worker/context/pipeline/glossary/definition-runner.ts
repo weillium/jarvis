@@ -145,7 +145,20 @@ interface TermGenerationResult {
   definition: TermDefinition | null;
   openAICalls: GlossaryCostBreakdown['openai']['chat_completions'];
   exaCost?: number;
+  exaDisabled?: boolean;
 }
+
+const EXA_CREDIT_LIMIT_SIGNATURES = [
+  'exaerror: you have exceeded your credits limit',
+  'exceeded your credits limit',
+] as const;
+
+const isExaCreditsLimitError = (text: string): boolean => {
+  const normalized = text.toLowerCase();
+  return EXA_CREDIT_LIMIT_SIGNATURES.some((signature) =>
+    normalized.includes(signature)
+  );
+};
 
 export async function generateTermDefinitions(
   terms: GlossaryPlanTerm[],
@@ -162,10 +175,11 @@ export async function generateTermDefinitions(
   let exaAnswerCost = 0;
   let exaAnswerQueries = 0;
   const definitions: TermDefinition[] = [];
+  let exaAvailable = Boolean(exa);
 
   for (const term of terms) {
     const snippets = selectRelevantSnippets(term, research);
-    const preferExa = Boolean(exa) && term.priority < 2;
+    const preferExa = exaAvailable && Boolean(exa) && term.priority < 2;
 
     const result = await generateDefinitionForTerm({
       term,
@@ -179,6 +193,15 @@ export async function generateTermDefinitions(
 
     if (result.definition) {
       definitions.push(result.definition);
+    }
+
+    if (result.exaDisabled) {
+      if (exaAvailable) {
+        console.warn(
+          `[glossary] Disabling Exa usage for remaining terms: exhausted credits detected at term "${term.term}"`
+        );
+      }
+      exaAvailable = false;
     }
 
     for (const call of result.openAICalls) {
@@ -213,14 +236,20 @@ export async function generateTermDefinitions(
 }
 
 async function generateDefinitionForTerm(params: TermGenerationParams): Promise<TermGenerationResult> {
+  let exaAttempt: TermGenerationResult | null = null;
   if (params.preferExa && params.exa) {
-    const withExa = await tryExaFirst(params);
-    if (withExa.definition) {
-      return withExa;
+    exaAttempt = await tryExaFirst(params);
+    if (exaAttempt.definition) {
+      return exaAttempt;
     }
   }
 
-  return generateViaGlossaryModel(params);
+  const fallback = await generateViaGlossaryModel(params);
+  if (exaAttempt?.exaDisabled) {
+    return { ...fallback, exaDisabled: true };
+  }
+
+  return fallback;
 }
 
 async function tryExaFirst(params: TermGenerationParams): Promise<TermGenerationResult> {
@@ -265,7 +294,14 @@ async function tryExaFirst(params: TermGenerationParams): Promise<TermGeneration
       exaCost,
     };
   } catch (err: unknown) {
-    console.error("[worker] error:", String(err));
+    const errString = String(err);
+    console.error("[worker] error:", errString);
+    if (isExaCreditsLimitError(errString)) {
+      console.warn(
+        `[glossary] Exa credits limit reached during term "${term.term}". Falling back to LLM definitions for remaining terms.`
+      );
+      return { definition: null, openAICalls: [], exaDisabled: true };
+    }
     return { definition: null, openAICalls: [] };
   }
 }
@@ -455,3 +491,4 @@ const normalizeUsageExamples = (
 
   return list;
 };
+

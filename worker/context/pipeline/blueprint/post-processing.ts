@@ -135,7 +135,8 @@ export const postProcessBlueprint = (input: Blueprint, topic: string): Blueprint
   }
 
   if (blueprint.research_plan.queries) {
-    blueprint.research_plan.queries = blueprint.research_plan.queries.map((queryPlan) => ({
+    const normalizedQueries = blueprint.research_plan.queries.map(
+      (queryPlan): Blueprint['research_plan']['queries'][number] => ({
       query: queryPlan.query || '',
       api: queryPlan.api === 'exa' || queryPlan.api === 'wikipedia' ? queryPlan.api : 'exa',
       priority: queryPlan.priority || 5,
@@ -151,16 +152,64 @@ export const postProcessBlueprint = (input: Blueprint, topic: string): Blueprint
         typeof queryPlan.provenance_hint === 'string' && queryPlan.provenance_hint.length > 0
           ? queryPlan.provenance_hint
           : 'Provenance not specified',
-    }));
-    blueprint.research_plan.total_searches = blueprint.research_plan.queries.length;
-    blueprint.research_plan.estimated_total_cost = blueprint.research_plan.queries.reduce(
+      })
+    );
+
+    const cappedQueries: Blueprint['research_plan']['queries'] = [];
+    let exaPriorityOneCount = 0;
+    let exaPriorityTwoCount = 0;
+
+    for (const query of normalizedQueries) {
+      if (query.api === 'exa' && query.priority === 1) {
+        if (exaPriorityOneCount < 1) {
+          exaPriorityOneCount += 1;
+          cappedQueries.push(query);
+        } else {
+          console.warn(
+            `[blueprint] Downgrading excess priority 1 Exa /research query "${query.query}" to control spend`
+          );
+          cappedQueries.push({
+            ...query,
+            api: 'wikipedia',
+            priority: Math.max(2, query.priority + 1),
+            estimated_cost: 0.001,
+          });
+        }
+        continue;
+      }
+
+      if (query.api === 'exa' && query.priority === 2) {
+        if (exaPriorityTwoCount < 4) {
+          exaPriorityTwoCount += 1;
+          cappedQueries.push(query);
+        } else {
+          console.warn(
+            `[blueprint] Downgrading excess priority 2 Exa /search query "${query.query}" to control spend`
+          );
+          cappedQueries.push({
+            ...query,
+            api: 'wikipedia',
+            priority: Math.max(3, query.priority + 1),
+            estimated_cost: 0.001,
+          });
+        }
+        continue;
+      }
+
+      cappedQueries.push(query);
+    }
+
+    blueprint.research_plan.queries = cappedQueries;
+    blueprint.research_plan.total_searches = cappedQueries.length;
+    blueprint.research_plan.estimated_total_cost = cappedQueries.reduce(
       (sum, queryPlan) => sum + (queryPlan.estimated_cost || 0),
       0
     );
   }
 
   if (blueprint.glossary_plan.terms) {
-    blueprint.glossary_plan.terms = blueprint.glossary_plan.terms.map((termPlan) => ({
+    const normalizedTerms = blueprint.glossary_plan.terms.map(
+      (termPlan): Blueprint['glossary_plan']['terms'][number] => ({
       term: termPlan.term || '',
       is_acronym: termPlan.is_acronym || false,
       category: termPlan.category || 'general',
@@ -171,8 +220,31 @@ export const postProcessBlueprint = (input: Blueprint, topic: string): Blueprint
               (agent): agent is 'facts' | 'cards' => agent === 'facts' || agent === 'cards'
             )
           : ['facts', 'cards'],
-    }));
-    blueprint.glossary_plan.estimated_count = blueprint.glossary_plan.terms.length;
+      })
+    );
+
+    let priorityOneCount = 0;
+    const cappedTerms: Blueprint['glossary_plan']['terms'] = normalizedTerms.map((termPlan) => {
+      if (termPlan.priority === 1) {
+        if (priorityOneCount < 3) {
+          priorityOneCount += 1;
+          return termPlan;
+        }
+
+        console.warn(
+          `[blueprint] Downgrading glossary term "${termPlan.term}" from priority 1 to cap Exa usage`
+        );
+        return {
+          ...termPlan,
+          priority: Math.max(2, termPlan.priority + 1),
+        };
+      }
+
+      return termPlan;
+    });
+
+    blueprint.glossary_plan.terms = cappedTerms;
+    blueprint.glossary_plan.estimated_count = cappedTerms.length;
   }
 
   if (blueprint.chunks_plan.sources) {

@@ -423,7 +423,7 @@ export function BlueprintDisplay({
                 }}>
                   <thead>
                     <tr>
-                      {['Query', 'API', 'Priority', 'Estimated Cost', 'Purpose', 'Provenance'].map((header) => (
+                      {['Query', 'API', 'Priority', 'Estimated Cost', 'Serves Agents', 'Provenance'].map((header) => (
                         <th
                           key={header}
                           style={{
@@ -455,10 +455,14 @@ export function BlueprintDisplay({
                           {formatCurrency(query.estimated_cost)}
                         </td>
                         <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', color: '#475569' }}>
-                          {formatPurpose(query.purpose)}
+                          {formatPurpose(
+                            Array.isArray(query.agent_utility) ? query.agent_utility : undefined
+                          )}
                         </td>
                         <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', color: '#475569' }}>
-                          {query.provenance_hint ?? '—'}
+                          {query.provenance_hint && query.provenance_hint.trim().length > 0
+                            ? query.provenance_hint
+                            : '—'}
                         </td>
                       </tr>
                     ))}
@@ -491,7 +495,7 @@ export function BlueprintDisplay({
                 }}>
                   <thead>
                     <tr>
-                      {['Term', 'Acronym', 'Category', 'Priority'].map((header) => (
+                      {['Term', 'Acronym', 'Category', 'Priority', 'Serves Agents'].map((header) => (
                         <th
                           key={header}
                           style={{
@@ -521,6 +525,11 @@ export function BlueprintDisplay({
                         </td>
                         <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', color: '#475569' }}>
                           {term.priority}
+                        </td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', color: '#475569' }}>
+                          {formatPurpose(
+                            Array.isArray(term.agent_utility) ? term.agent_utility : undefined
+                          )}
                         </td>
                       </tr>
                     ))}

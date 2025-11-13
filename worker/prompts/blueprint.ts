@@ -50,6 +50,8 @@ Return a JSON object with these sections:
    - queries: 5-12 items, each { query, api, priority, estimated_cost, agent_utility, provenance_hint }
    - agent_utility must be an array drawn from ["facts","cards","glossary"] to indicate which downstream consumers benefit
    - provenance_hint should call out expected sources (publication, speaker, document, etc.) when known
+  - Limit Exa-heavy work: include **at most one** priority-1 query that uses Exa /research; any additional high-signal work should be downgraded to priority ≥2 or routed to Wikipedia
+  - Cap Exa /search usage at four priority-2 queries; redirect further coverage to priority ≥3 or Wikipedia to control spend
    - Follow system rules for Exa endpoints and pricing; every query MUST include numeric estimated_cost
    - Example queries: ["comprehensive overview of the subject", "recent implementations and case studies", "industry standards and regulations"]
    - total_searches and estimated_total_cost must align with the queries
@@ -57,6 +59,7 @@ Return a JSON object with these sections:
 5. glossary_plan (object)
    - terms: 10-20 items, each { term, is_acronym, category, priority, agent_utility }
    - agent_utility must be an array drawn from ["facts","cards"] to highlight which agent benefits from each term
+  - Keep priority-1 terms (which trigger Exa /answer) to **no more than three**; assign remaining terms to priority ≥2 unless there is a compelling reason otherwise
    - Prioritize terms surfaced explicitly in this event’s content; leave the list shorter instead of fabricating jargon
    - Reflect priority-based sourcing guidance
    - estimated_count equals terms.length
