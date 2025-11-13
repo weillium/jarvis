@@ -59,7 +59,7 @@ Return a JSON object with these sections:
 5. glossary_plan (object)
    - terms: 10-20 items, each { term, is_acronym, category, priority, agent_utility }
    - agent_utility must be an array drawn from ["facts","cards"] to highlight which agent benefits from each term
-  - Keep priority-1 terms (which trigger Exa /answer) to **no more than three**; assign remaining terms to priority ≥2 unless there is a compelling reason otherwise
+   - Keep priority-1 terms (which trigger Exa /answer) to **no more than three**; assign remaining terms to priority ≥2 unless there is a compelling reason otherwise
    - Prioritize terms surfaced explicitly in this event’s content; leave the list shorter instead of fabricating jargon
    - Reflect priority-based sourcing guidance
    - estimated_count equals terms.length

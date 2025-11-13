@@ -249,6 +249,30 @@ async function generateDefinitionForTerm(params: TermGenerationParams): Promise<
     return { ...fallback, exaDisabled: true };
   }
 
+  if (!fallback.definition && exaAttempt && !exaAttempt.exaDisabled) {
+    console.warn(
+      `[glossary] Falling back to LLM glossary model for term "${params.term.term}" after Exa attempt returned no definition`
+    );
+  }
+
+  if (fallback.definition && exaAttempt) {
+    console.info(
+      `[glossary] Term "${params.term.term}" finalized via LLM glossary model (Exa attempt did not produce usable output)`
+    );
+  }
+
+  if (!exaAttempt && fallback.definition) {
+    console.info(
+      `[glossary] Term "${params.term.term}" generated via LLM glossary model (Exa not used for this term)`
+    );
+  }
+
+  if (!exaAttempt && !fallback.definition) {
+    console.warn(
+      `[glossary] Term "${params.term.term}" could not be generated; LLM glossary model returned no definition and Exa was not used`
+    );
+  }
+
   return fallback;
 }
 
