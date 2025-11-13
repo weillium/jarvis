@@ -200,7 +200,7 @@ IMPORTANT: This is a retry attempt. The previous response had empty or insuffici
                         },
                       },
                     },
-                    target_count: { type: 'integer', enum: [500, 1000] },
+                    target_count: { type: 'integer', minimum: 1 },
                     quality_tier: { type: 'string', enum: ['basic', 'comprehensive'] },
                     ranking_strategy: { type: 'string', minLength: 1 },
                   },

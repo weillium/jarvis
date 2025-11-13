@@ -30,6 +30,15 @@ const LINE_REMOVE_PATTERNS: RegExp[] = [
   /^\s*continue reading\s*$/i,
   /^\s*subscribe now to keep reading\s*$/i,
   /^\s*cart\s*$/i,
+  /^\s*view all result\s*$/i,
+  /^\s*reading time[:\s]/i,
+  /^\s*aa\s*aareset\s*$/i,
+  /^\s*share on (linkedin|twitter|facebook).*/i,
+  /^\s*advertisement\b.*$/i,
+  /^\s*no products in the basket.*$/i,
+  /^\s*toggle navigation\s*$/i,
+  /^\s*privacy policy.*$/i,
+  /^\s*terms & conditions.*$/i,
 ];
 
 const INLINE_LINK_LOGIN_PATTERN =
@@ -92,6 +101,24 @@ export const cleanResearchText = (input: string): CleanTextResult => {
 
     const withoutLoginLinks = trimmed.replace(INLINE_LINK_LOGIN_PATTERN, '').trim();
     if (!withoutLoginLinks) {
+      removedFragments.push(trimmed);
+      continue;
+    }
+
+    const linkMatches = withoutLoginLinks.match(/\[[^[\]]+\]\([^)]+\)/g);
+    if (linkMatches && linkMatches.length >= 2) {
+      removedFragments.push(trimmed);
+      continue;
+    }
+
+    const navSeparators = withoutLoginLinks.split('-').map((token) => token.trim());
+    const uppercaseTokens = navSeparators.filter(
+      (token) =>
+        token.length > 0 &&
+        token === token.toUpperCase() &&
+        token.replace(/[^A-Z]/g, '').length >= 3
+    );
+    if (uppercaseTokens.length >= 3 && navSeparators.length >= 4) {
       removedFragments.push(trimmed);
       continue;
     }

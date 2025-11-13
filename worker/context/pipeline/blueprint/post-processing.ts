@@ -105,7 +105,10 @@ export const postProcessBlueprint = (input: Blueprint, topic: string): Blueprint
         upstream_reference: 'fallback',
         expected_format: 'llm_summary',
         priority: 1,
-        estimated_chunks: blueprint.chunks_plan.target_count || 500,
+        estimated_chunks:
+          blueprint.chunks_plan.target_count && blueprint.chunks_plan.target_count > 0
+            ? blueprint.chunks_plan.target_count
+            : 100,
         agent_utility: ['cards', 'facts'],
       },
     ];
@@ -123,15 +126,11 @@ export const postProcessBlueprint = (input: Blueprint, topic: string): Blueprint
   }
 
   if (
-    blueprint.chunks_plan.quality_tier === 'comprehensive' &&
-    blueprint.chunks_plan.target_count < 1000
+    typeof blueprint.chunks_plan.target_count !== 'number' ||
+    !Number.isFinite(blueprint.chunks_plan.target_count) ||
+    blueprint.chunks_plan.target_count <= 0
   ) {
-    blueprint.chunks_plan.target_count = 1000;
-  } else if (
-    blueprint.chunks_plan.quality_tier === 'basic' &&
-    blueprint.chunks_plan.target_count > 500
-  ) {
-    blueprint.chunks_plan.target_count = 500;
+    blueprint.chunks_plan.target_count = 100;
   }
 
   if (blueprint.research_plan.queries) {

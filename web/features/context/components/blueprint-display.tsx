@@ -4,6 +4,7 @@ import { useState } from 'react';
 import {
   useBlueprintFullQuery,
   type BlueprintAgentAlignment,
+  type BlueprintAgentType,
   type BlueprintChunksPlan,
   type BlueprintGlossaryPlan,
   type BlueprintResearchPlan,
@@ -48,22 +49,101 @@ const isGlossaryPlan = (value: unknown): value is BlueprintGlossaryPlan =>
   ) &&
   typeof value.estimated_count === 'number';
 
-const isChunksPlan = (value: unknown): value is BlueprintChunksPlan =>
+const isAgentUtilityArray = (value: unknown): value is BlueprintAgentType[] =>
+  Array.isArray(value) && value.every((agent) => agent === 'facts' || agent === 'cards');
+
+type LegacyChunkSource = {
+  source: string;
+  priority: number;
+  estimated_chunks: number;
+  serves_agents?: BlueprintAgentType[];
+  upstream_reference?: string;
+  expected_format?: string;
+};
+
+const isChunkSourceV2 = (value: unknown): value is BlueprintChunksPlan['sources'][number] =>
   isRecord(value) &&
-  Array.isArray(value.sources) &&
-  value.sources.every(
-    (source) =>
-      isRecord(source) &&
-      typeof source.source === 'string' &&
-      typeof source.priority === 'number' &&
-      typeof source.estimated_chunks === 'number' &&
-      (source.serves_agents === undefined ||
-        (Array.isArray(source.serves_agents) &&
-          source.serves_agents.every((agent) => agent === 'facts' || agent === 'cards')))
-  ) &&
-  typeof value.target_count === 'number' &&
-  (value.quality_tier === 'basic' || value.quality_tier === 'comprehensive') &&
-  typeof value.ranking_strategy === 'string';
+  typeof value.label === 'string' &&
+  typeof value.upstream_reference === 'string' &&
+  typeof value.expected_format === 'string' &&
+  typeof value.priority === 'number' &&
+  typeof value.estimated_chunks === 'number' &&
+  isAgentUtilityArray(value.agent_utility);
+
+const isChunkSourceLegacy = (value: unknown): value is LegacyChunkSource =>
+  isRecord(value) &&
+  typeof value.source === 'string' &&
+  typeof value.priority === 'number' &&
+  typeof value.estimated_chunks === 'number' &&
+  (value.serves_agents === undefined || isAgentUtilityArray(value.serves_agents)) &&
+  (value.upstream_reference === undefined || typeof value.upstream_reference === 'string') &&
+  (value.expected_format === undefined || typeof value.expected_format === 'string');
+
+const normalizeChunkSource = (
+  source: unknown
+): BlueprintChunksPlan['sources'][number] | null => {
+  if (isChunkSourceV2(source)) {
+    return source;
+  }
+
+  if (isChunkSourceLegacy(source)) {
+    return {
+      label: source.source,
+      upstream_reference:
+        typeof source.upstream_reference === 'string' && source.upstream_reference.trim().length > 0
+          ? source.upstream_reference
+          : source.source,
+      expected_format:
+        typeof source.expected_format === 'string' && source.expected_format.trim().length > 0
+          ? source.expected_format
+          : 'unspecified',
+      priority: source.priority,
+      estimated_chunks: source.estimated_chunks,
+      agent_utility: source.serves_agents ?? [],
+    };
+  }
+
+  return null;
+};
+
+const parseChunksPlan = (value: unknown): BlueprintChunksPlan | undefined => {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value.sources)) {
+    return undefined;
+  }
+
+  const normalizedSources = value.sources
+    .map(normalizeChunkSource)
+    .filter((source): source is BlueprintChunksPlan['sources'][number] => source !== null);
+
+  if (normalizedSources.length === 0) {
+    return undefined;
+  }
+
+  const targetCount = typeof value.target_count === 'number' ? value.target_count : undefined;
+  const qualityTier =
+    value.quality_tier === 'basic' || value.quality_tier === 'comprehensive'
+      ? value.quality_tier
+      : undefined;
+  const rankingStrategy =
+    typeof value.ranking_strategy === 'string' && value.ranking_strategy.trim().length > 0
+      ? value.ranking_strategy
+      : undefined;
+
+  if (targetCount === undefined || !qualityTier || !rankingStrategy) {
+    return undefined;
+  }
+
+  return {
+    sources: normalizedSources,
+    target_count: targetCount,
+    quality_tier: qualityTier,
+    ranking_strategy: rankingStrategy,
+  };
+};
 
 const isAgentAlignment = (value: unknown): value is BlueprintAgentAlignment =>
   isRecord(value) &&
@@ -107,15 +187,8 @@ const asGlossaryPlan = (
 const asChunksPlan = (
   primary: unknown,
   fallback: unknown
-): BlueprintChunksPlan | undefined => {
-  if (isChunksPlan(primary)) {
-    return primary;
-  }
-  if (isChunksPlan(fallback)) {
-    return fallback;
-  }
-  return undefined;
-};
+): BlueprintChunksPlan | undefined =>
+  parseChunksPlan(primary) ?? parseChunksPlan(fallback);
 
 const asAgentAlignment = (
   primary: unknown,
@@ -245,6 +318,30 @@ export function BlueprintDisplay({
       ? (blueprintJson?.['cost_breakdown'] as Record<string, unknown>)
       : null;
 
+  const chunkPlanStats = chunksPlan
+    ? chunksPlan.sources.reduce(
+        (acc, source) => {
+          acc.total += source.estimated_chunks;
+          if (source.agent_utility.includes('facts')) {
+            acc.facts += source.estimated_chunks;
+          }
+          if (source.agent_utility.includes('cards')) {
+            acc.cards += source.estimated_chunks;
+          }
+          return acc;
+        },
+        { total: 0, facts: 0, cards: 0 }
+      )
+    : null;
+
+  const chunkPlanCoverage =
+    chunksPlan && chunkPlanStats && chunksPlan.target_count > 0
+      ? Math.round((chunkPlanStats.total / chunksPlan.target_count) * 100)
+      : null;
+
+  const targetChunkCount = blueprint.target_chunk_count ?? chunksPlan?.target_count ?? null;
+  const qualityTier = blueprint.quality_tier ?? chunksPlan?.quality_tier ?? null;
+
   return (
     <div style={{
       ...(embedded ? {} : {
@@ -280,23 +377,38 @@ export function BlueprintDisplay({
         gap: '16px',
         marginBottom: '16px',
       }}>
-        {blueprint.target_chunk_count && (
+        {targetChunkCount !== null && (
           <div>
             <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>
-              Target Chunks
+              Target Chunks (Plan)
             </div>
             <div style={{ fontSize: '16px', fontWeight: '600', color: '#0f172a' }}>
-              {blueprint.target_chunk_count.toLocaleString()}
+              {targetChunkCount.toLocaleString()}
             </div>
           </div>
         )}
-        {blueprint.quality_tier && (
+        {chunkPlanStats && (
+          <div>
+            <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>
+              Estimated Chunks (Plan)
+            </div>
+            <div style={{ fontSize: '16px', fontWeight: '600', color: '#0f172a' }}>
+              {chunkPlanStats.total.toLocaleString()}
+            </div>
+            {chunkPlanCoverage !== null && (
+              <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                {chunkPlanCoverage}% of target
+              </div>
+            )}
+          </div>
+        )}
+        {qualityTier && (
           <div>
             <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>
               Quality Tier
             </div>
             <div style={{ fontSize: '16px', fontWeight: '600', color: '#0f172a', textTransform: 'capitalize' }}>
-              {blueprint.quality_tier}
+              {qualityTier}
             </div>
           </div>
         )}
@@ -553,6 +665,34 @@ export function BlueprintDisplay({
               }}>
                 Chunks Plan
               </h5>
+              {chunkPlanStats && (
+                <div style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '12px',
+                  fontSize: '12px',
+                  color: '#475569',
+                  marginBottom: '12px',
+                }}>
+                  <div>
+                    <strong>{chunksPlan.sources.length}</strong> planned sources
+                  </div>
+                  <div>
+                    <strong>{chunkPlanStats.total.toLocaleString()}</strong> estimated chunks
+                  </div>
+                  <div>
+                    <strong>{chunkPlanStats.facts.toLocaleString()}</strong> for facts
+                  </div>
+                  <div>
+                    <strong>{chunkPlanStats.cards.toLocaleString()}</strong> for cards
+                  </div>
+                  {chunkPlanCoverage !== null && (
+                    <div>
+                      <strong>{chunkPlanCoverage}%</strong> of target coverage
+                    </div>
+                  )}
+                </div>
+              )}
               <div style={{ overflowX: 'auto' }}>
                 <table style={{
                   width: '100%',
@@ -562,7 +702,7 @@ export function BlueprintDisplay({
                 }}>
                   <thead>
                     <tr>
-                      {['Source', 'Priority', 'Estimated Chunks', 'Serves Agents'].map((header) => (
+                      {['Label', 'Upstream Reference', 'Expected Format', 'Priority', 'Estimated Chunks', 'Agent Utility'].map((header) => (
                         <th
                           key={header}
                           style={{
@@ -580,9 +720,15 @@ export function BlueprintDisplay({
                   </thead>
                   <tbody>
                     {chunksPlan.sources.map((source, i) => (
-                      <tr key={`${source.source}-${i}`}>
-                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', color: '#0f172a' }}>
-                          {source.source}
+                      <tr key={`${source.label}-${source.upstream_reference}-${i}`}>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', color: '#0f172a', fontWeight: 500 }}>
+                          {source.label}
+                        </td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', color: '#475569', maxWidth: '220px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={source.upstream_reference}>
+                          {source.upstream_reference}
+                        </td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', color: '#475569', textTransform: 'capitalize' }}>
+                          {source.expected_format}
                         </td>
                         <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', color: '#475569' }}>
                           {source.priority}
@@ -591,7 +737,7 @@ export function BlueprintDisplay({
                           {source.estimated_chunks}
                         </td>
                         <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', color: '#475569' }}>
-                          {formatPurpose(source.serves_agents)}
+                          {formatPurpose(source.agent_utility)}
                         </td>
                       </tr>
                     ))}
@@ -599,7 +745,23 @@ export function BlueprintDisplay({
                 </table>
               </div>
               <div style={{ marginTop: '8px', fontSize: '12px', color: '#475569' }}>
-                <strong>Target Count:</strong> {chunksPlan.target_count} &nbsp;•&nbsp; <strong>Quality Tier:</strong> {chunksPlan.quality_tier} &nbsp;•&nbsp; <strong>Ranking Strategy:</strong> {chunksPlan.ranking_strategy}
+                <strong>Target Count (Plan):</strong> {chunksPlan.target_count}
+                &nbsp;•&nbsp;
+                <strong>Quality Tier:</strong> {chunksPlan.quality_tier}
+                &nbsp;•&nbsp;
+                <strong>Ranking Strategy:</strong> {chunksPlan.ranking_strategy}
+                {chunkPlanStats && (
+                  <>
+                    &nbsp;•&nbsp;
+                    <strong>Estimated Total:</strong> {chunkPlanStats.total.toLocaleString()}
+                    {chunkPlanCoverage !== null && (
+                      <>
+                        &nbsp;•&nbsp;
+                        <strong>Coverage:</strong> {chunkPlanCoverage}%
+                      </>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -718,3 +880,4 @@ export function BlueprintDisplay({
     </div>
   );
 }
+

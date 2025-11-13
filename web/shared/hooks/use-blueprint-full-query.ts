@@ -35,10 +35,12 @@ export interface BlueprintGlossaryPlan {
 }
 
 export interface BlueprintChunkSourcePlan {
-  source: string;
+  label: string;
+  upstream_reference: string;
+  expected_format: string;
   priority: number;
   estimated_chunks: number;
-  serves_agents?: BlueprintAgentType[];
+  agent_utility: BlueprintAgentType[];
 }
 
 export interface BlueprintChunksPlan {

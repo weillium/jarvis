@@ -51,7 +51,8 @@ export const startWorker = async (env: WorkerEnvConfig): Promise<WorkerRuntime> 
     infrastructure.repositories.agentOutputs,
     infrastructure.repositories.cards,
     infrastructure.repositories.facts,
-    determineCardType
+    determineCardType,
+    pipeline.vectorSearchService
   );
 
   const runtimeService = new RuntimeService(

@@ -8,7 +8,11 @@ import type {
   GlossaryEntry,
 } from '../types';
 import type { FactsStore } from '../state/facts-store';
-import type { CardsProcessor, CardTriggerContext } from '../processing/cards-processor';
+import type {
+  CardsProcessor,
+  CardTriggerContext,
+  CardSupportingContextChunk,
+} from '../processing/cards-processor';
 import type { FactsProcessor } from '../processing/facts-processor';
 import type { TranscriptProcessor } from '../processing/transcript-processor';
 import type { AgentOutputsRepository } from '../services/supabase/agent-outputs-repository';
@@ -25,6 +29,8 @@ import {
   computeCardSalience,
   type CardSalienceComponents,
 } from './cards/salience';
+import type { VectorSearchService } from '../context/vector-search';
+import { countTokens, truncateToTokenBudget } from '../lib/text/token-counter';
 import {
   checkCardRateLimit,
   recordCardFire,
@@ -88,6 +94,15 @@ export class EventProcessor {
   private readonly CARD_FACT_LIMIT = Number(process.env.CARDS_SUPPORTING_FACTS_LIMIT ?? 5);
   private readonly CARD_CONTEXT_LIMIT = Number(process.env.CARDS_SUPPORTING_CONTEXT_LIMIT ?? 5);
   private readonly CARD_RECENT_LIMIT = Number(process.env.CARDS_SUPPORTING_RECENT_LIMIT ?? 5);
+  private readonly CARD_CONTEXT_CHUNK_TOP_K = Number(
+    process.env.CARDS_CONTEXT_CHUNK_TOP_K ?? 5
+  );
+  private readonly CARD_CONTEXT_CHUNK_TOKEN_BUDGET = Number(
+    process.env.CARDS_CONTEXT_CHUNK_TOKEN_BUDGET ?? 600
+  );
+  private readonly CARD_CONTEXT_CHUNK_PER_ITEM_BUDGET = Number(
+    process.env.CARDS_CONTEXT_CHUNK_PER_ITEM_BUDGET ?? 220
+  );
 
   constructor(
     private readonly cardsProcessor: CardsProcessor,
@@ -96,7 +111,8 @@ export class EventProcessor {
     private readonly agentOutputs: AgentOutputsRepository,
     private readonly cardsRepository: CardsRepository,
     private readonly factsRepository: FactsRepository,
-    private readonly determineCardType: DetermineCardTypeFn
+    private readonly determineCardType: DetermineCardTypeFn,
+    private readonly vectorSearch: VectorSearchService
   ) {}
 
   async handleTranscript(runtime: EventRuntime, transcript: unknown): Promise<void> {
@@ -163,7 +179,7 @@ export class EventProcessor {
         eventId: runtime.eventId,
         lastSeq: chunk.seq,
       });
-      const triggerContext = this.evaluateCardTrigger(runtime);
+      const triggerContext = await this.evaluateCardTrigger(runtime);
       if (triggerContext) {
         console.log('[cards][debug] card trigger selected', {
           eventId: runtime.eventId,
@@ -224,7 +240,7 @@ export class EventProcessor {
     void this.factsProcessor.process(runtime, runtime.factsSession, runtime.factsSessionId);
   }
 
-  private evaluateCardTrigger(runtime: EventRuntime): CardTriggerContext | null {
+  private async evaluateCardTrigger(runtime: EventRuntime): Promise<CardTriggerContext | null> {
     const recentChunks = runtime.ringBuffer.getLastN(this.CARD_WINDOW_CHUNKS);
     if (recentChunks.length < this.CARD_MIN_CHUNKS) {
       return null;
@@ -325,7 +341,11 @@ export class EventProcessor {
       components: bestComponents ?? {},
     });
 
-    const supportingContext = this.buildSupportingContext(runtime, bestCandidate, contextBullets);
+    const supportingContext = await this.buildSupportingContext(
+      runtime,
+      bestCandidate,
+      contextBullets
+    );
 
     return {
       conceptId: normalizeConcept(bestCandidate.conceptId),
@@ -342,21 +362,88 @@ export class EventProcessor {
     }, 0);
   }
 
-  private buildSupportingContext(
+  private async buildSupportingContext(
     runtime: EventRuntime,
     concept: { conceptId: string; conceptLabel: string; matchSource: string },
     contextBullets: string[]
-  ): CardTriggerContext['supportingContext'] {
+  ): Promise<CardTriggerContext['supportingContext']> {
     const facts = this.getRelevantFacts(runtime.factsStore.getAll(), concept);
     const recentCards = runtime.cardsStore.getRecent(this.CARD_RECENT_LIMIT);
     const glossaryEntries = this.getRelevantGlossaryEntries(runtime.glossaryCache, concept);
+    const contextChunks = await this.getRelevantContextChunks(runtime, concept);
 
     return {
       facts,
       recentCards,
       glossaryEntries,
       contextBullets,
+      contextChunks,
     };
+  }
+  private async getRelevantContextChunks(
+    runtime: EventRuntime,
+    concept: { conceptId: string; conceptLabel: string }
+  ): Promise<CardSupportingContextChunk[]> {
+    if (!this.vectorSearch) {
+      return [];
+    }
+
+    try {
+      const query = concept.conceptLabel;
+      const matches = await this.vectorSearch.search(
+        runtime.eventId,
+        query,
+        this.CARD_CONTEXT_CHUNK_TOP_K
+      );
+
+      if (!matches || matches.length === 0) {
+        return [];
+      }
+
+      const chunks: CardSupportingContextChunk[] = [];
+      let remainingBudget = this.CARD_CONTEXT_CHUNK_TOKEN_BUDGET;
+
+      for (const match of matches) {
+        if (remainingBudget <= 0) {
+          break;
+        }
+
+        const rawText = (match.chunk ?? '').trim();
+        if (!rawText) {
+          continue;
+        }
+
+        const perItemBudget = Math.min(this.CARD_CONTEXT_CHUNK_PER_ITEM_BUDGET, remainingBudget);
+        if (perItemBudget <= 0) {
+          break;
+        }
+
+        const excerpt = truncateToTokenBudget(rawText, perItemBudget);
+        const tokenCount = countTokens(excerpt);
+
+        if (tokenCount <= 0) {
+          continue;
+        }
+
+        remainingBudget -= tokenCount;
+
+        chunks.push({
+          id: match.id,
+          text: excerpt,
+          similarity: match.similarity,
+          tokenCount,
+        });
+      }
+
+      return chunks;
+    } catch (err: unknown) {
+      console.error('[cards][warn] failed to retrieve context chunks', {
+        eventId: runtime.eventId,
+        conceptId: concept.conceptId,
+        error: String(err),
+      });
+      return [];
+    }
   }
 
   private getRelevantFacts(

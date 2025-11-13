@@ -16,7 +16,7 @@ export interface GlossaryPlan {
 }
 
 export interface ChunksPlan {
-  target_count: number; // 500 or 1000
+  target_count: number;
   sources: string[];
   ranking_strategy: string;
 }

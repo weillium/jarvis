@@ -8,11 +8,19 @@ import { checkBudgetStatus, formatTokenBreakdown } from '../lib/text/token-count
 import { TemplateOrchestrator } from '../sessions/agent-profiles/cards/pipeline/orchestrator';
 import type { TemplatePlan } from '../sessions/agent-profiles/cards/templates/types';
 
+export interface CardSupportingContextChunk {
+  id: string;
+  text: string;
+  similarity: number;
+  tokenCount: number;
+}
+
 export interface CardTriggerSupportingContext {
   facts: Array<{ key: string; value: unknown; confidence: number }>;
   recentCards: CardRecord[];
   glossaryEntries: Array<Pick<GlossaryEntry, 'term' | 'definition'>>;
   contextBullets: string[];
+  contextChunks: CardSupportingContextChunk[];
 }
 
 export interface CardTriggerContext {

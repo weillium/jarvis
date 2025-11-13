@@ -103,13 +103,18 @@ const normalizeResearchOutput = (output: unknown): NormalizedResearchOutput | nu
     return null;
   }
 
+  const cleanedSummary = cleanResearchText(summary).text || summary.trim();
+
   const keyPointsValue = record.keyPoints;
   const keyPoints = Array.isArray(keyPointsValue)
-    ? keyPointsValue.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    ? keyPointsValue
+        .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+        .map((item) => cleanResearchText(item).text || item.trim())
+        .filter((item) => item.length > 0)
     : [];
 
   return {
-    summary: summary.trim(),
+    summary: cleanedSummary.trim(),
     keyPoints,
   };
 };

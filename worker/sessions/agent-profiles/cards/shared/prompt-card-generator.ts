@@ -77,6 +77,36 @@ export class PromptCardGenerator implements CardGenerator {
         ? supportingContext.contextBullets.join('\n')
         : '';
 
+    const supportingFactsSummary =
+      supportingContext?.facts && supportingContext.facts.length > 0
+        ? supportingContext.facts
+            .map(
+              (fact) =>
+                `- ${fact.key} (confidence ${fact.confidence?.toFixed?.(2) ?? fact.confidence ?? 'n/a'}): ${
+                  typeof fact.value === 'string' ? fact.value : JSON.stringify(fact.value)
+                }`
+            )
+            .join('\n')
+        : '';
+
+    const contextChunks =
+      supportingContext?.contextChunks && supportingContext.contextChunks.length > 0
+        ? supportingContext.contextChunks
+        : [];
+
+    const contextChunksSummary =
+      contextChunks.length > 0
+        ? contextChunks
+            .map((chunk, index) => {
+              const similarityLabel =
+                typeof chunk.similarity === 'number'
+                  ? chunk.similarity.toFixed(3)
+                  : String(chunk.similarity ?? 'n/a');
+              return `Chunk ${index + 1} (similarity ${similarityLabel}, tokens ${chunk.tokenCount}):\n${chunk.text}`;
+            })
+            .join('\n\n')
+        : '';
+
     const recentCardsSummary = [
       input.previousCards
         .slice(-MAX_CARD_HISTORY)
@@ -107,13 +137,27 @@ export class PromptCardGenerator implements CardGenerator {
       .filter(Boolean)
       .join('\n');
 
-    const userPrompt = createCardGenerationUserPrompt(
-      input.recentTranscript,
-      bulletSummary,
-      factsJson,
-      `${combinedGlossary}\n\nRecent Cards:\n${recentCardsSummary || 'None'}`,
-      conceptFocus
-    );
+    const audienceProfile =
+      typeof input.messageContext?.audienceProfile === 'string'
+        ? input.messageContext.audienceProfile
+        : supportingContext && 'audienceProfile' in supportingContext
+          ? (supportingContext as { audienceProfile?: string }).audienceProfile
+          : undefined;
+
+    const userPrompt = createCardGenerationUserPrompt({
+      transcriptSegment: input.recentTranscript,
+      transcriptSummary: bulletSummary || 'No transcript summary available.',
+      factsSnapshot: factsJson || 'No facts snapshot available.',
+      glossaryContext: glossaryContext || 'No glossary context available.',
+      supportingFacts: supportingFactsSummary,
+      supportingGlossary,
+      transcriptBullets: contextBullets,
+      retrievedContext: contextChunksSummary,
+      recentCards: recentCardsSummary || 'None',
+      audienceProfile,
+      templatePlan: input.messageContext?.templatePlan,
+      conceptFocus,
+    });
 
     console.log('[cards][debug] card generation prompt', {
       transcriptLength: input.recentTranscript.length,
@@ -182,6 +226,14 @@ export class PromptCardGenerator implements CardGenerator {
       if (!card.card_type) {
         card.card_type = 'text';
       }
+    }
+
+    if (generatedCards.length === 0) {
+      console.log('[cards][debug] model emitted no cards', {
+        eventId: this.deps.eventId,
+        sourceSeq: input.sourceSeq ?? 0,
+        concept: input.messageContext?.concept?.label,
+      });
     }
 
     return {

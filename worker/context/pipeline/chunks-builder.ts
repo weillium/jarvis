@@ -46,7 +46,14 @@ export async function buildContextChunks(
   options: ChunksBuilderOptions
 ): Promise<ChunksBuildResult> {
   console.log(`[chunks] Building context chunks for event ${eventId}, cycle ${generationCycleId}`);
-  console.log(`[chunks] Target: ${blueprint.chunks_plan.target_count} chunks (${blueprint.chunks_plan.quality_tier} tier)`);
+  const targetCount =
+    blueprint.chunks_plan.target_count && blueprint.chunks_plan.target_count > 0
+      ? blueprint.chunks_plan.target_count
+      : 100;
+
+  console.log(
+    `[chunks] Target: ${targetCount} chunks (${blueprint.chunks_plan.quality_tier} tier)`
+  );
 
   const costBreakdown: ChunksCostBreakdown = {
     openai: {
@@ -65,7 +72,7 @@ export async function buildContextChunks(
 
   const research: ResearchResults = researchResult;
 
-  await markCycleProcessing(options.supabase, generationCycleId, blueprint.chunks_plan.target_count || 500);
+  await markCycleProcessing(options.supabase, generationCycleId, targetCount);
 
   const researchCandidates = buildResearchChunkCandidates(research);
   const dedupedCandidates = deduplicateChunkCandidates(researchCandidates);
@@ -76,7 +83,6 @@ export async function buildContextChunks(
 
   const rankedChunks: ChunkWithRank[] = rankChunks(candidates);
 
-  const targetCount = blueprint.chunks_plan.target_count || 500;
   const selectedChunks = rankedChunks.slice(0, targetCount);
 
   console.log(`[chunks] Selected top ${selectedChunks.length} chunks after ranking`);
