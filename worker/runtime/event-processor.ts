@@ -12,6 +12,7 @@ import type {
   CardsProcessor,
   CardTriggerContext,
   CardSupportingContextChunk,
+  CardConceptWindowEntry,
 } from '../processing/cards-processor';
 import type { FactsProcessor } from '../processing/facts-processor';
 import type { TranscriptProcessor } from '../processing/transcript-processor';
@@ -23,6 +24,7 @@ import {
   extractConcepts,
   normalizeConcept,
   type ConceptCandidate,
+  type ConceptMatchSource,
 } from '../lib/text/concept-extractor';
 import {
   CARD_SALIENCE_THRESHOLD,
@@ -102,6 +104,9 @@ export class EventProcessor {
   );
   private readonly CARD_CONTEXT_CHUNK_PER_ITEM_BUDGET = Number(
     process.env.CARDS_CONTEXT_CHUNK_PER_ITEM_BUDGET ?? 220
+  );
+  private readonly CARD_CONCEPT_WINDOW_MAX = Number(
+    process.env.CARDS_CONCEPT_WINDOW_MAX ?? 6
   );
 
   constructor(
@@ -290,6 +295,8 @@ export class EventProcessor {
       return null;
     }
 
+    const conceptWindow = this.buildConceptWindowEntries(runtime, candidates, recentChunks);
+
     let bestCandidate: ConceptCandidate | null = null;
     let bestScore = Number.NEGATIVE_INFINITY;
     let bestComponents: CardSalienceComponents | null = null;
@@ -344,7 +351,8 @@ export class EventProcessor {
     const supportingContext = await this.buildSupportingContext(
       runtime,
       bestCandidate,
-      contextBullets
+      contextBullets,
+      conceptWindow
     );
 
     return {
@@ -362,10 +370,59 @@ export class EventProcessor {
     }, 0);
   }
 
+  private buildConceptWindowEntries(
+    runtime: EventRuntime,
+    candidates: ConceptCandidate[],
+    recentChunks: TranscriptChunk[]
+  ): CardConceptWindowEntry[] {
+    if (candidates.length === 0 || recentChunks.length === 0) {
+      return [];
+    }
+
+    const entries: CardConceptWindowEntry[] = [];
+    const reversedChunks = [...recentChunks].reverse();
+    const now = Date.now();
+
+    for (const candidate of candidates) {
+      const occurrences = this.countConceptOccurrences(recentChunks, candidate.conceptLabel);
+      if (occurrences === 0) {
+        continue;
+      }
+
+      const { score } = computeCardSalience({
+        candidate,
+        runtime,
+        recentChunks,
+        occurrences,
+        freshnessMs: this.CARD_FRESHNESS_MS,
+        recentLimit: this.CARD_RECENT_LIMIT,
+      });
+
+      const lastMentionChunk = reversedChunks.find((chunk) =>
+        chunk.text.toLowerCase().includes(candidate.conceptLabel.toLowerCase())
+      );
+
+      entries.push({
+        conceptId: normalizeConcept(candidate.conceptId),
+        conceptLabel: candidate.conceptLabel,
+        matchSource: candidate.matchSource,
+        occurrences,
+        score,
+        lastMentionSeq: lastMentionChunk?.seq,
+        lastMentionAgoMs:
+          typeof lastMentionChunk?.at_ms === 'number' ? now - lastMentionChunk.at_ms : undefined,
+      });
+    }
+
+    entries.sort((a, b) => b.score - a.score);
+    return entries.slice(0, this.CARD_CONCEPT_WINDOW_MAX);
+  }
+
   private async buildSupportingContext(
     runtime: EventRuntime,
     concept: { conceptId: string; conceptLabel: string; matchSource: string },
-    contextBullets: string[]
+    contextBullets: string[],
+    conceptWindow: CardConceptWindowEntry[]
   ): Promise<CardTriggerContext['supportingContext']> {
     const facts = this.getRelevantFacts(runtime.factsStore.getAll(), concept);
     const recentCards = runtime.cardsStore.getRecent(this.CARD_RECENT_LIMIT);
@@ -380,6 +437,7 @@ export class EventProcessor {
       contextBullets,
       contextChunks,
       audienceProfile,
+      conceptWindow,
     };
   }
   private async getRelevantContextChunks(

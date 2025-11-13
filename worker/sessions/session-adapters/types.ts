@@ -91,6 +91,15 @@ export interface RealtimeMessageContext {
       tokenCount: number;
     }>;
     audienceProfile?: string;
+    conceptWindow?: Array<{
+      conceptId: string;
+      conceptLabel: string;
+      matchSource: string;
+      occurrences: number;
+      score: number;
+      lastMentionSeq?: number;
+      lastMentionAgoMs?: number;
+    }>;
   };
   templatePlan?: TemplatePlan;
   audienceProfile?: string;

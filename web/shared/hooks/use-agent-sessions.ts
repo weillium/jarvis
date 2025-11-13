@@ -239,7 +239,7 @@ export function useAgentSessions(
       setError(error);
       setIsLoading(false);
     }
-  }, [eventId, shouldConnect, refetchSessions, sessionAgentTypes]);
+  }, [eventId, shouldConnect, refetchSessions]);
 
   const reconnect = useCallback(() => {
     console.log('[useAgentSessions] Manual reconnect triggered');

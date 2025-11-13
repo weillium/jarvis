@@ -9,6 +9,7 @@ export interface CardGenerationPromptInputs {
   supportingGlossary?: string;
   transcriptBullets?: string;
   retrievedContext?: string;
+  conceptWindow?: string;
   recentCards: string;
   audienceProfile?: string;
   templatePlan?: TemplatePlan;
@@ -45,6 +46,7 @@ export function createCardGenerationUserPrompt({
   supportingGlossary,
   transcriptBullets,
   retrievedContext,
+  conceptWindow,
   recentCards,
   audienceProfile,
   templatePlan,
@@ -104,6 +106,9 @@ ${transcriptBulletsSection}
 
 RETRIEVED CONTEXT CHUNKS
 ${retrievedContextSection}
+
+CONCEPT WINDOW
+${conceptWindow && conceptWindow.trim().length > 0 ? conceptWindow : 'No high-salience concepts detected'}
 
 RECENT CARDS
 ${recentCards}

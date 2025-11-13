@@ -7,12 +7,23 @@ import type { AgentRealtimeSession } from '../sessions/session-adapters';
 import { checkBudgetStatus, formatTokenBreakdown } from '../lib/text/token-counter';
 import { TemplateOrchestrator } from '../sessions/agent-profiles/cards/pipeline/orchestrator';
 import type { TemplatePlan } from '../sessions/agent-profiles/cards/templates/types';
+import type { ConceptMatchSource } from '../lib/text/concept-extractor';
 
 export interface CardSupportingContextChunk {
   id: string;
   text: string;
   similarity: number;
   tokenCount: number;
+}
+
+export interface CardConceptWindowEntry {
+  conceptId: string;
+  conceptLabel: string;
+  matchSource: ConceptMatchSource;
+  occurrences: number;
+  score: number;
+  lastMentionSeq?: number;
+  lastMentionAgoMs?: number;
 }
 
 export interface CardTriggerSupportingContext {
@@ -22,6 +33,7 @@ export interface CardTriggerSupportingContext {
   contextBullets: string[];
   contextChunks: CardSupportingContextChunk[];
   audienceProfile?: string;
+  conceptWindow?: CardConceptWindowEntry[];
 }
 
 export interface CardTriggerContext {

@@ -110,6 +110,28 @@ export class PromptCardGenerator implements CardGenerator {
             .join('\n\n')
         : '';
 
+    const conceptWindowEntries =
+      supportingContext?.conceptWindow && supportingContext.conceptWindow.length > 0
+        ? supportingContext.conceptWindow
+        : [];
+
+    const conceptWindowSummary =
+      conceptWindowEntries.length > 0
+        ? conceptWindowEntries
+            .map((entry, index) => {
+              const ageLabel =
+                typeof entry.lastMentionAgoMs === 'number'
+                  ? this.formatDurationShort(entry.lastMentionAgoMs)
+                  : 'timing unknown';
+              return `#${index + 1} ${entry.conceptLabel} (score ${entry.score.toFixed(
+                2
+              )}, occurrences ${entry.occurrences}, source ${entry.matchSource}${
+                entry.lastMentionSeq !== undefined ? `, seq ${entry.lastMentionSeq}` : ''
+              }, last mention ${ageLabel})`;
+            })
+            .join('\n')
+        : '';
+
     const recentCardsSummary = [
       input.previousCards
         .slice(-MAX_CARD_HISTORY)
@@ -156,6 +178,7 @@ export class PromptCardGenerator implements CardGenerator {
       supportingGlossary,
       transcriptBullets: contextBullets,
       retrievedContext: contextChunksSummary,
+      conceptWindow: conceptWindowSummary,
       recentCards: recentCardsSummary || 'None',
       audienceProfile,
       templatePlan: input.messageContext?.templatePlan,
@@ -243,6 +266,26 @@ export class PromptCardGenerator implements CardGenerator {
       rawResponse: { raw: payloadSource },
       generatedCards,
     };
+  }
+
+  private formatDurationShort(ms: number): string {
+    if (ms < 1000) {
+      return '<1s ago';
+    }
+    const seconds = Math.round(ms / 1000);
+    if (seconds < 120) {
+      return `${seconds}s ago`;
+    }
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 120) {
+      return `${minutes}m ago`;
+    }
+    const hours = Math.round(minutes / 60);
+    if (hours < 48) {
+      return `${hours}h ago`;
+    }
+    const days = Math.round(hours / 24);
+    return `${days}d ago`;
   }
 
   private normalizeCardPayloadContent(content: string): unknown {

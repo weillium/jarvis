@@ -14,6 +14,7 @@ export interface BlueprintResearchQuery {
   estimated_cost?: number;
   purpose?: BlueprintPurpose[];
   provenance_hint?: string;
+  agent_utility?: BlueprintAgentType[];
 }
 
 export interface BlueprintResearchPlan {
@@ -27,6 +28,7 @@ export interface BlueprintGlossaryTermPlan {
   is_acronym: boolean;
   category: string;
   priority: number;
+  agent_utility?: BlueprintAgentType[];
 }
 
 export interface BlueprintGlossaryPlan {

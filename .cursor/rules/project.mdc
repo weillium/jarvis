@@ -22,6 +22,17 @@ alwaysApply: true
 - React Query is the *only* source of server state.
 - prefer **query / mutation hooks** instead of custom fetch + useState.
 - use absolute imports `@/*` in web code.
+- new UI work should align with the upcoming shared Tamagui renderer; avoid adding net-new Tailwind-only patterns unless coordinated.
+
+## mobile
+- Expo + React Native app; keep platform-specific code inside `/mobile`.
+- use React Query as the single source of server state here as well.
+- prefer Tamagui-compatible primitives for new components so we can converge on the shared renderer.
+
+## packages
+- hosts shared UI building blocks consumed by both `/web` and `/mobile`.
+- ensure exports remain platform-agnostic (Tamagui primitives, universal hooks, or pure logic).
+- if platform-specific variants are required, gate them behind explicit sub-entries (e.g., `packages/ui/web` vs `packages/ui/native`).
 
 ## supabase
 - every DB change is done via: `supabase migration new <name>`
