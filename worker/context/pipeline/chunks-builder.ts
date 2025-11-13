@@ -19,15 +19,8 @@ import {
   markCycleProcessing,
   updateCycleProgress,
 } from './chunks/persistence';
-import {
-  loadResearchResults,
-  buildResearchChunkCandidates,
-} from './chunks/source-loader';
-import {
-  buildLLMChunkCandidates,
-  generateLLMChunks,
-  rankChunks,
-} from './chunks/generation-runner';
+import { loadResearchResults, buildResearchChunkCandidates } from './chunks/source-loader';
+import { rankChunks } from './chunks/generation-runner';
 import type {
   ChunkCandidate,
   ChunkWithRank,
@@ -74,18 +67,10 @@ export async function buildContextChunks(
 
   await markCycleProcessing(options.supabase, generationCycleId, blueprint.chunks_plan.target_count || 500);
 
-  const llmChunks = await generateLLMChunks(
-    blueprint,
-    research,
-    options.openai,
-    options.chunkModel,
-    costBreakdown
-  );
+  const researchCandidates = buildResearchChunkCandidates(research);
+  const dedupedCandidates = deduplicateChunkCandidates(researchCandidates);
 
-  const candidates: ChunkCandidate[] = [
-    ...buildResearchChunkCandidates(research),
-    ...buildLLMChunkCandidates(llmChunks),
-  ];
+  const candidates: ChunkCandidate[] = [...dedupedCandidates];
 
   console.log(`[chunks] Collected ${candidates.length} total chunks from all sources`);
 
@@ -197,6 +182,14 @@ export async function buildContextChunks(
           quality_score: chunk.qualityScore ?? 0.8,
           chunk_size: chunk.text.length,
           enrichment_timestamp: new Date().toISOString(),
+        prompt_view: chunk.promptText,
+        prompt_length: chunk.promptLength ?? chunk.promptText.length,
+        agent_utility: chunk.agentUtility ?? [],
+        topics: chunk.topics ?? [],
+        provenance_hint: chunk.provenanceHint ?? null,
+        query_priority: chunk.queryPriority ?? null,
+        hash: chunk.hash,
+        original_length: chunk.originalLength ?? chunk.text.length,
         };
 
         const inserted = await insertContextItem(options.supabase, {
@@ -245,3 +238,23 @@ export async function buildContextChunks(
     costBreakdown,
   };
 }
+
+const deduplicateChunkCandidates = (candidates: ChunkCandidate[]): ChunkCandidate[] => {
+  const byHash = new Map<string, ChunkCandidate>();
+
+  for (const candidate of candidates) {
+    const existing = byHash.get(candidate.hash);
+    if (!existing) {
+      byHash.set(candidate.hash, candidate);
+      continue;
+    }
+
+    const existingScore = existing.qualityScore ?? 0;
+    const candidateScore = candidate.qualityScore ?? 0;
+    if (candidateScore > existingScore) {
+      byHash.set(candidate.hash, candidate);
+    }
+  }
+
+  return Array.from(byHash.values());
+};

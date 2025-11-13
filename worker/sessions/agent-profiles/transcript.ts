@@ -2,8 +2,8 @@ import type OpenAI from 'openai';
 import type { RealtimeSessionConfig } from '../session-adapters';
 import { RealtimeAgentSession } from '../session-adapters/realtime/driver';
 import { createStatelessAgentSession } from '../session-adapters/stateless/driver';
-import { transcriptRealtimeProfile } from './transcript/realtime/profile';
-import { transcriptStatelessProfile } from './transcript/stateless/profile';
+import { transcriptRealtimeProfile } from './transcript/profiles/realtime/profile';
+import { transcriptStatelessProfile } from './transcript/profiles/stateless/profile';
 
 type TranscriptSessionFactoryDeps = unknown;
 

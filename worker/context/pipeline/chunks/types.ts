@@ -5,6 +5,8 @@ export type ChunkMetadata = ResearchChunkMetadata;
 
 export interface ChunkCandidate {
   text: string;
+  promptText: string;
+  hash: string;
   source: string;
   researchSource: string;
   qualityScore?: number;
@@ -12,6 +14,9 @@ export interface ChunkCandidate {
   agentUtility?: Array<'facts' | 'cards' | 'glossary'>;
   queryPriority?: number;
   provenanceHint?: string;
+  topics?: string[];
+  originalLength?: number;
+  promptLength?: number;
 }
 
 export interface ChunkWithRank extends ChunkCandidate {

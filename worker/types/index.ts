@@ -28,6 +28,7 @@ export type {
   CheckpointRecord,
   CardStateRecord,
   FactRecord,
+  FactAliasRecord,
   GlossaryRecord,
   InsertTranscriptParams,
   TranscriptRecord,

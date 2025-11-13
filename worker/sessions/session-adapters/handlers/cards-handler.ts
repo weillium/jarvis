@@ -9,7 +9,7 @@ import {
   interpretResponseDone,
   interpretResponseText,
   interpretToolCall,
-} from '../../agent-profiles/cards/tooling';
+} from '../../agent-profiles/cards/runtime-tooling';
 
 export class CardsAgentHandler extends BaseAgentHandler {
   handleResponseText(payload: ResponseTextDoneEvent): void {

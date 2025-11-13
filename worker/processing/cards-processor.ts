@@ -5,7 +5,7 @@ import type { MetricsCollector } from '../services/observability/metrics-collect
 import type { CheckpointManager } from '../services/observability/checkpoint-manager';
 import type { AgentRealtimeSession } from '../sessions/session-adapters';
 import { checkBudgetStatus, formatTokenBreakdown } from '../lib/text/token-counter';
-import { TemplateOrchestrator } from '../sessions/agent-profiles/cards/template-orchestrator';
+import { TemplateOrchestrator } from '../sessions/agent-profiles/cards/pipeline/orchestrator';
 import type { TemplatePlan } from '../sessions/agent-profiles/cards/templates/types';
 
 export interface CardTriggerSupportingContext {

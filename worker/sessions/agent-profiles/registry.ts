@@ -4,11 +4,11 @@ import type { StatelessSessionProfile } from '../session-adapters/stateless/prof
 import { cardsAgentDefinition } from './cards';
 import { transcriptAgentDefinition } from './transcript';
 import { factsAgentDefinition } from './facts';
-import { cardsRealtimeProfile } from './cards/realtime/profile';
-import { cardsStatelessProfile } from './cards/stateless/profile';
-import { transcriptRealtimeProfile } from './transcript/realtime/profile';
-import { transcriptStatelessProfile } from './transcript/stateless/profile';
-import { factsStatelessProfile } from './facts/stateless/profile';
+import { cardsRealtimeProfile } from './cards/profiles/realtime/profile';
+import { cardsStatelessProfile } from './cards/profiles/stateless/profile';
+import { transcriptRealtimeProfile } from './transcript/profiles/realtime/profile';
+import { transcriptStatelessProfile } from './transcript/profiles/stateless/profile';
+import { factsStatelessProfile } from './facts/profiles/stateless/profile';
 
 export interface AgentTransportProfiles {
   defaultTransport: 'realtime' | 'stateless';

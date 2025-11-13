@@ -1,7 +1,7 @@
 import type {
   RealtimeTranscriptDTO,
   RealtimeTranscriptionUsageDTO,
-} from '../../../../types';
+} from '../../../../../types';
 
 export interface TranscriptGenerationInput {
   text: string;

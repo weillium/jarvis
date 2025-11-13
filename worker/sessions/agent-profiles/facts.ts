@@ -1,7 +1,7 @@
 import type OpenAI from 'openai';
 import type { RealtimeSessionConfig } from '../session-adapters';
 import { createStatelessAgentSession } from '../session-adapters/stateless/driver';
-import { factsStatelessProfile } from './facts/stateless/profile';
+import { factsStatelessProfile } from './facts/profiles/stateless/profile';
 import type { OpenAIService } from '../../services/openai-service';
 
 interface FactsSessionFactoryDeps {

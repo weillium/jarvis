@@ -347,6 +347,8 @@ function buildSummaryFact(overflowFacts: Fact[], selectedFacts: Fact[], remainin
     lastTouchedAt: now,
     dormantAt: null,
     prunedAt: null,
+    kind: 'meta',
+    originalValue: summaryValue,
   };
 
   const summaryTokens = estimateFactTokens(summaryFact);

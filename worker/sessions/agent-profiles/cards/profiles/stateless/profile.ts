@@ -1,12 +1,12 @@
-import type { StatelessSessionProfile } from '../../../session-adapters/stateless/profile-types';
-import type { RealtimeMessageContext } from '../../../session-adapters/types';
-import type { RealtimeCardDTO } from '../../../../types';
-import type { OpenAIService } from '../../../../services/openai-service';
-import { PromptCardGenerator } from '../tooling';
+import type { StatelessSessionProfile } from '../../../../session-adapters/stateless/profile-types';
+import type { RealtimeMessageContext } from '../../../../session-adapters/types';
+import type { RealtimeCardDTO } from '../../../../../types';
+import type { OpenAIService } from '../../../../../services/openai-service';
+import { createStatelessCardGenerator } from './generator';
 import {
   resolveModelOrThrow,
   resolveModelSetFromEnv,
-} from '../../../../services/model-management/model-resolver';
+} from '../../../../../services/model-management/model-resolver';
 
 const MAX_CARD_HISTORY = 50;
 const CARD_HISTORY_KEY = 'cards:history';
@@ -45,7 +45,7 @@ export const cardsStatelessProfile: StatelessSessionProfile<CardsStatelessProfil
   agentType: 'cards',
   resolveModel: (hint) => hint ?? FALLBACK_CARD_MODEL,
   createHooks: ({ config, deps, emit, log, storage }) => {
-    const generator = new PromptCardGenerator({
+    const generator = createStatelessCardGenerator({
       openaiService: deps.openaiService,
       configModel: config.model ?? FALLBACK_CARD_MODEL,
       eventId: config.eventId,

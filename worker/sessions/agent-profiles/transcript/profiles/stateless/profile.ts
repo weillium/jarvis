@@ -1,7 +1,7 @@
-import type { StatelessSessionProfile } from '../../../session-adapters/stateless/profile-types';
-import type { RealtimeMessageContext } from '../../../session-adapters/types';
-import { getPolicy } from '../../../../policies';
-import { createTranscriptGenerationUserPrompt } from '../../../../prompts';
+import type { StatelessSessionProfile } from '../../../../session-adapters/stateless/profile-types';
+import type { RealtimeMessageContext } from '../../../../session-adapters/types';
+import { getPolicy } from '../../../../../policies';
+import { createTranscriptGenerationUserPrompt } from '../../../../../prompts';
 import {
   TranscriptPassthroughGenerator,
   type TranscriptGenerationInput,

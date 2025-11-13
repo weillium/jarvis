@@ -1,4 +1,4 @@
-import type { RealtimeSessionProfile } from '../../../session-adapters/realtime/profile-types';
+import type { RealtimeSessionProfile } from '../../../../session-adapters/realtime/profile-types';
 
 export const factsRealtimeProfile: RealtimeSessionProfile = {
   agentType: 'facts',

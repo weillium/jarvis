@@ -1,12 +1,12 @@
-import type { RealtimeSessionProfile } from '../../../session-adapters/realtime/profile-types';
-import { createBufferedTranscriptAudioHooks } from '../../../session-adapters/realtime/runtime-controller';
-import { TranscriptAgentHandler } from '../../../session-adapters/handlers/transcript-handler';
+import type { RealtimeSessionProfile } from '../../../../session-adapters/realtime/profile-types';
+import { createBufferedTranscriptAudioHooks } from '../../../../session-adapters/realtime/runtime-controller';
+import { TranscriptAgentHandler } from '../../../../session-adapters/handlers/transcript-handler';
 import {
   buildTranscriptSessionConfiguration,
   createTranscriptEventRouterHooks,
   REALTIME_CONNECTION_MODEL,
   registerTranscriptSessionEvents,
-} from '../tooling';
+} from '../../runtime-tooling';
 
 export const transcriptRealtimeProfile: RealtimeSessionProfile = {
   agentType: 'transcript',

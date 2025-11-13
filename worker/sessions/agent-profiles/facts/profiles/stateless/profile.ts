@@ -1,10 +1,10 @@
-import type { StatelessSessionProfile } from '../../../session-adapters/stateless/profile-types';
-import type { RealtimeMessageContext } from '../../../session-adapters/types';
-import type { OpenAIService } from '../../../../services/openai-service';
+import type { StatelessSessionProfile } from '../../../../session-adapters/stateless/profile-types';
+import type { RealtimeMessageContext } from '../../../../session-adapters/types';
+import type { OpenAIService } from '../../../../../services/openai-service';
 import {
   resolveModelOrThrow,
   resolveModelSetFromEnv,
-} from '../../../../services/model-management/model-resolver';
+} from '../../../../../services/model-management/model-resolver';
 import { PromptFactsGenerator } from './generator';
 
 const FACTS_HISTORY_KEY = 'facts:history';

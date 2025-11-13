@@ -1,10 +1,10 @@
-import type { RealtimeFactDTO } from '../../../../types';
-import type { Fact } from '../../../../state/facts-store';
-import type { OpenAIService } from '../../../../services/openai-service';
-import { getPolicy } from '../../../../policies';
-import { createFactsGenerationUserPrompt } from '../../../../prompts';
-import { mapFactsPayload } from '../../../session-adapters/shared/payload-utils';
-import { executeJsonPrompt } from '../../shared/json-prompt-runner';
+import type { RealtimeFactDTO } from '../../../../../types';
+import type { Fact } from '../../../../../state/facts-store';
+import type { OpenAIService } from '../../../../../services/openai-service';
+import { getPolicy } from '../../../../../policies';
+import { createFactsGenerationUserPrompt } from '../../../../../prompts';
+import { mapFactsPayload } from '../../../../session-adapters/shared/payload-utils';
+import { executeJsonPrompt } from '../../../shared/json-prompt-runner';
 
 interface FactsGenerationDeps {
   openaiService: OpenAIService;

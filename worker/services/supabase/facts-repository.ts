@@ -101,7 +101,7 @@ export class FactsRepository {
       .eq('event_id', eventId);
 
     if (response.error) throw response.error;
-    const rows = (response.data ?? []) as unknown;
+    const rows: unknown = Array.isArray(response.data) ? response.data : [];
     return mapFactAliasRecords(rows);
   }
 

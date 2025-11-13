@@ -1,7 +1,7 @@
 import type { CardTriggerContext } from '../../../processing/cards-processor';
-import type { TemplatePlan, TemplateSelection } from './templates/types';
-import { createDefaultTemplateRegistry } from './templates/registry';
-import type { CardTemplateRegistry } from './templates/registry';
+import type { TemplatePlan, TemplateSelection } from '../templates/types';
+import { createDefaultTemplateRegistry } from '../templates/registry';
+import type { CardTemplateRegistry } from '../templates/registry';
 
 export interface TemplateOrchestratorOptions {
   registry?: CardTemplateRegistry;

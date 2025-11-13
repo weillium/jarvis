@@ -4,8 +4,8 @@ import { RealtimeAgentSession } from '../session-adapters/realtime/driver';
 import { createStatelessAgentSession } from '../session-adapters/stateless/driver';
 import type { OpenAIService } from '../../services/openai-service';
 import type { AgentProfileTransport } from '../agent-profiles';
-import { cardsRealtimeProfile } from './cards/realtime/profile';
-import { cardsStatelessProfile } from './cards/stateless/profile';
+import { cardsRealtimeProfile } from './cards/profiles/realtime/profile';
+import { cardsStatelessProfile } from './cards/profiles/stateless/profile';
 
 export interface CardsAgentSessionFactory {
   createRealtimeSession(
