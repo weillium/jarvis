@@ -70,7 +70,7 @@ export async function GET(
     // Handle null generation_cycle_id separately since .in() doesn't match NULL
     let query = (supabase
       .from('glossary_terms') as any)
-      .select('id, term, definition, acronym_for, category, usage_examples, related_terms, confidence_score, source, source_url, created_at, generation_cycle_id')
+      .select('id, term, definition, acronym_for, category, usage_examples, related_terms, confidence_score, source, source_url, created_at, generation_cycle_id, agent_utility')
       .eq('event_id', eventId);
 
     if (activeCycleIds.length > 0) {
@@ -116,6 +116,11 @@ export async function GET(
 
     // Group by category if requested (for frontend convenience)
     const groupedByCategory: Record<string, typeof filteredTerms> = {};
+    filteredTerms = filteredTerms.map((term: any) => ({
+      ...term,
+      agent_utility: Array.isArray(term.agent_utility) ? term.agent_utility : [],
+    }));
+
     filteredTerms.forEach((term: any) => {
       const cat = term.category || 'uncategorized';
       if (!groupedByCategory[cat]) {

@@ -47,16 +47,47 @@ export const selectRelevantSnippets = (
     .map((part) => part.trim())
     .filter(Boolean);
 
+  const termAgentTargets = new Set(term.agent_utility ?? []);
+
   const scored: ScoredSnippet[] = research.chunks.map((chunk) => {
     const baseScore = scoreSnippet(termWords, chunk.text);
-    const priorityBoost =
+    const qualityBoost =
       typeof chunk.metadata?.quality_score === 'number'
         ? Math.max(0, Math.min(chunk.metadata.quality_score, 1))
         : 0;
 
+    const metadataAgentsRaw = chunk.metadata?.agent_utility;
+    const metadataAgents = Array.isArray(metadataAgentsRaw)
+      ? metadataAgentsRaw.filter(
+          (agent): agent is 'facts' | 'cards' | 'glossary' =>
+            agent === 'facts' || agent === 'cards' || agent === 'glossary'
+        )
+      : [];
+
+    const supportedAgents = metadataAgents.filter(
+      (agent): agent is 'facts' | 'cards' => agent === 'facts' || agent === 'cards'
+    );
+
+    const agentMatchBoost =
+      supportedAgents.length > 0 && termAgentTargets.size > 0
+        ? supportedAgents.some((agent) => termAgentTargets.has(agent))
+          ? 1.5
+          : 0
+        : 0;
+
+    const queryPriority =
+      typeof chunk.metadata?.query_priority === 'number'
+        ? chunk.metadata.query_priority
+        : typeof chunk.metadata?.priority === 'number'
+          ? chunk.metadata.priority
+          : null;
+
+    const priorityBoost =
+      queryPriority !== null ? Math.max(0, (5 - Math.min(queryPriority, 5)) * 0.25) : 0;
+
     return {
       text: chunk.text,
-      score: baseScore + priorityBoost,
+      score: baseScore + qualityBoost + agentMatchBoost + priorityBoost,
     };
   });
 

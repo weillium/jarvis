@@ -30,3 +30,4 @@ comment on table fact_key_aliases is 'Stores alternate fact keys observed during
 comment on column fact_key_aliases.canonical_key is 'Canonical fact key to reuse.';
 comment on column fact_key_aliases.alias_key is 'Observed alias key that should be normalized to the canonical key.';
 
+

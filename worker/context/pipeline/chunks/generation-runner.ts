@@ -156,9 +156,19 @@ export const rankChunks = (chunks: ChunkCandidate[]): ChunkWithRank[] => {
   const scoredChunks = chunks.map((chunk) => {
     const sourceScore = sourcePriority[chunk.researchSource] ?? 0.5;
     const qualityScore = chunk.qualityScore ?? 0.7;
+    const agentUtilityScore =
+      Array.isArray(chunk.agentUtility) && chunk.agentUtility.length > 0
+        ? chunk.agentUtility.includes('facts') && chunk.agentUtility.includes('cards')
+          ? 0.15
+          : 0.1
+        : 0;
+    const priorityScore =
+      typeof chunk.queryPriority === 'number'
+        ? Math.max(0, (5 - Math.min(chunk.queryPriority, 5))) * 0.05
+        : 0;
     return {
       chunk,
-      score: sourceScore * 0.6 + qualityScore * 0.4,
+      score: sourceScore * 0.5 + qualityScore * 0.35 + agentUtilityScore + priorityScore,
     };
   });
 

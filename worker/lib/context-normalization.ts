@@ -14,6 +14,7 @@ export interface GlossaryTermDefinition {
   confidence_score?: number;
   source?: string;
   source_url?: string;
+  agent_utility?: Array<'facts' | 'cards'>;
 }
 
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -138,6 +139,112 @@ const isGlossaryPlan = (value: unknown): value is Blueprint['glossary_plan'] =>
   value.terms.every(isGlossaryTermPlan) &&
   typeof value.estimated_count === 'number';
 
+const coerceBoolean = (value: unknown, defaultValue = false): boolean => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    if (value === 1) {
+      return true;
+    }
+    if (value === 0) {
+      return false;
+    }
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'y', 't'].includes(normalized)) {
+      return true;
+    }
+    if (['false', '0', 'no', 'n', 'f', ''].includes(normalized)) {
+      return false;
+    }
+  }
+  return defaultValue;
+};
+
+const coerceNumber = (value: unknown, defaultValue: number): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return defaultValue;
+};
+
+const normalizeAgentUtility = (value: unknown): Array<'facts' | 'cards'> => {
+  if (!Array.isArray(value)) {
+    return ['facts', 'cards'];
+  }
+
+  const normalized = value
+    .map((item) => {
+      if (typeof item !== 'string') {
+        return null;
+      }
+      const trimmed = item.trim().toLowerCase();
+      if (trimmed === 'facts' || trimmed === 'cards') {
+        return trimmed;
+      }
+      return null;
+    })
+    .filter((item): item is 'facts' | 'cards' => item !== null);
+
+  return normalized.length > 0 ? normalized : ['facts', 'cards'];
+};
+
+const normalizeGlossaryTermPlan = (
+  value: unknown
+): Blueprint['glossary_plan']['terms'][number] | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const rawTerm = value.term;
+  if (typeof rawTerm !== 'string' || rawTerm.trim().length === 0) {
+    return null;
+  }
+
+  const category =
+    typeof value.category === 'string' && value.category.trim().length > 0
+      ? value.category.trim()
+      : 'general';
+
+  const priority = coerceNumber(value.priority, 5);
+
+  return {
+    term: rawTerm.trim(),
+    is_acronym: coerceBoolean(value.is_acronym, false),
+    category,
+    priority,
+    agent_utility: normalizeAgentUtility(value.agent_utility),
+  };
+};
+
+const normalizeGlossaryPlan = (value: unknown): Blueprint['glossary_plan'] | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const rawTerms = Array.isArray(value.terms) ? value.terms : [];
+  const terms = rawTerms
+    .map((term) => normalizeGlossaryTermPlan(term))
+    .filter(
+      (
+        term
+      ): term is Blueprint['glossary_plan']['terms'][number] => term !== null
+    );
+
+  return {
+    terms,
+    estimated_count: terms.length,
+  };
+};
+
 const isChunkSourcePlan = (value: unknown): value is {
   label: string;
   upstream_reference: string;
@@ -196,34 +303,47 @@ const isBlueprint = (value: unknown): value is Blueprint =>
   isAgentAlignment(value.agent_alignment);
 
 export const ensureBlueprintShape = (value: unknown): Blueprint => {
-  const issues: string[] = [];
+  let candidate: unknown = value;
 
-  if (isBlueprint(value)) {
-    return value;
+  if (isRecord(candidate) && !isGlossaryPlan(candidate.glossary_plan)) {
+    const normalizedGlossary = normalizeGlossaryPlan(candidate.glossary_plan);
+    if (normalizedGlossary) {
+      candidate = {
+        ...candidate,
+        glossary_plan: normalizedGlossary,
+      };
+    }
   }
 
-  if (!isRecord(value)) {
+  if (isBlueprint(candidate)) {
+    return candidate;
+  }
+
+  const issues: string[] = [];
+
+  if (!isRecord(candidate)) {
     issues.push('payload is not an object');
   } else {
-    if (!isStringArray(value.important_details)) {
+    const record: Record<string, unknown> = candidate;
+    if (!isStringArray(record.important_details)) {
       issues.push('important_details must be an array of strings with at least 5 items');
     }
-    if (!isStringArray(value.inferred_topics)) {
+    if (!isStringArray(record.inferred_topics)) {
       issues.push('inferred_topics must be an array of strings with at least 5 items');
     }
-    if (!isStringArray(value.key_terms)) {
+    if (!isStringArray(record.key_terms)) {
       issues.push('key_terms must be an array of strings with at least 10 items');
     }
-    if (!isResearchPlan(value.research_plan)) {
+    if (!isResearchPlan(record.research_plan)) {
       issues.push('research_plan is missing required fields or contains invalid queries');
     }
-    if (!isGlossaryPlan(value.glossary_plan)) {
+    if (!isGlossaryPlan(record.glossary_plan)) {
       issues.push('glossary_plan is missing required fields or term entries are invalid');
     }
-    if (!isChunksPlan(value.chunks_plan)) {
+    if (!isChunksPlan(record.chunks_plan)) {
       issues.push('chunks_plan is missing required fields or contains invalid sources');
     }
-    if (!isCostBreakdown(value.cost_breakdown)) {
+    if (!isCostBreakdown(record.cost_breakdown)) {
       issues.push('cost_breakdown must include numeric research, glossary, chunks, and total values');
     }
   }
@@ -237,7 +357,7 @@ export const ensureBlueprintShape = (value: unknown): Blueprint => {
     throw error;
   }
 
-  return value as Blueprint;
+  return candidate as Blueprint;
 };
 
 export const normalizeGlossaryDefinitions = (
@@ -245,6 +365,11 @@ export const normalizeGlossaryDefinitions = (
 ): GlossaryTermDefinition[] => {
   return llmDefinitions.map((def) => {
     const normalized = (def as Partial<GlossaryTermDefinition>) ?? {};
+    const agentUtility = Array.isArray((normalized as { agent_utility?: unknown }).agent_utility)
+      ? ((normalized as { agent_utility?: unknown }).agent_utility as unknown[]).filter(
+          (item): item is 'facts' | 'cards' => item === 'facts' || item === 'cards'
+        )
+      : undefined;
     return {
       term: normalized.term || '',
       definition: normalized.definition || '',
@@ -255,6 +380,7 @@ export const normalizeGlossaryDefinitions = (
       confidence_score: normalized.confidence_score ?? 0.8,
       source: normalized.source || 'llm_generation',
       source_url: normalized.source_url || undefined,
+      agent_utility: agentUtility,
     };
   });
 };

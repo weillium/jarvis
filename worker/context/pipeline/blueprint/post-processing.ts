@@ -82,13 +82,14 @@ export const postProcessBlueprint = (input: Blueprint, topic: string): Blueprint
   }
 
   if (blueprint.glossary_plan.terms.length === 0) {
+    const fallbackUtility: Array<'facts' | 'cards'> = ['facts', 'cards'];
     blueprint.glossary_plan.terms = [
       {
         term: topic,
         is_acronym: false,
         category: 'domain-specific',
         priority: 1,
-        agent_utility: ['facts', 'cards'],
+        agent_utility: fallbackUtility,
       },
     ];
     blueprint.glossary_plan.estimated_count = 1;
@@ -169,7 +170,7 @@ export const postProcessBlueprint = (input: Blueprint, topic: string): Blueprint
           ? termPlan.agent_utility.filter(
               (agent): agent is 'facts' | 'cards' => agent === 'facts' || agent === 'cards'
             )
-          : ['facts'],
+          : ['facts', 'cards'],
     }));
     blueprint.glossary_plan.estimated_count = blueprint.glossary_plan.terms.length;
   }

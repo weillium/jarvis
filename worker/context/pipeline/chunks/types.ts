@@ -9,6 +9,9 @@ export interface ChunkCandidate {
   researchSource: string;
   qualityScore?: number;
   metadata?: ChunkMetadata;
+  agentUtility?: Array<'facts' | 'cards' | 'glossary'>;
+  queryPriority?: number;
+  provenanceHint?: string;
 }
 
 export interface ChunkWithRank extends ChunkCandidate {

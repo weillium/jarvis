@@ -95,11 +95,14 @@ export function createGlossaryTermUserPrompt(params: {
   category: string;
   importantDetails: string;
   snippets: string[];
+  agentUtility?: Array<'facts' | 'cards'>;
 }): string {
   const snippetsText =
     params.snippets.length > 0
       ? params.snippets.map((snippet, index) => `${index + 1}. ${snippet}`).join('\n')
       : 'None available. Use general knowledge informed by the important details.';
+
+  const agentGuidance = buildAgentGuidance(params.agentUtility);
 
   return `Term: ${params.term}${params.isAcronym ? ' (acronym)' : ''}
 Category: ${params.category}
@@ -113,6 +116,7 @@ ${snippetsText}
 Instructions:
 - Use only trustworthy information from the snippets and important details
 - Stay factual; do not speculate
+- Tailor tone and structure using these agent cues: ${agentGuidance}
 - Return a single JSON object describing the term`;
 }
 
@@ -133,11 +137,14 @@ export function createExaAnswerPolishUserPrompt(params: {
   answer: string;
   snippets: string[];
   importantDetails: string;
+  agentUtility?: Array<'facts' | 'cards'>;
 }): string {
   const snippetSection =
     params.snippets.length > 0
       ? params.snippets.map((snippet, index) => `${index + 1}. ${snippet}`).join('\n')
       : 'None available.';
+
+  const agentGuidance = buildAgentGuidance(params.agentUtility);
 
   return `Term: ${params.term}${params.isAcronym ? ' (acronym)' : ''}
 Category: ${params.category}
@@ -151,7 +158,35 @@ ${snippetSection}
 Important Event Details:
 ${params.importantDetails || 'None provided'}
 
+Instructions:
+- Integrate the authoritative answer with supporting snippet evidence when available
+- Keep the tone professional and trustworthy
+- Tailor phrasing using these agent cues: ${agentGuidance}
+
 Create a single glossary entry as JSON with keys: term, definition, acronym_for, category, usage_examples, related_terms, confidence_score, source, source_url (optional). Use "exa" as the source and keep the tone factual and professional.`;
+}
+
+function buildAgentGuidance(agentUtility?: Array<'facts' | 'cards'>): string {
+  if (!agentUtility || agentUtility.length === 0) {
+    return 'Provide a neutral, well-sourced technical definition suitable for all agents.';
+  }
+
+  const includesFacts = agentUtility.includes('facts');
+  const includesCards = agentUtility.includes('cards');
+
+  if (includesFacts && includesCards) {
+    return 'Blend factual precision with presentation-ready prose: begin with a concise, verifiable definition, then add a short narrative hook or usage insight that could anchor a card.';
+  }
+
+  if (includesFacts) {
+    return 'Prioritize factual precision: cite concrete details, include qualifiers when evidence is weak, and emphasize verification-friendly phrasing.';
+  }
+
+  if (includesCards) {
+    return 'Prioritize audience-ready phrasing: keep sentences concise, highlight why the term matters to event narratives, and surface memorable usage examples.';
+  }
+
+  return 'Provide a neutral, well-sourced technical definition suitable for all agents.';
 }
 
 

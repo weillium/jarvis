@@ -10,6 +10,7 @@ import {
 import { calculateExaAnswerCost, calculateOpenAICost } from '../../../lib/pricing';
 import { normalizeGlossaryDefinitions } from '../../../lib/context-normalization';
 import { selectRelevantSnippets } from './snippet-selector';
+import type { AgentUtilityTargets } from './types';
 import type {
   GlossaryPlanTerm,
   GlossaryCostBreakdown,
@@ -164,7 +165,7 @@ export async function generateTermDefinitions(
 
   for (const term of terms) {
     const snippets = selectRelevantSnippets(term, research);
-    const preferExa = Boolean(exa) && term.priority <= 3;
+    const preferExa = Boolean(exa) && term.priority < 2;
 
     const result = await generateDefinitionForTerm({
       term,
@@ -289,6 +290,7 @@ async function polishExaAnswer(
       answer: answerText,
       snippets,
       importantDetails,
+      agentUtility: term.agent_utility,
     }),
   });
 
@@ -298,17 +300,21 @@ async function polishExaAnswer(
 
   const definition: TermDefinition = {
     term: polishedDefinition.term || term.term,
-    definition: polishedDefinition.definition,
+    definition: formatDefinitionForAgents({
+      base: polishedDefinition.definition,
+      agentUtility: term.agent_utility,
+    }),
     acronym_for: polishedDefinition.acronym_for ?? (term.is_acronym ? term.term : undefined),
     category:
       polishedDefinition.category && polishedDefinition.category !== 'general'
         ? polishedDefinition.category
         : term.category,
-    usage_examples: polishedDefinition.usage_examples ?? [],
+    usage_examples: normalizeUsageExamples(polishedDefinition.usage_examples, term.agent_utility),
     related_terms: polishedDefinition.related_terms ?? [],
     confidence_score: polishedDefinition.confidence_score ?? 0.95,
     source: 'exa',
     source_url: citationUrl ?? polishedDefinition.source_url,
+    agent_utility: term.agent_utility,
   };
 
   return { definition, openAICalls: polishedCalls };
@@ -331,6 +337,7 @@ async function generateViaGlossaryModel(params: TermGenerationParams): Promise<T
       category: term.category,
       importantDetails,
       snippets,
+      agentUtility: term.agent_utility,
     }),
   });
 
@@ -340,17 +347,21 @@ async function generateViaGlossaryModel(params: TermGenerationParams): Promise<T
 
   const definition: TermDefinition = {
     term: generatedDefinition.term || term.term,
-    definition: generatedDefinition.definition,
+    definition: formatDefinitionForAgents({
+      base: generatedDefinition.definition,
+      agentUtility: term.agent_utility,
+    }),
     acronym_for: generatedDefinition.acronym_for ?? undefined,
     category:
       generatedDefinition.category && generatedDefinition.category !== 'general'
         ? generatedDefinition.category
         : term.category,
-    usage_examples: generatedDefinition.usage_examples ?? [],
+    usage_examples: normalizeUsageExamples(generatedDefinition.usage_examples, term.agent_utility),
     related_terms: generatedDefinition.related_terms ?? [],
     confidence_score: generatedDefinition.confidence_score ?? 0.85,
     source: generatedDefinition.source ?? 'llm_generation',
     source_url: generatedDefinition.source_url,
+    agent_utility: term.agent_utility,
   };
 
   return { definition, openAICalls };
@@ -376,4 +387,71 @@ const buildExaAnswerQuery = (
   ]
     .filter(Boolean)
     .join(' ');
+};
+
+const formatDefinitionForAgents = ({
+  base,
+  agentUtility,
+}: {
+  base: string;
+  agentUtility?: AgentUtilityTargets;
+}): string => {
+  if (!agentUtility || agentUtility.length === 0) {
+    return base;
+  }
+
+  const includesFacts = agentUtility.includes('facts');
+  const includesCards = agentUtility.includes('cards');
+
+  if (includesFacts && includesCards) {
+    return `${base} ${cardsFriendlySuffix()}`;
+  }
+
+  if (includesFacts) {
+    return ensureFactsTone(base);
+  }
+
+  if (includesCards) {
+    return ensureCardsTone(base);
+  }
+
+  return base;
+};
+
+const ensureFactsTone = (text: string): string => {
+  if (/\.$/.test(text.trim())) {
+    return text.trim();
+  }
+  return `${text.trim()}.`;
+};
+
+const ensureCardsTone = (text: string): string => {
+  const trimmed = text.trim();
+  if (trimmed.endsWith('!') || trimmed.endsWith('.')) {
+    return trimmed;
+  }
+  return `${trimmed}.`;
+};
+
+const cardsFriendlySuffix = (): string =>
+  'This definition highlights why the concept matters in practice, offering a quick takeaway suitable for cards.';
+
+const normalizeUsageExamples = (
+  examples: unknown,
+  agentUtility?: AgentUtilityTargets
+): string[] => {
+  const list = Array.isArray(examples)
+    ? examples.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : [];
+
+  if (!agentUtility || agentUtility.length === 0) {
+    return list;
+  }
+
+  const includesCards = agentUtility.includes('cards');
+  if (includesCards && list.length === 0) {
+    return ['Use this concept to anchor a compelling narrative or visual highlight.'];
+  }
+
+  return list;
 };

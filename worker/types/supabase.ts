@@ -1,4 +1,5 @@
 import type { AgentType } from './session';
+import type { ResearchChunkMetadata } from '../context/pipeline/glossary/types';
 
 export type AgentTransport = 'realtime' | 'stateless';
 
@@ -92,6 +93,7 @@ export interface GlossaryRecord {
   usage_examples: string[];
   related_terms: string[];
   confidence_score: number;
+  agent_utility: string[];
 }
 
 export interface AgentOutputRecord {
@@ -175,5 +177,5 @@ export interface ResearchResultInsert {
   content: string;
   source_url?: string | null;
   quality_score: number;
-  metadata: Record<string, unknown>;
+  metadata: ResearchChunkMetadata;
 }

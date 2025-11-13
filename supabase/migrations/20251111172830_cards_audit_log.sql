@@ -53,3 +53,4 @@ comment on table cards_audit_log is 'Audit log of moderation actions performed o
 comment on column cards_audit_log.payload_before is 'Snapshot of the card payload before the action (optional).';
 comment on column cards_audit_log.payload_after is 'Snapshot of the card payload after the action (optional).';
 
+

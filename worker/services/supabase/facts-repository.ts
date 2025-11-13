@@ -95,13 +95,14 @@ export class FactsRepository {
   }
 
   async getFactAliases(eventId: string): Promise<FactAliasRecord[]> {
-    const { data, error } = await this.client
+    const response = await this.client
       .from('fact_key_aliases')
       .select('*')
       .eq('event_id', eventId);
 
-    if (error) throw error;
-    return mapFactAliasRecords(data);
+    if (response.error) throw response.error;
+    const rows = (response.data ?? []) as unknown;
+    return mapFactAliasRecords(rows);
   }
 
   async upsertFactAliases(

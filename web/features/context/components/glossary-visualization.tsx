@@ -346,6 +346,14 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
                         <strong>Confidence:</strong> {(term.confidence_score * 100).toFixed(0)}%
                       </div>
                     )}
+                    {term.agent_utility && term.agent_utility.length > 0 && (
+                      <div>
+                        <strong>Agent Utility:</strong>{' '}
+                        {term.agent_utility
+                          .map((agent) => agent.charAt(0).toUpperCase() + agent.slice(1))
+                          .join(', ')}
+                      </div>
+                    )}
                     {term.source && (
                       <div>
                         <strong>Source:</strong> {term.source}

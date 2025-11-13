@@ -260,6 +260,7 @@ export const mapGlossaryRecords = (rows: unknown): GlossaryRecord[] =>
       usage_examples: getStringArray(record, 'usage_examples'),
       related_terms: getStringArray(record, 'related_terms'),
       confidence_score: getNumber(record, 'confidence_score', 'GlossaryRecord'),
+      agent_utility: getStringArray(record, 'agent_utility'),
     };
   });
 

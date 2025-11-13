@@ -74,6 +74,7 @@ export interface GlossaryTermInsert {
   confidence_score: number;
   source: string;
   source_url: string | null;
+  agent_utility: string[];
 }
 
 const formatSupabaseError = (error: SupabaseMutationResult['error']): string => {
@@ -106,6 +107,7 @@ export const insertGlossaryTerm = async (
     source: payload.source,
     source_url: payload.source_url,
     generation_cycle_id: payload.generation_cycle_id,
+    agent_utility: payload.agent_utility,
     updated_at: updatedAt,
   };
 
@@ -134,6 +136,7 @@ export const insertGlossaryTerm = async (
     .insert({
       ...payload,
       term: normalizedTerm,
+      agent_utility: payload.agent_utility,
       updated_at: updatedAt,
     });
 

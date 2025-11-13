@@ -5,6 +5,8 @@ import type { MetricsCollector } from '../services/observability/metrics-collect
 import type { CheckpointManager } from '../services/observability/checkpoint-manager';
 import type { AgentRealtimeSession } from '../sessions/session-adapters';
 import { checkBudgetStatus, formatTokenBreakdown } from '../lib/text/token-counter';
+import { TemplateOrchestrator } from '../sessions/agent-profiles/cards/template-orchestrator';
+import type { TemplatePlan } from '../sessions/agent-profiles/cards/templates/types';
 
 export interface CardTriggerSupportingContext {
   facts: Array<{ key: string; value: unknown; confidence: number }>;
@@ -21,12 +23,17 @@ export interface CardTriggerContext {
 }
 
 export class CardsProcessor {
+  private readonly templateOrchestrator: TemplateOrchestrator;
+
   constructor(
     private contextBuilder: ContextBuilder,
     private logger: Logger,
     private metrics: MetricsCollector,
-    private checkpointManager: CheckpointManager
-  ) {}
+    private checkpointManager: CheckpointManager,
+    templateOrchestrator?: TemplateOrchestrator
+  ) {
+    this.templateOrchestrator = templateOrchestrator ?? new TemplateOrchestrator();
+  }
 
   async process(
     runtime: EventRuntime,
@@ -68,6 +75,24 @@ export class CardsProcessor {
         budgetStatus.critical
       );
 
+      let templatePlan: TemplatePlan | undefined;
+      if (triggerContext) {
+        const planResult = this.templateOrchestrator.plan(triggerContext);
+        if (planResult) {
+          templatePlan = planResult.plan;
+          this.logger.log(runtime.eventId, 'cards', 'log', '[template] plan selected', {
+            templateId: planResult.plan.templateId,
+            reason: planResult.plan.metadata.eligibilityReason,
+            priority: planResult.plan.metadata.priority,
+          });
+        } else {
+          this.logger.log(runtime.eventId, 'cards', 'log', '[template] no eligible template', {
+            conceptId: triggerContext.conceptId,
+            conceptLabel: triggerContext.conceptLabel,
+          });
+        }
+      }
+
       const messageContext = {
         ...context,
         recentText: chunk.text,
@@ -80,6 +105,7 @@ export class CardsProcessor {
             }
           : undefined,
         supportingContext: triggerContext?.supportingContext,
+        templatePlan,
       };
 
       await session.sendMessage(chunk.text, messageContext);

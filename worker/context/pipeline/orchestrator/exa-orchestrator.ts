@@ -1,10 +1,13 @@
 import type { Exa } from 'exa-js';
+import type { Blueprint } from '../blueprint/types';
 import type { ResearchResults } from '../glossary/types';
 import type { ResearchResultInsert } from '../../../types';
 import { insertResearchResultRow, type WorkerSupabaseClient } from './supabase-orchestrator';
 import { calculateExaResearchCost, calculateExaSearchCost } from '../../../lib/pricing';
 import { chunkTextContent } from '../../../lib/text/llm-prompt-chunking';
 import { isRecord } from '../../../lib/context-normalization';
+
+type BlueprintResearchQuery = Blueprint['research_plan']['queries'][number];
 
 export type ExaCostUsage = {
   searches: number;
@@ -134,7 +137,7 @@ const getResearchClient = (research: unknown): ExaResearchRetriever | null => {
 
 export interface PendingResearchTask {
   researchId: string;
-  queryItem: { query: string; api: string; priority: number };
+  queryItem: BlueprintResearchQuery;
   queryNumber: number;
   queryProgress: string;
   createdAt: number;
@@ -306,6 +309,16 @@ export const processCompletedResearchTask = async (
       research_id: task.researchId,
       method: 'research',
       quality_score: qualityScore,
+      query_priority: queryItem.priority,
+      priority: queryItem.priority,
+      provenance_hint:
+        typeof queryItem.provenance_hint === 'string' && queryItem.provenance_hint.trim().length > 0
+          ? queryItem.provenance_hint
+          : null,
+      agent_utility:
+        Array.isArray(queryItem.agent_utility) && queryItem.agent_utility.length > 0
+          ? queryItem.agent_utility
+          : [],
     };
 
     const insertResult = await insertResearchResultRow(supabase, {
@@ -349,7 +362,10 @@ export const processCompletedResearchTask = async (
 };
 
 export const executeExaSearch = async (
-  queryItem: { query: string },
+  queryItem: Pick<
+    BlueprintResearchQuery,
+    'query' | 'priority' | 'agent_utility' | 'provenance_hint'
+  >,
   exa: Exa,
   supabase: WorkerSupabaseClient,
   eventId: string,
@@ -394,6 +410,15 @@ export const executeExaSearch = async (
     let processedResults = 0;
     let skippedResults = 0;
 
+    const agentUtilityTargets =
+      Array.isArray(queryItem.agent_utility) && queryItem.agent_utility.length > 0
+        ? queryItem.agent_utility
+        : [];
+    const provenanceHint =
+      typeof queryItem.provenance_hint === 'string' && queryItem.provenance_hint.trim().length > 0
+        ? queryItem.provenance_hint
+        : null;
+
     for (const result of rawResults) {
       if (!isRecord(result)) {
         skippedResults++;
@@ -428,6 +453,10 @@ export const executeExaSearch = async (
           author: metadataFields.author || null,
           published_date: metadataFields.publishedDate || null,
           quality_score: qualityScore,
+          query_priority: queryItem.priority,
+          priority: queryItem.priority,
+          provenance_hint: provenanceHint,
+          agent_utility: agentUtilityTargets,
         };
 
         const insertResult = await insertResearchResultRow(supabase, {

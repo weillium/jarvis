@@ -13,6 +13,7 @@ export interface GlossaryTerm {
   source_url: string | null;
   created_at: string;
   generation_cycle_id: string | null;
+  agent_utility: string[];
 }
 
 export interface GlossaryData {

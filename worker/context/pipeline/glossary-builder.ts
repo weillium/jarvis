@@ -159,6 +159,7 @@ export async function buildGlossary(
             confidence_score: def.confidence_score ?? 0.8,
             source: def.source || 'llm_generation',
             source_url: def.source_url ?? null,
+            agent_utility: def.agent_utility ?? [],
           });
 
           insertedCount++;

@@ -1,9 +1,20 @@
 import type { GlossaryTermDefinition } from '../../../lib/context-normalization';
 
-export type ResearchChunkMetadata = {
+export type AgentUtilityTargets = Array<'facts' | 'cards' | 'glossary'>;
+
+export interface ResearchChunkMetadata {
   api?: string;
+  query?: string;
+  url?: string | null;
+  research_id?: string;
+  method?: string;
   quality_score?: number;
-} & Record<string, unknown>;
+  priority?: number;
+  query_priority?: number;
+  provenance_hint?: string | null;
+  agent_utility?: AgentUtilityTargets;
+  [key: string]: unknown;
+}
 
 export interface ResearchResults {
   chunks: Array<{
@@ -20,6 +31,7 @@ export interface GlossaryPlanTerm {
   is_acronym: boolean;
   category: string;
   priority: number;
+  agent_utility: Array<'facts' | 'cards'>;
 }
 
 export interface GlossaryCostBreakdown {

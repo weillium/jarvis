@@ -15,6 +15,7 @@ import type {
   ResponseTextDoneEvent,
 } from 'openai/resources/realtime/realtime';
 import type { TokenBudget } from './shared/tokens';
+import type { TemplatePlan } from '../agent-profiles/cards/templates/types';
 
 export type AgentType = 'transcript' | 'cards' | 'facts';
 
@@ -84,6 +85,7 @@ export interface RealtimeMessageContext {
     glossaryEntries?: Array<{ term: string; definition?: string }>;
     contextBullets?: string[];
   };
+  templatePlan?: TemplatePlan;
 }
 
 export type RealtimeSessionEvent = 'card' | 'response' | 'facts' | 'transcript' | 'error';

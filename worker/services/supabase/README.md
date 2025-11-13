@@ -10,3 +10,4 @@ This module wraps Supabase access for the worker.
 Use this module when you need to evolve database interactions or add new persistence surfaces for the worker.
 
 
+

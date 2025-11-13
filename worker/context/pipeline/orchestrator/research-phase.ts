@@ -25,6 +25,8 @@ import { generateStubResearchChunks } from './llm-orchestrator';
 import type { GenerationContext, PhaseOptions } from './phase-context';
 import type { StatusManager } from './status-manager';
 
+type BlueprintResearchQuery = Blueprint['research_plan']['queries'][number];
+
 type OpenAIChatCompletionCost = {
   cost: number;
   usage: {
@@ -66,8 +68,7 @@ export async function runResearchPhase(
   options: ResearchPhaseOptions
 ): Promise<ResearchResults> {
   const { supabase, openai, genModel, stubResearchModel, exaApiKey, statusManager } = options;
-  const queries: Blueprint['research_plan']['queries'] =
-    blueprint.research_plan.queries ?? [];
+  const queries: BlueprintResearchQuery[] = blueprint.research_plan.queries ?? [];
 
   console.log(`[research] ========================================`);
   console.log(`[research] Starting research plan execution`);
@@ -117,46 +118,69 @@ export async function runResearchPhase(
     const queryNumber = i + 1;
     const queryProgress = `[${queryNumber}/${queries.length}]`;
 
+    const agentUtilityTargets =
+      Array.isArray(queryItem.agent_utility) && queryItem.agent_utility.length > 0
+        ? queryItem.agent_utility
+        : [];
+    const provenanceHint =
+      typeof queryItem.provenance_hint === 'string' && queryItem.provenance_hint.trim().length > 0
+        ? queryItem.provenance_hint
+        : null;
+
     console.log(
       `[research] ${queryProgress} Starting query: "${queryItem.query}" (API: ${queryItem.api}, Priority: ${queryItem.priority})`
     );
 
-    try {
-      if (queryItem.api === 'wikipedia') {
-        console.log(`[research] ${queryProgress} Executing Wikipedia API request for: ${queryItem.query}`);
-        const startTime = Date.now();
+    const runWikipediaFlow = async () => {
+      console.log(`[research] ${queryProgress} Executing Wikipedia API request for: ${queryItem.query}`);
+      const startTime = Date.now();
 
-        try {
-          const wikipediaChunks = await executeWikipediaSearch(
-            queryItem.query,
-            supabase,
-            context.eventId,
-            context.blueprintId,
-            generationCycleId
-          );
+      try {
+        const wikipediaChunks = await executeWikipediaSearch(
+          queryItem,
+          supabase,
+          context.eventId,
+          context.blueprintId,
+          generationCycleId
+        );
 
-          const duration = Date.now() - startTime;
+        const duration = Date.now() - startTime;
 
-          for (const chunk of wikipediaChunks) {
-            insertedCount.value++;
-            chunks.push(chunk);
-          }
-
-          console.log(
-            `[research] ${queryProgress} ✓ Wikipedia API success: ${wikipediaChunks.length} chunks created in ${duration}ms for query: "${queryItem.query}"`
-          );
-        } catch (err: unknown) {
-          console.error('[orchestrator] error:', String(err));
+        for (const chunk of wikipediaChunks) {
+          insertedCount.value++;
+          chunks.push(chunk);
         }
 
-        await statusManager.updateCycle(generationCycleId, {
-          progress_current: queryNumber,
-        });
-        continue;
-      } else if (queryItem.api === 'exa') {
+        console.log(
+          `[research] ${queryProgress} ✓ Wikipedia API success: ${wikipediaChunks.length} chunks created in ${duration}ms for query: "${queryItem.query}"`
+        );
+      } catch (err: unknown) {
+        console.error('[orchestrator] error:', String(err));
+      }
+
+      await statusManager.updateCycle(generationCycleId, {
+        progress_current: queryNumber,
+      });
+
+      console.log(
+        `[research] ${queryProgress} Query processing complete. Total chunks so far: ${insertedCount.value}`
+      );
+    };
+
+    try {
+      const priorityLevel =
+        typeof queryItem.priority === 'number' && Number.isFinite(queryItem.priority)
+          ? queryItem.priority
+          : 5;
+
+      if (priorityLevel === 1) {
+        console.log(
+          `[research] ${queryProgress} Priority 1 query detected – enforcing Exa /research for "${queryItem.query}"`
+        );
+
         if (!exa) {
           console.warn(
-            `[research] ${queryProgress} Exa API key not available - using LLM stub fallback for query: "${queryItem.query}"`
+            `[research] ${queryProgress} Exa API key not available - using LLM stub fallback for priority 1 query: "${queryItem.query}"`
           );
           const startTime = Date.now();
 
@@ -182,6 +206,9 @@ export async function runResearchPhase(
                   api: 'exa_stub',
                   query: queryItem.query,
                   priority: queryItem.priority,
+                  query_priority: queryItem.priority,
+                  agent_utility: agentUtilityTargets,
+                  provenance_hint: provenanceHint,
                 },
               });
             }
@@ -195,92 +222,102 @@ export async function runResearchPhase(
               throw new ExaSchemaValidationError(errString);
             }
           }
-        } else if (queryItem.priority === 1) {
-          console.log(
-            `[research] ${queryProgress} Using Exa /research endpoint for top-priority query (priority ${queryItem.priority}): "${queryItem.query}"`
-          );
-          const startTime = Date.now();
 
-          try {
-            const outputSchema = {
-              type: 'object',
-              required: ['summary', 'keyPoints', 'sources'],
-              properties: {
-                summary: {
-                  type: 'string',
-                  description: 'A 400-600 word synthesis that references citations using bracketed IDs (e.g. [1])',
-                },
-                keyPoints: {
-                  type: 'array',
-                  maxItems: 8,
-                  minItems: 5,
-                  description:
-                    'High-signal insights with citation references and confidence ratings to guide downstream generation',
-                  items: {
-                    type: 'object',
-                    additionalProperties: false,
-                    required: ['title', 'insight', 'citationId', 'confidence'],
-                    properties: {
-                      title: {
-                        type: 'string',
-                        description: 'Short label for the key point (<=8 words)',
-                      },
-                      insight: {
-                        type: 'string',
-                        description: 'One-sentence articulation of the key takeaway including a citation (e.g. "[2]")',
-                      },
-                      citationId: {
-                        type: 'integer',
-                        description: 'ID of the supporting source from the sources array',
-                      },
-                      confidence: {
-                        type: 'string',
-                        enum: ['high', 'medium', 'low'],
-                        description:
-                          'Confidence in the insight based on source quality and corroboration (enum required by Exa best practices)',
-                      },
+          await statusManager.updateCycle(generationCycleId, {
+            progress_current: queryNumber,
+          });
+
+          console.log(
+            `[research] ${queryProgress} Query processing complete. Total chunks so far: ${insertedCount.value}`
+          );
+          continue;
+        }
+
+        console.log(
+          `[research] ${queryProgress} Using Exa /research endpoint for top-priority query: "${queryItem.query}"`
+        );
+        const startTime = Date.now();
+
+        try {
+          const outputSchema = {
+            type: 'object',
+            required: ['summary', 'keyPoints', 'sources'],
+            properties: {
+              summary: {
+                type: 'string',
+                description: 'A 400-600 word synthesis that references citations using bracketed IDs (e.g. [1])',
+              },
+              keyPoints: {
+                type: 'array',
+                maxItems: 8,
+                minItems: 5,
+                description:
+                  'High-signal insights with citation references and confidence ratings to guide downstream generation',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['title', 'insight', 'citationId', 'confidence'],
+                  properties: {
+                    title: {
+                      type: 'string',
+                      description: 'Short label for the key point (<=8 words)',
                     },
-                  },
-                },
-                sources: {
-                  type: 'array',
-                  maxItems: 6,
-                  description:
-                    'Unique, authoritative sources sorted by relevance with metadata for downstream citation rendering',
-                  items: {
-                    type: 'object',
-                    additionalProperties: false,
-                    required: ['id', 'title', 'url'],
-                    properties: {
-                      id: {
-                        type: 'integer',
-                        description: 'Stable identifier used in citations (starts at 1)',
-                      },
-                      title: {
-                        type: 'string',
-                        description: 'Article or publication title',
-                      },
-                      url: {
-                        type: 'string',
-                        pattern: '^https?://.+$',
-                        description: 'Resolvable HTTPS URL',
-                      },
-                      publisher: {
-                        type: 'string',
-                        description: 'Publisher or organization name',
-                      },
-                      publishedDate: {
-                        type: 'string',
-                        description: 'ISO-8601 date string when available',
-                      },
+                    insight: {
+                      type: 'string',
+                      description: 'One-sentence articulation of the key takeaway including a citation (e.g. "[2]")',
+                    },
+                    citationId: {
+                      type: 'integer',
+                      description: 'ID of the supporting source from the sources array',
+                    },
+                    confidence: {
+                      type: 'string',
+                      enum: ['high', 'medium', 'low'],
+                      description:
+                        'Confidence in the insight based on source quality and corroboration (enum required by Exa best practices)',
                     },
                   },
                 },
               },
-              additionalProperties: false,
-            };
+              sources: {
+                type: 'array',
+                maxItems: 6,
+                description:
+                  'Unique, authoritative sources sorted by relevance with metadata for downstream citation rendering',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['id', 'title', 'url'],
+                  properties: {
+                    id: {
+                      type: 'integer',
+                      description: 'Stable identifier used in citations (starts at 1)',
+                    },
+                    title: {
+                      type: 'string',
+                      description: 'Article or publication title',
+                    },
+                    url: {
+                      type: 'string',
+                      pattern: '^https?://.+$',
+                      description: 'Resolvable HTTPS URL',
+                    },
+                    publisher: {
+                      type: 'string',
+                      description: 'Publisher or organization name',
+                    },
+                    publishedDate: {
+                      type: 'string',
+                      description: 'ISO-8601 date string when available',
+                    },
+                  },
+                },
+              },
+            },
+            additionalProperties: false,
+          };
 
-            const instructions = `Research the topic: "${queryItem.query}"
+          const instructions = `Research the topic: "${queryItem.query}"
 
 OBJECTIVE:
 - Produce authoritative context to brief downstream AI systems on this topic.
@@ -300,74 +337,96 @@ TONE & SCOPE:
 - Focus on actionable insights, industry standards, and current developments (2024-2025 emphasis).
 - Call out major uncertainties or gaps explicitly when encountered.`;
 
-            const research = await exa.research.create({
-              model: 'exa-research',
-              instructions,
-              outputSchema,
-            });
+          const research = await exa.research.create({
+            model: 'exa-research',
+            instructions,
+            outputSchema,
+          });
 
-            console.log(
-              `[research] ${queryProgress} ✓ Exa research task created: ${research.researchId}, status: ${research.status}. Will poll in background.`
-            );
-            console.log(
-              `[research] ${queryProgress} Note: Research uses variable pricing ($5/1k searches, $5/1k pages, $5/1M reasoning tokens). OutputSchema helps constrain scope.`
-            );
-
-            pendingResearchTasks.push({
-              researchId: research.researchId,
-              queryItem,
-              queryNumber,
-              queryProgress,
-              createdAt: Date.now(),
-              startTime,
-            });
-
-            await statusManager.updateCycle(generationCycleId, {
-              progress_current: queryNumber,
-            });
-
-            console.log(
-              `[research] ${queryProgress} Moving on to next query while research task runs in background...`
-            );
-            continue;
-          } catch (err: unknown) {
-            console.error('[orchestrator] error:', String(err));
-          }
-        } else {
           console.log(
-            `[research] ${queryProgress} Using Exa /search endpoint for query (priority ${queryItem.priority}): "${queryItem.query}"`
+            `[research] ${queryProgress} ✓ Exa research task created: ${research.researchId}, status: ${research.status}. Will poll in background.`
           );
-          const startTime = Date.now();
+          console.log(
+            `[research] ${queryProgress} Note: Research uses variable pricing ($5/1k searches, $5/1k pages, $5/1M reasoning tokens). OutputSchema helps constrain scope.`
+          );
 
-          try {
-            await executeExaSearch(
-              queryItem,
-              exa,
-              supabase,
-              context.eventId,
-              context.blueprintId,
-              generationCycleId,
-              chunks,
-              insertedCount,
-              costBreakdown
-            );
-            const duration = Date.now() - startTime;
-            console.log(
-              `[research] ${queryProgress} ✓ Exa /search completed in ${duration}ms for query: "${queryItem.query}"`
-            );
-          } catch (err: unknown) {
-            console.error('[orchestrator] error:', String(err));
-          }
+          pendingResearchTasks.push({
+            researchId: research.researchId,
+            queryItem,
+            queryNumber,
+            queryProgress,
+            createdAt: Date.now(),
+            startTime,
+          });
+
+          await statusManager.updateCycle(generationCycleId, {
+            progress_current: queryNumber,
+          });
+
+          console.log(
+            `[research] ${queryProgress} Moving on to next query while research task runs in background...`
+          );
+          continue;
+        } catch (err: unknown) {
+          console.error('[orchestrator] error:', String(err));
         }
+      } else if (priorityLevel === 2) {
+        const shouldUseWikipedia = queryItem.api === 'wikipedia' || !exa;
+
+        if (shouldUseWikipedia && queryItem.api !== 'wikipedia') {
+          console.log(
+            `[research] ${queryProgress} Overriding requested API to Wikipedia for priority 2 query: "${queryItem.query}"`
+          );
+        }
+
+        if (shouldUseWikipedia) {
+          await runWikipediaFlow();
+          continue;
+        }
+
+        console.log(
+          `[research] ${queryProgress} Using Exa /search endpoint for priority 2 query: "${queryItem.query}"`
+        );
+        const startTime = Date.now();
+
+        try {
+          await executeExaSearch(
+            queryItem,
+            exa,
+            supabase,
+            context.eventId,
+            context.blueprintId,
+            generationCycleId,
+            chunks,
+            insertedCount,
+            costBreakdown
+          );
+          const duration = Date.now() - startTime;
+          console.log(
+            `[research] ${queryProgress} ✓ Exa /search completed in ${duration}ms for query: "${queryItem.query}"`
+          );
+        } catch (err: unknown) {
+          console.error('[orchestrator] error:', String(err));
+        }
+
+        await statusManager.updateCycle(generationCycleId, {
+          progress_current: queryNumber,
+        });
+
+        console.log(
+          `[research] ${queryProgress} Query processing complete. Total chunks so far: ${insertedCount.value}`
+        );
+        continue;
+      } else {
+        if (queryItem.api !== 'wikipedia') {
+          console.log(
+            `[research] ${queryProgress} Priority ${queryItem.priority} query defaulting to Wikipedia: "${queryItem.query}"`
+          );
+        }
+
+        await runWikipediaFlow();
+        continue;
       }
-
-      await statusManager.updateCycle(generationCycleId, {
-        progress_current: queryNumber,
-      });
-
-      console.log(
-        `[research] ${queryProgress} Query processing complete. Total chunks so far: ${insertedCount.value}`
-      );
     } catch (err: unknown) {
       const errString = String(err);
       console.error('[orchestrator] error:', errString);
@@ -442,7 +501,7 @@ TONE & SCOPE:
 }
 
 async function executeWikipediaSearch(
-  query: string,
+  queryItem: BlueprintResearchQuery,
   supabase: WorkerSupabaseClient,
   eventId: string,
   blueprintId: string,
@@ -450,6 +509,16 @@ async function executeWikipediaSearch(
 ): Promise<ResearchResults['chunks']> {
   const chunks: ResearchResults['chunks'] = [];
   const startTime = Date.now();
+
+  const query = queryItem.query;
+  const agentUtilityTargets =
+    Array.isArray(queryItem.agent_utility) && queryItem.agent_utility.length > 0
+      ? queryItem.agent_utility
+      : [];
+  const provenanceHint =
+    typeof queryItem.provenance_hint === 'string' && queryItem.provenance_hint.trim().length > 0
+      ? queryItem.provenance_hint
+      : null;
 
   try {
     console.log(`[research] Wikipedia: Searching for articles matching "${query}"...`);
@@ -555,6 +624,10 @@ async function executeWikipediaSearch(
             url: sourceUrl,
             page_id: result.pageid,
             quality_score: qualityScore,
+            query_priority: queryItem.priority,
+            priority: queryItem.priority,
+            provenance_hint: provenanceHint,
+            agent_utility: agentUtilityTargets,
           };
 
           const insertResult = await insertResearchResultRow(supabase, {

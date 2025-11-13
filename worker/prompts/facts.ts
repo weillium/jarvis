@@ -6,7 +6,7 @@ export interface FactsPromptContext {
 }
 
 export function createFactsGenerationUserPrompt(context: FactsPromptContext): string {
-  const { transcriptWindow, existingFactsJson, glossaryContext } = context;
+  const { transcriptWindow, existingFactsJson, glossaryContext, rejectedFactsJson } = context;
 
   return `You are an event intelligence assistant extracting stable facts.
 
