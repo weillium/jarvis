@@ -33,7 +33,7 @@ const formatTemplatePlan = (plan?: TemplatePlan): string => {
 
   const templateLabel = plan.metadata.label ?? plan.templateId;
 
-  return `Template Selected: ${plan.metadata.label} (${plan.templateId})
+  return `Template Selected: ${templateLabel} (${plan.templateId})
 Why it was chosen: ${plan.metadata.eligibilityReason ?? 'not provided'}
 Emit these metadata fields exactly in every card output:
 - template_id: ${plan.templateId}
@@ -123,21 +123,31 @@ ${conceptFocus ? `CONCEPT FOCUS\n${conceptFocus}\n\n` : ''}INSTRUCTIONS
 - Validate retrieved chunks before using them; ignore low-similarity or off-topic excerpts.
 - Quote metrics, dates, and named entities precisely. Keep titles ≤ 8 words and body ≤ 3 tight bullets/sentences.
 - Respect card_type semantics:
-  * text: body required, label/image_url null.
-  * text_visual: body + image_url required, label null.
-  * visual: label + image_url required, body null.
+  * text: body required. label, image_url, visual_request must be null.
+  * text_visual: body required and visual_request required; label null; image_url must remain null until the worker resolves the request.
+  * visual: label required and visual_request required; body must be null; image_url must remain null until the worker resolves the request.
+- Populate visual_request whenever a helpful visual exists:
+  * Use {"strategy":"fetch","instructions":"...","source_url":"https://..."} for real-world photos or existing assets to retrieve.
+  * Use {"strategy":"generate","instructions":"...","source_url":null} for conceptual diagrams or illustrations that must be generated later.
+  * Provide concrete instructions (audience, style, framing). Omit visual_request when no visual is needed.
 - If no useful card exists, respond with { "cards": [] } and do nothing else.
 
 OUTPUT FORMAT (STRICT)
 {
   "cards": [
     {
-      "kind": "Definition | Summary | Framework | Timeline | Metric | Map | Comparison | Stakeholder | Process | Risk | Opportunity",
       "card_type": "text | text_visual | visual",
       "title": "concise title",
       "body": "slot-aligned bullets or null",
       "label": "visual label or null",
-      "image_url": "https://..." or null,
+      "template_id": "definition.v1 | summary.v1 | ...",
+      "template_label": "Definition Card | Summary Card | ...",
+      "visual_request": {
+        "strategy": "fetch | generate" or null,
+        "instructions": "visual description or null",
+        "source_url": "https://..." or null
+      },
+      "image_url": null,
       "source_seq": <number>
     }
   ]

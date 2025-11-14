@@ -65,23 +65,6 @@ const produceCardTool: FunctionToolDefinition = {
   parameters: {
     type: 'object',
     properties: {
-      kind: {
-        type: 'string',
-        enum: [
-          'Definition',
-          'Framework',
-          'Timeline',
-          'Metric',
-          'Map',
-          'Comparison',
-          'Stakeholder',
-          'Process',
-          'Risk',
-          'Opportunity',
-        ],
-        description:
-          'The contextual scaffold best describing this card: definition, framework, timeline, metric, map, comparison, stakeholder, process, risk, or opportunity.',
-      },
       card_type: {
         type: 'string',
         enum: ['text', 'text_visual', 'visual'],
@@ -122,7 +105,7 @@ const produceCardTool: FunctionToolDefinition = {
           'Human-readable template label corresponding to template_id (e.g., Definition Card).',
       },
     },
-    required: ['kind', 'card_type', 'title', 'source_seq'],
+    required: ['card_type', 'title', 'source_seq', 'template_id', 'template_label'],
   },
 };
 

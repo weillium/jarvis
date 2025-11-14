@@ -1,29 +1,14 @@
-export const REALTIME_CARD_KINDS = [
-  'Decision',
-  'Metric',
-  'Deadline',
-  'Topic',
-  'Entity',
-  'Action',
-  'Context',
-  'Definition',
-] as const;
-
-export type KnownRealtimeCardKind = (typeof REALTIME_CARD_KINDS)[number];
-
-export type RealtimeCardKind =
-  | KnownRealtimeCardKind
-  | (string & { __unknownCardKind?: never });
+import type { CardVisualRequest } from '../sessions/agent-profiles/cards/runtime-tooling/card-image-service';
 
 export type RealtimeCardType = 'text' | 'text_visual' | 'visual';
 
 export interface RealtimeCardDTO {
-  kind: RealtimeCardKind;
   card_type: RealtimeCardType;
   title: string;
   body: string | null;
   label: string | null;
   image_url: string | null;
+  visual_request?: CardVisualRequest | null;
   source_seq: number;
   template_id?: string | null;
   template_label?: string | null;

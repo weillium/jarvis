@@ -10,10 +10,12 @@ import { SessionLifecycle } from '../runtime/session-lifecycle';
 import type { WorkerEnvConfig } from './env';
 import type { WorkerInfrastructure } from './services';
 import type { RealtimeCardType } from '../types/websocket';
+import type { CardVisualRequest } from '../sessions/agent-profiles/cards/runtime-tooling/card-image-service';
 
 interface GeneratedCardPayload {
   body?: string | null;
   image_url?: string | null;
+  visual_request?: CardVisualRequest | null;
 }
 
 const visualKeywords = [
@@ -53,20 +55,13 @@ export const determineCardType = (
   card: GeneratedCardPayload,
   transcriptText: string
 ): RealtimeCardType => {
-  if (card.image_url) {
+  const visualRequest = card.visual_request;
+  if (
+    visualRequest &&
+    typeof visualRequest === 'object' &&
+    (visualRequest.strategy === 'fetch' || visualRequest.strategy === 'generate')
+  ) {
     return card.body ? 'text_visual' : 'visual';
-  }
-
-  const lowerText = transcriptText.toLowerCase();
-  const hasVisualKeyword = visualKeywords.some((keyword) => lowerText.includes(keyword));
-  const isDefinition = definitionKeywords.some((keyword) => lowerText.includes(keyword));
-
-  if (isDefinition && hasVisualKeyword) {
-    return 'text_visual';
-  }
-
-  if (hasVisualKeyword && !card.body) {
-    return 'visual';
   }
 
   return 'text';

@@ -1,4 +1,5 @@
 import type { RealtimeCardDTO } from '../types';
+import type { CardVisualRequest } from '../sessions/agent-profiles/cards/runtime-tooling/card-image-service';
 
 type CardType = RealtimeCardDTO['card_type'];
 
@@ -7,6 +8,9 @@ export interface CardRecordMetadata {
   body?: string | null;
   label?: string | null;
   imageUrl?: string | null;
+  visualRequest?: CardVisualRequest | null;
+  templateId?: string | null;
+  templateLabel?: string | null;
   agentOutputId?: number | string;
   [key: string]: unknown;
 }

@@ -126,16 +126,22 @@ export async function GET(req: NextRequest) {
                 return null;
               }
 
+              const templateLabel =
+                row.payload &&
+                typeof row.payload === 'object' &&
+                typeof row.payload.template_label === 'string' &&
+                row.payload.template_label.trim().length > 0
+                  ? row.payload.template_label
+                  : null;
+
               return {
                 id: row.card_id,
                 event_id: row.event_id,
                 payload: row.payload,
                 card_kind:
-                  typeof row.card_kind === 'string'
+                  typeof row.card_kind === 'string' && row.card_kind.length > 0
                     ? row.card_kind
-                    : typeof row.payload?.kind === 'string'
-                    ? row.payload.kind
-                    : null,
+                    : templateLabel,
                 created_at: typeof row.created_at === 'string' ? row.created_at : new Date().toISOString(),
                 updated_at: typeof row.updated_at === 'string' ? row.updated_at : null,
                 last_seen_seq:

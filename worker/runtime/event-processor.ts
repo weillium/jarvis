@@ -31,7 +31,10 @@ import {
   type CardSalienceComponents,
 } from './cards/salience';
 import type { VectorSearchService } from '../context/vector-search';
-import { CardImageService } from '../services/cards/card-image-service';
+import {
+  CardImageService,
+  type CardVisualRequest,
+} from '../sessions/agent-profiles/cards/runtime-tooling/card-image-service';
 import { countTokens, truncateToTokenBudget } from '../lib/text/token-counter';
 import {
   checkCardRateLimit,
@@ -57,6 +60,7 @@ interface DetermineCardPayload extends Record<string, unknown> {
   body?: string | null;
   label?: string | null;
   image_url?: string | null;
+  visual_request?: CardVisualRequest | null;
   source_seq?: number;
   template_id?: string | null;
   template_label?: string | null;
@@ -84,6 +88,29 @@ const isMutableCardPayload = (value: unknown): value is MutableCardPayload =>
 
 const isRealtimeFact = (value: unknown): value is RealtimeFactDTO =>
   isRecord(value) && typeof value.key === 'string';
+
+const isCardVisualRequest = (value: unknown): value is CardVisualRequest => {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const strategy = value.strategy;
+  const instructions = value.instructions;
+  const sourceUrl = value.source_url;
+
+  if (strategy !== 'fetch' && strategy !== 'generate') {
+    return false;
+  }
+
+  if (typeof instructions !== 'string' || instructions.trim().length === 0) {
+    return false;
+  }
+
+  if (sourceUrl !== undefined && sourceUrl !== null && typeof sourceUrl !== 'string') {
+    return false;
+  }
+
+  return true;
+};
 
 type DetermineCardTypeFn = (
   card: DetermineCardPayload,
@@ -593,15 +620,44 @@ export class EventProcessor {
 
       const card = cardInput;
 
-      if (typeof card.kind !== 'string' || typeof card.title !== 'string' || card.kind.length === 0 || card.title.length === 0) {
-        console.warn(`[cards] Invalid card structure: missing kind or title`);
+      if (typeof card.title !== 'string' || card.title.length === 0) {
+        console.warn(`[cards] Invalid card structure: missing title`);
         return;
       }
 
-      const cardType: CardType = isRealtimeCardType(card.card_type)
+      const originalVisualRequest = isCardVisualRequest(card.visual_request)
+        ? {
+            strategy: card.visual_request.strategy,
+            instructions: card.visual_request.instructions,
+            source_url: card.visual_request.source_url ?? null,
+          }
+        : null;
+
+      if (!originalVisualRequest && 'visual_request' in card) {
+        card.visual_request = null;
+      }
+
+      let cardType: CardType = isRealtimeCardType(card.card_type)
         ? card.card_type
         : this.determineCardType(card, '');
       card.card_type = cardType;
+      let visualRequest: CardVisualRequest | null = originalVisualRequest;
+
+      const downgradeToText = (reason: string) => {
+        if (cardType === 'text') {
+          return;
+        }
+        console.warn(`[cards] Downgrading ${cardType} card to text: ${reason}`);
+        cardType = 'text';
+        card.card_type = 'text';
+        card.image_url = null;
+        card.visual_request = null;
+        visualRequest = null;
+        if (!card.body || `${card.body}`.trim().length === 0) {
+          card.body = card.label ?? card.title ?? 'See transcript segment for details.';
+        }
+        card.label = null;
+      };
 
       if (cardType === 'visual') {
         if (!card.label) card.label = card.title || 'Image';
@@ -611,7 +667,40 @@ export class EventProcessor {
       } else {
         if (!card.body) card.body = card.title || 'Definition';
         card.image_url = null;
+        visualRequest = null;
+        card.visual_request = null;
       }
+
+      const cardId = randomUUID();
+
+      if (cardType === 'visual' || cardType === 'text_visual') {
+        if (!visualRequest) {
+          downgradeToText('missing_visual_request');
+        } else if (!this.cardImageService) {
+          downgradeToText('image_service_unavailable');
+        } else {
+          const resolvedUrl = await this.cardImageService.handleVisualRequest(
+            visualRequest,
+            runtime.eventId,
+            cardId
+          );
+          if (resolvedUrl) {
+            card.image_url = resolvedUrl;
+          } else {
+            downgradeToText('visual_resolution_failed');
+          }
+        }
+      } else {
+        card.image_url = null;
+        card.visual_request = null;
+        visualRequest = null;
+      }
+
+      if ((cardType === 'visual' || cardType === 'text_visual') && !card.image_url) {
+        downgradeToText('visual_unresolved');
+      }
+
+      card.visual_request = visualRequest;
 
       const cardSourceSeq =
         typeof card.source_seq === 'number' && Number.isFinite(card.source_seq)
@@ -643,22 +732,16 @@ export class EventProcessor {
             : templatePlan.templateId;
       }
 
-      const cardId = randomUUID();
+      const templateIdValue =
+        typeof (card as MutableCardPayload).template_id === 'string'
+          ? (card as MutableCardPayload).template_id
+          : null;
+      const templateLabelValue =
+        typeof (card as MutableCardPayload).template_label === 'string'
+          ? (card as MutableCardPayload).template_label
+          : null;
 
-      if (
-        this.cardImageService &&
-        typeof card.image_url === 'string' &&
-        card.image_url.trim().length > 0
-      ) {
-        const cachedUrl = await this.cardImageService.cacheRemoteImage(
-          card.image_url.trim(),
-          runtime.eventId,
-          cardId
-        );
-        if (cachedUrl) {
-          card.image_url = cachedUrl;
-        }
-      }
+      card.image_url = card.image_url ?? null;
 
       await this.agentOutputs.insertAgentOutput({
         id: cardId,
@@ -673,7 +756,10 @@ export class EventProcessor {
       await this.cardsRepository.upsertCard({
         event_id: runtime.eventId,
         card_id: cardId,
-        card_kind: typeof card.kind === 'string' ? card.kind : null,
+        card_kind:
+          typeof templateLabelValue === 'string' && templateLabelValue.length > 0
+            ? templateLabelValue
+            : null,
         card_type: typeof card.card_type === 'string' ? card.card_type : null,
         payload: card,
         source_seq: cardSourceSeq ?? null,
@@ -685,15 +771,6 @@ export class EventProcessor {
       console.log(
         `[cards] Card received from Realtime API (seq: ${cardSourceSeq ?? runtimeCardsSeq}, type: ${cardType})`
       );
-
-      const templateIdValue =
-        typeof (card as MutableCardPayload).template_id === 'string'
-          ? (card as MutableCardPayload).template_id
-          : null;
-      const templateLabelValue =
-        typeof (card as MutableCardPayload).template_label === 'string'
-          ? (card as MutableCardPayload).template_label
-          : null;
 
       if (pendingConcept && cardSourceSeq !== undefined) {
         runtime.cardsStore.add({
@@ -709,6 +786,7 @@ export class EventProcessor {
             imageUrl: card.image_url ?? null,
             templateId: templateIdValue,
             templateLabel: templateLabelValue,
+            visualRequest: originalVisualRequest ?? null,
           },
         });
       }

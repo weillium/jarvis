@@ -43,8 +43,8 @@ const extractSummaryBullets = (body?: string | null): string[] => {
 };
 
 const normalizeTemplateName = (card: CardPayload): string => {
-  const templateId = card.template_id ?? card.template_label ?? card.kind ?? '';
-  return templateId.toLowerCase();
+  const templateSource = card.template_id ?? card.template_label ?? '';
+  return templateSource.toLowerCase();
 };
 
 export function CardDisplay({
@@ -57,6 +57,7 @@ export function CardDisplay({
   const templateName = normalizeTemplateName(card);
   const isDefinition = templateName.includes('definition');
   const isSummary = templateName.includes('summary');
+  const badgeLabel = card.template_label ?? null;
   const transcriptTimestamp =
     typeof transcript?.at_ms === 'number' ? new Date(transcript.at_ms) : null;
   const transcriptTimeAgo =
@@ -202,7 +203,7 @@ export function CardDisplay({
             {card.title}
           </h3>
 
-          {card.kind && (
+          {badgeLabel && (
             <span
               style={{
                 display: 'inline-flex',
@@ -218,7 +219,7 @@ export function CardDisplay({
                 background: 'rgba(79, 70, 229, 0.12)',
               }}
             >
-              {card.kind}
+              {badgeLabel}
             </span>
           )}
         </div>

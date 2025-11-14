@@ -11,13 +11,20 @@ export interface Card {
 
 export type CardType = 'text' | 'text_visual' | 'visual';
 
+export interface CardVisualRequest {
+  strategy: 'fetch' | 'generate';
+  instructions: string;
+  source_url?: string | null;
+}
+
 export interface CardPayload {
-  kind: string;
+  kind?: string | null;
   card_type: CardType;
   title: string;
   body?: string | null;
   label?: string | null;
   image_url?: string | null;
+  visual_request?: CardVisualRequest | null;
   source_seq?: number;
   template_id?: string | null;
   template_label?: string | null;

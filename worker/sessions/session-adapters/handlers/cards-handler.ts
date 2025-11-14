@@ -64,11 +64,9 @@ export class CardsAgentHandler extends BaseAgentHandler {
 
     if (toolCall.type === 'produce_card') {
       const card = toolCall.card;
-      this.log(
-        'log',
-        `produce_card() called: kind="${card.kind}", card_type="${card.card_type}"`,
-        { seq: card.source_seq }
-      );
+      this.log('log', `produce_card() called: template="${card.template_id ?? 'unknown'}", card_type="${card.card_type}"`, {
+        seq: card.source_seq,
+      });
       this.emit('card', card);
       await this.sendToolResultSafe(toolCall.callId, {
         success: true,

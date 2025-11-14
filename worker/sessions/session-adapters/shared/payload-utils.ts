@@ -56,11 +56,7 @@ export const mapToolCallArguments = (
 export const mapCardFromRecord = (
   record: Record<string, unknown>
 ): RealtimeCardDTO | null => {
-  if (
-    typeof record.kind !== 'string' ||
-    typeof record.card_type !== 'string' ||
-    typeof record.title !== 'string'
-  ) {
+  if (typeof record.card_type !== 'string' || typeof record.title !== 'string') {
     return null;
   }
 
@@ -79,7 +75,6 @@ export const mapCardFromRecord = (
       : undefined;
 
   return {
-    kind: record.kind,
     card_type: cardType,
     title: record.title,
     body: typeof record.body === 'string' ? record.body : null,

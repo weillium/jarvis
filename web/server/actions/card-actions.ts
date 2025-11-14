@@ -35,12 +35,14 @@ export async function getCardsByEventId(eventId: string): Promise<{ data: Card[]
         ? row.created_at
         : new Date().toISOString();
 
+      const templateLabel =
+        payload && typeof payload.template_label === 'string' && payload.template_label.trim().length > 0
+          ? payload.template_label
+          : null;
       const kind =
-        typeof row.card_kind === 'string'
+        (typeof row.card_kind === 'string' && row.card_kind.length > 0
           ? row.card_kind
-          : payload && typeof payload.kind === 'string'
-          ? payload.kind
-          : 'Context';
+          : templateLabel) ?? 'Context';
 
       return {
         id: row.card_id,

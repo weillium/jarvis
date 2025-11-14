@@ -127,7 +127,9 @@ export class PromptCardGenerator implements CardGenerator {
         .slice(-MAX_CARD_HISTORY)
         .map(
           (card) =>
-            `- [${card.kind}] ${card.title ?? 'untitled'} (type: ${card.card_type}, seq: ${card.source_seq})`
+            `- [${
+              card.template_label ?? card.template_id ?? 'Card'
+            }] ${card.title ?? 'untitled'} (type: ${card.card_type}, seq: ${card.source_seq})`
         )
         .join('\n'),
       supportingContext?.recentCards && supportingContext.recentCards.length > 0
@@ -240,6 +242,18 @@ export class PromptCardGenerator implements CardGenerator {
       card.source_seq = card.source_seq ?? input.sourceSeq ?? 0;
       if (!card.card_type) {
         card.card_type = 'text';
+      }
+      const plan = input.messageContext?.templatePlan;
+      if (plan) {
+        if (!card.template_id) {
+          card.template_id = plan.templateId;
+        }
+        if (!card.template_label) {
+          card.template_label = plan.metadata?.label ?? plan.templateId;
+        }
+      }
+      if (card.card_type === 'text') {
+        card.visual_request = null;
       }
     }
 

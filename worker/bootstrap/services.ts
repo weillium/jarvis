@@ -20,7 +20,7 @@ import {
   VectorSearchGateway,
   ContextBlueprintRepository,
 } from '../services/supabase';
-import { CardImageService } from '../services/cards/card-image-service';
+import { CardImageService } from '../sessions/agent-profiles/cards/runtime-tooling/card-image-service';
 import type { WorkerEnvConfig } from './env';
 
 export interface WorkerRepositories {

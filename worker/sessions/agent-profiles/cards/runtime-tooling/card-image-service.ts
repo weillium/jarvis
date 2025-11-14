@@ -4,6 +4,14 @@ import type { Logger } from '../../../services/observability/logger';
 
 const HTTP_URL_REGEX = /^https?:\/\//i;
 
+export type CardVisualStrategy = 'fetch' | 'generate';
+
+export interface CardVisualRequest {
+  strategy: CardVisualStrategy;
+  instructions: string;
+  source_url?: string | null;
+}
+
 const inferExtension = (contentType: string | null, fallback: string = 'jpg'): string => {
   if (!contentType) {
     return fallback;
@@ -84,6 +92,35 @@ export class CardImageService {
       });
       return null;
     }
+  }
+
+  async handleVisualRequest(
+    request: CardVisualRequest,
+    eventId: string,
+    cardId: string
+  ): Promise<string | null> {
+    if (!request || typeof request !== 'object') {
+      return null;
+    }
+
+    if (request.strategy === 'fetch') {
+      if (typeof request.source_url === 'string' && request.source_url.trim().length > 0) {
+        return this.cacheRemoteImage(request.source_url.trim(), eventId, cardId);
+      }
+      this.logger.log(eventId, 'cards', 'warn', '[image] fetch strategy missing source_url', {
+        request,
+      });
+      return null;
+    }
+
+    if (request.strategy === 'generate') {
+      this.logger.log(eventId, 'cards', 'warn', '[image] generate strategy not yet implemented', {
+        instructions: request.instructions,
+      });
+      return null;
+    }
+
+    return null;
   }
 }
 
