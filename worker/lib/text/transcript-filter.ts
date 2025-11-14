@@ -22,6 +22,8 @@ const VERB_PATTERNS: RegExp[] = [
   /\b(?:announces?|announced|plans?|planned|targets?|targeted|expects?|expected|reports?|reported|confirms?|confirmed)\b/i,
   /\b(?:launches?|launched|approves?|approved|agrees?|agreed|expands?|expanded|reduces?|reduced|increases?|increased)\b/i,
   /\b(?:take|takes|taking|consider|considers|considered)\b/i,
+  /\b(?:remain|remains|remained|remaining)\b/i,
+  /\b(?:drive|drives|driven|driving)\b/i,
 ];
 
 const SUBJECT_PATTERNS: RegExp[] = [

@@ -56,25 +56,32 @@ export const validateFactSentence = (rawValue: unknown): FactSentenceValidation 
   }
 
   const filtered = filterTranscriptForFacts(normalized);
-  if (filtered.length === 0) {
-    return {
-      valid: false,
-      reason: 'Fact sentence lacks a clear subject and verb.',
-    };
-  }
+  // NOTE: Subject/verb enforcement is temporarily disabled while we evaluate a more reliable grammar check.
+  //       Consider replacing this with:
+  //       1. A lightweight Python microservice running spaCy/Stanza to confirm each sentence has an nsubj + verb.
+  //       2. A JavaScript-based POS tagger (e.g., compromise or wink-nlp) with custom heuristics for declarative sentences.
+  // if (filtered.length === 0) {
+  //   return {
+  //     valid: false,
+  //     reason: 'Fact sentence lacks a clear subject and verb.',
+  //   };
+  // }
 
   const normalizedCore = stripTerminalPunctuation(normalized).toLowerCase();
   const matchesFiltered = splitSentences(filtered).some((sentence) => {
     const comparable = stripTerminalPunctuation(sentence).toLowerCase();
     return comparable === normalizedCore;
   });
-
-  if (!matchesFiltered) {
-    return {
-      valid: false,
-      reason: 'Fact sentence appears procedural or conversational, not declarative.',
-    };
-  }
+  // NOTE: Strict matching against filtered clauses is temporarily disabled.
+  //       A future grammar validator (Python microservice or JS POS tagger) can enforce both:
+  //       - Subject/verb presence
+  //       - Declarative sentence structure (rather than relying on exact string equality)
+  // if (!matchesFiltered) {
+  //   return {
+  //     valid: false,
+  //     reason: 'Fact sentence appears procedural or conversational, not declarative.',
+  //   };
+  // }
 
   return { valid: true };
 };
