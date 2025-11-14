@@ -16,6 +16,66 @@ import type { FactKind } from './facts/fact-types';
 import { registerAliasKey } from './facts/alias-map';
 import type { Blueprint } from '../context/pipeline/blueprint/types';
 
+const normalizeTemplateList = (raw: unknown): string[] | null => {
+  if (raw === null || raw === undefined) {
+    return null;
+  }
+
+  if (Array.isArray(raw)) {
+    const normalized = raw
+      .map((value) => (typeof value === 'string' ? value.trim() : String(value).trim()))
+      .filter((value) => value.length > 0);
+    return normalized.length > 0 ? normalized : [];
+  }
+
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (trimmed.length === 0) {
+      return [];
+    }
+    const normalized = trimmed
+      .split(',')
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0);
+    return normalized.length > 0 ? normalized : [];
+  }
+
+  return null;
+};
+
+const cardTemplateAllowlistByEvent: Map<string, string[]> = new Map();
+let cardTemplateAllowlistDefault: string[] | null = normalizeTemplateList(
+  process.env.CARDS_TEMPLATE_ALLOWLIST_DEFAULT
+);
+
+const cardTemplateAllowlistJson = process.env.CARDS_TEMPLATE_ALLOWLIST_JSON;
+if (cardTemplateAllowlistJson) {
+  try {
+    const parsed = JSON.parse(cardTemplateAllowlistJson) as Record<string, unknown>;
+    if (parsed && typeof parsed === 'object') {
+      for (const [key, value] of Object.entries(parsed)) {
+        const normalized = normalizeTemplateList(value);
+        if (normalized === null) {
+          continue;
+        }
+        if (key === 'default') {
+          cardTemplateAllowlistDefault = normalized;
+        } else {
+          cardTemplateAllowlistByEvent.set(key, normalized);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[runtime-manager] Failed to parse CARDS_TEMPLATE_ALLOWLIST_JSON', {
+      error: String(error),
+    });
+  }
+}
+
+const getCardTemplateAllowlistForEvent = (eventId: string): string[] | null => {
+  return cardTemplateAllowlistByEvent.get(eventId) ?? cardTemplateAllowlistDefault;
+};
+
 export class RuntimeManager {
   private readonly runtimes: Map<string, EventRuntime> = new Map();
 
@@ -222,6 +282,7 @@ export class RuntimeManager {
       factKeyAliases,
       factsNormalizedHashEnabled: normalizedHashSupported,
       audienceProfile,
+      cardsTemplateAllowlist: getCardTemplateAllowlistForEvent(eventId),
       transcriptLastSeq: checkpoints.transcript || 0,
       cardsLastSeq,
       factsLastSeq: checkpoints.facts,

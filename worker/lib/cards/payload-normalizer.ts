@@ -69,6 +69,8 @@ export const normalizeCardStateRecord = (
   const body = getNullableString(payload.body);
   const label = getNullableString(payload.label);
   const imageUrl = getNullableString(payload.image_url);
+  const templateId = getNullableString(payload.template_id);
+  const templateLabel = getNullableString(payload.template_label);
 
   const metadata: CardRecord['metadata'] = {
     agentOutputId: card.card_id,
@@ -76,6 +78,12 @@ export const normalizeCardStateRecord = (
 
   if (title !== undefined) {
     metadata.title = title;
+  }
+  if (templateId !== undefined) {
+    metadata.templateId = templateId;
+  }
+  if (templateLabel !== undefined) {
+    metadata.templateLabel = templateLabel;
   }
   if (body !== undefined) {
     metadata.body = body;

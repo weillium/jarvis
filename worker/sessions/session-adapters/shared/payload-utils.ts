@@ -69,6 +69,14 @@ export const mapCardFromRecord = (
     : 'text';
 
   const sourceSeq = typeof record.source_seq === 'number' ? record.source_seq : 0;
+  const templateId =
+    typeof record.template_id === 'string' || record.template_id === null
+      ? (record.template_id as string | null)
+      : undefined;
+  const templateLabel =
+    typeof record.template_label === 'string' || record.template_label === null
+      ? (record.template_label as string | null)
+      : undefined;
 
   return {
     kind: record.kind,
@@ -78,6 +86,8 @@ export const mapCardFromRecord = (
     label: typeof record.label === 'string' ? record.label : null,
     image_url: typeof record.image_url === 'string' ? record.image_url : null,
     source_seq: sourceSeq,
+    template_id: templateId,
+    template_label: templateLabel,
   };
 };
 

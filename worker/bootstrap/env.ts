@@ -18,6 +18,7 @@ export interface WorkerEnvConfig {
   exaApiKey?: string;
   sseEndpoint: string;
   workerPort: number;
+  cardsImageBucket: string;
 }
 
 const requireEnv = (name: string): string => {
@@ -107,5 +108,6 @@ export const loadWorkerEnv = (): WorkerEnvConfig => {
     exaApiKey: process.env.EXA_API_KEY,
     sseEndpoint,
     workerPort,
+    cardsImageBucket: process.env.CARDS_IMAGE_BUCKET || 'card-assets',
   };
 };

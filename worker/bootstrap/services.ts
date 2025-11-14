@@ -20,6 +20,7 @@ import {
   VectorSearchGateway,
   ContextBlueprintRepository,
 } from '../services/supabase';
+import { CardImageService } from '../services/cards/card-image-service';
 import type { WorkerEnvConfig } from './env';
 
 export interface WorkerRepositories {
@@ -46,6 +47,7 @@ export interface WorkerInfrastructure {
   metricsCollector: MetricsCollector;
   checkpointManager: CheckpointManager;
   statusUpdater: StatusUpdater;
+  cardImageService: CardImageService;
 }
 
 const buildRepositories = (
@@ -88,6 +90,11 @@ export const createWorkerInfrastructure = (
     metricsCollector,
     env.cardsModel
   );
+  const cardImageService = new CardImageService(
+    supabaseClient,
+    env.cardsImageBucket,
+    logger
+  );
 
   return {
     supabaseClient,
@@ -100,5 +107,6 @@ export const createWorkerInfrastructure = (
     metricsCollector,
     checkpointManager,
     statusUpdater,
+    cardImageService,
   };
 };

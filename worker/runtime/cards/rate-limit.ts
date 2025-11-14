@@ -1,8 +1,8 @@
 import type { EventRuntime } from '../../types';
 
-const MIN_INTERVAL_MS = Number(process.env.CARDS_MIN_INTERVAL_MS ?? 5000);
-const MAX_CARDS_PER_WINDOW = Number(process.env.CARDS_MAX_PER_WINDOW ?? 3);
-const WINDOW_MS = Number(process.env.CARDS_RATE_WINDOW_MS ?? 60_000);
+const MIN_INTERVAL_MS = Number(process.env.CARDS_MIN_INTERVAL_MS ?? 30_000);
+const MAX_CARDS_PER_WINDOW = Number(process.env.CARDS_MAX_PER_WINDOW ?? 1);
+const WINDOW_MS = Number(process.env.CARDS_RATE_WINDOW_MS ?? 120_000);
 
 export interface RateLimitCheck {
   allowed: boolean;

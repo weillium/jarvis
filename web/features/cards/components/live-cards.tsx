@@ -11,11 +11,12 @@ import type {
   SSECardDeactivatedMessage,
   SSECardDeletedMessage,
 } from '@/shared/types/card';
-import { CardDisplay } from './card-display';
 import type { CardPayload } from '@/shared/types/card';
 import { useCardsQuery } from '@/shared/hooks/use-cards-query';
 import { useQueryClient } from '@tanstack/react-query';
 import { CardModerationModal } from './card-moderation-modal';
+import { useTranscriptsQuery, type Transcript } from '@/shared/hooks/use-transcripts-query';
+import { CardDisplay } from './card-display';
 
 interface LiveCardsProps {
   eventId: string;
@@ -33,7 +34,16 @@ export function LiveCards({ eventId }: LiveCardsProps) {
 
   const { data: cardsData, isLoading } = useCardsQuery(eventId);
 
+  const { data: transcriptsData } = useTranscriptsQuery(eventId);
   const cards = useMemo(() => cardsData ?? [], [cardsData]);
+  const transcriptBySeq = useMemo(() => {
+    const map = new Map<number, Transcript>();
+    const transcripts = transcriptsData?.transcripts ?? [];
+    for (const transcript of transcripts) {
+      map.set(transcript.seq, transcript);
+    }
+    return map;
+  }, [transcriptsData?.transcripts]);
   const canScroll = cards.length > 1;
   const moderationTarget = useMemo(() => {
     if (!moderationCardId) {
@@ -343,6 +353,10 @@ export function LiveCards({ eventId }: LiveCardsProps) {
               if (!payload) {
                 return null;
               }
+              const transcript =
+                typeof payload.source_seq === 'number'
+                  ? transcriptBySeq.get(payload.source_seq) ?? null
+                  : null;
 
               return (
                 <CardDisplay
@@ -350,6 +364,7 @@ export function LiveCards({ eventId }: LiveCardsProps) {
                   card={payload}
                   timestamp={card.emitted_at}
                   onModerate={() => setModerationCardId(card.id)}
+                  transcript={transcript}
                 />
               );
             })}

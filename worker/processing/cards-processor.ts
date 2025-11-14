@@ -6,6 +6,7 @@ import type { CheckpointManager } from '../services/observability/checkpoint-man
 import type { AgentRealtimeSession } from '../sessions/session-adapters';
 import { checkBudgetStatus, formatTokenBreakdown } from '../lib/text/token-counter';
 import { TemplateOrchestrator } from '../sessions/agent-profiles/cards/pipeline/orchestrator';
+import type { CardTemplateRegistry } from '../sessions/agent-profiles/cards/templates/registry';
 import type { TemplatePlan } from '../sessions/agent-profiles/cards/templates/types';
 import type { ConceptMatchSource } from '../lib/text/concept-extractor';
 
@@ -44,7 +45,10 @@ export interface CardTriggerContext {
 }
 
 export class CardsProcessor {
-  private readonly templateOrchestrator: TemplateOrchestrator;
+  private readonly defaultTemplateOrchestrator: TemplateOrchestrator;
+  private readonly defaultTemplateRegistry: CardTemplateRegistry;
+  private readonly orchestratorCache = new Map<string, TemplateOrchestrator>();
+  private readonly emptyAllowlistLogged = new Set<string>();
 
   constructor(
     private contextBuilder: ContextBuilder,
@@ -53,7 +57,8 @@ export class CardsProcessor {
     private checkpointManager: CheckpointManager,
     templateOrchestrator?: TemplateOrchestrator
   ) {
-    this.templateOrchestrator = templateOrchestrator ?? new TemplateOrchestrator();
+    this.defaultTemplateOrchestrator = templateOrchestrator ?? new TemplateOrchestrator();
+    this.defaultTemplateRegistry = this.defaultTemplateOrchestrator.getRegistry();
   }
 
   async process(
@@ -98,7 +103,8 @@ export class CardsProcessor {
 
       let templatePlan: TemplatePlan | undefined;
       if (triggerContext) {
-        const planResult = this.templateOrchestrator.plan(triggerContext);
+        const templateOrchestrator = this.getTemplateOrchestrator(runtime);
+        const planResult = templateOrchestrator.plan(triggerContext);
         if (planResult) {
           templatePlan = planResult.plan;
           this.logger.log(runtime.eventId, 'cards', 'log', '[template] plan selected', {
@@ -112,6 +118,32 @@ export class CardsProcessor {
             conceptLabel: triggerContext.conceptLabel,
           });
         }
+
+  private getTemplateOrchestrator(runtime: EventRuntime): TemplateOrchestrator {
+    const allowlist = runtime.cardsTemplateAllowlist;
+    if (!allowlist || allowlist.length === 0) {
+      return this.defaultTemplateOrchestrator;
+    }
+
+    const key = allowlist.slice().sort().join('|');
+    const cached = this.orchestratorCache.get(key);
+    if (cached) {
+      return cached;
+    }
+
+    const registry = this.defaultTemplateRegistry.filterByIds(allowlist);
+    const orchestrator = new TemplateOrchestrator({ registry });
+
+    if (registry.list().length === 0 && !this.emptyAllowlistLogged.has(key)) {
+      this.logger.log(runtime.eventId, 'cards', 'warn', '[template] allowlist produced no templates', {
+        allowlist,
+      });
+      this.emptyAllowlistLogged.add(key);
+    }
+
+    this.orchestratorCache.set(key, orchestrator);
+    return orchestrator;
+  }
       }
 
       const messageContext = {

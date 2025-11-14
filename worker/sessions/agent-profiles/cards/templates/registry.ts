@@ -173,6 +173,16 @@ export class CardTemplateRegistry {
       },
     };
   }
+
+  filterByIds(templateIds: string[] | null | undefined): CardTemplateRegistry {
+    if (!templateIds || templateIds.length === 0) {
+      return new CardTemplateRegistry(this.templates);
+    }
+
+    const allowed = new Set(templateIds);
+    const filtered = this.templates.filter((template) => allowed.has(template.id));
+    return new CardTemplateRegistry(filtered);
+  }
 }
 
 export const createDefaultTemplateRegistry = (): CardTemplateRegistry =>

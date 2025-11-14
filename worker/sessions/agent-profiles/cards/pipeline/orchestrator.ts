@@ -68,6 +68,10 @@ export class TemplateOrchestrator {
     this.registry = options.registry ?? createDefaultTemplateRegistry();
   }
 
+  getRegistry(): CardTemplateRegistry {
+    return this.registry;
+  }
+
   plan(triggerContext: unknown): TemplateOrchestratorResult | null {
     if (!isCardTriggerContext(triggerContext)) {
       return null;

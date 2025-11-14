@@ -40,6 +40,7 @@ export interface EventRuntime {
   cardsLastTriggeredAt?: number;
   cardsRateHistory?: number[];
   audienceProfile?: string;
+  cardsTemplateAllowlist?: string[] | null;
 
   // Realtime sessions
   transcriptSession?: AgentRealtimeSession;

@@ -25,6 +25,8 @@ export interface RealtimeCardDTO {
   label: string | null;
   image_url: string | null;
   source_seq: number;
+  template_id?: string | null;
+  template_label?: string | null;
 }
 
 export interface RealtimeRetrieveToolCallDTO {
