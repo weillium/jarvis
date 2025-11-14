@@ -2,6 +2,7 @@ import type { RingBuffer, TranscriptChunk } from '../state/ring-buffer';
 import type { FactsStore, Fact } from '../state/facts-store';
 import type { CardsStore, CardRecord } from '../state/cards-store';
 import type { AgentRealtimeSession } from '../sessions/session-adapters';
+import type { TemplatePlan } from '../sessions/agent-profiles/cards/templates/types';
 
 export type EventRuntimeStatus =
   | 'prepping'
@@ -34,6 +35,7 @@ export interface EventRuntime {
   cardsStore: CardsStore;
   glossaryCache?: Map<string, GlossaryEntry>;
   pendingCardConcepts: Map<number, PendingCardConcept>;
+  pendingTemplatePlans: Map<number, TemplatePlan>;
   pendingFactSources: Array<{ seq: number; transcriptId: number }>;
   factKeyAliases: Map<string, string>;
   factsNormalizedHashEnabled: boolean;

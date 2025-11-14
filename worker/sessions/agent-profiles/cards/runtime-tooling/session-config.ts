@@ -111,6 +111,16 @@ const produceCardTool: FunctionToolDefinition = {
         type: 'number',
         description: 'Sequence number of the transcript chunk that prompted this card.',
       },
+      template_id: {
+        type: 'string',
+        description:
+          'Template identifier used to generate this card (e.g., definition.v1, summary.v1).',
+      },
+      template_label: {
+        type: 'string',
+        description:
+          'Human-readable template label corresponding to template_id (e.g., Definition Card).',
+      },
     },
     required: ['kind', 'card_type', 'title', 'source_seq'],
   },

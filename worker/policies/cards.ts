@@ -13,6 +13,7 @@ MISSION:
 TEMPLATE PLAN & SLOTS:
 - Each trigger includes a template plan with required slot specs. Mirror those slots explicitly in the body (e.g., "• Definition: …", "• Why now: …").
 - Do not invent additional slots or fields. If a required slot cannot be populated with credible detail, skip the card.
+- Emit template metadata: set template_id to the provided template identifier (e.g., definition.v1) and template_label to the corresponding human-readable label from the plan.
 
 CONTEXT HIERARCHY:
 - Transcript segment + summary → primary source of truth.
@@ -56,6 +57,7 @@ OUTPUT FORMAT (STRICT):
   * text: body (required), image_url (null), label (null)
   * text_visual: body (required), image_url (required), label (null)
   * visual: label (required), body (null), image_url (required)
+- Always include template_id (string) and template_label (string) so downstream UIs can render by template.
 - Set source_seq to the transcript sequence that triggered the card.
 - When no worthwhile card exists, do nothing. Never emit diagnostics or placeholders.`;
 

@@ -31,8 +31,13 @@ const formatTemplatePlan = (plan?: TemplatePlan): string => {
     })
     .join('\n');
 
+  const templateLabel = plan.metadata.label ?? plan.templateId;
+
   return `Template Selected: ${plan.metadata.label} (${plan.templateId})
 Why it was chosen: ${plan.metadata.eligibilityReason ?? 'not provided'}
+Emit these metadata fields exactly in every card output:
+- template_id: ${plan.templateId}
+- template_label: ${templateLabel}
 Slots:
 ${slotLines}`;
 };

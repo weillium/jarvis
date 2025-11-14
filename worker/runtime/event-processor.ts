@@ -31,6 +31,7 @@ import {
   type CardSalienceComponents,
 } from './cards/salience';
 import type { VectorSearchService } from '../context/vector-search';
+import { CardImageService } from '../services/cards/card-image-service';
 import { countTokens, truncateToTokenBudget } from '../lib/text/token-counter';
 import {
   checkCardRateLimit,
@@ -57,6 +58,8 @@ interface DetermineCardPayload extends Record<string, unknown> {
   label?: string | null;
   image_url?: string | null;
   source_seq?: number;
+  template_id?: string | null;
+  template_label?: string | null;
 }
 
 interface MutableCardPayload extends DetermineCardPayload {
@@ -116,7 +119,8 @@ export class EventProcessor {
     private readonly cardsRepository: CardsRepository,
     private readonly factsRepository: FactsRepository,
     private readonly determineCardType: DetermineCardTypeFn,
-    private readonly vectorSearch: VectorSearchService
+    private readonly vectorSearch: VectorSearchService,
+    private readonly cardImageService?: CardImageService
   ) {}
 
   async handleTranscript(runtime: EventRuntime, transcript: unknown): Promise<void> {
@@ -628,7 +632,33 @@ export class EventProcessor {
           pendingConcept.conceptLabel;
       }
 
+      const templatePlan =
+        cardSourceSeq !== undefined ? runtime.pendingTemplatePlans.get(cardSourceSeq) : undefined;
+      if (templatePlan) {
+        (card as MutableCardPayload & { template_id?: string | null }).template_id =
+          templatePlan.templateId;
+        (card as MutableCardPayload & { template_label?: string | null }).template_label =
+          typeof templatePlan.metadata?.label === 'string'
+            ? templatePlan.metadata.label
+            : templatePlan.templateId;
+      }
+
       const cardId = randomUUID();
+
+      if (
+        this.cardImageService &&
+        typeof card.image_url === 'string' &&
+        card.image_url.trim().length > 0
+      ) {
+        const cachedUrl = await this.cardImageService.cacheRemoteImage(
+          card.image_url.trim(),
+          runtime.eventId,
+          cardId
+        );
+        if (cachedUrl) {
+          card.image_url = cachedUrl;
+        }
+      }
 
       await this.agentOutputs.insertAgentOutput({
         id: cardId,
@@ -656,6 +686,15 @@ export class EventProcessor {
         `[cards] Card received from Realtime API (seq: ${cardSourceSeq ?? runtimeCardsSeq}, type: ${cardType})`
       );
 
+      const templateIdValue =
+        typeof (card as MutableCardPayload).template_id === 'string'
+          ? (card as MutableCardPayload).template_id
+          : null;
+      const templateLabelValue =
+        typeof (card as MutableCardPayload).template_label === 'string'
+          ? (card as MutableCardPayload).template_label
+          : null;
+
       if (pendingConcept && cardSourceSeq !== undefined) {
         runtime.cardsStore.add({
           conceptId: pendingConcept.conceptId,
@@ -668,11 +707,14 @@ export class EventProcessor {
             body: card.body ?? null,
             label: card.label ?? null,
             imageUrl: card.image_url ?? null,
+            templateId: templateIdValue,
+            templateLabel: templateLabelValue,
           },
         });
       }
       if (cardSourceSeq !== undefined) {
         runtime.pendingCardConcepts.delete(cardSourceSeq);
+        runtime.pendingTemplatePlans.delete(cardSourceSeq);
       }
     } catch (err: unknown) {
       console.error("[event-processor] error:", String(err));

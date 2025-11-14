@@ -278,6 +278,7 @@ export class RuntimeManager {
       cardsStore,
       glossaryCache,
       pendingCardConcepts: new Map(),
+      pendingTemplatePlans: new Map(),
       pendingFactSources: [],
       factKeyAliases,
       factsNormalizedHashEnabled: normalizedHashSupported,

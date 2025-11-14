@@ -112,11 +112,17 @@ export class CardsProcessor {
             reason: planResult.plan.metadata.eligibilityReason,
             priority: planResult.plan.metadata.priority,
           });
+          if (typeof chunk.seq === 'number' && Number.isFinite(chunk.seq)) {
+            runtime.pendingTemplatePlans.set(chunk.seq, planResult.plan);
+          }
         } else {
           this.logger.log(runtime.eventId, 'cards', 'log', '[template] no eligible template', {
             conceptId: triggerContext.conceptId,
             conceptLabel: triggerContext.conceptLabel,
           });
+          if (typeof chunk.seq === 'number' && Number.isFinite(chunk.seq)) {
+            runtime.pendingTemplatePlans.delete(chunk.seq);
+          }
         }
 
   private getTemplateOrchestrator(runtime: EventRuntime): TemplateOrchestrator {

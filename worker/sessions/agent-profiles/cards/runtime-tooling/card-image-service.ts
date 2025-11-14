@@ -1,5 +1,6 @@
+import { Buffer } from 'node:buffer';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Logger } from '../observability/logger';
+import type { Logger } from '../../../services/observability/logger';
 
 const HTTP_URL_REGEX = /^https?:\/\//i;
 
