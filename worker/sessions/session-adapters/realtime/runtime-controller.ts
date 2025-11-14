@@ -305,13 +305,13 @@ export const createBufferedTranscriptAudioHooks: RuntimeControllerHooksFactory =
         } as RealtimeClientEvent);
         sentChunkCount += 1;
         if (sentChunkCount <= 10) {
-          context.log(
-            'log',
-            `Transcript chunk sent (#${sentChunkCount}, ${payload.length} bytes, ~${(
-              (payload.length / (format.sampleRate * format.bytesPerSample)) *
-              1000
-            ).toFixed(2)} ms)`
-          );
+          // context.log(
+          //   'log',
+          //   `[transcript][debug] Transcript chunk sent (#${sentChunkCount}, ${payload.length} bytes, ~${(
+          //     (payload.length / (format.sampleRate * format.bytesPerSample)) *
+          //     1000
+          //   ).toFixed(2)} ms)`
+          // );
         }
       } catch (error: unknown) {
         context.log('warn', `${logPrefix}: failed to flush ${payload.length} bytes, preserving buffer for retry`);
@@ -371,7 +371,7 @@ export const createBufferedTranscriptAudioHooks: RuntimeControllerHooksFactory =
 
     if (!chunk.isFinal) {
       if (!audioReady) {
-        context.log('log', 'Transcript audio buffered while session not ready');
+        // context.log('log', '[transcript][debug] Transcript audio buffered while session not ready');
         return;
       }
       flushTranscriptBuffer({
@@ -411,19 +411,19 @@ export const createBufferedTranscriptAudioHooks: RuntimeControllerHooksFactory =
     handleSessionClosed: (reason) => {
       audioReady = false;
       if (transcriptPcmBuffer.length > 0) {
-        context.log(
-          'log',
-          `Clearing ${transcriptPcmBuffer.length} buffered transcript byte(s) after session close (${reason})`
-        );
+        // context.log(
+        //   'log',
+        //   `[transcript][debug] Clearing ${transcriptPcmBuffer.length} buffered transcript byte(s) after session close (${reason})`
+        // );
         transcriptPcmBuffer = Buffer.alloc(0);
       }
     },
     handleTransientError: () => {
       if (transcriptPcmBuffer.length > 0) {
-        context.log(
-          'log',
-          `Preserving ${transcriptPcmBuffer.length} buffered transcript bytes during reconnect`
-        );
+        // context.log(
+        //   'log',
+        //   `[transcript][debug] Preserving ${transcriptPcmBuffer.length} buffered transcript bytes during reconnect`
+        // );
       }
       audioReady = false;
     },
@@ -433,7 +433,7 @@ export const createBufferedTranscriptAudioHooks: RuntimeControllerHooksFactory =
       }
 
       audioReady = true;
-      context.log('log', 'Transcript session marked ready for audio');
+      // context.log('log', '[transcript][debug] Transcript session marked ready for audio');
 
       const session = context.getSession();
       if (!session || !context.isActive()) {

@@ -314,13 +314,13 @@ export class EventRouter {
       console.log(`[realtime] Event: ${event.type}`, event);
     }
     if (event.type === 'session.updated') {
-      this.log('log', 'Session updated');
+      // this.log('log', '[transcript][debug] Session updated');
       this.deps.hooks?.onSessionUpdated?.();
     }
   }
 
   handleSessionCreated(): void {
-    this.log('log', 'Session created');
+    // this.log('log', '[transcript][debug] Session created');
   }
 
   handlePong(): void {
@@ -336,20 +336,20 @@ export class EventRouter {
 
     this.deltaLogCount += 1;
     if (this.deltaLogCount <= TRANSCRIPTION_STATUS_LOG_LIMIT) {
-      try {
-        this.log('log', `Transcription delta received payload: ${JSON.stringify(normalized)}`);
-      } catch {
-        this.log('log', 'Transcription delta received payload (failed to stringify)');
-      }
-
-      const snippet =
-        typeof normalized.delta === 'string' && normalized.delta.length > 0
-          ? normalized.delta.slice(0, 80)
-          : '<empty>';
-      this.log(
-        'log',
-        `Transcription delta received (item=${normalized.item_id}, idx=${normalized.content_index ?? 0}): ${snippet}`
-      );
+      // try {
+      //   this.log('log', `[transcript][debug] Transcription delta payload: ${JSON.stringify(normalized)}`);
+      // } catch {
+      //   this.log('log', '[transcript][debug] Transcription delta payload (failed to stringify)');
+      // }
+      //
+      // const snippet =
+      //   typeof normalized.delta === 'string' && normalized.delta.length > 0
+      //     ? normalized.delta.slice(0, 80)
+      //     : '<empty>';
+      // this.log(
+      //   'log',
+      //   `[transcript][debug] Transcription delta (item=${normalized.item_id}, idx=${normalized.content_index ?? 0}): ${snippet}`
+      // );
     }
 
     void this.deps.agentHandler.handleTranscriptionDelta(normalized);
@@ -364,20 +364,20 @@ export class EventRouter {
 
     this.completedLogCount += 1;
     if (this.completedLogCount <= TRANSCRIPTION_STATUS_LOG_LIMIT) {
-      try {
-        this.log('log', `Transcription completed payload: ${JSON.stringify(normalized)}`);
-      } catch {
-        this.log('log', 'Transcription completed payload (failed to stringify)');
-      }
-
-      const snippet =
-        typeof normalized.transcript === 'string' && normalized.transcript.length > 0
-          ? normalized.transcript.slice(0, 80)
-          : '<empty>';
-      this.log(
-        'log',
-        `Transcription completed (item=${normalized.item_id}, idx=${normalized.content_index ?? 0}): ${snippet}`
-      );
+      // try {
+      //   this.log('log', `[transcript][debug] Transcription completed payload: ${JSON.stringify(normalized)}`);
+      // } catch {
+      //   this.log('log', '[transcript][debug] Transcription completed payload (failed to stringify)');
+      // }
+      //
+      // const snippet =
+      //   typeof normalized.transcript === 'string' && normalized.transcript.length > 0
+      //     ? normalized.transcript.slice(0, 80)
+      //     : '<empty>';
+      // this.log(
+      //   'log',
+      //   `[transcript][debug] Transcription completed (item=${normalized.item_id}, idx=${normalized.content_index ?? 0}): ${snippet}`
+      // );
     }
 
     void this.deps.agentHandler.handleTranscriptionCompleted(normalized);
