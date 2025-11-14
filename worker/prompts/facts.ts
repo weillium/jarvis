@@ -23,7 +23,8 @@ Glossary Context:
 ${glossaryContext && glossaryContext.trim().length > 0 ? glossaryContext : 'None'}
 
 Instructions:
-- Each fact must be a single declarative sentence with a clear subject and verb describing a unique claim, observation, decision, or metric.
+- Each fact must be a single declarative sentence with a clear subject and verb describing a unique claim, observation, decision, or metric. Start the sentence with the subject (e.g., the entity or actors) and avoid parenthetical inserts at the beginning.
+- Favor active voice and concrete subjects (teams, institutions, people, products) so the sentence remains readable if quoted verbatim.
 - Do not produce questions, prompts, or procedural notes unless you can rewrite them into neutral declarative statements.
 - Treat high-confidence existing facts as canonical. Only change them when the transcript clearly updates or contradicts them.
 - Compare against Existing Facts. If the meaning already exists, reuse its key, set "status": "update", and supply the revised declarative value.

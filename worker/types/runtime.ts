@@ -51,6 +51,7 @@ export interface EventRuntime {
   transcriptHandlerSession?: AgentRealtimeSession;
   cardsHandlerSession?: AgentRealtimeSession;
   factsHandlerSession?: AgentRealtimeSession;
+  factsProcessingPromise?: Promise<void>;
   pendingTranscriptChunk?: {
     speaker?: string | null;
     sampleRate?: number;

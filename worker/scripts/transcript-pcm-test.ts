@@ -10,7 +10,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 const DEFAULT_SAMPLE_RATE = 24_000;
 const DEFAULT_BYTES_PER_SAMPLE = 2;
 const DEFAULT_ENCODING = 'pcm_s16le';
-const DEFAULT_EVENT_ID = '1b377cd5-4c73-4eee-ada8-fcc3800f2bbb';
+const DEFAULT_EVENT_ID = 'd9b352a7-91ab-4d37-a3eb-1c3e08aaa200';
 const DEFAULT_AUDIO_PATH = '/Users/will-liao/Desktop/Coding/Git/jarvis/worker/scripts/generated-transcript-first-minute.pcm';
 const DEFAULT_WORKER_URL = 'http://localhost:3001';
 const DEFAULT_SUPABASE_URL = 'http://127.0.0.1:54421';

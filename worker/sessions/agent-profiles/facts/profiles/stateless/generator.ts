@@ -91,6 +91,13 @@ export class PromptFactsGenerator {
       glossaryContext,
     });
 
+    console.log('[facts][debug] facts generation prompt', {
+      transcriptLength: transcriptWindow.length,
+      existingFactsLength: existingFactsJson.length,
+      glossaryLength: glossaryContext?.length ?? 0,
+      promptPreview: userPrompt.slice(0, 500),
+    });
+
     const { content, parsed } = await executeJsonPrompt({
       openaiService: this.deps.openaiService,
       model: this.deps.model,
@@ -100,6 +107,7 @@ export class PromptFactsGenerator {
     });
 
     if (!content) {
+      console.log('[facts][debug] model returned empty content');
       return {
         generatedFacts: [],
         rawResponse: null,
@@ -108,8 +116,32 @@ export class PromptFactsGenerator {
 
     const payloadSource = parsed ?? content;
 
+    console.log('[facts][debug] raw facts content preview', {
+      contentPreview:
+        typeof content === 'string' ? content.slice(0, 500) : JSON.stringify(content).slice(0, 500),
+    });
+
+    console.log('[facts][debug] payload source preview', {
+      parsed: parsed != null,
+      payloadPreview:
+        typeof payloadSource === 'string'
+          ? payloadSource.slice(0, 500)
+          : JSON.stringify(payloadSource).slice(0, 500),
+    });
+
+    const generatedFacts = this.parseFacts(payloadSource);
+
+    if (generatedFacts.length === 0) {
+      console.log('[facts][debug] model emitted no facts');
+    } else {
+      console.log('[facts][debug] model emitted facts', {
+        factCount: generatedFacts.length,
+        keys: generatedFacts.map((fact) => fact.key),
+      });
+    }
+
     return {
-      generatedFacts: this.parseFacts(payloadSource),
+      generatedFacts,
       rawResponse: payloadSource,
     };
   }

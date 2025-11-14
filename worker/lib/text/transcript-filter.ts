@@ -21,6 +21,7 @@ const VERB_PATTERNS: RegExp[] = [
   /\b(?:will|shall|should|can|could|would|may|might|must|needs?)\b/i,
   /\b(?:announces?|announced|plans?|planned|targets?|targeted|expects?|expected|reports?|reported|confirms?|confirmed)\b/i,
   /\b(?:launches?|launched|approves?|approved|agrees?|agreed|expands?|expanded|reduces?|reduced|increases?|increased)\b/i,
+  /\b(?:take|takes|taking|consider|considers|considered)\b/i,
 ];
 
 const SUBJECT_PATTERNS: RegExp[] = [
@@ -29,6 +30,7 @@ const SUBJECT_PATTERNS: RegExp[] = [
   /\b(?:the\s+)?board\b/i,
   /\b(?:the\s+)?group\b/i,
   /\b(?:we|they|he|she|I)\b/i,
+  /\b[A-Z]{2,}\b/,
   /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\b/,
 ];
 

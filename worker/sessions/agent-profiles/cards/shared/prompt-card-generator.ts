@@ -170,15 +170,19 @@ export class PromptCardGenerator implements CardGenerator {
       conceptFocus,
     });
 
-    console.log('[cards][debug] card generation prompt', {
-      transcriptLength: input.recentTranscript.length,
-      bulletsCount: bullets.length,
-      previousCards: input.previousCards.length,
-      factsLength: factsJson.length,
-      glossaryLength: combinedGlossary.length,
-      promptPreview: userPrompt.slice(0, 500),
-      eventId: this.deps.eventId,
-    });
+    // console.log('[cards][debug] card generation prompt', {
+    //   transcriptLength: input.recentTranscript.length,
+    //   bulletsCount: bullets.length,
+    //   previousCards: input.previousCards.length,
+    //   factsLength: factsJson.length,
+    //   supportingGlossaryLength: supportingGlossary.length,
+    //   supportingGlossaryEntries:
+    //     supportingContext?.glossaryEntries && supportingContext.glossaryEntries.length > 0
+    //       ? supportingContext.glossaryEntries.length
+    //       : 0,
+    //   promptPreview: userPrompt.slice(0, 500),
+    //   eventId: this.deps.eventId,
+    // });
 
     const { content, parsed } = await executeJsonPrompt({
       openaiService: this.deps.openaiService,
@@ -188,26 +192,26 @@ export class PromptCardGenerator implements CardGenerator {
     });
 
     if (!content) {
-      console.log('[cards][debug] model returned empty content', { eventId: this.deps.eventId });
+      // console.log('[cards][debug] model returned empty content', { eventId: this.deps.eventId });
       return { rawResponse: { raw: null }, generatedCards: [] };
     }
 
-    console.log('[cards][debug] raw card content preview', {
-      eventId: this.deps.eventId,
-      contentPreview: content.slice(0, 500),
-    });
+    // console.log('[cards][debug] raw card content preview', {
+    //   eventId: this.deps.eventId,
+    //   contentPreview: content.slice(0, 500),
+    // });
 
     const payloadSource =
       parsed ?? (content ? this.normalizeCardPayloadContent(content) : content);
 
-    console.log('[cards][debug] payload source preview', {
-      eventId: this.deps.eventId,
-      parsed: parsed !== null,
-      payloadPreview:
-        typeof payloadSource === 'string'
-          ? payloadSource.slice(0, 500)
-          : JSON.stringify(payloadSource).slice(0, 500),
-    });
+    // console.log('[cards][debug] payload source preview', {
+    //   eventId: this.deps.eventId,
+    //   parsed: parsed !== null,
+    //   payloadPreview:
+    //     typeof payloadSource === 'string'
+    //       ? payloadSource.slice(0, 500)
+    //       : JSON.stringify(payloadSource).slice(0, 500),
+    // });
 
     const generatedCards: RealtimeCardDTO[] = [];
 
@@ -240,11 +244,11 @@ export class PromptCardGenerator implements CardGenerator {
     }
 
     if (generatedCards.length === 0) {
-      console.log('[cards][debug] model emitted no cards', {
-        eventId: this.deps.eventId,
-        sourceSeq: input.sourceSeq ?? 0,
-        concept: input.messageContext?.concept?.label,
-      });
+      // console.log('[cards][debug] model emitted no cards', {
+      //   eventId: this.deps.eventId,
+      //   sourceSeq: input.sourceSeq ?? 0,
+      //   concept: input.messageContext?.concept?.label,
+      // });
     }
 
     return {
@@ -302,10 +306,10 @@ export class PromptCardGenerator implements CardGenerator {
       parsedFragments.push(parsed);
     }
 
-    console.log('[cards][debug] normalized newline-delimited card payload', {
-      eventId: this.deps.eventId,
-      fragmentCount: parsedFragments.length,
-    });
+    // console.log('[cards][debug] normalized newline-delimited card payload', {
+    //   eventId: this.deps.eventId,
+    //   fragmentCount: parsedFragments.length,
+    // });
 
     return parsedFragments;
   }

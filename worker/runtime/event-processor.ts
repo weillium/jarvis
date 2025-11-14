@@ -172,24 +172,24 @@ export class EventProcessor {
     if (runtime.enabledAgents.cards && runtime.cardsSession) {
       const rateLimitCheck = checkCardRateLimit(runtime);
       if (!rateLimitCheck.allowed) {
-        console.log('[cards][debug] rate limit prevented card trigger', {
-          eventId: runtime.eventId,
-          reason: rateLimitCheck.reason,
-        });
+        // console.log('[cards][debug] rate limit prevented card trigger', {
+        //   eventId: runtime.eventId,
+        //   reason: rateLimitCheck.reason,
+        // });
         return;
       }
 
-      console.log('[cards][debug] evaluating card trigger', {
-        eventId: runtime.eventId,
-        lastSeq: chunk.seq,
-      });
+      // console.log('[cards][debug] evaluating card trigger', {
+      //   eventId: runtime.eventId,
+      //   lastSeq: chunk.seq,
+      // });
       const triggerContext = await this.evaluateCardTrigger(runtime);
       if (triggerContext) {
-        console.log('[cards][debug] card trigger selected', {
-          eventId: runtime.eventId,
-          conceptId: triggerContext.conceptId,
-          conceptLabel: triggerContext.conceptLabel,
-        });
+        // console.log('[cards][debug] card trigger selected', {
+        //   eventId: runtime.eventId,
+        //   conceptId: triggerContext.conceptId,
+        //   conceptLabel: triggerContext.conceptLabel,
+        // });
         if (chunk.seq) {
           runtime.pendingCardConcepts.set(chunk.seq, {
             conceptId: triggerContext.conceptId,
@@ -207,13 +207,13 @@ export class EventProcessor {
         recordCardFire(runtime);
       }
     } else if (!runtime.enabledAgents.cards) {
-      console.log('[cards][debug] cards agent disabled for runtime', {
-        eventId: runtime.eventId,
-      });
+      // console.log('[cards][debug] cards agent disabled for runtime', {
+      //   eventId: runtime.eventId,
+      // });
     } else if (!runtime.cardsSession) {
-      console.log('[cards][debug] cards session missing; skipping trigger evaluation', {
-        eventId: runtime.eventId,
-      });
+      // console.log('[cards][debug] cards session missing; skipping trigger evaluation', {
+      //   eventId: runtime.eventId,
+      // });
     }
 
     if (runtime.enabledAgents.facts) {
@@ -241,7 +241,24 @@ export class EventProcessor {
       return;
     }
 
-    void this.factsProcessor.process(runtime, runtime.factsSession, runtime.factsSessionId);
+    if (runtime.factsProcessingPromise) {
+      // Chain the next run after the inflight one completes to avoid overlapping prompts.
+      runtime.factsProcessingPromise = runtime.factsProcessingPromise
+        .then(() => this.factsProcessor.process(runtime, runtime.factsSession, runtime.factsSessionId))
+        .catch((err: unknown) => {
+          console.error('[facts] error in queued processing run', String(err));
+        });
+      return;
+    }
+
+    runtime.factsProcessingPromise = this.factsProcessor
+      .process(runtime, runtime.factsSession, runtime.factsSessionId)
+      .catch((err: unknown) => {
+        console.error('[facts] error in processing run', String(err));
+      })
+      .finally(() => {
+        runtime.factsProcessingPromise = undefined;
+      });
   }
 
   private async evaluateCardTrigger(runtime: EventRuntime): Promise<CardTriggerContext | null> {
@@ -261,18 +278,18 @@ export class EventProcessor {
       existingConceptIds,
     });
 
-    console.log('[cards][debug] concept candidates evaluated', {
-      eventId: runtime.eventId,
-      recentChunkCount: recentChunks.length,
-      candidateCount: candidates.length,
-      candidateLabels: candidates.map((candidate) => candidate.conceptLabel),
-    });
+    // console.log('[cards][debug] concept candidates evaluated', {
+    //   eventId: runtime.eventId,
+    //   recentChunkCount: recentChunks.length,
+    //   candidateCount: candidates.length,
+    //   candidateLabels: candidates.map((candidate) => candidate.conceptLabel),
+    // });
 
     if (candidates.length === 0) {
-      console.log('[cards][debug] no concept candidates found', {
-        eventId: runtime.eventId,
-        recentChunkCount: recentChunks.length,
-      });
+      // console.log('[cards][debug] no concept candidates found', {
+      //   eventId: runtime.eventId,
+      //   recentChunkCount: recentChunks.length,
+      // });
       return null;
     }
 
@@ -280,17 +297,17 @@ export class EventProcessor {
       (candidate) => !runtime.cardsStore.hasRecentConcept(candidate.conceptId, this.CARD_FRESHNESS_MS)
     );
 
-    console.log('[cards][debug] novel concept candidates', {
-      eventId: runtime.eventId,
-      novelCandidateCount: novelCandidates.length,
-      novelLabels: novelCandidates.map((candidate) => candidate.conceptLabel),
-    });
+    // console.log('[cards][debug] novel concept candidates', {
+    //   eventId: runtime.eventId,
+    //   novelCandidateCount: novelCandidates.length,
+    //   novelLabels: novelCandidates.map((candidate) => candidate.conceptLabel),
+    // });
 
     if (novelCandidates.length === 0) {
-      console.log('[cards][debug] no novel concept candidates', {
-        eventId: runtime.eventId,
-        candidateCount: candidates.length,
-      });
+      // console.log('[cards][debug] no novel concept candidates', {
+      //   eventId: runtime.eventId,
+      //   candidateCount: candidates.length,
+      // });
       return null;
     }
 
@@ -312,14 +329,14 @@ export class EventProcessor {
         recentLimit: this.CARD_RECENT_LIMIT,
       });
 
-      console.log('[cards][debug] salience score evaluated', {
-        eventId: runtime.eventId,
-        conceptId: candidate.conceptId,
-        conceptLabel: candidate.conceptLabel,
-        occurrences,
-        score,
-        components,
-      });
+      // console.log('[cards][debug] salience score evaluated', {
+      //   eventId: runtime.eventId,
+      //   conceptId: candidate.conceptId,
+      //   conceptLabel: candidate.conceptLabel,
+      //   occurrences,
+      //   score,
+      //   components,
+      // });
 
       if (score > bestScore) {
         bestScore = score;
@@ -330,22 +347,22 @@ export class EventProcessor {
     }
 
     if (!bestCandidate || bestScore < CARD_SALIENCE_THRESHOLD) {
-      console.log('[cards][debug] no candidate exceeded salience threshold', {
-        eventId: runtime.eventId,
-        bestScore,
-        threshold: CARD_SALIENCE_THRESHOLD,
-      });
+      // console.log('[cards][debug] no candidate exceeded salience threshold', {
+      //   eventId: runtime.eventId,
+      //   bestScore,
+      //   threshold: CARD_SALIENCE_THRESHOLD,
+      // });
       return null;
     }
 
-    console.log('[cards][debug] salience winner selected', {
-      eventId: runtime.eventId,
-      conceptId: bestCandidate.conceptId,
-      conceptLabel: bestCandidate.conceptLabel,
-      score: bestScore,
-      occurrences: bestOccurrences,
-      components: bestComponents ?? {},
-    });
+    // console.log('[cards][debug] salience winner selected', {
+    //   eventId: runtime.eventId,
+    //   conceptId: bestCandidate.conceptId,
+      // conceptLabel: bestCandidate.conceptLabel,
+      // score: bestScore,
+      // occurrences: bestOccurrences,
+      // components: bestComponents ?? {},
+    // });
 
     const supportingContext = await this.buildSupportingContext(
       runtime,

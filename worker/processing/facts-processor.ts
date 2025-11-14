@@ -72,6 +72,11 @@ export class FactsProcessor {
       const cleanedTranscript = filterTranscriptForFacts(recentText);
       const recentTextForPrompt = cleanedTranscript.length > 0 ? cleanedTranscript : recentText;
 
+      if (recentTextForPrompt.trim().length === 0) {
+        console.log('[facts][debug] skipping facts generation: empty transcript window');
+        return;
+      }
+
       const { activeFacts, demotedFacts } = selectTopFactsForPrompt(
         eligibleFacts,
         FACT_PROMPT_LIMIT

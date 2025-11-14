@@ -56,7 +56,7 @@ Return a JSON object with these sections:
        "tone_and_voice": string,
        "cautionary_notes": string[]
      }
-   - audience_summary: 2-3 sentences explaining who attends, their responsibilities, and why they care about this event.
+  - audience_summary: 2-3 sentences explaining who attends, their responsibilities, and why they care about this event. Infer the most plausible description from the title/topic/documents even if explicit signals are sparse, and do not include placeholder phrases like "missing" or "assume".
    - primary_roles: 3-6 specific titles or personas (e.g., "Chief Revenue Officer", "Staff ML Engineer").
    - core_needs: 4-6 succinct bullets describing what the audience must solve, learn, or defend.
    - desired_outcomes: 4-6 bullets capturing what success looks like for attendees after the event.
@@ -96,7 +96,7 @@ Checklist before returning:
 - [ ] important_details has ≥5 items
 - [ ] inferred_topics has ≥5 items
 - [ ] key_terms has ≥10 items (or explicitly documents the shortfall)
-- [ ] audience_profile fields contain concrete, non-generic insight and no placeholders
+- [ ] audience_profile fields contain concrete, non-generic insight and no placeholders or caveats (e.g., avoid "missing", "assume")
 - [ ] research_plan.queries has ≥5 items, each with agent_utility, provenance_hint, priority, estimated_cost, and totals that add up
 - [ ] glossary_plan.terms has ≥10 items (unless fewer truly exist—note gaps instead of fabricating)
 - [ ] chunks_plan.sources has ≥3 items with agent_utility populated; target_count aligns with authentic material

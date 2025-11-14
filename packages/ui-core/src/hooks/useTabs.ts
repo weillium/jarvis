@@ -29,13 +29,15 @@ export function useTabs<TTab extends TabDefinition>(
     return tabs[0]?.id;
   }, [defaultTabId, tabs]);
 
-  const [activeTabId, setActiveTabId] = useState<TTab['id'] | undefined>(fallbackTabId);
+  const [activeTabId, setActiveTabId] = useState<TTab['id'] | undefined>(() => fallbackTabId);
 
   useEffect(() => {
-    if (fallbackTabId && fallbackTabId !== activeTabId) {
-      setActiveTabId(fallbackTabId);
+    if (fallbackTabId === undefined) {
+      return;
     }
-  }, [fallbackTabId, activeTabId]);
+
+    setActiveTabId((current) => current ?? fallbackTabId);
+  }, [fallbackTabId]);
 
   useEffect(() => {
     if (!tabs.length) {

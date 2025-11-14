@@ -80,7 +80,7 @@ export const postProcessBlueprint = (input: Blueprint, topic: string): Blueprint
   blueprint.audience_profile.audience_summary =
     blueprint.audience_profile.audience_summary && blueprint.audience_profile.audience_summary.length > 0
       ? blueprint.audience_profile.audience_summary
-      : `Audience profile missing; assume mixed professional audience for ${topic}.`;
+      : `Mixed team of executives and practitioners tracking ${topic}; prioritize succinct, actionable context grounded in current developments.`;
 
   const normalizeAudienceArray = (values: string[], fallback: string[]): string[] => {
     const normalized = values.map((value) => value.trim()).filter(isMeaningfulString);
