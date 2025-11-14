@@ -25,15 +25,11 @@ import {
   normalizeConcept,
   type ConceptCandidate,
 } from '../lib/text/concept-extractor';
-import {
-  CARD_SALIENCE_THRESHOLD,
-  computeCardSalience,
-  type CardSalienceComponents,
-} from './cards/salience';
+import { CARD_SALIENCE_THRESHOLD, computeCardSalience } from './cards/salience';
 import type { VectorSearchService } from '../context/vector-search';
-import {
+import type {
   CardImageService,
-  type CardVisualRequest,
+  CardVisualRequest,
 } from '../sessions/agent-profiles/cards/runtime-tooling/card-image-service';
 import { countTokens, truncateToTokenBudget } from '../lib/text/token-counter';
 import {
@@ -62,6 +58,8 @@ interface DetermineCardPayload extends Record<string, unknown> {
   image_url?: string | null;
   visual_request?: CardVisualRequest | null;
   source_seq?: number;
+  concept_id?: string;
+  concept_label?: string;
   template_id?: string | null;
   template_label?: string | null;
 }
@@ -112,10 +110,7 @@ const isCardVisualRequest = (value: unknown): value is CardVisualRequest => {
   return true;
 };
 
-type DetermineCardTypeFn = (
-  card: DetermineCardPayload,
-  transcriptText: string
-) => CardType;
+type DetermineCardTypeFn = (card: DetermineCardPayload) => CardType;
 
 export class EventProcessor {
   private readonly CARD_WINDOW_CHUNKS = Number(process.env.CARDS_CONCEPT_WINDOW ?? 3);
@@ -346,12 +341,10 @@ export class EventProcessor {
 
     let bestCandidate: ConceptCandidate | null = null;
     let bestScore = Number.NEGATIVE_INFINITY;
-    let bestComponents: CardSalienceComponents | null = null;
-    let bestOccurrences = 0;
 
     for (const candidate of novelCandidates) {
       const occurrences = this.countConceptOccurrences(recentChunks, candidate.conceptLabel);
-      const { score, components } = computeCardSalience({
+      const { score } = computeCardSalience({
         candidate,
         runtime,
         recentChunks,
@@ -372,8 +365,6 @@ export class EventProcessor {
       if (score > bestScore) {
         bestScore = score;
         bestCandidate = candidate;
-        bestComponents = components;
-        bestOccurrences = occurrences;
       }
     }
 
@@ -639,7 +630,7 @@ export class EventProcessor {
 
       let cardType: CardType = isRealtimeCardType(card.card_type)
         ? card.card_type
-        : this.determineCardType(card, '');
+        : this.determineCardType(card);
       card.card_type = cardType;
       let visualRequest: CardVisualRequest | null = originalVisualRequest;
 
@@ -715,30 +706,27 @@ export class EventProcessor {
         cardSourceSeq !== undefined ? runtime.pendingCardConcepts.get(cardSourceSeq) : undefined;
 
       if (pendingConcept) {
-        (card as MutableCardPayload & { concept_id?: string; concept_label?: string }).concept_id =
-          pendingConcept.conceptId;
-        (card as MutableCardPayload & { concept_id?: string; concept_label?: string }).concept_label =
-          pendingConcept.conceptLabel;
+        card.concept_id = pendingConcept.conceptId;
+        card.concept_label = pendingConcept.conceptLabel;
       }
 
       const templatePlan =
         cardSourceSeq !== undefined ? runtime.pendingTemplatePlans.get(cardSourceSeq) : undefined;
       if (templatePlan) {
-        (card as MutableCardPayload & { template_id?: string | null }).template_id =
-          templatePlan.templateId;
-        (card as MutableCardPayload & { template_label?: string | null }).template_label =
+        card.template_id = templatePlan.templateId;
+        card.template_label =
           typeof templatePlan.metadata?.label === 'string'
             ? templatePlan.metadata.label
             : templatePlan.templateId;
       }
 
       const templateIdValue =
-        typeof (card as MutableCardPayload).template_id === 'string'
-          ? (card as MutableCardPayload).template_id
+        typeof card.template_id === 'string'
+          ? card.template_id
           : null;
       const templateLabelValue =
-        typeof (card as MutableCardPayload).template_label === 'string'
-          ? (card as MutableCardPayload).template_label
+        typeof card.template_label === 'string'
+          ? card.template_label
           : null;
 
       card.image_url = card.image_url ?? null;

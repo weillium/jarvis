@@ -67,11 +67,11 @@ export const mapCardFromRecord = (
   const sourceSeq = typeof record.source_seq === 'number' ? record.source_seq : 0;
   const templateId =
     typeof record.template_id === 'string' || record.template_id === null
-      ? (record.template_id as string | null)
+      ? record.template_id
       : undefined;
   const templateLabel =
     typeof record.template_label === 'string' || record.template_label === null
-      ? (record.template_label as string | null)
+      ? record.template_label
       : undefined;
 
   return {

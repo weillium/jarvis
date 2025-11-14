@@ -287,12 +287,11 @@ export const createBufferedTranscriptAudioHooks: RuntimeControllerHooksFactory =
 
   const flushTranscriptBuffer = (params: {
     session: OpenAIRealtimeWebSocket;
-    format: AudioFormat;
     flushAll: boolean;
     minFlushBytes: number;
     logPrefix: string;
   }): void => {
-    const { session, format, flushAll, minFlushBytes, logPrefix } = params;
+    const { session, flushAll, minFlushBytes, logPrefix } = params;
 
     const flushChunk = (size: number): void => {
       const payload = transcriptPcmBuffer.subarray(0, size);
@@ -307,10 +306,7 @@ export const createBufferedTranscriptAudioHooks: RuntimeControllerHooksFactory =
         if (sentChunkCount <= 10) {
           // context.log(
           //   'log',
-          //   `[transcript][debug] Transcript chunk sent (#${sentChunkCount}, ${payload.length} bytes, ~${(
-          //     (payload.length / (format.sampleRate * format.bytesPerSample)) *
-          //     1000
-          //   ).toFixed(2)} ms)`
+          //   `[transcript][debug] Transcript chunk sent (#${sentChunkCount}, ${payload.length} bytes)`
           // );
         }
       } catch (error: unknown) {
@@ -355,7 +351,6 @@ export const createBufferedTranscriptAudioHooks: RuntimeControllerHooksFactory =
     if (formatChanged && transcriptPcmBuffer.length > 0) {
       flushTranscriptBuffer({
         session,
-        format: previousFormat,
         flushAll: true,
         minFlushBytes: RuntimeController.computeFlushThreshold(previousFormat),
         logPrefix: 'Format change flush',
@@ -376,7 +371,6 @@ export const createBufferedTranscriptAudioHooks: RuntimeControllerHooksFactory =
       }
       flushTranscriptBuffer({
         session,
-        format,
         flushAll: false,
         minFlushBytes: flushThresholdBytes,
         logPrefix: 'Buffered flush',
@@ -391,7 +385,6 @@ export const createBufferedTranscriptAudioHooks: RuntimeControllerHooksFactory =
 
     flushTranscriptBuffer({
       session,
-      format,
       flushAll: true,
       minFlushBytes: flushThresholdBytes,
       logPrefix: 'Final flush',
@@ -409,6 +402,7 @@ export const createBufferedTranscriptAudioHooks: RuntimeControllerHooksFactory =
       await transcriptQueue;
     },
     handleSessionClosed: (reason) => {
+      void reason;
       audioReady = false;
       if (transcriptPcmBuffer.length > 0) {
         // context.log(
@@ -446,7 +440,6 @@ export const createBufferedTranscriptAudioHooks: RuntimeControllerHooksFactory =
 
       flushTranscriptBuffer({
         session,
-        format: audioFormat,
         flushAll: true,
         minFlushBytes: flushThresholdBytes,
         logPrefix: 'Ready flush',

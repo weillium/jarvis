@@ -66,6 +66,7 @@ export function LiveCards({ eventId }: LiveCardsProps) {
         kind: card.card_kind,
         payload: card.payload,
         is_active: card.is_active,
+        card_type: typeof card.card_type === 'string' ? card.card_type : null,
         updated_at: card.updated_at ?? undefined,
         last_seen_seq: typeof card.last_seen_seq === 'number' ? card.last_seen_seq : null,
       };

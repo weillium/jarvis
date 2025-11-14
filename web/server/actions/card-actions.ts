@@ -13,7 +13,7 @@ export async function getCardsByEventId(eventId: string): Promise<{ data: Card[]
     // Fetch active cards from the canonical cards table
     const { data, error } = await supabase
       .from('cards')
-      .select('card_id, event_id, payload, last_seen_seq, created_at, updated_at, card_kind, is_active')
+      .select('card_id, event_id, payload, last_seen_seq, created_at, updated_at, card_kind, card_type, is_active')
       .eq('event_id', eventId)
       .eq('is_active', true)
       .order('last_seen_seq', { ascending: false });
@@ -51,6 +51,7 @@ export async function getCardsByEventId(eventId: string): Promise<{ data: Card[]
         kind,
         payload,
         is_active: row.is_active !== false,
+        card_type: typeof row.card_type === 'string' ? (row.card_type as Card['card_type']) : null,
         updated_at: typeof row.updated_at === 'string' ? row.updated_at : undefined,
         last_seen_seq: typeof row.last_seen_seq === 'number' ? row.last_seen_seq : null,
       };

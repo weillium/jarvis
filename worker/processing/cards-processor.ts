@@ -1,9 +1,10 @@
-import type { EventRuntime, TranscriptChunk, CardRecord, GlossaryEntry } from '../types';
+import type { EventRuntime, TranscriptChunk, GlossaryEntry } from '../types';
 import type { ContextBuilder } from '../context/context-builder';
 import type { Logger } from '../services/observability/logger';
 import type { MetricsCollector } from '../services/observability/metrics-collector';
 import type { CheckpointManager } from '../services/observability/checkpoint-manager';
 import type { AgentRealtimeSession } from '../sessions/session-adapters';
+import type { CardRecord } from '../state/cards-store';
 import { checkBudgetStatus, formatTokenBreakdown } from '../lib/text/token-counter';
 import { TemplateOrchestrator } from '../sessions/agent-profiles/cards/pipeline/orchestrator';
 import type { CardTemplateRegistry } from '../sessions/agent-profiles/cards/templates/registry';
@@ -124,32 +125,6 @@ export class CardsProcessor {
             runtime.pendingTemplatePlans.delete(chunk.seq);
           }
         }
-
-  private getTemplateOrchestrator(runtime: EventRuntime): TemplateOrchestrator {
-    const allowlist = runtime.cardsTemplateAllowlist;
-    if (!allowlist || allowlist.length === 0) {
-      return this.defaultTemplateOrchestrator;
-    }
-
-    const key = allowlist.slice().sort().join('|');
-    const cached = this.orchestratorCache.get(key);
-    if (cached) {
-      return cached;
-    }
-
-    const registry = this.defaultTemplateRegistry.filterByIds(allowlist);
-    const orchestrator = new TemplateOrchestrator({ registry });
-
-    if (registry.list().length === 0 && !this.emptyAllowlistLogged.has(key)) {
-      this.logger.log(runtime.eventId, 'cards', 'warn', '[template] allowlist produced no templates', {
-        allowlist,
-      });
-      this.emptyAllowlistLogged.add(key);
-    }
-
-    this.orchestratorCache.set(key, orchestrator);
-    return orchestrator;
-  }
       }
 
       const messageContext = {
@@ -176,10 +151,36 @@ export class CardsProcessor {
         'cards',
         runtime.cardsLastSeq
       );
-      // TODO: narrow unknown -> OpenAIAPIError after upstream callsite analysis
     } catch (err: unknown) {
-      console.error("[worker] error:", String(err));
+      this.logger.log(runtime.eventId, 'cards', 'error', '[processor] failed to process card trigger', {
+        error: String(err),
+      });
     }
   }
 
+  private getTemplateOrchestrator(runtime: EventRuntime): TemplateOrchestrator {
+    const allowlist = runtime.cardsTemplateAllowlist;
+    if (!allowlist || allowlist.length === 0) {
+      return this.defaultTemplateOrchestrator;
+    }
+
+    const key = allowlist.slice().sort().join('|');
+    const cached = this.orchestratorCache.get(key);
+    if (cached) {
+      return cached;
+    }
+
+    const registry = this.defaultTemplateRegistry.filterByIds(allowlist);
+    const orchestrator = new TemplateOrchestrator({ registry });
+
+    if (registry.list().length === 0 && !this.emptyAllowlistLogged.has(key)) {
+      this.logger.log(runtime.eventId, 'cards', 'warn', '[template] allowlist produced no templates', {
+        allowlist,
+      });
+      this.emptyAllowlistLogged.add(key);
+    }
+
+    this.orchestratorCache.set(key, orchestrator);
+    return orchestrator;
+  }
 }

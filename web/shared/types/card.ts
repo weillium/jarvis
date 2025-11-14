@@ -1,3 +1,5 @@
+export type CardType = 'text' | 'text_visual' | 'visual';
+
 export interface Card {
   id: string;
   event_id: string;
@@ -5,11 +7,10 @@ export interface Card {
   kind: string | null;
   payload: Record<string, any> | null;
   is_active: boolean;
+  card_type?: CardType | null;
   updated_at?: string;
   last_seen_seq?: number | null;
 }
-
-export type CardType = 'text' | 'text_visual' | 'visual';
 
 export interface CardVisualRequest {
   strategy: 'fetch' | 'generate';
@@ -35,6 +36,7 @@ export interface CardSnapshot {
   event_id: string;
   payload: Record<string, any>;
   card_kind: string | null;
+  card_type?: CardType | null;
   created_at: string;
   updated_at?: string | null;
   last_seen_seq?: number | null;

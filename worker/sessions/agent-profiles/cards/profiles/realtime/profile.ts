@@ -2,7 +2,7 @@ import type { RealtimeSessionProfile } from '../../../../session-adapters/realti
 import { createPassthroughAudioHooks } from '../../../../session-adapters/realtime/runtime-controller';
 import { CardsAgentHandler } from '../../../../session-adapters/handlers/cards-handler';
 import { getPolicy } from '../../../../../policies';
-import { getCardsRealtimeTooling } from '../../tooling';
+import { getCardsRealtimeTooling } from '../../runtime-tooling';
 import {
   resolveModelOrThrow,
   resolveModelSetFromEnv,

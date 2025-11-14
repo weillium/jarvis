@@ -18,42 +18,8 @@ interface GeneratedCardPayload {
   visual_request?: CardVisualRequest | null;
 }
 
-const visualKeywords = [
-  'photo',
-  'image',
-  'picture',
-  'diagram',
-  'chart',
-  'graph',
-  'map',
-  'illustration',
-  'visual',
-  'showing',
-  'depicts',
-  'looks like',
-  'appearance',
-  'shape',
-  'structure',
-  'location',
-];
-
-const definitionKeywords = [
-  'is',
-  'are',
-  'means',
-  'refers to',
-  'definition',
-  'explain',
-  'describe',
-  'what is',
-  'who is',
-  'where is',
-  'what are',
-];
-
 export const determineCardType = (
-  card: GeneratedCardPayload,
-  transcriptText: string
+  card: GeneratedCardPayload
 ): RealtimeCardType => {
   const visualRequest = card.visual_request;
   if (

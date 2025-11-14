@@ -142,6 +142,10 @@ export async function GET(req: NextRequest) {
                   typeof row.card_kind === 'string' && row.card_kind.length > 0
                     ? row.card_kind
                     : templateLabel,
+                card_type:
+                  typeof row.card_type === 'string' && row.card_type.length > 0
+                    ? row.card_type
+                    : row.payload?.card_type ?? null,
                 created_at: typeof row.created_at === 'string' ? row.created_at : new Date().toISOString(),
                 updated_at: typeof row.updated_at === 'string' ? row.updated_at : null,
                 last_seen_seq:

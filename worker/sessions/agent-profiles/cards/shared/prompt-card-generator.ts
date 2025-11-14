@@ -37,9 +37,6 @@ export class PromptCardGenerator implements CardGenerator {
 
   async generate(input: CardGenerationInput): Promise<CardGenerationResult> {
     const policy = getPolicy('cards', 1);
-    const rawBullets = input.messageContext?.bullets;
-    const bullets = Array.isArray(rawBullets) ? rawBullets : [];
-
     const supportingContext = input.messageContext?.supportingContext;
 
     const factsRecord = input.messageContext?.facts ?? {};
@@ -174,7 +171,9 @@ export class PromptCardGenerator implements CardGenerator {
 
     // console.log('[cards][debug] card generation prompt', {
     //   transcriptLength: input.recentTranscript.length,
-    //   bulletsCount: bullets.length,
+    //   bulletsCount: Array.isArray(input.messageContext?.bullets)
+    //     ? input.messageContext?.bullets.length
+    //     : 0,
     //   previousCards: input.previousCards.length,
     //   factsLength: factsJson.length,
     //   supportingGlossaryLength: supportingGlossary.length,
