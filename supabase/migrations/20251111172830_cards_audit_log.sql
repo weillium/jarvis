@@ -54,3 +54,4 @@ comment on column cards_audit_log.payload_before is 'Snapshot of the card payloa
 comment on column cards_audit_log.payload_after is 'Snapshot of the card payload after the action (optional).';
 
 
+
