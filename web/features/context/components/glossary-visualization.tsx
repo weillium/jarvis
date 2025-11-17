@@ -1,70 +1,26 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useGlossaryQuery } from '@/shared/hooks/use-glossary-query';
 
 interface GlossaryVisualizationProps {
   eventId: string;
   embedded?: boolean; // If true, removes outer wrapper styling for embedding
 }
 
-interface GlossaryTerm {
-  id: string;
-  term: string;
-  definition: string;
-  acronym_for: string | null;
-  category: string | null;
-  usage_examples: string[] | null;
-  related_terms: string[] | null;
-  confidence_score: number | null;
-  source: string | null;
-  source_url: string | null;
-  created_at: string;
-  version: number | null;
-  generation_cycle_id: string | null;
-}
-
-interface GlossaryData {
-  ok: boolean;
-  terms: GlossaryTerm[];
-  count: number;
-  grouped_by_category: Record<string, GlossaryTerm[]>;
-}
-
 export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVisualizationProps) {
-  const [glossaryData, setGlossaryData] = useState<GlossaryData | null>(null);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [expandedTerms, setExpandedTerms] = useState<Set<string>>(new Set());
-  const [refreshing, setRefreshing] = useState(false);
+  
+  const { data: glossaryData, isLoading, error, refetch, isFetching } = useGlossaryQuery(eventId, {
+    category: selectedCategory,
+    search: search || undefined,
+  });
 
-  const fetchGlossary = async () => {
-    setRefreshing(true);
-    try {
-      const params = new URLSearchParams();
-      if (selectedCategory) {
-        params.append('category', selectedCategory);
-      }
-      if (search) {
-        params.append('search', search);
-      }
-
-      const res = await fetch(`/api/context/${eventId}/glossary?${params.toString()}`);
-      const data = await res.json();
-      if (data.ok) {
-        setGlossaryData(data);
-      }
-    } catch (err) {
-      console.error('Failed to fetch glossary:', err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+  const handleRefresh = () => {
+    refetch();
   };
-
-  useEffect(() => {
-    fetchGlossary();
-  }, [eventId, search, selectedCategory]);
 
   const toggleTerm = (termId: string) => {
     setExpandedTerms((prev) => {
@@ -86,7 +42,7 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
   // Filter terms based on search (client-side if needed)
   const displayTerms = glossaryData?.terms || [];
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div style={{
         background: '#ffffff',
@@ -97,6 +53,21 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
         color: '#64748b',
       }}>
         Loading glossary...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{
+        background: '#ffffff',
+        border: '1px solid #e2e8f0',
+        borderRadius: '12px',
+        padding: '24px',
+        textAlign: 'center',
+        color: '#ef4444',
+      }}>
+        Error loading glossary: {error instanceof Error ? error.message : 'Unknown error'}
       </div>
     );
   }
@@ -171,8 +142,8 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
           }}
         />
         <button
-          onClick={fetchGlossary}
-          disabled={refreshing}
+          onClick={handleRefresh}
+          disabled={isFetching}
           style={{
             padding: '8px 16px',
             border: '1px solid #e2e8f0',
@@ -181,14 +152,14 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
             fontWeight: '500',
             background: '#ffffff',
             color: '#374151',
-            cursor: refreshing ? 'not-allowed' : 'pointer',
-            opacity: refreshing ? 0.6 : 1,
+            cursor: isFetching ? 'not-allowed' : 'pointer',
+            opacity: isFetching ? 0.6 : 1,
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
           }}
         >
-          {refreshing ? '↻' : '↻'} {refreshing ? 'Refreshing...' : 'Refresh'}
+          ↻ {isFetching ? 'Refreshing...' : 'Refresh'}
         </button>
         {categories.length > 0 && (
           <select
@@ -273,19 +244,6 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
                         fontWeight: '500',
                       }}>
                         {term.category}
-                      </span>
-                    )}
-                    {term.version && term.version > 1 && (
-                      <span style={{
-                        display: 'inline-block',
-                        padding: '2px 8px',
-                        background: '#f3f4f6',
-                        color: '#64748b',
-                        borderRadius: '4px',
-                        fontSize: '11px',
-                        fontWeight: '500',
-                      }}>
-                        v{term.version}
                       </span>
                     )}
                   </div>
@@ -386,6 +344,14 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
                     {term.confidence_score !== null && (
                       <div>
                         <strong>Confidence:</strong> {(term.confidence_score * 100).toFixed(0)}%
+                      </div>
+                    )}
+                    {term.agent_utility && term.agent_utility.length > 0 && (
+                      <div>
+                        <strong>Agent Utility:</strong>{' '}
+                        {term.agent_utility
+                          .map((agent) => agent.charAt(0).toUpperCase() + agent.slice(1))
+                          .join(', ')}
                       </div>
                     )}
                     {term.source && (

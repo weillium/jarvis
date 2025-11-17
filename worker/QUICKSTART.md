@@ -6,6 +6,27 @@ Your `.env` file already exists with required variables configured!
 
 ## 🚀 Quick Launch Steps
 
+### 0. Use Node.js 25
+
+```bash
+nvm use
+# or, if nvm is unavailable
+corepack env use node@25.1.0
+```
+
+> The repository root includes `.nvmrc` / `.node-version` so `nvm use` or `nodenv` will automatically select Node.js 25.1.0. If you rely on Corepack directly, `corepack env use node@25.1.0` ensures the worker runs under the same runtime before invoking pnpm.
+
+### 0a. Set SSE Endpoint (Required for Live UI Updates)
+
+Add `SSE_ENDPOINT` to your `worker/.env` so it matches the origin that serves the web UI (for local dev this is typically `http://localhost:3000`, for staging/production use the deployed HTTPS URL). The worker pushes session enrichment to `/api/agent-sessions/:event_id/status`; if this value is missing or still pointed at localhost, cards and facts will only refresh after you tab away and React Query refetches.
+
+```bash
+# worker/.env
+SSE_ENDPOINT="https://your-web-app.example.com"
+```
+
+Restart the worker after updating the variable so the configuration is picked up.
+
 ### 1. Verify Setup (Optional but Recommended)
 
 ```bash

@@ -9,6 +9,14 @@ import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import { EventWithStatus } from '@/shared/types/event';
 import { MarkdownEditor } from '@/shared/ui/markdown-editor';
+import { FileUpload } from '@/shared/ui/file-upload';
+import { useUpdateEventMutation, useDeleteEventDocMutation, useUpdateEventDocNameMutation } from '@/shared/hooks/use-mutations';
+import { useEventDocsQuery } from '@/shared/hooks/use-event-docs-query';
+import { DocumentListItem } from './document-list-item';
+import { supabase } from '@/shared/lib/supabase/client';
+import { withTimeout } from '@/shared/utils/promise-timeout';
+import { validateFiles, MAX_FILE_SIZE } from '@/shared/utils/file-validation';
+import { getFilenameFromPath, getFileExtension, getFileType } from '@/shared/utils/file-utils';
 
 // Extend dayjs with plugins
 dayjs.extend(utc);
@@ -21,6 +29,89 @@ interface EditEventModalProps {
   onSuccess?: (updatedEvent: EventWithStatus) => void;
 }
 
+// Helper to upload a single file (reused from create-event-modal)
+async function uploadFile(file: File, eventId: string): Promise<void> {
+  const originalFileName = file.name;
+  const fileExt = file.name.split('.').pop() || 'file';
+  const fileName = `${eventId}/${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+  const filePath = fileName;
+
+  // Upload to storage with timeout
+  const uploadResult = await withTimeout(
+    supabase.storage
+      .from('event-docs')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false,
+      }),
+    60000,
+    `Upload timeout for ${file.name}. This may be due to large file size or slow network connection.`
+  );
+
+  const { error: uploadError, data } = uploadResult;
+
+  if (uploadError) {
+    let errorMsg = `Failed to upload ${file.name}`;
+    
+    if (uploadError.message?.includes('bucket') || uploadError.message?.includes('not found')) {
+      errorMsg += ': Storage bucket "event-docs" does not exist. Please create the bucket in Supabase Dashboard or contact support.';
+    } else if (uploadError.message?.includes('permission') || uploadError.message?.includes('policy')) {
+      errorMsg += ': Permission denied. Please verify you own this event and try again.';
+    } else if (uploadError.message?.includes('size') || uploadError.message?.includes('limit')) {
+      errorMsg += `: File size exceeds limit (${MAX_FILE_SIZE / 1024 / 1024}MB). Please upload a smaller file.`;
+    } else {
+      errorMsg += `: ${uploadError.message}`;
+    }
+    
+    throw new Error(errorMsg);
+  }
+
+  // Determine file type from extension
+  const fileExtension = getFileExtension(originalFileName);
+  const fileType = getFileType(fileExtension);
+
+  // Create database record with timeout
+  const insertPromise = supabase
+    .from('event_docs')
+    .insert([
+      {
+        event_id: eventId,
+        path: filePath,
+        name: originalFileName,
+        file_type: fileType,
+      },
+    ]);
+  
+  const insertResult = await withTimeout(
+    Promise.resolve(insertPromise),
+    10000,
+    `Database insert timeout for ${file.name}. The file was uploaded but the record could not be created.`
+  ) as { error: { message: string } | null };
+
+  const { error: docError } = insertResult;
+
+  if (docError) {
+    // Clean up uploaded file
+    if (data?.path) {
+      try {
+        await supabase.storage.from('event-docs').remove([data.path]);
+      } catch (cleanupError) {
+        console.error('Failed to cleanup uploaded file after DB insert failure:', cleanupError);
+      }
+    }
+    
+    let errorMsg = `Failed to create document record for ${file.name}`;
+    
+    if (docError.message?.includes('permission') || docError.message?.includes('policy')) {
+      errorMsg += ': Permission denied. Please verify you own this event.';
+    } else {
+      errorMsg += `: ${docError.message}`;
+    }
+    
+    throw new Error(errorMsg);
+  }
+}
+
 export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventModalProps) {
   const [title, setTitle] = useState(event.title);
   const [topic, setTopic] = useState(event.topic || '');
@@ -31,8 +122,20 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
     event.end_time ? dayjs(event.end_time) : null
   );
   const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [newFiles, setNewFiles] = useState<File[]>([]);
+  const [removingDocs, setRemovingDocs] = useState<Set<string>>(new Set());
+  const [pendingDocNameChanges, setPendingDocNameChanges] = useState<Map<string, string>>(new Map());
+
+  // Mutation hooks
+  const updateEventMutation = useUpdateEventMutation(event.id);
+  const deleteDocMutation = useDeleteEventDocMutation(event.id);
+  const updateDocNameMutation = useUpdateEventDocNameMutation(event.id);
+  
+  // Fetch existing documents
+  const { data: existingDocs } = useEventDocsQuery(event.id);
+  
+  const loading = updateEventMutation.isPending || deleteDocMutation.isPending || updateDocNameMutation.isPending;
 
   // Get list of common timezones
   const timezones = Intl.supportedValuesOf('timeZone').sort();
@@ -44,100 +147,183 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
     setStartDate(event.start_time ? dayjs(event.start_time) : null);
     setEndDate(event.end_time ? dayjs(event.end_time) : null);
     setError(null);
+    setNewFiles([]);
+    setRemovingDocs(new Set());
+    setPendingDocNameChanges(new Map());
   }, [event]);
+
+  const handleRemoveDoc = async (docId: string) => {
+    setRemovingDocs(prev => new Set(prev).add(docId));
+    try {
+      await deleteDocMutation.mutateAsync(docId);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to remove document';
+      setError(errorMessage);
+    } finally {
+      setRemovingDocs(prev => {
+        const next = new Set(prev);
+        next.delete(docId);
+        return next;
+      });
+    }
+  };
+
+  // Track document name changes (will be saved on form submit)
+  const handleDocNameChange = (docId: string, newName: string) => {
+    setPendingDocNameChanges(prev => {
+      const next = new Map(prev);
+      // Store the raw value (will be trimmed on save)
+      next.set(docId, newName);
+      return next;
+    });
+  };
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    setLoading(true);
 
-    try {
-      // Validate dates if provided
-      if (startDate && endDate) {
-        if (endDate.isBefore(startDate) || endDate.isSame(startDate)) {
-          throw new Error('End time must be after start time');
-        }
-        
-        const diffHours = endDate.diff(startDate, 'hour', true);
-        if (diffHours > 12) {
-          throw new Error('End time must be within 12 hours of start time');
-        }
+    // Validate dates if provided
+    if (startDate && endDate) {
+      if (endDate.isBefore(startDate) || endDate.isSame(startDate)) {
+        setError('End time must be after start time');
+        return;
       }
-
-      // Prepare update data
-      const updateData: {
-        title?: string;
-        topic?: string | null;
-        start_time?: string | null;
-        end_time?: string | null;
-      } = {};
-
-      if (title.trim() !== event.title) {
-        updateData.title = title.trim();
+      
+      const diffHours = endDate.diff(startDate, 'hour', true);
+      if (diffHours > 12) {
+        setError('End time must be within 12 hours of start time');
+        return;
       }
+    }
 
-      if (topic.trim() !== (event.topic || '')) {
-        updateData.topic = topic.trim() || null;
+    // Prepare update data
+    const updateData: {
+      title?: string;
+      topic?: string | null;
+      start_time?: string | null;
+      end_time?: string | null;
+    } = {};
+
+    if (title.trim() !== event.title) {
+      updateData.title = title.trim();
+    }
+
+    if (topic.trim() !== (event.topic || '')) {
+      updateData.topic = topic.trim() || null;
+    }
+
+    // Convert dates to UTC timestamps
+    if (startDate) {
+      const dateString = startDate.format('YYYY-MM-DD HH:mm:ss');
+      const dateInTimezone = dayjs.tz(dateString, timezone);
+      const isoString = dateInTimezone.utc().toISOString();
+      if (isoString !== event.start_time) {
+        updateData.start_time = isoString;
       }
+    } else if (event.start_time) {
+      updateData.start_time = null;
+    }
 
-      // Convert dates to UTC timestamps
-      if (startDate) {
-        const dateString = startDate.format('YYYY-MM-DD HH:mm:ss');
-        const dateInTimezone = dayjs.tz(dateString, timezone);
-        const isoString = dateInTimezone.utc().toISOString();
-        if (isoString !== event.start_time) {
-          updateData.start_time = isoString;
-        }
-      } else if (event.start_time) {
-        updateData.start_time = null;
+    if (endDate) {
+      const dateString = endDate.format('YYYY-MM-DD HH:mm:ss');
+      const dateInTimezone = dayjs.tz(dateString, timezone);
+      const isoString = dateInTimezone.utc().toISOString();
+      if (isoString !== event.end_time) {
+        updateData.end_time = isoString;
       }
+    } else if (event.end_time) {
+      updateData.end_time = null;
+    }
 
-      if (endDate) {
-        const dateString = endDate.format('YYYY-MM-DD HH:mm:ss');
-        const dateInTimezone = dayjs.tz(dateString, timezone);
-        const isoString = dateInTimezone.utc().toISOString();
-        if (isoString !== event.end_time) {
-          updateData.end_time = isoString;
-        }
-      } else if (event.end_time) {
-        updateData.end_time = null;
-      }
-
-      // Only update if there are changes
-      if (Object.keys(updateData).length === 0) {
-        onClose();
+    // Upload new files if any
+    if (newFiles.length > 0) {
+      // Validate files before uploading
+      const fileErrors = validateFiles(newFiles);
+      if (fileErrors.length > 0) {
+        setError(fileErrors.join('\n'));
         return;
       }
 
-      // Call API to update event
-      const res = await fetch(`/api/events/${event.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
+      try {
+        // Upload all new files
+        const uploadPromises = newFiles.map(file => uploadFile(file, event.id));
+        await withTimeout(
+          Promise.all(uploadPromises),
+          300000, // 5 minutes total for all files
+          'Total file upload time exceeded 5 minutes. This may be due to too many large files or slow network connection.'
+        );
+      } catch (uploadErr) {
+        const errorMessage = uploadErr instanceof Error ? uploadErr.message : 'Failed to upload files';
+        setError(errorMessage);
+        return;
+      }
+    }
+
+    // Update document names if there are changes
+    if (pendingDocNameChanges.size > 0 && existingDocs) {
+      try {
+        // Only update documents where the name actually changed
+        const changesToSave: Array<[string, string]> = [];
+        
+        for (const [docId, newName] of pendingDocNameChanges.entries()) {
+          const doc = existingDocs.find(d => d.id === docId);
+          if (!doc) continue;
+          
+          const currentName = doc.name || getFilenameFromPath(doc.path);
+          const trimmedNewName = newName.trim();
+          const trimmedCurrentName = currentName.trim();
+          
+          // Only save if the trimmed names are different
+          if (trimmedNewName !== trimmedCurrentName && trimmedNewName.length > 0) {
+            changesToSave.push([docId, trimmedNewName]);
+          }
+        }
+
+        if (changesToSave.length > 0) {
+          const docNamePromises = changesToSave.map(([docId, name]) =>
+            updateDocNameMutation.mutateAsync({ docId, name })
+          );
+          await Promise.all(docNamePromises);
+        }
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to update document names';
+        setError(errorMessage);
+        return;
+      }
+    }
+
+    // Update event data if there are changes
+    if (Object.keys(updateData).length > 0) {
+      updateEventMutation.mutate(updateData, {
+        onSuccess: (updatedEvent) => {
+          // Reset form and close modal
+          setNewFiles([]);
+          setPendingDocNameChanges(new Map());
+          onClose();
+          
+          // Trigger success callback if provided
+          if (onSuccess && updatedEvent) {
+            onSuccess(updatedEvent);
+          }
         },
-        body: JSON.stringify(updateData),
+        onError: (err) => {
+          const errorMessage = err instanceof Error ? err.message : 'Failed to update event';
+          setError(errorMessage);
+        },
       });
-
-      const result = await res.json();
-
-      if (!res.ok) {
-        throw new Error(result.error || 'Failed to update event');
-      }
-
-      // Reset form and close modal
+    } else if (newFiles.length > 0 || pendingDocNameChanges.size > 0) {
+      // If only files were uploaded or document names changed, just close
+      setNewFiles([]);
+      setPendingDocNameChanges(new Map());
       onClose();
-      
-      // Trigger success callback if provided
-      if (onSuccess && result.data) {
-        onSuccess(result.data);
+      if (onSuccess) {
+        onSuccess(event); // Pass current event since no event data changes were made
       }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to update event';
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
+    } else {
+      // No changes at all
+      onClose();
     }
   };
 
@@ -148,6 +334,8 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
       setStartDate(event.start_time ? dayjs(event.start_time) : null);
       setEndDate(event.end_time ? dayjs(event.end_time) : null);
       setError(null);
+      setNewFiles([]);
+      setPendingDocNameChanges(new Map());
       onClose();
     }
   };
@@ -388,6 +576,44 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
                 label="Topic"
                 instructions="Briefly describe the event. You can use markdown formatting for rich text."
                 height={180}
+                disabled={loading}
+              />
+            </div>
+
+            {/* Event Documents Section */}
+            <div style={{ marginBottom: '24px', width: '100%', boxSizing: 'border-box' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '14px',
+                fontWeight: '500',
+                color: '#374151',
+                marginBottom: '12px',
+              }}>
+                Event Documents
+              </label>
+              
+              {/* Existing Documents List */}
+              {existingDocs && existingDocs.length > 0 && (
+                <div style={{ marginBottom: '16px' }}>
+                  {existingDocs.map((doc) => (
+                    <DocumentListItem
+                      key={doc.id}
+                      doc={doc}
+                      onRemove={() => handleRemoveDoc(doc.id)}
+                      onUpdateName={handleDocNameChange}
+                      isRemoving={removingDocs.has(doc.id)}
+                      isUpdating={false}
+                    />
+                  ))}
+                </div>
+              )}
+              
+              {/* File Upload Component */}
+              <FileUpload
+                files={newFiles}
+                onFilesChange={setNewFiles}
+                label={existingDocs && existingDocs.length > 0 ? "Add More Documents" : "Upload Documents"}
+                instructions={`Upload additional documents. Maximum file size: ${MAX_FILE_SIZE / 1024 / 1024}MB.`}
                 disabled={loading}
               />
             </div>

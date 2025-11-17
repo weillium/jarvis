@@ -4,7 +4,7 @@
 
 export interface EnrichmentResult {
   chunks: string[];
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
   source: string;
   qualityScore?: number;
 }

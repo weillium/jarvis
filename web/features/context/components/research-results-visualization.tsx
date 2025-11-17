@@ -1,61 +1,24 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useResearchQuery } from '@/shared/hooks/use-research-query';
+import type { ResearchResult } from '@/shared/hooks/use-research-query';
 
 interface ResearchResultsVisualizationProps {
   eventId: string;
   embedded?: boolean; // If true, removes outer wrapper styling for embedding
 }
 
-interface ResearchResult {
-  id: string;
-  query: string;
-  api: string;
-  content: string;
-  source_url: string | null;
-  quality_score: number | null;
-  metadata: Record<string, any> | null;
-  created_at: string;
-  generation_cycle_id: string | null;
-  version: number;
-}
-
-interface ResearchData {
-  ok: boolean;
-  results: ResearchResult[];
-  count: number;
-  byApi: Record<string, number>;
-  avgQualityScore: number;
-}
-
 export function ResearchResultsVisualization({ eventId, embedded = false }: ResearchResultsVisualizationProps) {
-  const [researchData, setResearchData] = useState<ResearchData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: researchData, isLoading, error, refetch, isFetching } = useResearchQuery(eventId);
   const [isExpanded, setIsExpanded] = useState(embedded); // Auto-expand when embedded
   const [filterByApi, setFilterByApi] = useState<string | null>(null);
   const [expandedResults, setExpandedResults] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
-  const [refreshing, setRefreshing] = useState(false);
 
-  const fetchResearchResults = async () => {
-    setRefreshing(true);
-    try {
-      const res = await fetch(`/api/context/${eventId}/research`);
-      const data = await res.json();
-      if (data.ok) {
-        setResearchData(data);
-      }
-    } catch (err) {
-      console.error('Failed to fetch research results:', err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+  const handleRefresh = () => {
+    refetch();
   };
-
-  useEffect(() => {
-    fetchResearchResults();
-  }, [eventId]);
 
   const toggleResult = (resultId: string) => {
     setExpandedResults((prev) => {
@@ -112,7 +75,7 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
     ? Array.from(new Set(researchData.results.map((r) => r.api))).sort()
     : [];
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div style={{
         background: embedded ? 'transparent' : '#ffffff',
@@ -123,6 +86,22 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
       }}>
         <div style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
           Loading research results...
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{
+        background: embedded ? 'transparent' : '#ffffff',
+        border: embedded ? 'none' : '1px solid #e2e8f0',
+        borderRadius: embedded ? '0' : '12px',
+        padding: embedded ? '0' : '24px',
+        marginBottom: embedded ? '0' : '24px',
+      }}>
+        <div style={{ padding: '24px', textAlign: 'center', color: '#ef4444' }}>
+          Error loading research results: {error instanceof Error ? error.message : 'Unknown error'}
         </div>
       </div>
     );
@@ -275,8 +254,8 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
             }}
           />
           <button
-            onClick={fetchResearchResults}
-            disabled={refreshing}
+            onClick={handleRefresh}
+            disabled={isFetching}
             style={{
               padding: '8px 16px',
               border: '1px solid #e2e8f0',
@@ -285,14 +264,14 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
               fontWeight: '500',
               background: '#ffffff',
               color: '#374151',
-              cursor: refreshing ? 'not-allowed' : 'pointer',
-              opacity: refreshing ? 0.6 : 1,
+              cursor: isFetching ? 'not-allowed' : 'pointer',
+              opacity: isFetching ? 0.6 : 1,
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
             }}
           >
-            {refreshing ? '↻' : '↻'} {refreshing ? 'Refreshing...' : 'Refresh'}
+            ↻ {isFetching ? 'Refreshing...' : 'Refresh'}
           </button>
           {apis.length > 0 && (
             <select
@@ -398,18 +377,6 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
                           }}>
                             {getApiLabel(result.api)}
                           </span>
-                          {result.version > 1 && (
-                            <span style={{
-                              fontSize: '11px',
-                              padding: '2px 8px',
-                              background: '#e0e7ff',
-                              color: '#4338ca',
-                              borderRadius: '4px',
-                              fontWeight: '500',
-                            }}>
-                              v{result.version}
-                            </span>
-                          )}
                         </div>
                         <div style={{
                           fontSize: '14px',

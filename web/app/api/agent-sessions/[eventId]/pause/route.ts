@@ -28,7 +28,7 @@ export async function POST(
       .from('agent_sessions')
       .select('id, agent_type, status, agent_id')
       .eq('event_id', eventId)
-      .in('status', ['starting', 'active']);
+      .in('status', ['active']);
 
     if (sessionsError) {
       return NextResponse.json(
@@ -54,7 +54,7 @@ export async function POST(
       .from('agent_sessions')
       .update({ status: 'paused' })
       .eq('event_id', eventId)
-      .in('status', ['starting', 'active']);
+      .in('status', ['active']);
 
     if (updateError) {
       // Check if it's a constraint violation (migration not applied)

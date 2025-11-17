@@ -1,4 +1,4 @@
-export type BlueprintStatus = 'generating' | 'ready' | 'approved' | 'executing' | 'completed' | 'error';
+export type BlueprintStatus = 'generating' | 'ready' | 'approved' | 'superseded' | 'error';
 
 export type QualityTier = 'basic' | 'comprehensive';
 
@@ -16,7 +16,7 @@ export interface GlossaryPlan {
 }
 
 export interface ChunksPlan {
-  target_count: number; // 500 or 1000
+  target_count: number;
   sources: string[];
   ranking_strategy: string;
 }
@@ -57,8 +57,6 @@ export interface ContextBlueprint {
   // Metadata
   created_at: string;
   approved_at: string | null;
-  execution_started_at: string | null;
-  completed_at: string | null;
   error_message: string | null;
 }
 

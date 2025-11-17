@@ -1,29 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@/shared/lib/supabase/server';
+import { requireAuth, requireEventOwnership } from '@/shared/lib/auth';
 
 /**
  * Agent Information API Route
  * 
  * Returns comprehensive agent information for an event, including:
- * - Agent details (status, model, created_at, etc.)
+ * - Agent details (status, model_set, created_at, etc.)
  * - Context statistics (chunk count, glossary term count)
  * - Blueprint information (if exists)
  * 
  * GET /api/agent/[eventId]
+ * 
+ * Requires authentication and event ownership.
  */
-
-function getSupabaseClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error('Missing Supabase configuration');
-  }
-
-  return createClient(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false },
-  });
-}
 
 export async function GET(
   req: NextRequest,
@@ -41,7 +31,10 @@ export async function GET(
       );
     }
 
-    const supabase = getSupabaseClient();
+    // Check authentication and event ownership
+    const supabase = await createServerClient();
+    const user = await requireAuth(supabase);
+    await requireEventOwnership(supabase, user.id, eventId);
 
     // Fetch agent with all details
     const { data: agents, error: agentError } = await (supabase
@@ -70,19 +63,22 @@ export async function GET(
     const agent = agents[0];
     const agentId = agent.id;
 
-    // Fetch context statistics in parallel (only active items)
-    const [chunksResult, glossaryResult, blueprintResult] = await Promise.all([
-      // Get active chunk count
-      (supabase.from('context_items') as any)
-        .select('*', { count: 'exact', head: true })
+    // Fetch context statistics in parallel, excluding items from superseded generation cycles
+    // First, get all active (non-superseded) generation cycle IDs
+    const [activeChunksCycles, activeGlossaryCycles, blueprintResult] = await Promise.all([
+      // Get active chunks/research cycle IDs
+      (supabase.from('generation_cycles') as any)
+        .select('id')
         .eq('event_id', eventId)
-        .eq('is_active', true),
+        .neq('status', 'superseded')
+        .in('cycle_type', ['chunks', 'research']),
       
-      // Get active glossary term count
-      (supabase.from('glossary_terms') as any)
-        .select('*', { count: 'exact', head: true })
+      // Get active glossary cycle IDs
+      (supabase.from('generation_cycles') as any)
+        .select('id')
         .eq('event_id', eventId)
-        .eq('is_active', true),
+        .neq('status', 'superseded')
+        .in('cycle_type', ['glossary']),
       
       // Get latest blueprint
       (supabase.from('context_blueprints') as any)
@@ -91,6 +87,44 @@ export async function GET(
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
+    ]);
+
+    // Build lists of active cycle IDs
+    const activeChunksCycleIds: string[] = [];
+    if (activeChunksCycles.data && activeChunksCycles.data.length > 0) {
+      activeChunksCycleIds.push(...activeChunksCycles.data.map((c: { id: string }) => c.id));
+    }
+
+    const activeGlossaryCycleIds: string[] = [];
+    if (activeGlossaryCycles.data && activeGlossaryCycles.data.length > 0) {
+      activeGlossaryCycleIds.push(...activeGlossaryCycles.data.map((c: { id: string }) => c.id));
+    }
+
+    // Fetch counts, excluding items from superseded generation cycles
+    // Handle null generation_cycle_id separately since .in() doesn't match NULL
+    let chunksQuery = (supabase.from('context_items') as any)
+      .select('*', { count: 'exact', head: true })
+      .eq('event_id', eventId);
+    
+    if (activeChunksCycleIds.length > 0) {
+      chunksQuery = chunksQuery.or(`generation_cycle_id.is.null,generation_cycle_id.in.(${activeChunksCycleIds.join(',')})`);
+    } else {
+      chunksQuery = chunksQuery.is('generation_cycle_id', null);
+    }
+    
+    let glossaryQuery = (supabase.from('glossary_terms') as any)
+      .select('*', { count: 'exact', head: true })
+      .eq('event_id', eventId);
+    
+    if (activeGlossaryCycleIds.length > 0) {
+      glossaryQuery = glossaryQuery.or(`generation_cycle_id.is.null,generation_cycle_id.in.(${activeGlossaryCycleIds.join(',')})`);
+    } else {
+      glossaryQuery = glossaryQuery.is('generation_cycle_id', null);
+    }
+
+    const [chunksResult, glossaryResult] = await Promise.all([
+      chunksQuery,
+      glossaryQuery,
     ]);
 
     const contextStats = {
@@ -106,7 +140,9 @@ export async function GET(
         id: agent.id,
         event_id: agent.event_id,
         status: agent.status,
-        model: agent.model,
+        stage: agent.stage || null,
+        model: agent.model || 'gpt-4o-mini',
+        model_set: agent.model_set || null,
         created_at: agent.created_at,
         updated_at: agent.updated_at,
       },

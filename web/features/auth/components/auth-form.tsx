@@ -39,47 +39,8 @@ export function AuthForm({ mode, onToggleMode }: AuthFormProps) {
 
       if (result.error) throw result.error;
 
-      // Sync session to cookies immediately after successful auth
-      if (result.data.session) {
-        const { access_token, refresh_token, expires_at } = result.data.session;
-        const maxAge = Math.floor((expires_at! * 1000 - Date.now()) / 1000);
-        document.cookie = `sb-access-token=${access_token}; path=/; max-age=${maxAge}; SameSite=Lax`;
-        document.cookie = `sb-refresh-token=${refresh_token}; path=/; max-age=604800; SameSite=Lax`;
-      }
-
-      // Wait for auth state to propagate - ensure session is available before navigation
-      // This helps the useAuth hook on the next page receive the session immediately
-      let authStateReceived = false;
-      await new Promise<void>((resolve) => {
-        // Check if session is already available immediately
-        supabase.auth.getSession().then(({ data: { session } }) => {
-          if (session && !authStateReceived) {
-            authStateReceived = true;
-            resolve();
-            return;
-          }
-        }).catch(() => {});
-        
-        const timeout = setTimeout(() => {
-          // If auth state change doesn't fire within 500ms, proceed anyway
-          // (session is already set, onAuthStateChange might just be delayed)
-          if (!authStateReceived) {
-            authStateReceived = true;
-            resolve();
-          }
-        }, 500);
-        
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-          if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session && !authStateReceived) {
-            clearTimeout(timeout);
-            subscription.unsubscribe();
-            authStateReceived = true;
-            resolve();
-          }
-        });
-      });
-
-      // Redirect to app dashboard (route group doesn't appear in URL)
+      // Session is automatically synced to cookies via @supabase/ssr
+      // Redirect to app dashboard
       router.push('/');
     } catch (err: any) {
       const errorMessage = err.message || 'An error occurred';

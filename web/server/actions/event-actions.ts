@@ -1,6 +1,7 @@
 'use server';
 
 import { createServerClient } from '@/shared/lib/supabase/server';
+import { requireAuth, requireEventOwnership } from '@/shared/lib/auth';
 import { Event, EventWithStatus } from '@/shared/types/event';
 import { mapDbEventToEventWithStatus } from '../mappers/event-mapper';
 
@@ -10,28 +11,11 @@ export async function getEvents(filters?: {
 }): Promise<{ data: EventWithStatus[] | null; error: string | null }> {
   try {
     const supabase = await createServerClient();
-    
-    // Get current user session - try both getSession and getUser for better reliability
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
-    // Log for debugging
-    if (sessionError || userError || !session?.user || !user) {
-      console.error('[Event Actions] Auth check failed:', {
-        hasSession: !!session,
-        hasUser: !!user,
-        sessionError: sessionError?.message,
-        userError: userError?.message,
-      });
-      return { data: null, error: 'Not authenticated' };
-    }
-
-    // Build query - use user.id from getUser() as it's more reliable
-    const userId = user.id || session.user.id;
+    const user = await requireAuth(supabase);
     let query = supabase
       .from('events')
       .select('*')
-      .eq('owner_uid', userId)
+      .eq('owner_uid', user.id)
       .order('created_at', { ascending: false });
 
     // Apply search filter
@@ -68,28 +52,14 @@ export async function getEvents(filters?: {
 export async function getEventById(eventId: string): Promise<{ data: EventWithStatus | null; error: string | null }> {
   try {
     const supabase = await createServerClient();
-    
-    // Get current user session - try both getSession and getUser for better reliability
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
-    if (sessionError || userError || !session?.user || !user) {
-      console.error('[Event Actions] Auth check failed for getEventById:', {
-        hasSession: !!session,
-        hasUser: !!user,
-        sessionError: sessionError?.message,
-        userError: userError?.message,
-      });
-      return { data: null, error: 'Not authenticated' };
-    }
+    const user = await requireAuth(supabase);
+    await requireEventOwnership(supabase, user.id, eventId);
 
-    // Fetch event - use user.id from getUser() as it's more reliable
-    const userId = user.id || session.user.id;
     const { data, error } = await supabase
       .from('events')
       .select('*')
       .eq('id', eventId)
-      .eq('owner_uid', userId)
+      .eq('owner_uid', user.id)
       .single();
 
     if (error) {
@@ -121,33 +91,8 @@ export async function updateEvent(
 ): Promise<{ data: EventWithStatus | null; error: string | null }> {
   try {
     const supabase = await createServerClient();
-    
-    // Get current user session - try both getSession and getUser for better reliability
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
-    if (sessionError || userError || !session?.user || !user) {
-      console.error('[Event Actions] Auth check failed for updateEvent:', {
-        hasSession: !!session,
-        hasUser: !!user,
-        sessionError: sessionError?.message,
-        userError: userError?.message,
-      });
-      return { data: null, error: 'Not authenticated' };
-    }
-
-    // Verify user owns the event - use user.id from getUser() as it's more reliable
-    const userId = user.id || session.user.id;
-    const { data: eventCheck, error: eventError } = await supabase
-      .from('events')
-      .select('id')
-      .eq('id', eventId)
-      .eq('owner_uid', userId)
-      .single();
-
-    if (eventError || !eventCheck) {
-      return { data: null, error: 'Event not found or access denied' };
-    }
+    const user = await requireAuth(supabase);
+    await requireEventOwnership(supabase, user.id, eventId);
 
     // Build update object (only include provided fields)
     const updateData: Record<string, any> = {};
@@ -155,7 +100,7 @@ export async function updateEvent(
       updateData.title = updates.title.trim();
     }
     if (updates.topic !== undefined) {
-      updateData.topic = updates.topic === '' ? null : updates.topic.trim();
+      updateData.topic = updates.topic === null || updates.topic === '' ? null : updates.topic.trim();
     }
     if (updates.start_time !== undefined) {
       updateData.start_time = updates.start_time;

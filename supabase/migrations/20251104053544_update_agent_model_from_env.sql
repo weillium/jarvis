@@ -1,5 +1,5 @@
 -- Update create_event_with_agent function to accept and set model parameter
--- This allows the model to be set when the agent is created, matching the worker's GEN_MODEL
+-- This allows the model_set to be set when the agent is created
 
 create or replace function create_event_with_agent(
   p_owner_uid uuid,

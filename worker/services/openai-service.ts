@@ -1,0 +1,156 @@
+import OpenAI from 'openai';
+import type {
+  ChatCompletionContentPart,
+  ChatCompletionMessage,
+  ChatCompletionMessageParam,
+  ChatCompletionCreateParams,
+} from 'openai/resources/chat/completions';
+import type {
+  ChatCompletionDTO,
+  ChatCompletionMessageDTO,
+} from '../types';
+import type { ModelSet } from './model-management/model-providers';
+import {
+  resolveModel,
+  resolveModelSetFromEnv,
+} from './model-management/model-resolver';
+
+export class OpenAIService {
+  private client: OpenAI;
+  private embedModel: string;
+  private genModel: string;
+  private readonly modelSet: ModelSet;
+
+  constructor(
+    clientOrKey: OpenAI | string,
+    embedModel: string,
+    genModel: string,
+    modelSet?: ModelSet
+  ) {
+    if (typeof clientOrKey === 'string') {
+      this.client = new OpenAI({ apiKey: clientOrKey });
+    } else {
+      this.client = clientOrKey;
+    }
+    this.embedModel = embedModel;
+    this.genModel = genModel;
+    this.modelSet = modelSet ?? resolveModelSetFromEnv();
+  }
+
+  getClient(): OpenAI {
+    return this.client;
+  }
+
+  getEmbedModel(): string {
+    return this.embedModel;
+  }
+
+  getGenModel(): string {
+    return this.genModel;
+  }
+
+  getRealtimeModel(defaultModel: string = 'gpt-4o-realtime-preview-2024-10-01'): string {
+    const resolution = resolveModel({
+      modelKey: 'runtime.realtime',
+      modelSet: this.modelSet,
+      throwOnMissing: false,
+    });
+    return resolution.resolvedValue ?? defaultModel;
+  }
+
+  async createEmbedding(text: string): Promise<number[]> {
+    const response = await this.client.embeddings.create({
+      model: this.embedModel,
+      input: text,
+    });
+
+    return response.data[0].embedding;
+  }
+
+  async createChatCompletion(
+    messages: ChatCompletionMessageParam[],
+    options?: {
+      responseFormat?: ChatCompletionCreateParams['response_format'];
+      temperature?: number;
+      model?: string;
+    }
+  ): Promise<ChatCompletionDTO> {
+    const request: OpenAI.Chat.Completions.ChatCompletionCreateParams = {
+      model: options?.model ?? this.genModel,
+      messages,
+    };
+
+    if (options?.responseFormat) {
+      request.response_format = options.responseFormat;
+    }
+
+    if (options?.temperature !== undefined) {
+      request.temperature = options.temperature;
+    }
+
+    const response = await this.client.chat.completions.create(request);
+    return mapChatCompletionResponse(response);
+  }
+}
+
+const mapChatCompletionResponse = (
+  response: OpenAI.Chat.Completions.ChatCompletion
+): ChatCompletionDTO => ({
+  id: response.id,
+  created: response.created,
+  model: response.model,
+  choices: response.choices.map(choice => ({
+    index: choice.index,
+    finishReason: choice.finish_reason ?? null,
+    message: mapMessage(choice.message),
+  })),
+  usage: response.usage
+    ? {
+        promptTokens: response.usage.prompt_tokens,
+        completionTokens: response.usage.completion_tokens ?? 0,
+        totalTokens: response.usage.total_tokens,
+      }
+    : undefined,
+});
+
+const mapMessage = (message: ChatCompletionMessage): ChatCompletionMessageDTO => ({
+  role: message.role,
+  content: normalizeMessageContent(message.content),
+  refusal: message.refusal ?? null,
+});
+
+const normalizeMessageContent = (
+  content: ChatCompletionMessage['content']
+): string | null => {
+  if (typeof content === 'string' || content === null) {
+    return content;
+  }
+
+  if (!Array.isArray(content)) {
+    return null;
+  }
+
+  const contentParts = content as ChatCompletionContentPart[];
+
+  const textParts = contentParts
+    .map(extractTextFromPart)
+    .filter((value: string): value is string => value.trim().length > 0);
+
+  if (textParts.length === 0) {
+    return null;
+  }
+
+  return textParts.join('\n');
+};
+
+const extractTextFromPart = (part: ChatCompletionContentPart): string => {
+  if (part.type === 'text') {
+    return part.text ?? '';
+  }
+
+  if ('text' in part && typeof part.text === 'string') {
+    return part.text;
+  }
+
+  return '';
+};

@@ -1,5 +1,7 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@/shared/lib/supabase/server';
+import { requireAuth, requireEventOwnership } from '@/shared/lib/auth';
 import { connectionManager } from './connection-manager';
 
 /**
@@ -61,6 +63,24 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  // Check authentication and event ownership
+  try {
+    const supabase = await createServerClient();
+    const user = await requireAuth(supabase);
+    await requireEventOwnership(supabase, user.id, eventId);
+  } catch (error) {
+    return new Response(
+      JSON.stringify({ 
+        ok: false, 
+        error: error instanceof Error ? error.message : 'Not authenticated' 
+      }),
+      {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  }
+
   // Create SSE stream
   const stream = new ReadableStream({
     async start(controller) {
@@ -81,76 +101,115 @@ export async function GET(req: NextRequest) {
         )
       );
 
-      // Send initial session statuses (if any exist)
-      try {
-        const { data: sessions } = await supabase
-          .from('agent_sessions')
-          .select('*')
-          .eq('event_id', eventId)
-          .order('created_at', { ascending: true });
+      // Initial session data is provided by React Query, not SSE
+      // SSE only streams real-time enrichment data (connection health, logs, metrics)
+      console.log(`[api/stream] SSE connection established for event ${eventId} - waiting for enrichment data from worker`);
 
-        if (sessions && sessions.length > 0) {
-          console.log(`[api/stream] Sending initial ${sessions.length} session(s) for event ${eventId}`);
-          // Send immediately without delay for better responsiveness
-          for (const session of sessions) {
-            try {
-              controller.enqueue(
-                encoder.encode(
-                  formatSSE({
-                    type: 'agent_session_status',
-                    event_id: eventId,
-                    timestamp: new Date().toISOString(),
-                    payload: {
-                      agent_type: session.agent_type,
-                      session_id: session.provider_session_id || session.id,
-                      status: session.status, // Can be 'generated', 'starting', 'active', 'paused', 'closed', 'error'
-                      metadata: {
-                        created_at: session.created_at,
-                        updated_at: session.updated_at,
-                        closed_at: session.closed_at,
-                        model: session.model || undefined,
-                      },
-                    },
-                  })
-                )
-              );
-              console.log(`[api/stream] Sent initial session ${session.agent_type}: ${session.status}`);
-            } catch (error) {
-              console.error(`[api/stream] Error sending initial session ${session.agent_type}: ${error}`);
-            }
-          }
-        } else {
-          console.log(`[api/stream] No existing sessions for event ${eventId}`);
-        }
-      } catch (error: any) {
-        console.error(`[api/stream] Error fetching initial sessions: ${error.message}`);
-        // Don't fail the connection if initial fetch fails
-      }
-
-      // Subscribe to agent_outputs table for cards
+      // Subscribe to cards table for canonical state changes
       const cardsChannel = supabase
-        .channel(`agent_outputs_${eventId}`)
+        .channel(`cards_${eventId}`)
         .on(
           'postgres_changes',
           {
-            event: 'INSERT',
+            event: '*',
             schema: 'public',
-            table: 'agent_outputs',
+            table: 'cards',
             filter: `event_id=eq.${eventId}`,
           },
           (payload: any) => {
-            const output = payload.new;
-            
-            // Only stream cards (not facts updates)
-            if (output.agent_type === 'cards' && output.type === 'card') {
+            const eventType = payload.eventType;
+            const newRow = payload.new;
+            const oldRow = payload.old;
+
+            const toSnapshot = (row: any) => {
+              if (!row || typeof row !== 'object' || typeof row.payload !== 'object') {
+                return null;
+              }
+
+              const templateLabel =
+                row.payload &&
+                typeof row.payload === 'object' &&
+                typeof row.payload.template_label === 'string' &&
+                row.payload.template_label.trim().length > 0
+                  ? row.payload.template_label
+                  : null;
+
+              return {
+                id: row.card_id,
+                event_id: row.event_id,
+                payload: row.payload,
+                card_kind:
+                  typeof row.card_kind === 'string' && row.card_kind.length > 0
+                    ? row.card_kind
+                    : templateLabel,
+                card_type:
+                  typeof row.card_type === 'string' && row.card_type.length > 0
+                    ? row.card_type
+                    : row.payload?.card_type ?? null,
+                created_at: typeof row.created_at === 'string' ? row.created_at : new Date().toISOString(),
+                updated_at: typeof row.updated_at === 'string' ? row.updated_at : null,
+                last_seen_seq:
+                  typeof row.last_seen_seq === 'number' && Number.isFinite(row.last_seen_seq)
+                    ? row.last_seen_seq
+                    : null,
+                is_active: row.is_active !== false,
+              };
+            };
+
+            if (eventType === 'INSERT') {
+              const snapshot = toSnapshot(newRow);
+              if (!snapshot) return;
               controller.enqueue(
                 encoder.encode(
                   formatSSE({
-                    type: 'card',
-                    payload: output.payload,
-                    for_seq: output.for_seq,
-                    created_at: output.created_at,
+                    type: 'card_created',
                     timestamp: new Date().toISOString(),
+                    card: snapshot,
+                  })
+                )
+              );
+              return;
+            }
+
+            if (eventType === 'UPDATE') {
+              const snapshot = toSnapshot(newRow);
+              if (!snapshot) return;
+
+              const wasActive = oldRow ? oldRow.is_active !== false : true;
+              const nowInactive = snapshot.is_active === false;
+
+              if (wasActive && nowInactive) {
+                controller.enqueue(
+                  encoder.encode(
+                    formatSSE({
+                      type: 'card_deactivated',
+                      timestamp: new Date().toISOString(),
+                      card_id: snapshot.id,
+                    })
+                  )
+                );
+                return;
+              }
+
+              controller.enqueue(
+                encoder.encode(
+                  formatSSE({
+                    type: 'card_updated',
+                    timestamp: new Date().toISOString(),
+                    card: snapshot,
+                  })
+                )
+              );
+              return;
+            }
+
+            if (eventType === 'DELETE' && oldRow) {
+              controller.enqueue(
+                encoder.encode(
+                  formatSSE({
+                    type: 'card_deleted',
+                    timestamp: new Date().toISOString(),
+                    card_id: oldRow.card_id,
                   })
                 )
               );
@@ -185,70 +244,8 @@ export async function GET(req: NextRequest) {
         )
         .subscribe();
 
-      // Subscribe to agent_sessions table for status updates
-      const sessionsChannel = supabase
-        .channel(`agent_sessions_${eventId}_${Date.now()}`) // Add timestamp to prevent channel conflicts
-        .on(
-          'postgres_changes',
-          {
-            event: '*', // INSERT, UPDATE, DELETE
-            schema: 'public',
-            table: 'agent_sessions',
-            filter: `event_id=eq.${eventId}`,
-          },
-          async (payload: any) => {
-            const session = payload.new || payload.old;
-            
-            // Only process if we have a valid session
-            if (!session || !session.agent_type) {
-              console.warn(`[api/stream] Invalid session payload:`, payload);
-              return;
-            }
-            
-            console.log(`[api/stream] Session ${payload.eventType} for ${session.agent_type}: ${session.status} (event: ${eventId})`);
-            
-            // Stream basic status update
-            // Note: Comprehensive status (with token metrics, logs, etc.) will be
-            // pushed by worker via separate mechanism in Step 7
-            try {
-              // Create a fresh payload object to ensure React detects the change
-              // Use the actual updated_at from the database to ensure React detects status changes
-              const statusPayload = {
-                agent_type: session.agent_type,
-                session_id: session.provider_session_id || session.id,
-                status: session.status,
-                metadata: {
-                  created_at: session.created_at,
-                  updated_at: session.updated_at || session.created_at || new Date().toISOString(),
-                  closed_at: session.closed_at,
-                  model: session.model || undefined,
-                },
-              };
-              
-              const message = formatSSE({
-                type: 'agent_session_status',
-                event_id: eventId,
-                timestamp: new Date().toISOString(),
-                payload: statusPayload,
-              });
-              
-              controller.enqueue(encoder.encode(message));
-              
-              console.log(`[api/stream] Successfully sent ${session.agent_type} status update: ${session.status} to SSE stream`);
-            } catch (error) {
-              console.error(`[api/stream] Error sending session status: ${error}`);
-            }
-          }
-        )
-        .subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-            console.log(`[api/stream] agent_sessions channel subscribed successfully for event ${eventId}`);
-          } else if (status === 'CHANNEL_ERROR') {
-            console.error(`[api/stream] agent_sessions channel subscription error for event ${eventId}`);
-          } else {
-            console.log(`[api/stream] agent_sessions channel subscription status: ${status} for event ${eventId}`);
-          }
-        });
+      // Session status updates are handled by React Query polling
+      // SSE only streams enrichment data from worker (websocket_state, ping_pong, logs, real-time metrics)
 
       // Send periodic heartbeat to keep connection alive
       const heartbeatInterval = setInterval(() => {
@@ -280,7 +277,6 @@ export async function GET(req: NextRequest) {
         // Clean up Supabase channels
         supabase.removeChannel(cardsChannel);
         supabase.removeChannel(factsChannel);
-        supabase.removeChannel(sessionsChannel);
         
         // Close controller
         controller.close();

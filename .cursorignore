@@ -1,0 +1,19 @@
+# deps
+**/node_modules/
+**/pnpm-lock.yaml.bak
+**/package-lock.json.bak
+
+# build outputs
+**/.next/
+**/dist/
+**/build/
+**/.output/
+**/.turbo/
+
+# caches
+**/.cache/
+**/.eslintcache
+
+# infra stuff
+supabase/.temp/
+supabase/function_log/

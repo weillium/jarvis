@@ -10,7 +10,7 @@
  */
 
 import { BaseEnricher } from './base-enricher';
-import { EnrichmentResult } from '../types';
+import type { EnrichmentResult } from '../types';
 
 export class WebSearchEnricher extends BaseEnricher {
   name = 'web_search';
@@ -23,7 +23,7 @@ export class WebSearchEnricher extends BaseEnricher {
     super();
   }
 
-  async enrich(
+  enrich(
     eventId: string,
     eventTitle: string,
     eventTopic: string | null
@@ -60,7 +60,7 @@ export class WebSearchEnricher extends BaseEnricher {
 
     // PLACEHOLDER: Return empty for now
     console.log(`[enrichment/${this.name}] Placeholder - returning empty results`);
-    return [];
+    return Promise.resolve([]);
   }
 
   // TODO: Implement web search

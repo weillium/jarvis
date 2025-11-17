@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 /**
- * Start Context Generation API Route
+ * Start Context Generation API Route (Consolidated)
  * 
- * Initiates context generation by setting agent status to 'blueprint_generating'.
+ * Initiates context generation by setting agent status to 'blueprint'.
+ * If blueprints already exist, marks them as 'superseded' before generating a new one.
  * The worker will pick this up via tickBlueprint() and generate a blueprint.
  * 
  * POST /api/context/[eventId]/start
@@ -45,7 +46,7 @@ export async function POST(
     // Try to find existing agent, or we could create one if needed
     const { data: existingAgents, error: agentError } = await (supabase
       .from('agents') as any)
-      .select('id, event_id, status')
+      .select('id, event_id, status, stage')
       .eq('event_id', eventId)
       .limit(1);
 
@@ -58,18 +59,25 @@ export async function POST(
     }
 
     let agentId: string;
+    let existingBlueprints: Array<{ id: string }> | null = null;
 
     if (existingAgents && existingAgents.length > 0) {
       // Agent exists, check if we can start blueprint generation
       const agent = existingAgents[0];
       
-      // Only allow starting if agent is in a valid state
-      const validStates = ['idle', 'blueprint_ready', 'error'];
-      if (!validStates.includes(agent.status)) {
+      // Allow starting blueprint generation if:
+      // - Agent is idle (with any stage, including context_complete to allow regeneration)
+      // - Agent is in error state
+      // Blueprint regeneration is allowed even after context generation is complete
+      const isValidState = 
+        agent.status === 'idle' ||
+        agent.status === 'error';
+      
+      if (!isValidState) {
         return NextResponse.json(
           { 
             ok: false, 
-            error: `Cannot start blueprint generation. Agent status is '${agent.status}'. Valid states: ${validStates.join(', ')}` 
+            error: `Cannot start blueprint generation. Agent status is '${agent.status}' with stage '${agent.stage}'. Valid states: idle (any stage) or error` 
           },
           { status: 400 }
         );
@@ -77,10 +85,76 @@ export async function POST(
 
       agentId = agent.id;
 
-      // Update agent status to 'blueprint_generating'
+      // Check if blueprints exist (for regeneration case)
+      const { data: blueprints, error: blueprintCheckError } = await (supabase
+        .from('context_blueprints') as any)
+        .select('id')
+        .eq('agent_id', agentId)
+        .in('status', ['generating', 'ready', 'approved']);
+
+      if (blueprintCheckError) {
+        console.error('[api/context/start] Error checking existing blueprints:', blueprintCheckError);
+        // Continue anyway - might not have blueprints
+      } else {
+        existingBlueprints = blueprints;
+      }
+
+      // If blueprints exist, mark them as superseded (regeneration case)
+      if (existingBlueprints && existingBlueprints.length > 0) {
+        const blueprintIds = existingBlueprints.map(b => b.id);
+
+        // Mark blueprints as superseded
+        const { error: supersedeError } = await (supabase
+          .from('context_blueprints') as any)
+          .update({ 
+            status: 'superseded',
+            superseded_at: new Date().toISOString(),
+          })
+          .eq('agent_id', agentId)
+          .in('status', ['generating', 'ready', 'approved']);
+
+        if (supersedeError) {
+          console.error('[api/context/start] Error superseding blueprints:', supersedeError);
+          return NextResponse.json(
+            { ok: false, error: `Failed to supersede existing blueprints: ${supersedeError.message}` },
+            { status: 500 }
+          );
+        }
+
+        // Mark blueprint generation cycles as superseded
+        const { error: blueprintCycleError } = await (supabase
+          .from('generation_cycles') as any)
+          .update({ status: 'superseded' })
+          .eq('event_id', eventId)
+          .in('blueprint_id', blueprintIds)
+          .eq('cycle_type', 'blueprint')
+          .in('status', ['started', 'processing', 'completed']);
+
+        if (blueprintCycleError) {
+          console.warn('[api/context/start] Warning: Failed to mark blueprint cycles as superseded:', blueprintCycleError.message);
+        }
+
+        // Mark downstream generation cycles (research, glossary, chunks) as superseded
+        // These cycles are associated with the superseded blueprints
+        const { error: downstreamCycleError } = await (supabase
+          .from('generation_cycles') as any)
+          .update({ status: 'superseded' })
+          .eq('event_id', eventId)
+          .in('blueprint_id', blueprintIds)
+          .in('cycle_type', ['research', 'glossary', 'chunks'])
+          .in('status', ['started', 'processing', 'completed']);
+
+        if (downstreamCycleError) {
+          console.warn('[api/context/start] Warning: Failed to mark downstream cycles as superseded:', downstreamCycleError.message);
+        }
+
+        console.log(`[api/context/start] Marked ${existingBlueprints.length} blueprint(s) and associated cycles as superseded`);
+      }
+
+      // Update agent status to 'idle' with 'blueprint' stage
       const { error: updateError } = await (supabase
         .from('agents') as any)
-        .update({ status: 'blueprint_generating' })
+        .update({ status: 'idle', stage: 'blueprint' })
         .eq('id', agentId);
 
       if (updateError) {
@@ -102,12 +176,18 @@ export async function POST(
       );
     }
 
+    const isRegeneration = existingBlueprints && existingBlueprints.length > 0;
+
     return NextResponse.json({
       ok: true,
       agent_id: agentId,
       event_id: eventId,
-      status: 'blueprint_generating',
-      message: 'Context generation started. Blueprint will be generated shortly.',
+      status: 'idle',
+      stage: 'blueprint',
+      is_regeneration: isRegeneration,
+      message: isRegeneration 
+        ? 'Blueprint regeneration started. A new blueprint will be generated shortly.' 
+        : 'Context generation started. Blueprint will be generated shortly.',
     });
   } catch (error: any) {
     console.error('[api/context/start] Unexpected error:', error);

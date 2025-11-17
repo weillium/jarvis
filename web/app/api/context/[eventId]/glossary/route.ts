@@ -46,13 +46,42 @@ export async function GET(
 
     const supabase = getSupabaseClient();
 
-    // Build query - only fetch active terms with version info
+    // Fetch glossary terms, excluding those from superseded generation cycles
+    // First, get all generation cycle IDs that are NOT superseded
+    const { data: activeCycles, error: cycleError } = await (supabase
+      .from('generation_cycles') as any)
+      .select('id')
+      .eq('event_id', eventId)
+      .neq('status', 'superseded')
+      .in('cycle_type', ['glossary']);
+
+    if (cycleError) {
+      console.warn('[api/context/glossary] Warning: Failed to fetch active cycles:', cycleError.message);
+      // Continue with empty list - will only show legacy items
+    }
+
+    // Build list of active cycle IDs
+    const activeCycleIds: string[] = [];
+    if (activeCycles && activeCycles.length > 0) {
+      activeCycleIds.push(...activeCycles.map((c: { id: string }) => c.id));
+    }
+
+    // Build query - fetch terms only from active cycles (or null/legacy items)
+    // Handle null generation_cycle_id separately since .in() doesn't match NULL
     let query = (supabase
       .from('glossary_terms') as any)
-      .select('id, term, definition, acronym_for, category, usage_examples, related_terms, confidence_score, source, source_url, created_at, version, generation_cycle_id')
-      .eq('event_id', eventId)
-      .eq('is_active', true)
-      .order('confidence_score', { ascending: false, nullsFirst: false })
+      .select('id, term, definition, acronym_for, category, usage_examples, related_terms, confidence_score, source, source_url, created_at, generation_cycle_id, agent_utility')
+      .eq('event_id', eventId);
+
+    if (activeCycleIds.length > 0) {
+      // Include items with null generation_cycle_id OR items from active cycles
+      query = query.or(`generation_cycle_id.is.null,generation_cycle_id.in.(${activeCycleIds.join(',')})`);
+    } else {
+      // If no active cycles, only show legacy items (null generation_cycle_id)
+      query = query.is('generation_cycle_id', null);
+    }
+
+    query = query.order('confidence_score', { ascending: false, nullsFirst: false })
       .order('term', { ascending: true });
 
     // Apply filters
@@ -87,6 +116,11 @@ export async function GET(
 
     // Group by category if requested (for frontend convenience)
     const groupedByCategory: Record<string, typeof filteredTerms> = {};
+    filteredTerms = filteredTerms.map((term: any) => ({
+      ...term,
+      agent_utility: Array.isArray(term.agent_utility) ? term.agent_utility : [],
+    }));
+
     filteredTerms.forEach((term: any) => {
       const cat = term.category || 'uncategorized';
       if (!groupedByCategory[cat]) {

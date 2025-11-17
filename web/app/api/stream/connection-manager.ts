@@ -16,6 +16,8 @@ interface EventConnections {
 class ConnectionManager {
   private connections: Map<string, EventConnections> = new Map();
   private cleanupInterval: NodeJS.Timeout;
+  private noConnectionLogged: Set<string> = new Set();
+  private lastStatuses: Map<string, Map<string, { payload: any; storedAt: number }>> = new Map();
 
   constructor() {
     // Clean up stale connections every 5 minutes
@@ -39,7 +41,25 @@ class ConnectionManager {
     eventConnections.controllers.add(controller);
     eventConnections.lastActivity = Date.now();
 
+    if (this.noConnectionLogged.has(eventId)) {
+      this.noConnectionLogged.delete(eventId);
+    }
+
     console.log(`[connection-manager] Registered connection for event ${eventId} (total: ${eventConnections.controllers.size})`);
+
+    // Replay the most recent statuses so freshly connected clients don't have to wait
+    const lastStatusesForEvent = this.lastStatuses.get(eventId);
+    if (lastStatusesForEvent && lastStatusesForEvent.size > 0) {
+      const encoder = new TextEncoder();
+      for (const { payload } of lastStatusesForEvent.values()) {
+        const replayMessage = this.buildMessage(eventId, payload);
+        try {
+          controller.enqueue(encoder.encode(replayMessage));
+        } catch (error) {
+          console.warn('[connection-manager] Failed to replay status for event', eventId, error);
+        }
+      }
+    }
   }
 
   /**
@@ -57,26 +77,30 @@ class ConnectionManager {
     // Clean up empty event connections
     if (eventConnections.controllers.size === 0) {
       this.connections.delete(eventId);
+      this.noConnectionLogged.delete(eventId);
+      // Retain last statuses so the next connection can hydrate immediately
     }
   }
 
   /**
-   * Push status update to all connections for an event
+   * Push enrichment update to all connections for an event
+   * Only sends enrichment data (websocket_state, ping_pong, logs, metrics)
+   * Database state (status, metadata) comes from React Query
    */
-  pushStatus(eventId: string, status: any): void {
+  pushStatus(eventId: string, enrichment: any): void {
     const eventConnections = this.connections.get(eventId);
     if (!eventConnections || eventConnections.controllers.size === 0) {
-      console.log(`[connection-manager] No active connections for event ${eventId}`);
+      if (!this.noConnectionLogged.has(eventId)) {
+        console.log(`[connection-manager] No active connections for event ${eventId}`);
+        this.noConnectionLogged.add(eventId);
+      }
+      this.storeLastStatus(eventId, enrichment);
       return;
     }
 
     const encoder = new TextEncoder();
-    const message = `data: ${JSON.stringify({
-      type: 'agent_session_status',
-      event_id: eventId,
-      timestamp: new Date().toISOString(),
-      payload: status,
-    })}\n\n`;
+    this.storeLastStatus(eventId, enrichment);
+    const message = this.buildMessage(eventId, enrichment);
 
     const data = encoder.encode(message);
     let pushedCount = 0;
@@ -100,7 +124,10 @@ class ConnectionManager {
     eventConnections.lastActivity = Date.now();
 
     if (pushedCount > 0) {
-      console.log(`[connection-manager] Pushed status to ${pushedCount} connection(s) for event ${eventId}`);
+      console.log(`[connection-manager] Pushed enrichment to ${pushedCount} connection(s) for event ${eventId}`);
+      if (this.noConnectionLogged.has(eventId)) {
+        this.noConnectionLogged.delete(eventId);
+      }
     }
   }
 
@@ -122,6 +149,8 @@ class ConnectionManager {
           }
         }
         this.connections.delete(eventId);
+        this.noConnectionLogged.delete(eventId);
+        this.lastStatuses.delete(eventId);
       }
     }
   }
@@ -148,6 +177,34 @@ class ConnectionManager {
       }
     }
     this.connections.clear();
+    this.noConnectionLogged.clear();
+    this.lastStatuses.clear();
+  }
+
+  private storeLastStatus(eventId: string, enrichment: any): void {
+    if (!enrichment || typeof enrichment !== 'object') {
+      return;
+    }
+
+    const agentType = typeof enrichment.agent_type === 'string' ? enrichment.agent_type : '__global__';
+    if (!this.lastStatuses.has(eventId)) {
+      this.lastStatuses.set(eventId, new Map());
+    }
+
+    const eventStatusMap = this.lastStatuses.get(eventId)!;
+    eventStatusMap.set(agentType, {
+      payload: enrichment,
+      storedAt: Date.now(),
+    });
+  }
+
+  private buildMessage(eventId: string, enrichment: any): string {
+    return `data: ${JSON.stringify({
+      type: 'agent_session_enrichment',
+      event_id: eventId,
+      timestamp: new Date().toISOString(),
+      payload: enrichment,
+    })}\n\n`;
   }
 }
 

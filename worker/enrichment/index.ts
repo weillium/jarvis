@@ -5,20 +5,20 @@
  * Goal: Generate 45-75 high-quality chunks from multiple sources
  */
 
-import { createClient } from '@supabase/supabase-js';
-import OpenAI from 'openai';
-import { BaseEnricher } from './enrichers/base-enricher';
+import type OpenAI from 'openai';
+import type { BaseEnricher } from './enrichers/base-enricher';
 import { WebSearchEnricher } from './enrichers/web-search';
 import { DocumentExtractor } from './enrichers/document-extractor';
 import { WikipediaEnricher } from './enrichers/wikipedia';
-import { EnrichmentConfig, EnrichmentResult } from './types';
+import type { EnrichmentConfig, EnrichmentResult } from './types';
+import type { WorkerSupabaseClient } from '../services/supabase';
 
 export class EnrichmentOrchestrator {
   private enrichers: Map<string, BaseEnricher> = new Map();
 
   constructor(
     private config: EnrichmentConfig,
-    private supabase: ReturnType<typeof createClient>,
+    private supabase: WorkerSupabaseClient,
     private openai: OpenAI,
     private embedModel: string
   ) {
@@ -76,10 +76,11 @@ export class EnrichmentOrchestrator {
         const results = await enricher.enrich(eventId, eventTitle, eventTopic);
         console.log(`[enrichment] ${enricherName} produced ${results.length} result(s)`);
         return results;
-      } catch (error: any) {
-        console.error(`[enrichment] Error in ${enricherName}: ${error.message}`);
-        return [];
+      } catch (err: unknown) {
+        console.error("[worker] error:", String(err));
       }
+
+      return [];
     });
 
     const results = await Promise.all(enricherPromises);
@@ -107,7 +108,7 @@ export class EnrichmentOrchestrator {
         const embedding = embeddingRes.data[0].embedding;
 
         // Store in database
-        const { error } = await this.supabase.from('context_items').insert({
+        const payload = {
           event_id: eventId,
           source: 'enrichment',
           chunk,
@@ -117,15 +118,18 @@ export class EnrichmentOrchestrator {
           quality_score: result.qualityScore,
           chunk_size: chunk.length,
           enrichment_timestamp: new Date().toISOString(),
-        });
+        };
 
+        const { error } = await this.supabase
+          .from('context_items')
+          .insert(payload);
         if (error) {
           console.error(`[enrichment] Error storing chunk: ${error.message}`);
         } else {
           insertedCount++;
         }
-      } catch (error: any) {
-        console.error(`[enrichment] Error processing chunk: ${error.message}`);
+      } catch (err: unknown) {
+        console.error("[worker] error:", String(err));
       }
     }
 
@@ -170,4 +174,3 @@ export function getEnrichmentConfig(): EnrichmentConfig {
       : undefined,
   };
 }
-

@@ -23,12 +23,13 @@ export async function POST(
       auth: { persistSession: false },
     });
 
-    // Get the agent for this event (must be in testing status)
+    // Get the agent for this event (must be in active status with testing stage)
     const { data: agents, error: agentError } = await supabase
       .from('agents')
-      .select('id, status')
+      .select('id, status, stage, model_set')
       .eq('event_id', eventId)
-      .eq('status', 'testing')
+      .eq('status', 'active')
+      .eq('stage', 'testing')
       .limit(1);
 
     if (agentError) {
@@ -42,7 +43,7 @@ export async function POST(
       return NextResponse.json(
         {
           ok: false,
-          error: 'No agent found with testing status for this event',
+          error: 'No agent found with testing stage for this event',
         },
         { status: 404 }
       );
@@ -80,15 +81,31 @@ export async function POST(
       }
     }
 
-    // Step 2: Agent sessions MUST use the Realtime API model, not the agent's model
-    // The agent's model is for text generation (e.g., gpt-4o-mini), but sessions need Realtime API
-    // Use environment variable or default to the correct Realtime API model
-    // This matches the worker's REALTIME_MODEL configuration
-    const model = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-10-01';
+    // Step 2: Get agent's model_set to determine which models to use
+    const modelSet = agents[0].model_set || 'open_ai';
     
-    console.log(`[api/agent-sessions/confirm-ready] Using Realtime model: ${model} for event ${eventId}`);
+    // Determine models based on model_set
+    let transcriptModel: string;
+    let cardsModel: string;
+    let factsModel: string;
+    
+    if (modelSet === 'open_ai') {
+      transcriptModel = process.env.OPENAI_TRANSCRIPT_MODEL || process.env.DEFAULT_TRANSCRIPT_MODEL || 'gpt-4o-realtime-preview-2024-10-01';
+      cardsModel = process.env.OPENAI_CARDS_MODEL || process.env.DEFAULT_CARDS_MODEL || 'gpt-4o-realtime-preview-2024-10-01';
+      factsModel = process.env.OPENAI_FACTS_MODEL || process.env.DEFAULT_FACTS_MODEL || 'gpt-4o-mini';
+    } else {
+      // Default fallback for unknown model_set values
+      transcriptModel = process.env.DEFAULT_TRANSCRIPT_MODEL || 'gpt-4o-realtime-preview-2024-10-01';
+      cardsModel = process.env.DEFAULT_CARDS_MODEL || 'gpt-4o-realtime-preview-2024-10-01';
+      factsModel = process.env.DEFAULT_FACTS_MODEL || 'gpt-4o-mini';
+    }
+    
+    console.log(`[api/agent-sessions/confirm-ready] Using models for event ${eventId} (model_set: ${modelSet}):`);
+    console.log(`  - Transcript: ${transcriptModel}`);
+    console.log(`  - Cards: ${cardsModel}`);
+    console.log(`  - Facts: ${factsModel}`);
 
-    // Step 3: Create new sessions with 'generated' status
+    // Step 3: Create new sessions with 'closed' status (will be updated to 'active' when started)
     const { data: newSessions, error: createError } = await supabase
       .from('agent_sessions')
       .insert([
@@ -96,17 +113,25 @@ export async function POST(
           event_id: eventId,
           agent_id: agentId,
           provider_session_id: 'pending',
+          agent_type: 'transcript',
+          status: 'closed', // Will be updated to 'active' when started
+          model: transcriptModel,
+        },
+        {
+          event_id: eventId,
+          agent_id: agentId,
+          provider_session_id: 'pending',
           agent_type: 'cards',
-          status: 'generated',
-          model: model,
+          status: 'closed', // Will be updated to 'active' when started
+          model: cardsModel,
         },
         {
           event_id: eventId,
           agent_id: agentId,
           provider_session_id: 'pending',
           agent_type: 'facts',
-          status: 'generated',
-          model: model,
+          status: 'closed', // Will be updated to 'active' when started
+          model: factsModel,
         },
       ])
       .select();
@@ -118,10 +143,10 @@ export async function POST(
       );
     }
 
-    // Step 4: Update agent status to 'ready' (not 'running')
+    // Step 4: Update agent status to 'active' with 'running' stage (ready for production)
     const { error: updateError } = await supabase
       .from('agents')
-      .update({ status: 'ready' })
+      .update({ status: 'active', stage: 'running' })
       .eq('id', agentId);
 
     if (updateError) {

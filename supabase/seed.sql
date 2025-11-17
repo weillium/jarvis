@@ -28,9 +28,9 @@ insert into events (owner_uid, title, topic, start_time)
 values
   ('00000000-0000-0000-0000-000000000000', 'Demo Event - New Workflow', 'AI Context Agents and Deep Research', now() + interval '5 minutes');
 
--- Agent for Event 1 with new 'idle' status (manual context generation)
-insert into agents (event_id, status)
-select id, 'idle' from events where title = 'Demo Event - New Workflow';
+-- Agent for Event 1 with new schema: status='idle', stage='blueprint' (manual context generation)
+insert into agents (event_id, status, stage)
+select id, 'idle', 'blueprint' from events where title = 'Demo Event - New Workflow';
 
 -- Example context blueprint for Event 1 (ready for approval)
 insert into context_blueprints (
@@ -101,7 +101,7 @@ select
   'basic'
 from events e
 join agents a on a.event_id = e.id
-where e.title = 'Demo Event - New Workflow' and a.status = 'idle';
+where e.title = 'Demo Event - New Workflow' and a.status = 'idle' and a.stage = 'blueprint';
 
 -- Example glossary terms for Event 1
 insert into glossary_terms (event_id, term, definition, category, confidence_score, source)
@@ -129,17 +129,21 @@ set
   source = excluded.source,
   updated_at = now();
 
--- Example context items with ranking for Event 1
-insert into context_items (event_id, source, chunk, enrichment_source, chunk_size, rank, research_source, quality_score)
+-- Example context items with ranking for Event 1 (using metadata JSONB column)
+insert into context_items (event_id, chunk, rank, metadata)
 select 
   e.id,
-  'topic_prep',
   chunk_data.chunk,
-  'llm_generation',
-  length(chunk_data.chunk),
   chunk_data.rank,
-  'llm_generation',
-  0.85
+  jsonb_build_object(
+    'source', 'topic_prep',
+    'enrichment_source', 'llm_generation',
+    'research_source', 'llm_generation',
+    'component_type', 'chunk',
+    'quality_score', 0.85,
+    'chunk_size', length(chunk_data.chunk),
+    'enrichment_timestamp', now()
+  )
 from events e,
 (values
   (1, 'Large Language Models (LLMs) are AI systems trained on vast amounts of text data to understand and generate human-like language. They use transformer architectures to process sequences of text and can perform tasks like summarization, translation, and question answering.'),
@@ -155,9 +159,9 @@ insert into events (owner_uid, title, topic, start_time)
 values
   ('00000000-0000-0000-0000-000000000000', 'Demo Event - Legacy Workflow', 'Legacy Automatic Context Generation', now() + interval '10 minutes');
 
--- Agent for Event 2 with legacy 'prepping' status
-insert into agents (event_id, status)
-select id, 'prepping' from events where title = 'Demo Event - Legacy Workflow';
+-- Agent for Event 2 with new schema: status='idle', stage='prepping' (legacy workflow)
+insert into agents (event_id, status, stage)
+select id, 'idle', 'prepping' from events where title = 'Demo Event - Legacy Workflow';
 
 -- Example transcript for Event 2
 insert into transcripts (event_id, text)

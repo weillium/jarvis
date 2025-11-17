@@ -3,7 +3,7 @@
  * All enrichers must extend this class
  */
 
-import { EnrichmentResult } from '../types';
+import type { EnrichmentResult } from '../types';
 
 export abstract class BaseEnricher {
   abstract name: string;
@@ -30,7 +30,9 @@ export abstract class BaseEnricher {
    * Optional: Configure quality scoring
    * Returns a score 0-1 indicating chunk quality
    */
-  getQualityScore(chunk: string, metadata: any): number {
+  getQualityScore(chunk: string, metadata: Record<string, unknown>): number {
+    void chunk;
+    void metadata;
     return 0.5; // Default quality score
   }
 }

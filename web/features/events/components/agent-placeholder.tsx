@@ -23,71 +23,56 @@ export function AgentPlaceholder({ agent, eventId }: AgentPlaceholderProps) {
   const [contextItems, setContextItems] = useState<ContextItem[]>([]);
   const [isContextExpanded, setIsContextExpanded] = useState(false);
   const [contextLoading, setContextLoading] = useState(false);
-  const getStatusColor = (status: Agent['status']): string => {
-    switch (status) {
-      // New context generation statuses
-      case 'idle':
-        return '#64748b'; // gray
-      case 'blueprint_generating':
-        return '#3b82f6'; // blue
-      case 'blueprint_ready':
-        return '#10b981'; // green
-      case 'blueprint_approved':
-      case 'researching':
-      case 'building_glossary':
-      case 'building_chunks':
-        return '#f59e0b'; // amber
-      case 'context_complete':
-        return '#10b981'; // green
-      // Legacy statuses
-      case 'prepping':
-        return '#f59e0b'; // amber
-      case 'ready':
-        return '#10b981'; // green
-      case 'running':
-        return '#3b82f6'; // blue
-      case 'ended':
-        return '#6b7280'; // gray
-      case 'error':
-        return '#ef4444'; // red
-      default:
-        return '#6b7280';
+  const getStatusColor = (status: Agent['status'], stage?: string | null): string => {
+    if (status === 'error') return '#ef4444'; // red
+    if (status === 'ended') return '#6b7280'; // gray
+    if (status === 'paused') return '#f59e0b'; // amber
+    if (status === 'active') {
+      return stage === 'running' ? '#3b82f6' : stage === 'testing' ? '#8b5cf6' : '#3b82f6'; // blue/purple
     }
+    if (status === 'idle') {
+      switch (stage) {
+        case 'blueprint': return '#8b5cf6'; // purple
+        case 'researching': return '#f59e0b'; // amber
+        case 'building_glossary': return '#f59e0b'; // amber
+        case 'building_chunks': return '#f59e0b'; // amber
+        case 'regenerating_research': return '#f59e0b'; // amber
+        case 'regenerating_glossary': return '#f59e0b'; // amber
+        case 'regenerating_chunks': return '#f59e0b'; // amber
+        case 'context_complete': return '#10b981'; // green
+        case 'testing': return '#8b5cf6'; // purple
+        case 'ready': return '#10b981'; // green
+        case 'prepping': return '#f59e0b'; // amber
+        default: return '#64748b'; // gray
+      }
+    }
+    return '#6b7280';
   };
 
-  const getStatusLabel = (status: Agent['status']): string => {
-    switch (status) {
-      // New context generation statuses
-      case 'idle':
-        return 'Idle';
-      case 'blueprint_generating':
-        return 'Generating Blueprint';
-      case 'blueprint_ready':
-        return 'Blueprint Ready';
-      case 'blueprint_approved':
-        return 'Blueprint Approved';
-      case 'researching':
-        return 'Researching';
-      case 'building_glossary':
-        return 'Building Glossary';
-      case 'building_chunks':
-        return 'Building Chunks';
-      case 'context_complete':
-        return 'Context Complete';
-      // Legacy statuses
-      case 'prepping':
-        return 'Prepping';
-      case 'ready':
-        return 'Ready';
-      case 'running':
-        return 'Running';
-      case 'ended':
-        return 'Ended';
-      case 'error':
-        return 'Error';
-      default:
-        return status || 'Unknown';
+  const getStatusLabel = (status: Agent['status'], stage?: string | null): string => {
+    if (status === 'error') return 'Error';
+    if (status === 'ended') return 'Ended';
+    if (status === 'paused') return 'Paused';
+    if (status === 'active') {
+      return stage === 'running' ? 'Running' : stage === 'testing' ? 'Testing' : 'Active';
     }
+    if (status === 'idle') {
+      switch (stage) {
+        case 'blueprint': return 'Blueprint';
+        case 'researching': return 'Researching';
+        case 'building_glossary': return 'Building Glossary';
+        case 'building_chunks': return 'Building Chunks';
+        case 'regenerating_research': return 'Regenerating Research';
+        case 'regenerating_glossary': return 'Regenerating Glossary';
+        case 'regenerating_chunks': return 'Regenerating Chunks';
+        case 'context_complete': return 'Context Complete';
+        case 'testing': return 'Testing';
+        case 'ready': return 'Ready';
+        case 'prepping': return 'Prepping';
+        default: return 'Idle';
+      }
+    }
+    return 'Unknown';
   };
 
   if (!agent) {
@@ -185,17 +170,17 @@ export function AgentPlaceholder({ agent, eventId }: AgentPlaceholderProps) {
                 borderRadius: '12px',
                 fontSize: '13px',
                 fontWeight: '600',
-                backgroundColor: `${getStatusColor(agent.status)}20`,
-                color: getStatusColor(agent.status),
+                backgroundColor: `${getStatusColor(agent.status, agent.stage)}20`,
+                color: getStatusColor(agent.status, agent.stage),
               }}
             >
-              {getStatusLabel(agent.status)}
+              {getStatusLabel(agent.status, agent.stage)}
             </span>
             <span style={{
               fontSize: '13px',
               color: '#64748b',
             }}>
-              Model: {agent.model}
+              Model Set: {agent.model_set}
             </span>
           </div>
         </div>
@@ -242,9 +227,9 @@ export function AgentPlaceholder({ agent, eventId }: AgentPlaceholderProps) {
           <div style={{
             fontSize: '14px',
             fontWeight: '500',
-            color: getStatusColor(agent.status),
+            color: getStatusColor(agent.status, agent.stage),
           }}>
-            {getStatusLabel(agent.status)}
+            {getStatusLabel(agent.status, agent.stage)}
           </div>
         </div>
         <div>
@@ -256,14 +241,14 @@ export function AgentPlaceholder({ agent, eventId }: AgentPlaceholderProps) {
             letterSpacing: '0.5px',
             marginBottom: '6px',
           }}>
-            Model
+            Model Set
           </div>
           <div style={{
             fontSize: '14px',
             fontWeight: '500',
             color: '#0f172a',
           }}>
-            {agent.model}
+            {agent.model_set}
           </div>
         </div>
       </div>
@@ -343,7 +328,7 @@ export function AgentPlaceholder({ agent, eventId }: AgentPlaceholderProps) {
               </div>
             ) : contextItems.length === 0 ? (
               <div style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
-                No context items found. Context will be generated when agent status is 'prepping'.
+                No context items found. Context will be generated when agent is in prepping stage.
               </div>
             ) : (
               <div style={{ padding: '8px' }}>

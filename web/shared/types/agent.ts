@@ -1,26 +1,36 @@
-// Context generation statuses (new workflow)
-export type ContextGenerationStatus = 
-  | 'idle'                    // Agent created but context generation not started
-  | 'blueprint_generating'    // Generating context blueprint
-  | 'blueprint_ready'         // Blueprint generated, awaiting user approval
-  | 'blueprint_approved'      // User approved, research starting
-  | 'researching'             // Executing deep research plan
-  | 'building_glossary'        // Constructing glossary knowledge base
-  | 'building_chunks'         // Constructing vector database chunks
-  | 'context_complete'        // Context generation complete
-  | 'testing';                // Sessions generated, ready for testing
+// Agent lifecycle status (simplified - Phase 1)
+export type AgentLifecycleStatus = 
+  | 'idle'      // Not active (includes all workflow stages)
+  | 'active'    // Processing (running or testing)
+  | 'paused'    // Temporarily stopped
+  | 'ended'     // Completed
+  | 'error';    // Failed
 
-// Legacy statuses (backward compatibility - 'ready' is deprecated, use 'context_complete' instead)
-export type LegacyAgentStatus = 'prepping' | 'ready' | 'running' | 'ended' | 'error';
+// Agent workflow stage (Phase 1)
+export type AgentStage = 
+  | 'prepping'              // Legacy: automatic context building
+  | 'blueprint'             // Blueprint generation
+  | 'researching'           // Research phase
+  | 'building_glossary'      // Glossary construction
+  | 'building_chunks'       // Chunk construction
+  | 'regenerating_research'  // Regenerating research
+  | 'regenerating_glossary' // Regenerating glossary
+  | 'regenerating_chunks'    // Regenerating chunks
+  | 'context_complete'       // Context ready
+  | 'testing'               // Testing sessions
+  | 'ready'                 // Legacy: ready to start
+  | 'running'                // Processing transcripts
+  | null;                    // No stage
 
-// Combined agent status type
-export type AgentStatus = ContextGenerationStatus | LegacyAgentStatus;
+// Combined agent status type (for backward compatibility during migration)
+export type AgentStatus = AgentLifecycleStatus;
 
 export interface Agent {
   id: string;
   event_id: string;
   status: AgentStatus;
-  model: string;
+  stage: string | null;
+  model_set: string;
   created_at: string;
 }
 
