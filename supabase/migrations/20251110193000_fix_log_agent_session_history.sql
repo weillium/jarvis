@@ -141,3 +141,4 @@ $$;
 comment on function log_agent_session_history is 'Helper function to log connection events to agent_sessions_history table (captures full agent_sessions snapshot without relying on rowtype fields).';
 
 
+
