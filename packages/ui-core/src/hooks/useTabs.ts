@@ -1,3 +1,5 @@
+'use client';
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 export interface TabDefinition<TId extends string = string> {
