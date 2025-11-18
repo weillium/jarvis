@@ -18,6 +18,7 @@ import { StartSessionsModal } from './start-sessions-modal';
 import { calculateOpenAICost } from '@/shared/utils/pricing';
 import type { AgentSessionDisplay, AgentType } from './agent-sessions-utils';
 import { agentTitles, defaultAgentModels, inferPromptShareFromMetrics, formatDuration } from './agent-sessions-utils';
+import { YStack, XStack, Text, Button, Card, Alert } from '@jarvis/ui-core';
 
 interface AgentSessionsProps {
   eventId: string;
@@ -287,28 +288,20 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
   const hasRuntimeStats = runtimeStatsEntries.length > 0;
 
   return (
-    <div>
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '16px',
-      }}>
-        <h4 style={{
-          fontSize: '16px',
-          fontWeight: '600',
-          color: '#0f172a',
-          margin: 0,
-        }}>
+    <YStack>
+      <XStack
+        justifyContent="space-between"
+        alignItems="center"
+        marginBottom="$4"
+        flexWrap="wrap"
+        gap="$2"
+      >
+        <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
           Agent Sessions
-        </h4>
+        </Text>
         
         {/* Controls */}
-        <div style={{
-          display: 'flex',
-          gap: '8px',
-          alignItems: 'center',
-        }}>
+        <XStack gap="$2" alignItems="center" flexWrap="wrap">
           {/* Start/Resume Sessions button */}
           {(() => {
             if (checkingSessions || !sessionsData) {
@@ -341,36 +334,16 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
             }
 
             return (
-              <button
-                onClick={handleStartSessions}
+              <Button
+                variant="primary"
+                size="sm"
+                onPress={handleStartSessions}
                 disabled={isStartingSessions}
-                style={{
-                  padding: '8px 16px',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  color: '#ffffff',
-                  background: isStartingSessions ? '#93c5fd' : '#3b82f6',
-                  cursor: isStartingSessions ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  if (!isStartingSessions) {
-                    e.currentTarget.style.background = '#2563eb';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isStartingSessions) {
-                    e.currentTarget.style.background = '#3b82f6';
-                  }
-                }}
-                title={isPaused ? 'Resume paused sessions' : 'Start sessions'}
               >
                 {isStartingSessions
                   ? (isPaused ? 'Resuming...' : 'Starting...')
                   : (isPaused ? 'Resume Sessions' : 'Start Sessions')}
-              </button>
+              </Button>
             );
           })()}
 
@@ -379,64 +352,24 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
            !checkingSessions && 
            sessionsData && 
            !sessionsData.hasSessions && (
-            <button
-              onClick={handleCreateSessions}
+            <Button
+              variant="primary"
+              size="sm"
+              onPress={handleCreateSessions}
               disabled={isStartingSessions}
-              style={{
-                padding: '8px 16px',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '14px',
-                fontWeight: '500',
-                color: '#ffffff',
-                background: isStartingSessions ? '#93c5fd' : '#3b82f6',
-                cursor: isStartingSessions ? 'not-allowed' : 'pointer',
-                transition: 'all 0.2s',
-              }}
-              onMouseEnter={(e) => {
-                if (!isStartingSessions) {
-                  e.currentTarget.style.background = '#2563eb';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isStartingSessions) {
-                  e.currentTarget.style.background = '#3b82f6';
-                }
-              }}
-              title="Create sessions (generates but does not start them)"
             >
               {isStartingSessions ? 'Creating...' : 'Create Sessions'}
-            </button>
+            </Button>
           )}
 
-          <button
-            onClick={handleResetSessions}
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={handleResetSessions}
             disabled={isResettingSessions}
-            style={{
-              padding: '8px 16px',
-              border: '1px solid #e2e8f0',
-              borderRadius: '6px',
-              fontSize: '14px',
-              fontWeight: '500',
-              color: isResettingSessions ? '#9ca3af' : '#374151',
-              background: isResettingSessions ? '#f3f4f6' : '#ffffff',
-              cursor: isResettingSessions ? 'not-allowed' : 'pointer',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              if (!isResettingSessions) {
-                e.currentTarget.style.background = '#f8fafc';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!isResettingSessions) {
-                e.currentTarget.style.background = '#ffffff';
-              }
-            }}
-            title="Delete existing sessions and reset agent to context_complete"
           >
             {isResettingSessions ? 'Resetting...' : 'Reset Sessions'}
-          </button>
+          </Button>
           
           {/* Pause Sessions button */}
           {(() => {
@@ -448,312 +381,176 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
             const factsSession = displaySessions.find(s => s.agent_type === 'facts');
             return (transcriptSession?.status === 'active' || cardsSession?.status === 'active' || factsSession?.status === 'active');
           })() && (
-            <button
-              onClick={handlePauseSessions}
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={handlePauseSessions}
               disabled={isPausing}
-              style={{
-                padding: '8px 16px',
-                border: '1px solid #e2e8f0',
-                borderRadius: '6px',
-                fontSize: '14px',
-                fontWeight: '500',
-                color: isPausing ? '#9ca3af' : '#374151',
-                background: isPausing ? '#f3f4f6' : '#ffffff',
-                cursor: isPausing ? 'not-allowed' : 'pointer',
-                transition: 'all 0.2s',
-              }}
-              onMouseEnter={(e) => {
-                if (!isPausing) {
-                  e.currentTarget.style.background = '#f8fafc';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isPausing) {
-                  e.currentTarget.style.background = '#ffffff';
-                }
-              }}
-              title="Pause active sessions (preserves state for resume)"
             >
               {isPausing ? 'Pausing...' : 'Pause Sessions'}
-            </button>
+            </Button>
           )}
           
           {/* Testing state buttons */}
           {agent?.status === 'active' && agent?.stage === 'testing' && (
             <>
-              <button
-                onClick={() => setIsTestTranscriptModalOpen(true)}
-                style={{
-                  padding: '8px 16px',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  color: '#374151',
-                  background: '#ffffff',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = '#f8fafc';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = '#ffffff';
-                }}
-                title="Send test transcript to sessions"
+              <Button
+                variant="outline"
+                size="sm"
+                onPress={() => setIsTestTranscriptModalOpen(true)}
               >
                 Test Transcript
-              </button>
+              </Button>
               
-              <button
-                onClick={handleConfirmReady}
+              <Button
+                variant="outline"
+                size="sm"
+                onPress={handleConfirmReady}
                 disabled={isResuming}
-                style={{
-                  padding: '8px 16px',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  color: isResuming ? '#9ca3af' : '#374151',
-                  background: isResuming ? '#f3f4f6' : '#ffffff',
-                  cursor: isResuming ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  if (!isResuming) {
-                    e.currentTarget.style.background = '#f8fafc';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isResuming) {
-                    e.currentTarget.style.background = '#ffffff';
-                  }
-                }}
-                title="Stop sessions, regenerate, and set agent to ready"
               >
                 {isResuming ? 'Processing...' : 'Confirm Ready'}
-              </button>
+              </Button>
             </>
           )}
           
           {/* Refresh button */}
-          <button
-            onClick={() => {
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={() => {
               refetchSessions();
               reconnect();
             }}
-            style={{
-              padding: '8px 16px',
-              border: '1px solid #e2e8f0',
-              borderRadius: '6px',
-              fontSize: '14px',
-              fontWeight: '500',
-              color: '#374151',
-              background: '#ffffff',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = '#f8fafc';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = '#ffffff';
-            }}
-            title="Refresh session status"
           >
             Refresh
-          </button>
-        </div>
-      </div>
+          </Button>
+        </XStack>
+      </XStack>
       
       {(pauseResumeError || startSessionsError) && (
-        <div style={{
-          padding: '8px 12px',
-          marginBottom: '16px',
-          background: '#fef2f2',
-          borderRadius: '6px',
-          border: '1px solid #fecaca',
-          fontSize: '12px',
-          color: '#dc2626',
-        }}>
+        <Alert variant="error" marginBottom="$4">
           {pauseResumeError || startSessionsError}
-        </div>
+        </Alert>
       )}
       
       {hasRuntimeStats && (
-        <section
-          style={{
-            marginBottom: '24px',
-            padding: '20px',
-            background: '#ffffff',
-            borderRadius: '12px',
-            border: '1px solid #e2e8f0',
-            boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
-          }}
-        >
-          <header style={{ marginBottom: '16px' }}>
-            <h5 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#0f172a' }}>
+        <Card variant="outlined" padding="$5" marginBottom="$6">
+          <YStack marginBottom="$4">
+            <Text fontSize="$3" fontWeight="600" color="$color" margin={0}>
               Runtime Stats
-            </h5>
-            <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#64748b' }}>
+            </Text>
+            <Text fontSize="$2" color="$gray11" margin="$1.5 0 0 0" marginTop="$1.5">
               Shared telemetry across active realtime agents.
-            </p>
-          </header>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-              gap: '12px',
-            }}
+            </Text>
+          </YStack>
+          <XStack
+            flexWrap="wrap"
+            gap="$3"
+            $sm={{ flexDirection: 'column' }}
+            $md={{ flexDirection: 'row' }}
           >
             {runtimeStatsEntries.map(({ label, value }) => (
-              <div
+              <Card
                 key={label}
-                style={{
-                  padding: '12px 14px',
-                  borderRadius: '10px',
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                }}
+                variant="outlined"
+                backgroundColor="$gray1"
+                padding="$3 $3.5"
+                borderRadius="$2.5"
+                flex={1}
+                minWidth={160}
               >
-                <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                <Text
+                  fontSize="$1"
+                  color="$gray11"
+                  textTransform="uppercase"
+                  letterSpacing={0.4}
+                  margin={0}
+                >
                   {label}
-                </div>
-                <div style={{ marginTop: '6px', fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>
+                </Text>
+                <Text fontSize="$3" fontWeight="600" color="$color" marginTop="$1.5" margin={0}>
                   {value}
-                </div>
-              </div>
+                </Text>
+              </Card>
             ))}
-          </div>
+          </XStack>
           {runtimeCostSummary?.breakdown.length ? (
-            <div
-              style={{
-                marginTop: '16px',
-              }}
-            >
-              <div
-                style={{
-                  fontSize: '11px',
-                  color: '#64748b',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.4px',
-                  fontWeight: 600,
-                  marginBottom: '8px',
-                }}
+            <YStack marginTop="$4">
+              <Text
+                fontSize="$1"
+                color="$gray11"
+                textTransform="uppercase"
+                letterSpacing={0.4}
+                fontWeight="600"
+                marginBottom="$2"
+                margin={0}
               >
                 Cost Breakdown
-              </div>
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '4px',
-                  fontSize: '12px',
-                  color: '#475569',
-                }}
-              >
+              </Text>
+              <YStack gap="$1">
                 {runtimeCostSummary.breakdown.map(({ agent, cost, model }) => (
-                  <div
+                  <XStack
                     key={agent}
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                    }}
+                    justifyContent="space-between"
+                    alignItems="center"
                   >
-                    <span>{agentTitles[agent]}</span>
-                    <span style={{ fontFamily: 'monospace' }}>
+                    <Text fontSize="$2" color="$gray9" margin={0}>
+                      {agentTitles[agent]}
+                    </Text>
+                    <Text fontSize="$2" color="$gray9" fontFamily="$mono" margin={0}>
                       ${cost.toFixed(4)}
                       {model ? ` · ${model}` : ''}
-                    </span>
-                  </div>
+                    </Text>
+                  </XStack>
                 ))}
-              </div>
-            </div>
+              </YStack>
+            </YStack>
           ) : null}
-        </section>
+        </Card>
       )}
 
       {sessionsQueryError && (
-        <div style={{
-          padding: '12px',
-          background: '#fef2f2',
-          borderRadius: '8px',
-          border: '1px solid #fecaca',
-          marginBottom: '16px',
-        }}>
-          <div style={{
-            fontSize: '12px',
-            color: '#dc2626',
-            fontWeight: '600',
-            marginBottom: '4px',
-          }}>
-            Error loading sessions:
-          </div>
-          <div style={{
-            fontSize: '12px',
-            color: '#dc2626',
-          }}>
-            {sessionsQueryError instanceof Error ? sessionsQueryError.message : String(sessionsQueryError)}
-          </div>
-        </div>
+        <Alert variant="error" marginBottom="$4">
+          <YStack gap="$1">
+            <Text fontSize="$2" fontWeight="600" color="$red11" margin={0}>
+              Error loading sessions:
+            </Text>
+            <Text fontSize="$2" color="$red11" margin={0}>
+              {sessionsQueryError instanceof Error ? sessionsQueryError.message : String(sessionsQueryError)}
+            </Text>
+          </YStack>
+        </Alert>
       )}
 
       {enrichmentError && (
-        <div style={{
-          padding: '12px',
-          background: '#fef2f2',
-          borderRadius: '8px',
-          border: '1px solid #fecaca',
-          marginBottom: '16px',
-        }}>
-          <div style={{
-            fontSize: '12px',
-            color: '#dc2626',
-          }}>
+        <Alert variant="error" marginBottom="$4">
+          <Text fontSize="$2" margin={0}>
             Error connecting to enrichment stream: {enrichmentError.message}
-          </div>
-        </div>
+          </Text>
+        </Alert>
       )}
 
       {(enrichmentLoading || checkingSessions) && displaySessions.length === 0 && (
-        <div style={{
-          padding: '24px',
-          textAlign: 'center',
-          color: '#64748b',
-          fontSize: '14px',
-        }}>
-          Loading session status...
-        </div>
+        <YStack padding="$6" alignItems="center">
+          <Text fontSize="$3" color="$gray11">
+            Loading session status...
+          </Text>
+        </YStack>
       )}
 
       {!enrichmentLoading && !checkingSessions && displaySessions.length === 0 && !enrichmentError && (
-        <div style={{
-          padding: '24px',
-          textAlign: 'center',
-          background: '#f8fafc',
-          borderRadius: '8px',
-          border: '1px solid #e2e8f0',
-        }}>
-          <div style={{
-            fontSize: '14px',
-            color: '#64748b',
-            marginBottom: '8px',
-          }}>
+        <Card variant="outlined" padding="$6" alignItems="center">
+          <Text fontSize="$3" color="$gray11" marginBottom="$2" margin={0}>
             No active agent sessions
-          </div>
-          <div style={{
-            fontSize: '12px',
-            color: '#94a3b8',
-            marginBottom: '16px',
-          }}>
+          </Text>
+          <Text fontSize="$2" color="$gray5" margin={0}>
             {(agent?.status === 'idle' && (agent?.stage === 'ready' || agent?.stage === 'context_complete'))
               ? 'Use the "Create Sessions" button above to begin.'
               : (agent?.status === 'active' && agent?.stage === 'running')
               ? 'Waiting for sessions to be created...'
               : 'Agent sessions are only available when the event is running.'}
-          </div>
-        </div>
+          </Text>
+        </Card>
       )}
 
       {displaySessions.length > 0 && (
@@ -766,25 +563,23 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
             if (realtimeSessions.length === 0) return null;
 
             return (
-              <div style={{ marginBottom: '32px' }}>
-                <h5
-                  style={{
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    color: '#64748b',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    marginBottom: '16px',
-                  }}
+              <YStack marginBottom="$8">
+                <Text
+                  fontSize="$2"
+                  fontWeight="600"
+                  color="$gray11"
+                  textTransform="uppercase"
+                  letterSpacing={0.5}
+                  marginBottom="$4"
+                  margin={0}
                 >
                   Realtime Sessions
-                </h5>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
-                    gap: '16px',
-                  }}
+                </Text>
+                <XStack
+                  flexWrap="wrap"
+                  gap="$4"
+                  $sm={{ flexDirection: 'column' }}
+                  $md={{ flexDirection: 'row' }}
                 >
                   {realtimeSessions.map((session) => (
                     <SessionStatusCard
@@ -795,8 +590,8 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
                       setExpandedLogs={setExpandedLogs}
                     />
                   ))}
-                </div>
-              </div>
+                </XStack>
+              </YStack>
             );
           })()}
 
@@ -808,25 +603,23 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
             if (statelessSessions.length === 0) return null;
 
             return (
-              <div>
-                <h5
-                  style={{
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    color: '#64748b',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    marginBottom: '16px',
-                  }}
+              <YStack>
+                <Text
+                  fontSize="$2"
+                  fontWeight="600"
+                  color="$gray11"
+                  textTransform="uppercase"
+                  letterSpacing={0.5}
+                  marginBottom="$4"
+                  margin={0}
                 >
                   Stateless Sessions
-                </h5>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
-                    gap: '16px',
-                  }}
+                </Text>
+                <XStack
+                  flexWrap="wrap"
+                  gap="$4"
+                  $sm={{ flexDirection: 'column' }}
+                  $md={{ flexDirection: 'row' }}
                 >
                   {statelessSessions.map((session) => (
                     <SessionStatusCard
@@ -837,8 +630,8 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
                       setExpandedLogs={setExpandedLogs}
                     />
                   ))}
-                </div>
-              </div>
+                </XStack>
+              </YStack>
             );
           })()}
         </>
@@ -863,7 +656,7 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
           onSend={handleSendTestTranscript}
         />
       )}
-    </div>
+    </YStack>
   );
 }
 

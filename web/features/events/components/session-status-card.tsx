@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { YStack, XStack, Text, Button, Card, Alert } from '@jarvis/ui-core';
 import type { AgentSessionDisplay, AgentType } from './agent-sessions-utils';
-import { getSessionStatusColor, getSessionStatusLabel, formatDate, formatDuration } from './agent-sessions-utils';
+import { getSessionStatusColor, getSessionStatusColorHex, getSessionStatusLabel, formatDate, formatDuration } from './agent-sessions-utils';
 
 interface SessionStatusCardProps {
   title: string;
@@ -32,6 +33,7 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
   }, [shouldTick, session.metadata.created_at]);
 
   const statusColor = getSessionStatusColor(session.status);
+  const statusColorHex = getSessionStatusColorHex(session.status);
   const statusLabel = getSessionStatusLabel(session.status);
   const agentType = session.agent_type;
   const isExpanded = expandedLogs[agentType];
@@ -40,28 +42,34 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
   
   let connectionStatus: string;
   let connectionColor: string;
+  let connectionColorToken: string;
   
   if (actualWebSocketState) {
     switch (actualWebSocketState) {
       case 'OPEN':
         connectionStatus = 'Live';
         connectionColor = '#10b981';
+        connectionColorToken = '$green11';
         break;
       case 'CONNECTING':
         connectionStatus = 'Connecting';
         connectionColor = '#f59e0b';
+        connectionColorToken = '$yellow11';
         break;
       case 'CLOSING':
         connectionStatus = 'Closing';
         connectionColor = '#f59e0b';
+        connectionColorToken = '$yellow11';
         break;
       case 'CLOSED':
         connectionStatus = 'Disconnected';
         connectionColor = '#6b7280';
+        connectionColorToken = '$gray11';
         break;
       default:
         connectionStatus = session.status === 'paused' ? 'Paused' : 'Disconnected';
         connectionColor = session.status === 'paused' ? '#8b5cf6' : '#6b7280';
+        connectionColorToken = session.status === 'paused' ? '$purple11' : '$gray11';
     }
   } else {
     const isNewClosed = session.status === 'closed' && session.metadata?.created_at && 
@@ -69,15 +77,19 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
     if (session.status === 'active') {
       connectionStatus = 'Awaiting SSE';
       connectionColor = '#f59e0b';
+      connectionColorToken = '$yellow11';
     } else if (session.status === 'paused') {
       connectionStatus = 'Paused';
       connectionColor = '#8b5cf6';
+      connectionColorToken = '$purple11';
     } else if (isNewClosed) {
       connectionStatus = 'Ready';
       connectionColor = '#64748b';
+      connectionColorToken = '$gray11';
     } else {
       connectionStatus = 'Disconnected';
       connectionColor = '#6b7280';
+      connectionColorToken = '$gray11';
     }
   }
 
@@ -124,457 +136,356 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
 
   const runtime = runtimeMs !== null && runtimeMs !== undefined ? formatDuration(runtimeMs) : null;
 
+  const pingPongMissed = session.ping_pong?.missedPongs ?? 0;
+  const pingPongVariant = pingPongMissed === 0 ? 'success' : pingPongMissed === 1 ? 'warning' : 'error';
+
   return (
-    <div style={{
-      padding: '20px',
-      background: '#ffffff',
-      borderRadius: '12px',
-      border: '1px solid #e2e8f0',
-      boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-    }}>
+    <Card variant="outlined" padding="$5">
       {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '16px',
-        }}
+      <XStack
+        justifyContent="space-between"
+        alignItems="center"
+        marginBottom="$4"
       >
-        <h5
-          style={{
-            fontSize: '16px',
-            fontWeight: '600',
-            color: '#0f172a',
-            margin: 0,
-          }}
-        >
+        <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
           {title}
-        </h5>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}
-        >
-          <div
-            style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              background: statusColor,
-            }}
+        </Text>
+        <XStack alignItems="center" gap="$2">
+          <YStack
+            width={8}
+            height={8}
+            borderRadius="$10"
+            backgroundColor={statusColorHex}
           />
-          <span
-            style={{
-              fontSize: '14px',
-              fontWeight: '500',
-              color: statusColor,
-            }}
-          >
+          <Text fontSize="$3" fontWeight="500" color={statusColor}>
             {statusLabel}
-          </span>
-        </div>
-      </div>
+          </Text>
+        </XStack>
+      </XStack>
 
       {/* Connection Status & Runtime */}
-      <div
-        style={{
-          marginBottom: '16px',
-          paddingBottom: '16px',
-          borderBottom: '1px solid #e2e8f0',
-        }}
+      <YStack
+        marginBottom="$4"
+        paddingBottom="$4"
+        borderBottomWidth={1}
+        borderBottomColor="$borderColor"
       >
         {isRealtime && (
           <>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                marginBottom: '8px',
-              }}
+            <XStack
+              alignItems="center"
+              gap="$2"
+              marginBottom="$2"
             >
-              <div
+              <YStack
+                width={8}
+                height={8}
+                borderRadius="$10"
+                backgroundColor={connectionColor}
                 style={{
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '50%',
-                  background: connectionColor,
                   animation: isWebSocketLive ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none',
                 }}
               />
-              <span
-                style={{
-                  fontSize: '12px',
-                  fontWeight: '600',
-                  color: connectionColor,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                }}
+              <Text
+                fontSize="$2"
+                fontWeight="600"
+                color={connectionColorToken}
+                textTransform="uppercase"
+                letterSpacing={0.5}
               >
                 WebSocket: {connectionStatus}
                 {actualWebSocketState && (
-                  <span
-                    style={{
-                      fontSize: '10px',
-                      fontWeight: '400',
-                      marginLeft: '6px',
-                      opacity: 0.7,
-                      textTransform: 'none',
-                    }}
+                  <Text
+                    fontSize="$1"
+                    fontWeight="400"
+                    marginLeft="$1.5"
+                    opacity={0.7}
+                    textTransform="none"
                   >
                     ({actualWebSocketState})
-                  </span>
+                  </Text>
                 )}
-              </span>
-            </div>
+              </Text>
+            </XStack>
 
             {actualWebSocketState === 'OPEN' && (
-              <div
-                style={{
-                  marginBottom: '8px',
-                  padding: '8px 12px',
-                  background:
-                    session.ping_pong?.missedPongs === 0
-                      ? '#f0fdf4'
-                      : session.ping_pong?.missedPongs === 1
-                      ? '#fffbeb'
-                      : '#fef2f2',
-                  borderRadius: '6px',
-                  border: `1px solid ${
-                    session.ping_pong?.missedPongs === 0
-                      ? '#bbf7d0'
-                      : session.ping_pong?.missedPongs === 1
-                      ? '#fde68a'
-                      : '#fecaca'
-                  }`,
-                }}
+              <Alert
+                variant={pingPongVariant}
+                marginBottom="$2"
               >
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginBottom: '4px',
-                  }}
+                <XStack
+                  alignItems="center"
+                  justifyContent="space-between"
+                  marginBottom="$1"
                 >
-                  <span
-                    style={{
-                      fontSize: '11px',
-                      fontWeight: '600',
-                      color:
-                        session.ping_pong?.missedPongs === 0
-                          ? '#166534'
-                          : session.ping_pong?.missedPongs === 1
-                          ? '#92400e'
-                          : '#991b1b',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.5px',
-                    }}
+                  <Text
+                    fontSize="$1"
+                    fontWeight="600"
+                    textTransform="uppercase"
+                    letterSpacing={0.5}
                   >
                     Connection Health
-                  </span>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                    }}
-                  >
-                    {session.ping_pong?.missedPongs === 0 && (
-                      <span style={{ fontSize: '12px' }}>✓ Healthy</span>
+                  </Text>
+                  <XStack alignItems="center" gap="$1">
+                    {pingPongMissed === 0 && (
+                      <Text fontSize="$2">✓ Healthy</Text>
                     )}
-                    {session.ping_pong?.missedPongs === 1 && (
-                      <span style={{ fontSize: '12px', color: '#d97706' }}>⚠ 1 Missed</span>
+                    {pingPongMissed === 1 && (
+                      <Text fontSize="$2" color="$yellow11">⚠ 1 Missed</Text>
                     )}
-                    {session.ping_pong && session.ping_pong.missedPongs >= 2 && (
-                      <span style={{ fontSize: '12px', color: '#dc2626' }}>
-                        ⚠⚠ {session.ping_pong.missedPongs} Missed
-                      </span>
+                    {pingPongMissed >= 2 && (
+                      <Text fontSize="$2" color="$red11">
+                        ⚠⚠ {pingPongMissed} Missed
+                      </Text>
                     )}
-                  </div>
-                </div>
+                  </XStack>
+                </XStack>
                 {session.ping_pong?.enabled && (
-                  <div
-                    style={{
-                      fontSize: '10px',
-                      color: '#64748b',
-                      display: 'flex',
-                      gap: '12px',
-                      flexWrap: 'wrap',
-                    }}
+                  <XStack
+                    fontSize="$1"
+                    color="$gray11"
+                    gap="$3"
+                    flexWrap="wrap"
                   >
                     {session.ping_pong.lastPongReceived && (
-                      <span>
+                      <Text>
                         Last pong: {new Date(session.ping_pong.lastPongReceived).toLocaleTimeString()}
-                      </span>
+                      </Text>
                     )}
-                    <span>Ping interval: {Math.round((session.ping_pong.pingIntervalMs || 0) / 1000)}s</span>
+                    <Text>Ping interval: {Math.round((session.ping_pong.pingIntervalMs || 0) / 1000)}s</Text>
                     {session.ping_pong.missedPongs > 0 && (
-                      <span style={{ color: '#dc2626', fontWeight: '600' }}>
+                      <Text color="$red11" fontWeight="600">
                         {session.ping_pong.missedPongs}/{session.ping_pong.maxMissedPongs} missed
-                      </span>
+                      </Text>
                     )}
-                  </div>
+                  </XStack>
                 )}
-              </div>
+              </Alert>
             )}
           </>
         )}
 
-        <div
-          style={{
-            fontSize: '12px',
-            color: '#64748b',
-            marginBottom: '4px',
-          }}
-        >
+        <Text fontSize="$2" color="$gray11" marginBottom="$1" margin={0}>
           {runtime ? `${runtimeLabel}: ${runtime}` : `${runtimeLabel}: N/A`}
-        </div>
+        </Text>
         {isRealtime && (
-          <div
-            style={{
-              fontSize: '12px',
-              color: '#64748b',
-              fontFamily: 'monospace',
-              marginBottom: '4px',
-            }}
+          <Text
+            fontSize="$2"
+            color="$gray11"
+            fontFamily="$mono"
+            marginBottom="$1"
+            margin={0}
           >
             {session.session_id === 'pending' ||
             (session.status === 'closed' &&
               session.metadata?.created_at &&
               new Date().getTime() - new Date(session.metadata.created_at).getTime() < 60000) ? (
-              <span style={{ fontStyle: 'italic', color: '#94a3b8' }}>Pending activation</span>
+              <Text fontStyle="italic" color="$gray5">Pending activation</Text>
             ) : (
               <>Session: {session.session_id.substring(0, 20)}...</>
             )}
-          </div>
+          </Text>
         )}
-        <div
-          style={{
-            fontSize: '12px',
-            color: '#64748b',
-          }}
-        >
+        <Text fontSize="$2" color="$gray11" margin={0}>
           Model: {session.metadata.model || 'N/A'}
-        </div>
+        </Text>
         {session.metrics_recorded_at && (
-          <div
-            style={{
-              fontSize: '11px',
-              color: '#94a3b8',
-              fontStyle: 'italic',
-            }}
+          <Text
+            fontSize="$1"
+            color="$gray5"
+            fontStyle="italic"
+            margin={0}
           >
             Metrics recorded at: {new Date(session.metrics_recorded_at).toLocaleString()}
-          </div>
+          </Text>
         )}
-      </div>
+      </YStack>
 
       {/* Token Metrics */}
       {session.token_metrics && (
-        <div style={{
-          marginBottom: '16px',
-          paddingBottom: '16px',
-          borderBottom: '1px solid #e2e8f0',
-        }}>
-          <div style={{
-            fontSize: '12px',
-            fontWeight: '600',
-            color: '#64748b',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            marginBottom: '12px',
-          }}>
+        <YStack
+          marginBottom="$4"
+          paddingBottom="$4"
+          borderBottomWidth={1}
+          borderBottomColor="$borderColor"
+        >
+          <Text
+            fontSize="$2"
+            fontWeight="600"
+            color="$gray11"
+            textTransform="uppercase"
+            letterSpacing={0.5}
+            marginBottom="$3"
+            margin={0}
+          >
             Token Metrics
-          </div>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(2, 1fr)',
-            gap: '12px',
-          }}>
-            <div>
-              <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>Total</div>
-              <div style={{ fontSize: '16px', fontWeight: '600', color: '#0f172a' }}>
+          </Text>
+          <XStack
+            flexWrap="wrap"
+            gap="$3"
+            $sm={{ flexDirection: 'column' }}
+            $md={{ flexDirection: 'row' }}
+          >
+            <YStack flex={1} minWidth={100}>
+              <Text fontSize="$1" color="$gray5" marginBottom="$1" margin={0}>Total</Text>
+              <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
                 {session.token_metrics.total_tokens.toLocaleString()}
-              </div>
-            </div>
-            <div>
-              <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>Avg</div>
-              <div style={{ fontSize: '16px', fontWeight: '600', color: '#0f172a' }}>
+              </Text>
+            </YStack>
+            <YStack flex={1} minWidth={100}>
+              <Text fontSize="$1" color="$gray5" marginBottom="$1" margin={0}>Avg</Text>
+              <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
                 {session.token_metrics.avg_tokens.toLocaleString()}
-              </div>
-            </div>
-            <div>
-              <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>Max</div>
-              <div style={{ fontSize: '16px', fontWeight: '600', color: '#0f172a' }}>
+              </Text>
+            </YStack>
+            <YStack flex={1} minWidth={100}>
+              <Text fontSize="$1" color="$gray5" marginBottom="$1" margin={0}>Max</Text>
+              <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
                 {session.token_metrics.max_tokens.toLocaleString()}
-              </div>
-            </div>
-            <div>
-              <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>Requests</div>
-              <div style={{ fontSize: '16px', fontWeight: '600', color: '#0f172a' }}>
+              </Text>
+            </YStack>
+            <YStack flex={1} minWidth={100}>
+              <Text fontSize="$1" color="$gray5" marginBottom="$1" margin={0}>Requests</Text>
+              <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
                 {session.token_metrics.request_count}
-              </div>
-            </div>
-          </div>
+              </Text>
+            </YStack>
+          </XStack>
           {(session.token_metrics.warnings > 0 || session.token_metrics.criticals > 0) && (
-            <div style={{
-              marginTop: '12px',
-              padding: '8px 12px',
-              background: session.token_metrics.criticals > 0 ? '#fef2f2' : '#fffbeb',
-              borderRadius: '6px',
-              border: `1px solid ${session.token_metrics.criticals > 0 ? '#fecaca' : '#fde68a'}`,
-            }}>
-              <div style={{
-                fontSize: '12px',
-                color: session.token_metrics.criticals > 0 ? '#dc2626' : '#d97706',
-              }}>
+            <Alert
+              variant={session.token_metrics.criticals > 0 ? 'error' : 'warning'}
+              marginTop="$3"
+            >
+              <Text fontSize="$2" margin={0}>
                 {session.token_metrics.criticals > 0 && `⚠️ ${session.token_metrics.criticals} critical threshold breaches`}
                 {session.token_metrics.criticals > 0 && session.token_metrics.warnings > 0 && ' • '}
                 {session.token_metrics.warnings > 0 && `⚠️ ${session.token_metrics.warnings} warnings`}
-              </div>
-            </div>
+              </Text>
+            </Alert>
           )}
           {session.agent_type === 'facts' && session.token_metrics.facts_budget && (
-            <div style={{
-              marginTop: '12px',
-              padding: '12px',
-              borderRadius: '6px',
-              border: '1px solid #e2e8f0',
-              background: '#f8fafc',
-            }}>
-              <div style={{
-                fontSize: '12px',
-                fontWeight: '600',
-                color: '#475569',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-                marginBottom: '8px',
-              }}>
+            <Card variant="outlined" backgroundColor="$gray1" padding="$3" marginTop="$3">
+              <Text
+                fontSize="$2"
+                fontWeight="600"
+                color="$gray9"
+                textTransform="uppercase"
+                letterSpacing={0.5}
+                marginBottom="$2"
+                margin={0}
+              >
                 Facts Prompt Budget (last run)
-              </div>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                gap: '10px',
-              }}>
-                <div>
-                  <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '2px' }}>Selected Facts</div>
-                  <div style={{ fontSize: '15px', fontWeight: 600, color: '#0f172a' }}>
+              </Text>
+              <XStack
+                flexWrap="wrap"
+                gap="$2.5"
+                $sm={{ flexDirection: 'column' }}
+                $md={{ flexDirection: 'row' }}
+              >
+                <YStack flex={1} minWidth={120}>
+                  <Text fontSize="$1" color="$gray5" marginBottom="$0.5" margin={0}>Selected Facts</Text>
+                  <Text fontSize="$3" fontWeight="600" color="$color" margin={0}>
                     {session.token_metrics.facts_budget.selected} / {session.token_metrics.facts_budget.total_facts}
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '2px' }}>Overflow Facts</div>
-                  <div style={{ fontSize: '15px', fontWeight: 600, color: '#0f172a' }}>
+                  </Text>
+                </YStack>
+                <YStack flex={1} minWidth={120}>
+                  <Text fontSize="$1" color="$gray5" marginBottom="$0.5" margin={0}>Overflow Facts</Text>
+                  <Text fontSize="$3" fontWeight="600" color="$color" margin={0}>
                     {session.token_metrics.facts_budget.overflow}
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '2px' }}>Summaries Added</div>
-                  <div style={{ fontSize: '15px', fontWeight: 600, color: '#0f172a' }}>
+                  </Text>
+                </YStack>
+                <YStack flex={1} minWidth={120}>
+                  <Text fontSize="$1" color="$gray5" marginBottom="$0.5" margin={0}>Summaries Added</Text>
+                  <Text fontSize="$3" fontWeight="600" color="$color" margin={0}>
                     {session.token_metrics.facts_budget.summary}
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '2px' }}>Tokens Used / Budget</div>
-                  <div style={{ fontSize: '15px', fontWeight: 600, color: '#0f172a' }}>
+                  </Text>
+                </YStack>
+                <YStack flex={1} minWidth={120}>
+                  <Text fontSize="$1" color="$gray5" marginBottom="$0.5" margin={0}>Tokens Used / Budget</Text>
+                  <Text fontSize="$3" fontWeight="600" color="$color" margin={0}>
                     {session.token_metrics.facts_budget.used_tokens} / {session.token_metrics.facts_budget.budget_tokens}
-                  </div>
-                </div>
-              </div>
-              <div style={{ marginTop: '8px', fontSize: '11px', color: '#64748b' }}>
+                  </Text>
+                </YStack>
+              </XStack>
+              <Text fontSize="$1" color="$gray11" marginTop="$2" margin={0}>
                 Selection Ratio:{' '}
                 {(session.token_metrics.facts_budget.selection_ratio * 100).toFixed(1)}%
-              </div>
-              <div style={{ marginTop: '4px', fontSize: '11px', color: '#64748b' }}>
+              </Text>
+              <Text fontSize="$1" color="$gray11" marginTop="$1" margin={0}>
                 Merged Clusters: {session.token_metrics.facts_budget.merged_clusters}
-              </div>
+              </Text>
               {session.token_metrics.facts_budget.merged_facts.length > 0 && (
-                <div style={{ marginTop: '10px' }}>
-                  <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>
+                <YStack marginTop="$2.5">
+                  <Text fontSize="$1" color="$gray5" marginBottom="$1" margin={0}>
                     Merged Facts
-                  </div>
-                  <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: '#475569' }}>
+                  </Text>
+                  <YStack gap="$1" paddingLeft="$4">
                     {session.token_metrics.facts_budget.merged_facts.slice(0, 5).map((merged, idx) => (
-                      <li key={`${merged.representative}-${idx}`}>
-                        <span style={{ fontWeight: 600 }}>{merged.representative}</span>
+                      <Text key={`${merged.representative}-${idx}`} fontSize="$2" color="$gray9" margin={0}>
+                        <Text fontWeight="600">{merged.representative}</Text>
                         {merged.members.length > 0 && (
-                          <span style={{ opacity: 0.8 }}>
+                          <Text opacity={0.8}>
                             {' '}
                             ← {merged.members.join(', ')}
-                          </span>
+                          </Text>
                         )}
-                      </li>
+                      </Text>
                     ))}
-                  </ul>
+                  </YStack>
                   {session.token_metrics.facts_budget.merged_facts.length > 5 && (
-                    <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>
+                    <Text fontSize="$1" color="$gray5" marginTop="$1" margin={0}>
                       +{session.token_metrics.facts_budget.merged_facts.length - 5} additional merges
-                    </div>
+                    </Text>
                   )}
-                </div>
+                </YStack>
               )}
-            </div>
+            </Card>
           )}
-        </div>
+        </YStack>
       )}
 
       {/* Recent Logs */}
       {session.recent_logs && session.recent_logs.length > 0 && (
-        <div>
-          <button
-            onClick={() => setExpandedLogs(prev => ({ ...prev, [session.agent_type]: !prev[session.agent_type] }))}
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              background: 'transparent',
-              border: '1px solid #e2e8f0',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '12px',
-              fontWeight: '500',
-              color: '#64748b',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
+        <YStack>
+          <Button
+            variant="ghost"
+            width="100%"
+            justifyContent="space-between"
+            padding="$2 $3"
+            onPress={() => setExpandedLogs(prev => ({ ...prev, [session.agent_type]: !prev[session.agent_type] }))}
           >
-            <span>Recent Logs ({session.recent_logs.length})</span>
-            <span>{expandedLogs[session.agent_type] ? '▼' : '▶'}</span>
-          </button>
+            <Text fontSize="$2" fontWeight="500" color="$gray11" margin={0}>
+              Recent Logs ({session.recent_logs.length})
+            </Text>
+            <Text fontSize="$3" margin={0}>
+              {expandedLogs[session.agent_type] ? '▼' : '▶'}
+            </Text>
+          </Button>
           {expandedLogs[session.agent_type] && (
-            <div style={{
-              marginTop: '12px',
-              maxHeight: '300px',
-              overflowY: 'auto',
-              padding: '12px',
-              background: '#f8fafc',
-              borderRadius: '6px',
-              border: '1px solid #e2e8f0',
-            }}>
+            <YStack
+              marginTop="$3"
+              maxHeight={300}
+              overflowY="auto"
+              padding="$3"
+              backgroundColor="$gray1"
+              borderRadius="$3"
+              borderWidth={1}
+              borderColor="$borderColor"
+            >
               {session.recent_logs.slice(-20).reverse().map((log, idx) => (
-                <div
+                <YStack
                   key={idx}
-                  style={{
-                    padding: '8px',
-                    marginBottom: '8px',
-                    background: '#ffffff',
-                    borderRadius: '4px',
-                    borderLeft: `3px solid ${
-                      log.level === 'error' ? '#ef4444' :
-                      log.level === 'warn' ? '#f59e0b' : '#3b82f6'
-                    }`,
-                  }}
+                  padding="$2"
+                  marginBottom="$2"
+                  backgroundColor="$background"
+                  borderRadius="$1"
+                  borderLeftWidth={3}
+                  borderLeftColor={
+                    log.level === 'error' ? '$red11' :
+                    log.level === 'warn' ? '$yellow11' : '$blue11'
+                  }
                 >
-                  <div style={{
-                    fontSize: '11px',
-                    color: '#64748b',
-                    marginBottom: '4px',
-                  }}>
+                  <Text fontSize="$1" color="$gray11" marginBottom="$1" margin={0}>
                     {new Date(log.timestamp).toLocaleTimeString()}
                     {(() => {
                       const seqEntry = log.context?.find(
@@ -582,37 +493,43 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
                       );
                       return seqEntry ? ` • Seq ${seqEntry.value}` : null;
                     })()}
-                  </div>
-                  <div style={{
-                    fontSize: '12px',
-                    color: '#0f172a',
-                    fontFamily: 'monospace',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                  }}>
+                  </Text>
+                  <Text
+                    fontSize="$2"
+                    color="$color"
+                    fontFamily="$mono"
+                    whiteSpace="pre-wrap"
+                    wordBreak="break-word"
+                    margin={0}
+                  >
                     {log.message}
-                  </div>
-                </div>
+                  </Text>
+                </YStack>
               ))}
-            </div>
+            </YStack>
           )}
-        </div>
+        </YStack>
       )}
 
       {/* Metadata */}
-      <div style={{
-        marginTop: '16px',
-        paddingTop: '16px',
-        borderTop: '1px solid #e2e8f0',
-        fontSize: '11px',
-        color: '#94a3b8',
-      }}>
-        <div>Created: {formatDate(session.metadata.created_at)}</div>
-        <div>Updated: {formatDate(session.metadata.updated_at)}</div>
+      <YStack
+        marginTop="$4"
+        paddingTop="$4"
+        borderTopWidth={1}
+        borderTopColor="$borderColor"
+      >
+        <Text fontSize="$1" color="$gray5" margin={0}>
+          Created: {formatDate(session.metadata.created_at)}
+        </Text>
+        <Text fontSize="$1" color="$gray5" margin={0}>
+          Updated: {formatDate(session.metadata.updated_at)}
+        </Text>
         {session.metadata.closed_at && (
-          <div>Closed: {formatDate(session.metadata.closed_at)}</div>
+          <Text fontSize="$1" color="$gray5" margin={0}>
+            Closed: {formatDate(session.metadata.closed_at)}
+          </Text>
         )}
-      </div>
+      </YStack>
 
       <style jsx global>{`
         @keyframes pulse {
@@ -624,7 +541,6 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
           }
         }
       `}</style>
-    </div>
+    </Card>
   );
 }
-

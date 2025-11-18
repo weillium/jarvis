@@ -1,5 +1,7 @@
 'use client';
 
+import { YStack, XStack, Text, Button, Sheet } from '@jarvis/ui-core';
+
 interface StartSessionsModalProps {
   isOpen: boolean;
   selection: { transcript: boolean; cards: boolean; facts: boolean };
@@ -17,10 +19,6 @@ export function StartSessionsModal({
   onClose,
   isSubmitting,
 }: StartSessionsModalProps) {
-  if (!isOpen) {
-    return null;
-  }
-
   const options: Array<{
     key: 'transcript' | 'cards' | 'facts';
     label: string;
@@ -46,110 +44,83 @@ export function StartSessionsModal({
   const hasSelection = selection.transcript || selection.cards || selection.facts;
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'rgba(0, 0, 0, 0.5)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-        padding: '24px',
+    <Sheet
+      modal
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open && !isSubmitting) {
+          onClose();
+        }
       }}
-      onClick={onClose}
+      snapPoints={[70]}
+      dismissOnSnapToBottom
+      zIndex={1000}
     >
-      <div
-        style={{
-          background: '#ffffff',
-          borderRadius: '12px',
-          width: '100%',
-          maxWidth: '600px',
-          boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)',
-        }}
-        onClick={(e) => e.stopPropagation()}
+      <Sheet.Overlay
+        animation="lazy"
+        enterStyle={{ opacity: 0 }}
+        exitStyle={{ opacity: 0 }}
+        opacity={0.5}
+        backgroundColor="black"
+      />
+      <Sheet.Handle />
+      <Sheet.Frame
+        padding={0}
+        backgroundColor="$background"
+        borderRadius="$4"
+        maxWidth={600}
+        width="100%"
       >
-        <div
-          style={{
-            padding: '24px',
-            borderBottom: '1px solid #e2e8f0',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
+        <XStack
+          padding="$6"
+          borderBottomWidth={1}
+          borderBottomColor="$borderColor"
+          justifyContent="space-between"
+          alignItems="center"
         >
-          <h2
-            style={{
-              fontSize: '20px',
-              fontWeight: '600',
-              color: '#0f172a',
-              margin: 0,
-            }}
-          >
+          <Text fontSize="$7" fontWeight="600" color="$color" margin={0}>
             Start Agent Sessions
-          </h2>
-          <button
-            onClick={onClose}
+          </Text>
+          <Button
+            variant="ghost"
+            size="sm"
+            onPress={onClose}
             disabled={isSubmitting}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              fontSize: '24px',
-              color: '#64748b',
-              cursor: isSubmitting ? 'not-allowed' : 'pointer',
-              padding: '0',
-              width: '32px',
-              height: '32px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
+            circular
+            width={32}
+            height={32}
+            padding={0}
           >
             ×
-          </button>
-        </div>
+          </Button>
+        </XStack>
 
-        <div style={{ padding: '24px' }}>
-          <p
-            style={{
-              fontSize: '14px',
-              color: '#64748b',
-              marginBottom: '20px',
-              margin: '0 0 20px 0',
-            }}
-          >
+        <YStack padding="$6" gap="$5">
+          <Text fontSize="$3" color="$gray11" margin={0}>
             Select which agent sessions you want to start:
-          </p>
+          </Text>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
+          <YStack gap="$3" marginBottom="$6">
             {options.map((option) => (
-              <label
+              <XStack
                 key={option.key}
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '12px',
-                  padding: '16px',
-                  border: `2px solid ${selection[option.key] ? '#3b82f6' : '#e2e8f0'}`,
-                  borderRadius: '8px',
-                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                  background: selection[option.key] ? '#eff6ff' : '#ffffff',
-                  transition: 'all 0.2s',
-                  opacity: isSubmitting ? 0.6 : 1,
-                }}
-                onMouseEnter={(e) => {
-                  if (!isSubmitting) {
-                    e.currentTarget.style.borderColor = selection[option.key] ? '#2563eb' : '#cbd5e1';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isSubmitting) {
-                    e.currentTarget.style.borderColor = selection[option.key] ? '#3b82f6' : '#e2e8f0';
-                  }
-                }}
+                as="label"
+                alignItems="flex-start"
+                gap="$3"
+                padding="$4"
+                borderWidth={2}
+                borderColor={selection[option.key] ? '$blue6' : '$borderColor'}
+                borderRadius="$3"
+                backgroundColor={selection[option.key] ? '$blue2' : '$background'}
+                cursor={isSubmitting ? 'not-allowed' : 'pointer'}
+                opacity={isSubmitting ? 0.6 : 1}
+                hoverStyle={
+                  !isSubmitting
+                    ? {
+                        borderColor: selection[option.key] ? '$blue7' : '$borderColorHover',
+                      }
+                    : undefined
+                }
               >
                 <input
                   type="checkbox"
@@ -168,87 +139,39 @@ export function StartSessionsModal({
                     cursor: isSubmitting ? 'not-allowed' : 'pointer',
                   }}
                 />
-                <div style={{ flex: 1 }}>
-                  <div
-                    style={{
-                      fontSize: '16px',
-                      fontWeight: '600',
-                      color: '#0f172a',
-                      marginBottom: '4px',
-                    }}
-                  >
+                <YStack flex={1} gap="$1">
+                  <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
                     {option.label}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: '14px',
-                      color: '#64748b',
-                    }}
-                  >
+                  </Text>
+                  <Text fontSize="$3" color="$gray11" margin={0}>
                     {option.description}
-                  </div>
-                </div>
-              </label>
+                  </Text>
+                </YStack>
+              </XStack>
             ))}
-          </div>
+          </YStack>
 
-          <div
-            style={{
-              display: 'flex',
-              gap: '12px',
-              justifyContent: 'flex-end',
-            }}
-          >
-            <button
+          <XStack gap="$3" justifyContent="flex-end">
+            <Button
               type="button"
-              onClick={onClose}
+              variant="outline"
+              onPress={onClose}
               disabled={isSubmitting}
-              style={{
-                padding: '10px 20px',
-                border: '1px solid #e2e8f0',
-                borderRadius: '6px',
-                fontSize: '15px',
-                fontWeight: '500',
-                color: '#374151',
-                background: '#ffffff',
-                cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                opacity: isSubmitting ? 0.6 : 1,
-              }}
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              onClick={onConfirm}
+              variant="primary"
+              onPress={onConfirm}
               disabled={isSubmitting || !hasSelection}
-              style={{
-                padding: '10px 20px',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '15px',
-                fontWeight: '500',
-                color: '#ffffff',
-                background: isSubmitting || !hasSelection ? '#94a3b8' : '#3b82f6',
-                cursor: isSubmitting || !hasSelection ? 'not-allowed' : 'pointer',
-                transition: 'background 0.2s',
-              }}
-              onMouseEnter={(e) => {
-                if (!isSubmitting && hasSelection) {
-                  e.currentTarget.style.background = '#2563eb';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isSubmitting && hasSelection) {
-                  e.currentTarget.style.background = '#3b82f6';
-                }
-              }}
             >
               {isSubmitting ? 'Starting…' : 'Start Selected Agents'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+            </Button>
+          </XStack>
+        </YStack>
+      </Sheet.Frame>
+    </Sheet>
   );
 }
 

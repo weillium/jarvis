@@ -41,6 +41,21 @@ export const DEFAULT_PROMPT_SHARE = 0.5;
 export const getSessionStatusColor = (status: string): string => {
   switch (status) {
     case 'active':
+      return '$green11';
+    case 'paused':
+      return '$purple11';
+    case 'closed':
+      return '$gray11';
+    case 'error':
+      return '$red11';
+    default:
+      return '$gray11';
+  }
+};
+
+export const getSessionStatusColorHex = (status: string): string => {
+  switch (status) {
+    case 'active':
       return '#10b981';
     case 'paused':
       return '#8b5cf6';
