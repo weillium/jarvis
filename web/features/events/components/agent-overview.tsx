@@ -5,6 +5,7 @@ import { useAgentQuery } from '@/shared/hooks/use-agent-query';
 import { useContextVersionsQuery } from '@/shared/hooks/use-context-versions-query';
 import { ContextGenerationPanel } from '@/features/context/components/context-generation-panel';
 import { useResetContextMutation } from '@/shared/hooks/use-mutations';
+import { YStack, XStack, Text, Card, Alert } from '@jarvis/ui-core';
 
 interface AgentOverviewProps {
   eventId: string;
@@ -116,43 +117,30 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
 
   if (isLoading) {
     return (
-      <div style={{
-        padding: '32px 24px',
-        textAlign: 'center',
-      }}>
-        <div style={{
-          display: 'inline-block',
-          width: '40px',
-          height: '40px',
-          border: '3px solid #e2e8f0',
-          borderTopColor: '#3b82f6',
-          borderRadius: '50%',
-          animation: 'spin 1s linear infinite',
-        }} />
-        <p style={{
-          marginTop: '16px',
-          color: '#64748b',
-          fontSize: '14px',
-        }}>
+      <YStack padding="$8" alignItems="center">
+        <YStack
+          width={40}
+          height={40}
+          borderWidth={3}
+          borderColor="$borderColor"
+          borderTopColor="$blue6"
+          borderRadius="$10"
+          animation="spin"
+        />
+        <Text marginTop="$4" color="$gray11" fontSize="$3">
           Loading agent information...
-        </p>
-      </div>
+        </Text>
+      </YStack>
     );
   }
 
   if (error || !agent) {
     return (
-      <div style={{
-        padding: '32px 24px',
-        textAlign: 'center',
-      }}>
-        <p style={{
-          color: '#ef4444',
-          fontSize: '14px',
-        }}>
+      <YStack padding="$8" alignItems="center">
+        <Alert variant="error">
           {error instanceof Error ? error.message : (error ? String(error) : 'No agent found for this event')}
-        </p>
-      </div>
+        </Alert>
+      </YStack>
     );
   }
 
@@ -160,206 +148,165 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
   const statusLabel = getStatusLabel(agent.status, agent.stage, blueprint?.status);
 
   return (
-    <div>
+    <YStack>
       {/* Agent Details Grid */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-        gap: '20px',
-        marginBottom: '24px',
-      }}>
-        <div>
-          <div style={{
-            fontSize: '12px',
-            fontWeight: '600',
-            color: '#64748b',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            marginBottom: '6px',
-          }}>
+      <XStack
+        flexWrap="wrap"
+        gap="$5"
+        marginBottom="$6"
+        $sm={{ flexDirection: 'column' }}
+        $md={{ flexDirection: 'row' }}
+      >
+        <YStack minWidth={180} flex={1}>
+          <Text
+            fontSize="$2"
+            fontWeight="600"
+            color="$gray11"
+            textTransform="uppercase"
+            letterSpacing={0.5}
+            marginBottom="$1.5"
+          >
             Agent ID
-          </div>
-          <div style={{
-            fontSize: '13px',
-            fontWeight: '500',
-            color: '#0f172a',
-            fontFamily: 'monospace',
-            wordBreak: 'break-all',
-          }}>
+          </Text>
+          <Text
+            fontSize="$3"
+            fontWeight="500"
+            color="$color"
+            fontFamily="$mono"
+            wordBreak="break-all"
+          >
             {agent.id.substring(0, 8)}...
-          </div>
-        </div>
-        <div>
-          <div style={{
-            fontSize: '12px',
-            fontWeight: '600',
-            color: '#64748b',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            marginBottom: '6px',
-          }}>
+          </Text>
+        </YStack>
+        <YStack minWidth={180} flex={1}>
+          <Text
+            fontSize="$2"
+            fontWeight="600"
+            color="$gray11"
+            textTransform="uppercase"
+            letterSpacing={0.5}
+            marginBottom="$1.5"
+          >
             Status
-          </div>
-          <div style={{
-            fontSize: '14px',
-            fontWeight: '500',
-            color: statusColor,
-          }}>
+          </Text>
+          <Text fontSize="$3" fontWeight="500" color={statusColor}>
             {statusLabel}
-          </div>
-        </div>
-        <div>
-          <div style={{
-            fontSize: '12px',
-            fontWeight: '600',
-            color: '#64748b',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            marginBottom: '6px',
-          }}>
+          </Text>
+        </YStack>
+        <YStack minWidth={180} flex={1}>
+          <Text
+            fontSize="$2"
+            fontWeight="600"
+            color="$gray11"
+            textTransform="uppercase"
+            letterSpacing={0.5}
+            marginBottom="$1.5"
+          >
             Model Set
-          </div>
-          <div style={{
-            fontSize: '14px',
-            fontWeight: '500',
-            color: '#0f172a',
-          }}>
+          </Text>
+          <Text fontSize="$3" fontWeight="500" color="$color">
             {agent.model_set}
-          </div>
-        </div>
-        <div>
-          <div style={{
-            fontSize: '12px',
-            fontWeight: '600',
-            color: '#64748b',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            marginBottom: '6px',
-          }}>
+          </Text>
+        </YStack>
+        <YStack minWidth={180} flex={1}>
+          <Text
+            fontSize="$2"
+            fontWeight="600"
+            color="$gray11"
+            textTransform="uppercase"
+            letterSpacing={0.5}
+            marginBottom="$1.5"
+          >
             Created
-          </div>
-          <div style={{
-            fontSize: '13px',
-            fontWeight: '500',
-            color: '#0f172a',
-          }}>
+          </Text>
+          <Text fontSize="$3" fontWeight="500" color="$color">
             {formatDate(agent.created_at)}
-          </div>
-        </div>
-        <div>
-          <div style={{
-            fontSize: '12px',
-            fontWeight: '600',
-            color: '#64748b',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            marginBottom: '6px',
-          }}>
+          </Text>
+        </YStack>
+        <YStack minWidth={180} flex={1}>
+          <Text
+            fontSize="$2"
+            fontWeight="600"
+            color="$gray11"
+            textTransform="uppercase"
+            letterSpacing={0.5}
+            marginBottom="$1.5"
+          >
             Total Cost
-          </div>
-          <div style={{
-            fontSize: '14px',
-            fontWeight: '600',
-            color: '#10b981',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-          }}>
+          </Text>
+          <XStack alignItems="center" gap="$1">
             {totalCost !== null ? (
-              <>${totalCost.toFixed(4)}</>
+              <Text fontSize="$3" fontWeight="600" color="$green11">
+                ${totalCost.toFixed(4)}
+              </Text>
             ) : (
-              <span style={{ fontSize: '12px', color: '#94a3b8' }}>N/A</span>
+              <Text fontSize="$2" color="$gray5">
+                N/A
+              </Text>
             )}
-          </div>
-        </div>
-      </div>
+          </XStack>
+        </YStack>
+      </XStack>
 
       {/* Context Statistics */}
       {contextStats && (
-        <div style={{
-          marginBottom: '24px',
-          paddingBottom: '24px',
-          borderBottom: '1px solid #e2e8f0',
-        }}>
-          <h4 style={{
-            fontSize: '16px',
-            fontWeight: '600',
-            color: '#0f172a',
-            margin: '0 0 16px 0',
-          }}>
+        <YStack
+          marginBottom="$6"
+          paddingBottom="$6"
+          borderBottomWidth={1}
+          borderBottomColor="$borderColor"
+        >
+          <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$4" margin={0}>
             Context Library
-          </h4>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-            gap: '16px',
-          }}>
-            <div style={{
-              padding: '16px',
-              background: '#f8fafc',
-              borderRadius: '8px',
-              border: '1px solid #e2e8f0',
-            }}>
-              <div style={{
-                fontSize: '24px',
-                fontWeight: '700',
-                color: '#10b981',
-                marginBottom: '4px',
-              }}>
-                {contextStats.glossaryTermCount.toLocaleString()}
-              </div>
-              <div style={{
-                fontSize: '12px',
-                fontWeight: '500',
-                color: '#64748b',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-              }}>
-                Glossary Terms
-              </div>
-            </div>
-            <div style={{
-              padding: '16px',
-              background: '#f8fafc',
-              borderRadius: '8px',
-              border: '1px solid #e2e8f0',
-            }}>
-              <div style={{
-                fontSize: '24px',
-                fontWeight: '700',
-                color: '#3b82f6',
-                marginBottom: '4px',
-              }}>
-                {contextStats.chunkCount.toLocaleString()}
-              </div>
-              <div style={{
-                fontSize: '12px',
-                fontWeight: '500',
-                color: '#64748b',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-              }}>
-                Context Chunks
-              </div>
-            </div>
-          </div>
-        </div>
+          </Text>
+          <XStack
+            flexWrap="wrap"
+            gap="$4"
+            $sm={{ flexDirection: 'column' }}
+            $md={{ flexDirection: 'row' }}
+          >
+            <Card variant="outlined" backgroundColor="$gray1" padding="$4" flex={1} minWidth={150}>
+              <YStack gap="$1">
+                <Text fontSize="$7" fontWeight="700" color="$green11" marginBottom="$1">
+                  {contextStats.glossaryTermCount.toLocaleString()}
+                </Text>
+                <Text
+                  fontSize="$2"
+                  fontWeight="500"
+                  color="$gray11"
+                  textTransform="uppercase"
+                  letterSpacing={0.5}
+                >
+                  Glossary Terms
+                </Text>
+              </YStack>
+            </Card>
+            <Card variant="outlined" backgroundColor="$gray1" padding="$4" flex={1} minWidth={150}>
+              <YStack gap="$1">
+                <Text fontSize="$7" fontWeight="700" color="$blue6" marginBottom="$1">
+                  {contextStats.chunkCount.toLocaleString()}
+                </Text>
+                <Text
+                  fontSize="$2"
+                  fontWeight="500"
+                  color="$gray11"
+                  textTransform="uppercase"
+                  letterSpacing={0.5}
+                >
+                  Context Chunks
+                </Text>
+              </YStack>
+            </Card>
+          </XStack>
+        </YStack>
       )}
 
       {/* Context Generation Progress */}
-      <div style={{ marginBottom: '24px' }}>
+      <YStack marginBottom="$6">
         {resetError && (
-          <div style={{
-            marginBottom: '16px',
-            padding: '8px 12px',
-            background: '#fee2e2',
-            border: '1px solid #fecaca',
-            borderRadius: '6px',
-            color: '#991b1b',
-            fontSize: '12px',
-          }}>
+          <Alert variant="error" marginBottom="$4">
             {resetError}
-          </div>
+          </Alert>
         )}
         <ContextGenerationPanel 
           eventId={eventId} 
@@ -367,8 +314,8 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
           onClearContext={agent && agent.status !== 'idle' ? handleReset : undefined}
           isClearing={isResetting}
         />
-      </div>
-    </div>
+      </YStack>
+    </YStack>
   );
 }
 

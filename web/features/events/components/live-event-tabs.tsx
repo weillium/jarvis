@@ -117,9 +117,7 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
   ];
 
   return (
-    <div>
-      <Tabs tabs={mainTabs} defaultTab="event" />
-    </div>
+    <Tabs tabs={mainTabs} defaultTab="event" />
   );
 }
 

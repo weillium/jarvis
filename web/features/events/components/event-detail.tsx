@@ -127,8 +127,9 @@ export function EventDetail({ eventId, event, onEventUpdate }: EventDetailProps)
           backgroundColor="$gray1"
           marginBottom="$6"
           padding="$4"
+          width="100%"
         >
-          <YStack gap="$3">
+          <YStack gap="$3" width="100%">
             <Text
               fontSize="$3"
               fontWeight="600"
@@ -142,8 +143,14 @@ export function EventDetail({ eventId, event, onEventUpdate }: EventDetailProps)
             <Text
               fontSize="$4"
               color="$gray9"
-              lineHeight={1.6}
-              whiteSpace="pre-wrap"
+              width="100%"
+              style={{ 
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                display: 'block',
+                overflowWrap: 'break-word',
+                lineHeight: '1.6'
+              }}
             >
               {currentEvent.topic}
             </Text>

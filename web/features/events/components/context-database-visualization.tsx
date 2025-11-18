@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/shared/lib/supabase/client';
 import { useContextDatabaseQuery } from '@/shared/hooks/use-context-database-query';
+import { YStack, XStack, Text, Card, Button, Input, Alert } from '@jarvis/ui-core';
 
 interface ContextItem {
   id: string;
@@ -226,274 +227,211 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
   ).sort() as string[];
 
   return (
-    <div style={{
-      background: embedded ? 'transparent' : '#ffffff',
-      border: embedded ? 'none' : '1px solid #e2e8f0',
-      borderRadius: embedded ? '0' : '12px',
-      padding: embedded ? '0' : '24px',
-      marginBottom: embedded ? '0' : '24px',
-    }}>
+    <YStack
+      backgroundColor={embedded ? 'transparent' : '$background'}
+      borderWidth={embedded ? 0 : 1}
+      borderColor={embedded ? 'transparent' : '$borderColor'}
+      borderRadius={embedded ? 0 : '$4'}
+      padding={embedded ? 0 : '$6'}
+      marginBottom={embedded ? 0 : '$6'}
+    >
       {/* Header - only show when not embedded */}
       {!embedded && (
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '20px',
-        }}>
-          <div>
-            <h3 style={{
-              fontSize: '20px',
-              fontWeight: '600',
-              color: '#0f172a',
-              margin: '0 0 4px 0',
-            }}>
+        <XStack
+          justifyContent="space-between"
+          alignItems="center"
+          marginBottom="$5"
+        >
+          <YStack>
+            <Text fontSize="$5" fontWeight="600" color="$color" marginBottom="$1" margin={0}>
               Context Database
-            </h3>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              fontSize: '13px',
-              color: '#64748b',
-          }}>
-            <span>
-              {isLoading ? 'Loading...' : `${stats?.total || 0} / 1,000 chunks`}
-            </span>
-            {isRealTime && (
-              <span style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-              }}>
-                <span style={{
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '50%',
-                  background: '#10b981',
-                  animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                }} />
-                Live
-              </span>
-            )}
-          </div>
-        </div>
-        {!embedded && (
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            style={{
-              padding: '8px 16px',
-              border: '1px solid #e2e8f0',
-              borderRadius: '6px',
-              fontSize: '14px',
-              fontWeight: '500',
-              color: '#374151',
-              background: '#ffffff',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = '#f8fafc';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = '#ffffff';
-            }}
-          >
-            {isExpanded ? 'Collapse' : 'Expand'}
-          </button>
-        )}
-      </div>
+            </Text>
+            <XStack alignItems="center" gap="$3" fontSize="$3" color="$gray11">
+              <Text>
+                {isLoading ? 'Loading...' : `${stats?.total || 0} / 1,000 chunks`}
+              </Text>
+              {isRealTime && (
+                <XStack alignItems="center" gap="$1">
+                  <YStack
+                    width={8}
+                    height={8}
+                    borderRadius="$10"
+                    backgroundColor="$green11"
+                    opacity={0.8}
+                    style={{
+                      animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }}
+                  />
+                  <Text>Live</Text>
+                </XStack>
+              )}
+            </XStack>
+          </YStack>
+          {!embedded && (
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={() => setIsExpanded(!isExpanded)}
+            >
+              {isExpanded ? 'Collapse' : 'Expand'}
+            </Button>
+          )}
+        </XStack>
       )}
 
       {/* Stats Overview */}
       {stats && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
-          gap: '12px',
-          marginBottom: '20px',
-          padding: '16px',
-          background: '#f8fafc',
-          borderRadius: '8px',
-        }}>
-          <div>
-            <div style={{
-              fontSize: '11px',
-              fontWeight: '600',
-              color: '#64748b',
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px',
-              marginBottom: '4px',
-            }}>
+        <XStack
+          flexWrap="wrap"
+          gap="$3"
+          marginBottom="$5"
+          padding="$4"
+          backgroundColor="$gray1"
+          borderRadius="$3"
+          $sm={{ flexDirection: 'column' }}
+          $md={{ flexDirection: 'row' }}
+        >
+          <YStack flex={1} minWidth={120}>
+            <Text
+              fontSize="$1"
+              fontWeight="600"
+              color="$gray11"
+              textTransform="uppercase"
+              letterSpacing={0.5}
+              marginBottom="$1"
+            >
               Total Chunks
-            </div>
-            <div style={{
-              fontSize: '20px',
-              fontWeight: '700',
-              color: '#0f172a',
-            }}>
+            </Text>
+            <Text fontSize="$5" fontWeight="700" color="$color">
               {stats.total}
-            </div>
-          </div>
-          <div>
-            <div style={{
-              fontSize: '11px',
-              fontWeight: '600',
-              color: '#64748b',
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px',
-              marginBottom: '4px',
-            }}>
+            </Text>
+          </YStack>
+          <YStack flex={1} minWidth={120}>
+            <Text
+              fontSize="$1"
+              fontWeight="600"
+              color="$gray11"
+              textTransform="uppercase"
+              letterSpacing={0.5}
+              marginBottom="$1"
+            >
               Avg Quality
-            </div>
-            <div style={{
-              fontSize: '20px',
-              fontWeight: '700',
-              color: stats.avgQualityScore >= 0.7 ? '#10b981' : stats.avgQualityScore >= 0.4 ? '#f59e0b' : '#ef4444',
-            }}>
+            </Text>
+            <Text
+              fontSize="$5"
+              fontWeight="700"
+              color={
+                stats.avgQualityScore >= 0.7
+                  ? '$green11'
+                  : stats.avgQualityScore >= 0.4
+                  ? '$yellow11'
+                  : '$red11'
+              }
+            >
               {(stats.avgQualityScore * 100).toFixed(0)}%
-            </div>
-          </div>
-          <div>
-            <div style={{
-              fontSize: '11px',
-              fontWeight: '600',
-              color: '#64748b',
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px',
-              marginBottom: '4px',
-            }}>
+            </Text>
+          </YStack>
+          <YStack flex={1} minWidth={120}>
+            <Text
+              fontSize="$1"
+              fontWeight="600"
+              color="$gray11"
+              textTransform="uppercase"
+              letterSpacing={0.5}
+              marginBottom="$1"
+            >
               Total Chars
-            </div>
-            <div style={{
-              fontSize: '20px',
-              fontWeight: '700',
-              color: '#0f172a',
-            }}>
+            </Text>
+            <Text fontSize="$5" fontWeight="700" color="$color">
               {stats.totalChars.toLocaleString()}
-            </div>
-          </div>
-        </div>
+            </Text>
+          </YStack>
+        </XStack>
       )}
 
       {/* Source Breakdown */}
       {stats && stats.byEnrichmentSource && Object.keys(stats.byEnrichmentSource).length > 0 && (
-        <div style={{
-          marginBottom: '20px',
-          padding: '16px',
-          background: '#f8fafc',
-          borderRadius: '8px',
-        }}>
-          <div style={{
-            fontSize: '12px',
-            fontWeight: '600',
-            color: '#64748b',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            marginBottom: '12px',
-          }}>
+        <YStack marginBottom="$5" padding="$4" backgroundColor="$gray1" borderRadius="$3">
+          <Text
+            fontSize="$2"
+            fontWeight="600"
+            color="$gray11"
+            textTransform="uppercase"
+            letterSpacing={0.5}
+            marginBottom="$3"
+          >
             Source Breakdown
-          </div>
-          <div style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '8px',
-          }}>
+          </Text>
+          <XStack flexWrap="wrap" gap="$2">
             {Object.entries(stats.byEnrichmentSource).map(([source, count]) => (
-              <div
+              <XStack
                 key={source}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 12px',
-                  background: '#ffffff',
-                  border: `1px solid ${getSourceColor(source)}`,
-                  borderRadius: '6px',
-                  fontSize: '13px',
-                }}
+                alignItems="center"
+                gap="$1.5"
+                padding="$1.5 $3"
+                backgroundColor="$background"
+                borderWidth={1}
+                borderColor={getSourceColor(source)}
+                borderRadius="$2"
+                fontSize="$3"
               >
-                <div style={{
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '50%',
-                  background: getSourceColor(source),
-                }} />
-                <span style={{ color: '#0f172a', fontWeight: '500' }}>
+                <YStack
+                  width={8}
+                  height={8}
+                  borderRadius="$10"
+                  backgroundColor={getSourceColor(source)}
+                />
+                <Text color="$color" fontWeight="500">
                   {getSourceLabel(source)}
-                </span>
-                <span style={{ color: '#64748b' }}>
+                </Text>
+                <Text color="$gray11">
                   {count}
-                </span>
-              </div>
+                </Text>
+              </XStack>
             ))}
-          </div>
-        </div>
+          </XStack>
+        </YStack>
       )}
 
       {/* Status Indicator - Only show during active building */}
       {isPrepping && contextItems.length === 0 && (
-        <div style={{
-          padding: '12px 16px',
-          background: '#fef3c7',
-          border: '1px solid #fbbf24',
-          borderRadius: '8px',
-          marginBottom: '20px',
-          fontSize: '14px',
-          color: '#92400e',
-        }}>
-          ⚡ Building context database... Chunks will appear here as they are generated.
-          <div style={{ marginTop: '8px', fontSize: '12px', opacity: 0.8 }}>
-            Agent status: <strong>{agentStatus}</strong> - The worker should be processing this every 3 seconds.
-            {!isRealTime && ' Make sure the worker is running!'}
-          </div>
-        </div>
+        <Alert variant="warning" marginBottom="$5">
+          <YStack gap="$2">
+            <Text>
+              ⚡ Building context database... Chunks will appear here as they are generated.
+            </Text>
+            <Text fontSize="$2" opacity={0.8}>
+              Agent status: <Text fontWeight="600">{agentStatus}</Text> - The worker should be processing this every 3 seconds.
+              {!isRealTime && ' Make sure the worker is running!'}
+            </Text>
+          </YStack>
+        </Alert>
       )}
 
       {/* Search and Filters */}
       {isExpanded && contextItems.length > 0 && (
-        <div style={{
-          display: 'flex',
-          gap: '12px',
-          marginTop: '20px',
-          marginBottom: '12px',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-        }}>
-          <input
-            type="text"
+        <XStack
+          gap="$3"
+          marginTop="$5"
+          marginBottom="$3"
+          flexWrap="wrap"
+          alignItems="center"
+        >
+          <Input
+            flex={1}
+            minWidth={200}
             placeholder="Search chunks..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              flex: 1,
-              minWidth: '200px',
-              padding: '8px 12px',
-              border: '1px solid #e2e8f0',
-              borderRadius: '6px',
-              fontSize: '14px',
-            }}
+            onChange={(e: any) => setSearchQuery(e.target.value)}
           />
-          <button
-            onClick={handleRefresh}
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={handleRefresh}
             disabled={isFetching}
-            style={{
-              padding: '8px 16px',
-              border: '1px solid #e2e8f0',
-              borderRadius: '6px',
-              fontSize: '14px',
-              fontWeight: '500',
-              background: '#ffffff',
-              color: '#374151',
-              cursor: isFetching ? 'not-allowed' : 'pointer',
-              opacity: isFetching ? 0.6 : 1,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
           >
             ↻ {isFetching ? 'Refreshing...' : 'Refresh'}
-          </button>
+          </Button>
           <select
             value={filterByRank || ''}
             onChange={(e) => setFilterByRank(e.target.value || null)}
@@ -503,6 +441,7 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
               borderRadius: '6px',
               fontSize: '13px',
               background: '#ffffff',
+              fontFamily: 'inherit',
             }}
           >
             <option value="">All Ranks</option>
@@ -519,6 +458,7 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
                 borderRadius: '6px',
                 fontSize: '13px',
                 background: '#ffffff',
+                fontFamily: 'inherit',
               }}
             >
               <option value="">All Research Sources</option>
@@ -530,208 +470,184 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
             </select>
           )}
           {(filterByRank || filterByResearchSource || searchQuery) && (
-            <button
-              onClick={() => {
+            <Button
+              variant="ghost"
+              size="sm"
+              onPress={() => {
                 setFilterByRank(null);
                 setFilterByResearchSource(null);
                 setSearchQuery('');
               }}
-              style={{
-                padding: '8px 12px',
-                border: '1px solid #e2e8f0',
-                borderRadius: '6px',
-                fontSize: '13px',
-                background: '#ffffff',
-                cursor: 'pointer',
-                color: '#64748b',
-              }}
             >
               Clear Filters
-            </button>
+            </Button>
           )}
-        </div>
+        </XStack>
       )}
 
       {/* Expanded View */}
       {isExpanded && (
-        <div style={{
-          marginTop: '20px',
-          maxHeight: '600px',
-          overflowY: 'auto',
-          border: '1px solid #e2e8f0',
-          borderRadius: '8px',
-          background: '#f8fafc',
-        }}>
+        <YStack
+          marginTop="$5"
+          maxHeight={600}
+          overflowY="auto"
+          borderWidth={1}
+          borderColor="$borderColor"
+          borderRadius="$3"
+          backgroundColor="$gray1"
+        >
           {isLoading ? (
-            <div style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
-              Loading context items...
-            </div>
+            <YStack padding="$6" alignItems="center">
+              <Text color="$gray11">Loading context items...</Text>
+            </YStack>
           ) : error ? (
-            <div style={{ padding: '24px', textAlign: 'center', color: '#ef4444' }}>
-              Error loading context items: {error instanceof Error ? error.message : 'Unknown error'}
-            </div>
+            <YStack padding="$6" alignItems="center">
+              <Alert variant="error">
+                Error loading context items: {error instanceof Error ? error.message : 'Unknown error'}
+              </Alert>
+            </YStack>
           ) : filteredItems.length === 0 ? (
-            <div style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
-              {(filterByRank || filterByResearchSource)
-                ? 'No context items match the selected filters.'
-                : contextItems.length === 0
-                ? 'No context items found. Expand to view chunks when they are available.'
-                : 'No context items match the current filters.'}
-            </div>
+            <YStack padding="$6" alignItems="center">
+              <Text color="$gray11">
+                {(filterByRank || filterByResearchSource)
+                  ? 'No context items match the selected filters.'
+                  : contextItems.length === 0
+                  ? 'No context items found. Expand to view chunks when they are available.'
+                  : 'No context items match the current filters.'}
+              </Text>
+            </YStack>
           ) : (
-            <div style={{ padding: '8px' }}>
-              {filteredItems.map((item) => (
-                <div
-                  key={item.id}
-                  style={{
-                    padding: '16px',
-                    marginBottom: '8px',
-                    background: '#ffffff',
-                    borderRadius: '6px',
-                    border: '1px solid #e2e8f0',
-                    transition: 'all 0.2s',
-                  }}
-                >
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start',
-                    marginBottom: '8px',
-                  }}>
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                    }}>
-                      {item.rank !== null && (
-                        <div style={{
-                          fontSize: '11px',
-                          padding: '2px 8px',
-                          background: '#dbeafe',
-                          color: '#1e40af',
-                          borderRadius: '4px',
-                          fontWeight: '600',
-                        }}>
-                          Rank: {item.rank}
-                        </div>
-                      )}
-                      {/* Version column removed in Phase 3 */}
-                      <div style={{
-                        width: '8px',
-                        height: '8px',
-                        borderRadius: '50%',
-                        background: getSourceColor(item.metadata?.enrichment_source || item.metadata?.source || 'unknown'),
-                      }} />
-                      <div style={{
-                        fontSize: '12px',
-                        fontWeight: '600',
-                        color: '#64748b',
-                        textTransform: 'uppercase',
-                      }}>
-                        {getSourceLabel(item.metadata?.enrichment_source || item.metadata?.source || 'unknown')}
-                      </div>
-                      {item.metadata?.research_source && (
-                        <div style={{
-                          fontSize: '11px',
-                          padding: '2px 8px',
-                          background: '#f3f4f6',
-                          color: '#374151',
-                          borderRadius: '4px',
-                          fontWeight: '500',
-                        }}>
-                          Research: {item.metadata.research_source}
-                        </div>
-                      )}
-                    </div>
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                    }}>
-                      {item.metadata?.quality_score !== null && item.metadata?.quality_score !== undefined && (
-                        <div style={{
-                          fontSize: '11px',
-                          padding: '2px 8px',
-                          background: (() => {
-                            const score = typeof item.metadata.quality_score === 'string' 
-                              ? parseFloat(item.metadata.quality_score) 
-                              : item.metadata.quality_score;
-                            return score >= 0.7 ? '#dcfce7' : score >= 0.4 ? '#fef3c7' : '#fee2e2';
-                          })(),
-                          color: '#0f172a',
-                          borderRadius: '4px',
-                          fontWeight: '500',
-                        }}>
-                          Quality: {(() => {
-                            const score = typeof item.metadata.quality_score === 'string' 
-                              ? parseFloat(item.metadata.quality_score) 
-                              : item.metadata.quality_score;
-                            return (score * 100).toFixed(0);
-                          })()}%
-                        </div>
-                      )}
-                      {item.metadata?.chunk_size && (
-                        <div style={{
-                          fontSize: '11px',
-                          color: '#94a3b8',
-                        }}>
-                          {typeof item.metadata.chunk_size === 'string' 
-                            ? parseInt(item.metadata.chunk_size, 10) 
-                            : item.metadata.chunk_size} chars
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div style={{
-                    fontSize: '13px',
-                    color: '#374151',
-                    lineHeight: '1.6',
-                    marginBottom: '8px',
-                    whiteSpace: 'pre-wrap',
-                  }}>
-                    {item.chunk}
-                  </div>
-                  {item.metadata && Object.keys(item.metadata).length > 0 && (
-                    <details style={{
-                      fontSize: '11px',
-                      color: '#64748b',
-                      marginTop: '8px',
-                    }}>
-                      <summary style={{
-                        cursor: 'pointer',
-                        fontWeight: '500',
-                      }}>
-                        Metadata
-                      </summary>
-                      <pre style={{
-                        marginTop: '8px',
-                        padding: '8px',
-                        background: '#f8fafc',
-                        borderRadius: '4px',
-                        overflow: 'auto',
-                        fontSize: '11px',
-                      }}>
-                        {JSON.stringify(item.metadata, null, 2)}
-                      </pre>
-                    </details>
-                  )}
-                  {item.metadata?.enrichment_timestamp && (
-                    <div style={{
-                      fontSize: '11px',
-                      color: '#94a3b8',
-                      marginTop: '4px',
-                    }}>
-                      Added: {new Date(item.metadata.enrichment_timestamp).toLocaleTimeString()}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+            <YStack padding="$2">
+              {filteredItems.map((item) => {
+                const qualityScore = item.metadata?.quality_score !== null && item.metadata?.quality_score !== undefined
+                  ? (typeof item.metadata.quality_score === 'string' 
+                      ? parseFloat(item.metadata.quality_score) 
+                      : item.metadata.quality_score)
+                  : null;
+                const sourceColor = getSourceColor(item.metadata?.enrichment_source || item.metadata?.source || 'unknown');
+                
+                return (
+                  <Card
+                    key={item.id}
+                    variant="outlined"
+                    padding="$4"
+                    marginBottom="$2"
+                    backgroundColor="$background"
+                  >
+                    <XStack
+                      justifyContent="space-between"
+                      alignItems="flex-start"
+                      marginBottom="$2"
+                    >
+                      <XStack alignItems="center" gap="$2">
+                        {item.rank !== null && (
+                          <YStack
+                            padding="$0.5 $2"
+                            backgroundColor="$blue2"
+                            borderRadius="$1"
+                          >
+                            <Text fontSize="$1" fontWeight="600" color="$blue11">
+                              Rank: {item.rank}
+                            </Text>
+                          </YStack>
+                        )}
+                        <YStack
+                          width={8}
+                          height={8}
+                          borderRadius="$10"
+                          backgroundColor={sourceColor}
+                        />
+                        <Text
+                          fontSize="$2"
+                          fontWeight="600"
+                          color="$gray11"
+                          textTransform="uppercase"
+                        >
+                          {getSourceLabel(item.metadata?.enrichment_source || item.metadata?.source || 'unknown')}
+                        </Text>
+                        {item.metadata?.research_source && (
+                          <YStack
+                            padding="$0.5 $2"
+                            backgroundColor="$gray2"
+                            borderRadius="$1"
+                          >
+                            <Text fontSize="$1" fontWeight="500" color="$gray9">
+                              Research: {item.metadata.research_source}
+                            </Text>
+                          </YStack>
+                        )}
+                      </XStack>
+                      <XStack alignItems="center" gap="$2">
+                        {qualityScore !== null && (
+                          <YStack
+                            padding="$0.5 $2"
+                            backgroundColor={
+                              qualityScore >= 0.7
+                                ? '$green2'
+                                : qualityScore >= 0.4
+                                ? '$yellow2'
+                                : '$red2'
+                            }
+                            borderRadius="$1"
+                          >
+                            <Text fontSize="$1" fontWeight="500" color="$color">
+                              Quality: {(qualityScore * 100).toFixed(0)}%
+                            </Text>
+                          </YStack>
+                        )}
+                        {item.metadata?.chunk_size && (
+                          <Text fontSize="$1" color="$gray5">
+                            {typeof item.metadata.chunk_size === 'string' 
+                              ? parseInt(item.metadata.chunk_size, 10) 
+                              : item.metadata.chunk_size} chars
+                          </Text>
+                        )}
+                      </XStack>
+                    </XStack>
+                    <Text
+                      fontSize="$3"
+                      color="$gray9"
+                      lineHeight={1.6}
+                      marginBottom="$2"
+                      whiteSpace="pre-wrap"
+                    >
+                      {item.chunk}
+                    </Text>
+                    {item.metadata && Object.keys(item.metadata).length > 0 && (
+                      <details>
+                        <summary style={{ cursor: 'pointer', fontWeight: '500', fontSize: '11px', color: '#64748b' }}>
+                          Metadata
+                        </summary>
+                        <YStack
+                          marginTop="$2"
+                          padding="$2"
+                          backgroundColor="$gray1"
+                          borderRadius="$1"
+                        >
+                          <Text
+                            fontSize="$1"
+                            fontFamily="$mono"
+                            color="$gray11"
+                            whiteSpace="pre-wrap"
+                          >
+                            {JSON.stringify(item.metadata, null, 2)}
+                          </Text>
+                        </YStack>
+                      </details>
+                    )}
+                    {item.metadata?.enrichment_timestamp && (
+                      <Text fontSize="$1" color="$gray5" marginTop="$1">
+                        Added: {new Date(item.metadata.enrichment_timestamp).toLocaleTimeString()}
+                      </Text>
+                    )}
+                  </Card>
+                );
+              })}
+            </YStack>
           )}
-        </div>
+        </YStack>
       )}
-
-      <style jsx>{`
+      <style jsx global>{`
         @keyframes pulse {
           0%, 100% {
             opacity: 1;
@@ -741,7 +657,7 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
           }
         }
       `}</style>
-    </div>
+    </YStack>
   );
 }
 

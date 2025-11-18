@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { YStack, XStack, Text, Button, Input, Textarea, Alert } from '@jarvis/ui-core';
 
 interface TestTranscriptModalProps {
   eventId: string;
@@ -53,199 +54,101 @@ export function TestTranscriptModal({
     }
   };
 
+  if (!isOpen) return null;
+
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000,
-    }} onClick={handleClose}>
-      <div style={{
-        backgroundColor: '#ffffff',
-        borderRadius: '12px',
-        padding: '24px',
-        width: '90%',
-        maxWidth: '600px',
-        boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
-      }} onClick={(e) => e.stopPropagation()}>
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '20px',
-        }}>
-          <h3 style={{
-            fontSize: '18px',
-            fontWeight: '600',
-            color: '#0f172a',
-            margin: 0,
-          }}>
-            Send Test Transcript
-          </h3>
-          <button
-            onClick={handleClose}
-            disabled={isSending}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              fontSize: '24px',
-              color: '#64748b',
-              cursor: isSending ? 'not-allowed' : 'pointer',
-              padding: '0',
-              width: '32px',
-              height: '32px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            ×
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{
-              display: 'block',
-              fontSize: '14px',
-              fontWeight: '500',
-              color: '#374151',
-              marginBottom: '8px',
-            }}>
-              Speaker Name
-            </label>
-            <input
-              type="text"
-              value={speaker}
-              onChange={(e) => setSpeaker(e.target.value)}
-              placeholder="Test User"
+    <YStack
+      position="fixed"
+      top={0}
+      left={0}
+      right={0}
+      bottom={0}
+      backgroundColor="rgba(0, 0, 0, 0.5)"
+      alignItems="center"
+      justifyContent="center"
+      zIndex={1000}
+      onPress={handleClose}
+    >
+      <Card
+        padding="$6"
+        width="90%"
+        maxWidth={600}
+        onPress={(e: any) => e.stopPropagation()}
+      >
+        <YStack gap="$5">
+          <XStack justifyContent="space-between" alignItems="center">
+            <Text fontSize="$5" fontWeight="600" color="$color" margin={0}>
+              Send Test Transcript
+            </Text>
+            <Button
+              variant="ghost"
+              size="sm"
+              onPress={handleClose}
               disabled={isSending}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                border: '1px solid #e2e8f0',
-                borderRadius: '6px',
-                fontSize: '14px',
-                color: '#374151',
-                background: isSending ? '#f3f4f6' : '#ffffff',
-              }}
-            />
-          </div>
-
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{
-              display: 'block',
-              fontSize: '14px',
-              fontWeight: '500',
-              color: '#374151',
-              marginBottom: '8px',
-            }}>
-              Transcript Text
-            </label>
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="Enter test transcript text here..."
-              disabled={isSending}
-              rows={6}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                border: '1px solid #e2e8f0',
-                borderRadius: '6px',
-                fontSize: '14px',
-                color: '#374151',
-                background: isSending ? '#f3f4f6' : '#ffffff',
-                resize: 'vertical',
-                fontFamily: 'inherit',
-              }}
-            />
-          </div>
-
-          {error && (
-            <div style={{
-              padding: '8px 12px',
-              marginBottom: '16px',
-              background: '#fef2f2',
-              borderRadius: '6px',
-              border: '1px solid #fecaca',
-              fontSize: '12px',
-              color: '#dc2626',
-            }}>
-              {error}
-            </div>
-          )}
-
-          <div style={{
-            display: 'flex',
-            gap: '12px',
-            justifyContent: 'flex-end',
-          }}>
-            <button
-              type="button"
-              onClick={handleClose}
-              disabled={isSending}
-              style={{
-                padding: '10px 20px',
-                border: '1px solid #e2e8f0',
-                borderRadius: '6px',
-                fontSize: '14px',
-                fontWeight: '500',
-                color: '#374151',
-                background: '#ffffff',
-                cursor: isSending ? 'not-allowed' : 'pointer',
-                transition: 'all 0.2s',
-              }}
-              onMouseEnter={(e) => {
-                if (!isSending) {
-                  e.currentTarget.style.background = '#f8fafc';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isSending) {
-                  e.currentTarget.style.background = '#ffffff';
-                }
-              }}
+              padding="$1"
+              width={32}
+              height={32}
             >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSending || !text.trim()}
-              style={{
-                padding: '10px 20px',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '14px',
-                fontWeight: '500',
-                color: '#ffffff',
-                background: isSending || !text.trim() ? '#cbd5e1' : '#3b82f6',
-                cursor: isSending || !text.trim() ? 'not-allowed' : 'pointer',
-                transition: 'all 0.2s',
-              }}
-              onMouseEnter={(e) => {
-                if (!isSending && text.trim()) {
-                  e.currentTarget.style.background = '#2563eb';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isSending && text.trim()) {
-                  e.currentTarget.style.background = '#3b82f6';
-                }
-              }}
-            >
-              {isSending ? 'Sending...' : 'Send Transcript'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+              <Text fontSize="$7">×</Text>
+            </Button>
+          </XStack>
+
+          <form onSubmit={handleSubmit}>
+            <YStack gap="$5">
+              <YStack gap="$2">
+                <Text fontSize="$3" fontWeight="500" color="$gray9">
+                  Speaker Name
+                </Text>
+                <Input
+                  type="text"
+                  value={speaker}
+                  onChange={(e: any) => setSpeaker(e.target.value)}
+                  placeholder="Test User"
+                  disabled={isSending}
+                />
+              </YStack>
+
+              <YStack gap="$2">
+                <Text fontSize="$3" fontWeight="500" color="$gray9">
+                  Transcript Text
+                </Text>
+                <Textarea
+                  value={text}
+                  onChange={(e: any) => setText(e.target.value)}
+                  placeholder="Enter test transcript text here..."
+                  disabled={isSending}
+                  rows={6}
+                  minHeight={120}
+                />
+              </YStack>
+
+              {error && (
+                <Alert variant="error">
+                  {error}
+                </Alert>
+              )}
+
+              <XStack gap="$3" justifyContent="flex-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onPress={handleClose}
+                  disabled={isSending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSending || !text.trim()}
+                >
+                  {isSending ? 'Sending...' : 'Send Transcript'}
+                </Button>
+              </XStack>
+            </YStack>
+          </form>
+        </YStack>
+      </Card>
+    </YStack>
   );
 }
 

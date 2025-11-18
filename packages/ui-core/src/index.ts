@@ -5,6 +5,7 @@ export { TamaguiProvider } from './components/TamaguiProvider';
 export { SmokeTest } from './components/SmokeTest';
 export { Button } from './components/Button';
 export { Input } from './components/Input';
+export { Textarea } from './components/Textarea';
 export { Card } from './components/Card';
 export { Alert } from './components/Alert';
 
