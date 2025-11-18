@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '@/shared/lib/supabase/client';
+import { XStack, YStack, Text, Button, Separator } from '@jarvis/ui-core';
 
 interface AppShellNavProps {
   user: User;
@@ -36,90 +37,66 @@ export function AppShellNav({ user }: AppShellNavProps) {
   };
 
   return (
-    <header style={{
-      background: '#ffffff',
-      borderBottom: '1px solid #e2e8f0',
-      padding: '16px 24px',
-    }}>
-      <div style={{
-        maxWidth: '1400px',
-        margin: '0 auto',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-      }}>
-        <Link href="/" style={{
-          fontSize: '20px',
-          fontWeight: '600',
-          color: '#1e293b',
-          textDecoration: 'none',
-        }}>
-          Jarvis
+    <YStack
+      as="header"
+      backgroundColor="$background"
+      borderBottomWidth={1}
+      borderBottomColor="$borderColor"
+      paddingVertical="$4"
+      paddingHorizontal="$6"
+    >
+      <XStack
+        maxWidth={1400}
+        marginHorizontal="auto"
+        width="100%"
+        justifyContent="space-between"
+        alignItems="center"
+      >
+        <Link href="/" style={{ textDecoration: 'none' }}>
+          <Text fontSize="$6" fontWeight="600" color="$blue11">
+            Jarvis
+          </Text>
         </Link>
-        <nav style={{
-          display: 'flex',
-          gap: '24px',
-          alignItems: 'center',
-        }}>
-          <Link href="/" style={{
-            color: '#475569',
-            textDecoration: 'none',
-            fontSize: '15px',
-            fontWeight: '500',
-          }}>
-            Dashboard
+        <XStack as="nav" gap="$6" alignItems="center">
+          <Link href="/" style={{ textDecoration: 'none' }}>
+            <Text color="$gray7" fontSize="$4" fontWeight="500">
+              Dashboard
+            </Text>
           </Link>
-          <Link href="/events" style={{
-            color: '#475569',
-            textDecoration: 'none',
-            fontSize: '15px',
-            fontWeight: '500',
-          }}>
-            Events
+          <Link href="/events" style={{ textDecoration: 'none' }}>
+            <Text color="$gray7" fontSize="$4" fontWeight="500">
+              Events
+            </Text>
           </Link>
-          <Link href="/agents" style={{
-            color: '#475569',
-            textDecoration: 'none',
-            fontSize: '15px',
-            fontWeight: '500',
-          }}>
-            Agents
+          <Link href="/agents" style={{ textDecoration: 'none' }}>
+            <Text color="$gray7" fontSize="$4" fontWeight="500">
+              Agents
+            </Text>
           </Link>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '16px',
-            marginLeft: '16px',
-            paddingLeft: '16px',
-            borderLeft: '1px solid #e2e8f0',
-          }}>
-            <Link href="/profile" style={{
-              fontSize: '14px',
-              color: '#64748b',
-              textDecoration: 'none',
-            }}>
-              {user.email}
+          <XStack
+            alignItems="center"
+            gap="$4"
+            marginLeft="$4"
+            paddingLeft="$4"
+            borderLeftWidth={1}
+            borderLeftColor="$borderColor"
+          >
+            <Link href="/profile" style={{ textDecoration: 'none' }}>
+              <Text fontSize="$3" color="$gray11">
+                {user.email}
+              </Text>
             </Link>
-            <button
-              onClick={handleSignOut}
-              style={{
-                background: 'transparent',
-                border: '1px solid #cbd5e1',
-                color: '#475569',
-                padding: '6px 16px',
-                borderRadius: '6px',
-                fontSize: '14px',
-                fontWeight: '500',
-                cursor: 'pointer',
-                transition: 'background 0.2s',
-              }}
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={handleSignOut}
             >
               Sign Out
-            </button>
-          </div>
-        </nav>
-      </div>
-    </header>
+            </Button>
+          </XStack>
+        </XStack>
+      </XStack>
+    </YStack>
   );
 }
 

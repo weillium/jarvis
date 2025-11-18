@@ -3,6 +3,7 @@
 import { AuthGuard } from '@/features/auth/components/auth-guard';
 import { useAuth } from '@/shared/hooks/use-auth';
 import { AppShellNav } from './app-shell-nav';
+import { YStack } from '@jarvis/ui-core';
 
 interface AppShellWrapperProps {
   children: React.ReactNode;
@@ -27,19 +28,21 @@ function AppShell({ children }: AppShellWrapperProps) {
   }
 
   return (
-    <section style={{
-      minHeight: '100vh',
-      background: '#f8fafc',
-    }}>
+    <YStack
+      as="section"
+      minHeight="100vh"
+      backgroundColor="$gray1"
+    >
       <AppShellNav user={user} />
-      <div style={{
-        padding: '24px',
-        maxWidth: '1400px',
-        margin: '0 auto',
-      }}>
+      <YStack
+        padding="$6"
+        maxWidth={1400}
+        marginHorizontal="auto"
+        width="100%"
+      >
         {children}
-      </div>
-    </section>
+      </YStack>
+    </YStack>
   );
 }
 

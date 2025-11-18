@@ -1,164 +1,112 @@
+'use client';
+
 import Link from 'next/link';
+import { YStack, XStack, Text, Card } from '@jarvis/ui-core';
 
 export default function AppDashboard() {
   return (
-    <div style={{
-      maxWidth: '1400px',
-      margin: '0 auto',
-    }}>
-      <div style={{
-        marginBottom: '32px',
-      }}>
-        <h1 style={{
-          fontSize: '36px',
-          fontWeight: '700',
-          color: '#0f172a',
-          margin: '0 0 8px 0',
-          letterSpacing: '-0.5px',
-        }}>
+    <YStack maxWidth={1400} marginHorizontal="auto" width="100%">
+      <YStack marginBottom="$8">
+        <Text
+          fontSize="$10"
+          fontWeight="700"
+          color="$color"
+          marginBottom="$2"
+          letterSpacing={-0.5}
+        >
           Dashboard
-        </h1>
-        <p style={{
-          fontSize: '18px',
-          color: '#64748b',
-          margin: 0,
-        }}>
+        </Text>
+        <Text fontSize="$5" color="$gray11" margin={0}>
           Overview of your events and agents
-        </p>
-      </div>
+        </Text>
+      </YStack>
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-        gap: '24px',
-        marginBottom: '40px',
-      }}>
-        <div style={{
-          background: '#ffffff',
-          border: '1px solid #e2e8f0',
-          borderRadius: '12px',
-          padding: '24px',
-        }}>
-          <h3 style={{
-            fontSize: '14px',
-            fontWeight: '500',
-            color: '#64748b',
-            margin: '0 0 8px 0',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-          }}>
-            Active Events
-          </h3>
-          <div style={{
-            fontSize: '32px',
-            fontWeight: '700',
-            color: '#0f172a',
-            margin: '0 0 4px 0',
-          }}>
-            {/* Placeholder: Active events count */}
-            --
-          </div>
-          <Link href="/events" style={{
-            fontSize: '14px',
-            color: '#1e293b',
-            textDecoration: 'none',
-            fontWeight: '500',
-          }}>
-            View all →
-          </Link>
-        </div>
+      <XStack
+        flexWrap="wrap"
+        gap="$6"
+        marginBottom="$10"
+        $sm={{ flexDirection: 'column' }}
+        $md={{ flexDirection: 'row' }}
+      >
+        <Card flex={1} minWidth={300}>
+          <YStack gap="$2">
+            <Text
+              fontSize="$3"
+              fontWeight="500"
+              color="$gray11"
+              textTransform="uppercase"
+              letterSpacing={0.5}
+            >
+              Active Events
+            </Text>
+            <Text fontSize="$9" fontWeight="700" color="$color" marginBottom="$1">
+              {/* Placeholder: Active events count */}
+              --
+            </Text>
+            <Link href="/events" style={{ textDecoration: 'none' }}>
+              <Text fontSize="$3" color="$blue11" fontWeight="500">
+                View all →
+              </Text>
+            </Link>
+          </YStack>
+        </Card>
 
-        <div style={{
-          background: '#ffffff',
-          border: '1px solid #e2e8f0',
-          borderRadius: '12px',
-          padding: '24px',
-        }}>
-          <h3 style={{
-            fontSize: '14px',
-            fontWeight: '500',
-            color: '#64748b',
-            margin: '0 0 8px 0',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-          }}>
-            Active Agents
-          </h3>
-          <div style={{
-            fontSize: '32px',
-            fontWeight: '700',
-            color: '#0f172a',
-            margin: '0 0 4px 0',
-          }}>
-            {/* Placeholder: Active agents count */}
-            --
-          </div>
-          <Link href="/agents" style={{
-            fontSize: '14px',
-            color: '#1e293b',
-            textDecoration: 'none',
-            fontWeight: '500',
-          }}>
-            View all →
-          </Link>
-        </div>
+        <Card flex={1} minWidth={300}>
+          <YStack gap="$2">
+            <Text
+              fontSize="$3"
+              fontWeight="500"
+              color="$gray11"
+              textTransform="uppercase"
+              letterSpacing={0.5}
+            >
+              Active Agents
+            </Text>
+            <Text fontSize="$9" fontWeight="700" color="$color" marginBottom="$1">
+              {/* Placeholder: Active agents count */}
+              --
+            </Text>
+            <Link href="/agents" style={{ textDecoration: 'none' }}>
+              <Text fontSize="$3" color="$blue11" fontWeight="500">
+                View all →
+              </Text>
+            </Link>
+          </YStack>
+        </Card>
 
-        <div style={{
-          background: '#ffffff',
-          border: '1px solid #e2e8f0',
-          borderRadius: '12px',
-          padding: '24px',
-        }}>
-          <h3 style={{
-            fontSize: '14px',
-            fontWeight: '500',
-            color: '#64748b',
-            margin: '0 0 8px 0',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-          }}>
-            Total Cards Generated
-          </h3>
-          <div style={{
-            fontSize: '32px',
-            fontWeight: '700',
-            color: '#0f172a',
-            margin: '0 0 4px 0',
-          }}>
-            {/* Placeholder: Total cards count */}
-            --
-          </div>
-          <span style={{
-            fontSize: '14px',
-            color: '#64748b',
-          }}>
-            All time
-          </span>
-        </div>
-      </div>
+        <Card flex={1} minWidth={300}>
+          <YStack gap="$2">
+            <Text
+              fontSize="$3"
+              fontWeight="500"
+              color="$gray11"
+              textTransform="uppercase"
+              letterSpacing={0.5}
+            >
+              Total Cards Generated
+            </Text>
+            <Text fontSize="$9" fontWeight="700" color="$color" marginBottom="$1">
+              {/* Placeholder: Total cards count */}
+              --
+            </Text>
+            <Text fontSize="$3" color="$gray11">
+              All time
+            </Text>
+          </YStack>
+        </Card>
+      </XStack>
 
-      <div style={{
-        background: '#ffffff',
-        border: '1px solid #e2e8f0',
-        borderRadius: '12px',
-        padding: '24px',
-      }}>
-        <h2 style={{
-          fontSize: '20px',
-          fontWeight: '600',
-          color: '#0f172a',
-          margin: '0 0 16px 0',
-        }}>
-          Recent Activity
-        </h2>
-        <div style={{
-          color: '#64748b',
-          fontSize: '14px',
-        }}>
-          {/* Placeholder: Recent activity list */}
-          No recent activity to display
-        </div>
-      </div>
-    </div>
+      <Card>
+        <YStack gap="$4">
+          <Text fontSize="$6" fontWeight="600" color="$color" margin={0}>
+            Recent Activity
+          </Text>
+          <Text color="$gray11" fontSize="$3">
+            {/* Placeholder: Recent activity list */}
+            No recent activity to display
+          </Text>
+        </YStack>
+      </Card>
+    </YStack>
   );
 }

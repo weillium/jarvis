@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { EventWithStatus } from '@/shared/types/event';
 import { getEvents } from '@/server/actions/event-actions';
 import { format, parseISO } from 'date-fns';
+import { YStack, XStack, Text, Card, Alert } from '@jarvis/ui-core';
 
 interface EventsListProps {
   searchQuery?: string;
@@ -48,16 +49,29 @@ export function EventsList({ searchQuery = '', statusFilter = 'all' }: EventsLis
     }
   };
 
-  const getStatusColor = (status: EventWithStatus['status']): string => {
+  const getStatusColor = (status: EventWithStatus['status']) => {
     switch (status) {
       case 'live':
-        return '#10b981'; // green
+        return '$green11';
       case 'scheduled':
-        return '#3b82f6'; // blue
+        return '$blue6';
       case 'ended':
-        return '#6b7280'; // gray
+        return '$gray11';
       default:
-        return '#6b7280';
+        return '$gray11';
+    }
+  };
+
+  const getStatusBgColor = (status: EventWithStatus['status']) => {
+    switch (status) {
+      case 'live':
+        return '$green2';
+      case 'scheduled':
+        return '$blue2';
+      case 'ended':
+        return '$gray2';
+      default:
+        return '$gray2';
     }
   };
 
@@ -76,154 +90,109 @@ export function EventsList({ searchQuery = '', statusFilter = 'all' }: EventsLis
 
   if (loading) {
     return (
-      <div style={{
-        textAlign: 'center',
-        padding: '48px 24px',
-        color: '#64748b',
-      }}>
-        <p style={{ fontSize: '16px', margin: 0 }}>Loading events...</p>
-      </div>
+      <YStack alignItems="center" paddingVertical="$12" paddingHorizontal="$6">
+        <Text fontSize="$4" color="$gray11">
+          Loading events...
+        </Text>
+      </YStack>
     );
   }
 
   if (error) {
     return (
-      <div style={{
-        textAlign: 'center',
-        padding: '48px 24px',
-        color: '#991b1b',
-      }}>
-        <p style={{ fontSize: '16px', margin: 0 }}>Error loading events: {error}</p>
-      </div>
+      <YStack alignItems="center" paddingVertical="$12" paddingHorizontal="$6">
+        <Alert variant="error">Error loading events: {error}</Alert>
+      </YStack>
     );
   }
 
   if (events.length === 0) {
     return (
-      <div style={{
-        textAlign: 'center',
-        padding: '48px 24px',
-        color: '#64748b',
-      }}>
-        <p style={{
-          fontSize: '16px',
-          margin: '0 0 8px 0',
-        }}>
+      <YStack alignItems="center" paddingVertical="$12" paddingHorizontal="$6">
+        <Text fontSize="$4" color="$gray11" marginBottom="$2">
           No events found
-        </p>
-        <p style={{
-          fontSize: '14px',
-          margin: 0,
-        }}>
+        </Text>
+        <Text fontSize="$3" color="$gray11">
           {searchQuery || statusFilter !== 'all'
             ? 'Try adjusting your search or filter criteria'
             : 'Create your first event to get started'}
-        </p>
-      </div>
+        </Text>
+      </YStack>
     );
   }
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '12px',
-    }}>
+    <YStack gap="$3">
       {events.map((event) => (
         <Link
           key={event.id}
           href={`/events/${event.id}/live`}
-          style={{
-            display: 'block',
-            padding: '20px',
-            background: '#ffffff',
-            border: '1px solid #e2e8f0',
-            borderRadius: '8px',
-            textDecoration: 'none',
-            color: 'inherit',
-            transition: 'all 0.2s',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = '#cbd5e1';
-            e.currentTarget.style.boxShadow = '0 1px 3px 0 rgb(0 0 0 / 0.1)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = '#e2e8f0';
-            e.currentTarget.style.boxShadow = 'none';
-          }}
+          style={{ textDecoration: 'none', color: 'inherit' }}
         >
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-start',
-            gap: '16px',
-          }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                marginBottom: '8px',
-              }}>
-                <h3 style={{
-                  fontSize: '18px',
-                  fontWeight: '600',
-                  color: '#0f172a',
-                  margin: 0,
-                }}>
-                  {event.title}
-                </h3>
-                <span
-                  style={{
-                    padding: '4px 10px',
-                    borderRadius: '12px',
-                    fontSize: '12px',
-                    fontWeight: '500',
-                    backgroundColor: `${getStatusColor(event.status)}20`,
-                    color: getStatusColor(event.status),
-                  }}
-                >
-                  {getStatusLabel(event.status)}
-                </span>
-              </div>
-              
-              {event.topic && (
-                <p style={{
-                  fontSize: '14px',
-                  color: '#64748b',
-                  margin: '0 0 12px 0',
-                  display: '-webkit-box',
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                }}>
-                  {event.topic.replace(/[#*`]/g, '').substring(0, 150)}
-                  {event.topic.length > 150 ? '...' : ''}
-                </p>
-              )}
-
-              <div style={{
-                display: 'flex',
-                gap: '24px',
-                fontSize: '13px',
-                color: '#64748b',
-              }}>
-                <div>
-                  <strong style={{ color: '#374151' }}>Start:</strong>{' '}
-                  {formatDateTime(event.start_time)}
-                </div>
-                {event.end_time && (
-                  <div>
-                    <strong style={{ color: '#374151' }}>End:</strong>{' '}
-                    {formatDateTime(event.end_time)}
-                  </div>
+          <Card
+            padding="$5"
+            hoverStyle={{
+              borderColor: '$borderColorHover',
+              shadowColor: '$color',
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.1,
+              shadowRadius: 3,
+              elevation: 1,
+            }}
+          >
+            <XStack justifyContent="space-between" alignItems="flex-start" gap="$4">
+              <YStack flex={1} minWidth={0} gap="$2">
+                <XStack alignItems="center" gap="$3" marginBottom="$2">
+                  <Text fontSize="$5" fontWeight="600" color="$color" margin={0}>
+                    {event.title}
+                  </Text>
+                  <YStack
+                    paddingHorizontal="$2.5"
+                    paddingVertical="$1"
+                    borderRadius="$4"
+                    backgroundColor={getStatusBgColor(event.status)}
+                  >
+                    <Text
+                      fontSize="$2"
+                      fontWeight="500"
+                      color={getStatusColor(event.status)}
+                    >
+                      {getStatusLabel(event.status)}
+                    </Text>
+                  </YStack>
+                </XStack>
+                
+                {event.topic && (
+                  <Text
+                    fontSize="$3"
+                    color="$gray11"
+                    marginBottom="$3"
+                    numberOfLines={2}
+                    ellipsizeMode="tail"
+                  >
+                    {event.topic.replace(/[#*`]/g, '').substring(0, 150)}
+                    {event.topic.length > 150 ? '...' : ''}
+                  </Text>
                 )}
-              </div>
-            </div>
-          </div>
+
+                <XStack gap="$6" fontSize="$3" color="$gray11">
+                  <Text fontSize="$3" color="$gray11">
+                    <Text fontWeight="600" color="$gray9">Start:</Text>{' '}
+                    {formatDateTime(event.start_time)}
+                  </Text>
+                  {event.end_time && (
+                    <Text fontSize="$3" color="$gray11">
+                      <Text fontWeight="600" color="$gray9">End:</Text>{' '}
+                      {formatDateTime(event.end_time)}
+                    </Text>
+                  )}
+                </XStack>
+              </YStack>
+            </XStack>
+          </Card>
         </Link>
       ))}
-    </div>
+    </YStack>
   );
 }
 
