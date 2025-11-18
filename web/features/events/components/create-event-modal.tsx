@@ -14,6 +14,7 @@ import { useCreateEventMutation } from '@/shared/hooks/use-mutations';
 import { withTimeout } from '@/shared/utils/promise-timeout';
 import { validateFiles, MAX_FILE_SIZE } from '@/shared/utils/file-validation';
 import { getFileExtension, getFileType } from '@/shared/utils/file-utils';
+import { YStack, XStack, Text, Button, Input, Alert, Sheet } from '@jarvis/ui-core';
 
 // Extend dayjs with plugins
 dayjs.extend(utc);
@@ -159,8 +160,6 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
     }
   }, [startDate]);
 
-  if (!isOpen) return null;
-
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -297,326 +296,263 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
   const isLoading = createEventMutation.isPending || Object.keys(uploadProgress).length > 0;
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'rgba(0, 0, 0, 0.5)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-        padding: '24px',
+    <Sheet
+      modal
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open && !isLoading) {
+          handleClose();
+        }
       }}
-      onClick={handleClose}
+      snapPoints={[95]}
+      dismissOnSnapToBottom
+      zIndex={1000}
     >
-      <div
-        style={{
-          background: '#ffffff',
-          borderRadius: '12px',
-          width: '100%',
-          maxWidth: '1200px',
-          maxHeight: '95vh',
-          overflow: 'auto',
-          boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)',
-        }}
-        onClick={(e) => e.stopPropagation()}
+      <Sheet.Overlay
+        animation="lazy"
+        enterStyle={{ opacity: 0 }}
+        exitStyle={{ opacity: 0 }}
+        opacity={0.5}
+        backgroundColor="black"
+      />
+      <Sheet.Handle />
+      <Sheet.Frame
+        padding={0}
+        backgroundColor="$background"
+        borderRadius="$4"
+        maxWidth={1200}
+        width="100%"
+        maxHeight="95vh"
       >
-        <div
-          style={{
-            padding: '24px',
-            borderBottom: '1px solid #e2e8f0',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
+        <XStack
+          padding="$6"
+          borderBottomWidth={1}
+          borderBottomColor="$borderColor"
+          justifyContent="space-between"
+          alignItems="center"
         >
-          <h2
-            style={{
-              fontSize: '24px',
-              fontWeight: '600',
-              color: '#0f172a',
-              margin: 0,
-            }}
-          >
+          <Text fontSize="$7" fontWeight="600" color="$color" margin={0}>
             Create New Event
-          </h2>
-          <button
-            onClick={handleClose}
+          </Text>
+          <Button
+            variant="ghost"
+            size="sm"
+            onPress={handleClose}
             disabled={isLoading}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              fontSize: '24px',
-              color: '#64748b',
-              cursor: isLoading ? 'not-allowed' : 'pointer',
-              padding: '0',
-              width: '32px',
-              height: '32px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
+            circular
+            width={32}
+            height={32}
+            padding={0}
           >
             ×
-          </button>
-        </div>
+          </Button>
+        </XStack>
 
         <LocalizationProvider dateAdapter={AdapterDayjs}>
-          <form onSubmit={handleSubmit} style={{ padding: '32px', boxSizing: 'border-box' }}>
-            {error && (
-              <div
-                style={{
-                  padding: '12px 16px',
-                  background: '#fee2e2',
-                  border: '1px solid #fecaca',
-                  borderRadius: '6px',
-                  color: '#991b1b',
-                  fontSize: '14px',
-                  marginBottom: '24px',
-                  whiteSpace: 'pre-line',
-                }}
+          <form onSubmit={handleSubmit}>
+            <YStack padding="$8" gap="$6">
+              {error && (
+                <Alert variant="error" style={{ whiteSpace: 'pre-line' }}>
+                  {error}
+                </Alert>
+              )}
+
+              <XStack
+                gap="$6"
+                marginBottom="$6"
+                $sm={{ flexDirection: 'column' }}
+                $md={{ flexDirection: 'row' }}
               >
-                {error}
-              </div>
-            )}
+                <YStack flex={1} width="100%">
+                  <Text
+                    htmlFor="title"
+                    as="label"
+                    fontSize="$3"
+                    fontWeight="500"
+                    color="$gray9"
+                    marginBottom="$2"
+                    display="block"
+                  >
+                    Title <Text color="$red11">*</Text>
+                  </Text>
+                  <Input
+                    id="title"
+                    type="text"
+                    value={title}
+                    onChange={(e: any) => setTitle(e.target.value)}
+                    required
+                    disabled={isLoading}
+                    placeholder="Enter event title"
+                    width="100%"
+                  />
+                </YStack>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
-              <div style={{ width: '100%', boxSizing: 'border-box' }}>
-                <label
-                  htmlFor="title"
-                  style={{
-                    display: 'block',
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    color: '#374151',
-                    marginBottom: '8px',
-                  }}
-                >
-                  Title <span style={{ color: '#ef4444' }}>*</span>
-                </label>
-                <input
-                  id="title"
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  required
-                  disabled={isLoading}
-                  placeholder="Enter event title"
-                  style={{
-                    width: '100%',
-                    padding: '10px 16px',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '6px',
-                    fontSize: '15px',
-                    background: isLoading ? '#f8fafc' : '#ffffff',
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </div>
+                <YStack flex={1} width="100%">
+                  <Text
+                    htmlFor="timezone"
+                    as="label"
+                    fontSize="$3"
+                    fontWeight="500"
+                    color="$gray9"
+                    marginBottom="$2"
+                    display="block"
+                  >
+                    Timezone
+                  </Text>
+                  <select
+                    id="timezone"
+                    value={timezone}
+                    onChange={(e) => setTimezone(e.target.value)}
+                    disabled={isLoading}
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '6px',
+                      fontSize: '15px',
+                      backgroundColor: isLoading ? '#f8fafc' : '#ffffff',
+                      boxSizing: 'border-box',
+                      cursor: isLoading ? 'not-allowed' : 'pointer',
+                      appearance: 'none',
+                      backgroundImage: isLoading
+                        ? 'none'
+                        : `url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L6 6L11 1' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+                      backgroundRepeat: 'no-repeat',
+                      backgroundPosition: 'right 12px center',
+                      paddingRight: '40px',
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    {timezones.map((tz) => (
+                      <option key={tz} value={tz}>
+                        {tz}
+                      </option>
+                    ))}
+                  </select>
+                </YStack>
+              </XStack>
 
-              <div style={{ width: '100%', boxSizing: 'border-box' }}>
-                <label
-                  htmlFor="timezone"
-                  style={{
-                    display: 'block',
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    color: '#374151',
-                    marginBottom: '8px',
-                  }}
-                >
-                  Timezone
-                </label>
-                <select
-                  id="timezone"
-                  value={timezone}
-                  onChange={(e) => setTimezone(e.target.value)}
-                  disabled={isLoading}
-                  style={{
-                    width: '100%',
-                    padding: '12px 16px',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '6px',
-                    fontSize: '15px',
-                    backgroundColor: isLoading ? '#f8fafc' : '#ffffff',
-                    boxSizing: 'border-box',
-                    cursor: isLoading ? 'not-allowed' : 'pointer',
-                    appearance: 'none',
-                    backgroundImage: isLoading
-                      ? 'none'
-                      : `url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L6 6L11 1' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
-                    backgroundRepeat: 'no-repeat',
-                    backgroundPosition: 'right 12px center',
-                    paddingRight: '40px',
-                    transition: 'all 0.2s',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isLoading) {
-                      e.currentTarget.style.borderColor = '#cbd5e1';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = '#e2e8f0';
-                  }}
-                >
-                  {timezones.map((tz) => (
-                    <option key={tz} value={tz}>
-                      {tz}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
-              <div style={{ width: '100%', boxSizing: 'border-box' }}>
-                <label
-                  htmlFor="start_time"
-                  style={{
-                    display: 'block',
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    color: '#374151',
-                    marginBottom: '8px',
-                  }}
-                >
-                  Start Time <span style={{ color: '#ef4444' }}>*</span>
-                </label>
-                <DateTimePicker
-                  value={startDate}
-                  onChange={(newValue) => setStartDate(newValue)}
-                  disabled={isLoading}
-                  minDate={dayjs()}
-                  minutesStep={15}
-                  slotProps={{
-                    textField: {
-                      fullWidth: true,
-                      size: 'small',
-                      sx: {
-                        '& .MuiOutlinedInput-root': {
-                          fontSize: '15px',
-                          borderRadius: '6px',
+              <XStack
+                gap="$6"
+                marginBottom="$6"
+                $sm={{ flexDirection: 'column' }}
+                $md={{ flexDirection: 'row' }}
+              >
+                <YStack flex={1} width="100%">
+                  <Text
+                    htmlFor="start_time"
+                    as="label"
+                    fontSize="$3"
+                    fontWeight="500"
+                    color="$gray9"
+                    marginBottom="$2"
+                    display="block"
+                  >
+                    Start Time <Text color="$red11">*</Text>
+                  </Text>
+                  <DateTimePicker
+                    value={startDate}
+                    onChange={(newValue) => setStartDate(newValue)}
+                    disabled={isLoading}
+                    minDate={dayjs()}
+                    minutesStep={15}
+                    slotProps={{
+                      textField: {
+                        fullWidth: true,
+                        size: 'small',
+                        sx: {
+                          '& .MuiOutlinedInput-root': {
+                            fontSize: '15px',
+                            borderRadius: '6px',
+                          },
                         },
                       },
-                    },
-                  }}
-                />
-              </div>
+                    }}
+                  />
+                </YStack>
 
-              <div style={{ width: '100%', boxSizing: 'border-box' }}>
-                <label
-                  htmlFor="end_time"
-                  style={{
-                    display: 'block',
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    color: '#374151',
-                    marginBottom: '8px',
-                  }}
-                >
-                  End Time <span style={{ color: '#ef4444' }}>*</span>
-                  {startDate && endDate && (
-                    <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '400', marginLeft: '8px' }}>
-                      (auto-set to 1 hour after start)
-                    </span>
-                  )}
-                </label>
-                <DateTimePicker
-                  value={endDate}
-                  onChange={(newValue) => setEndDate(newValue)}
-                  disabled={isLoading || !startDate}
-                  minDate={startDate || dayjs()}
-                  minutesStep={15}
-                  slotProps={{
-                    textField: {
-                      fullWidth: true,
-                      size: 'small',
-                      placeholder: startDate ? "Select end date and time" : "Select start time first",
-                      sx: {
-                        '& .MuiOutlinedInput-root': {
-                          fontSize: '15px',
-                          borderRadius: '6px',
+                <YStack flex={1} width="100%">
+                  <Text
+                    htmlFor="end_time"
+                    as="label"
+                    fontSize="$3"
+                    fontWeight="500"
+                    color="$gray9"
+                    marginBottom="$2"
+                    display="block"
+                  >
+                    End Time <Text color="$red11">*</Text>
+                    {startDate && endDate && (
+                      <Text fontSize="$2" color="$gray11" fontWeight="400" marginLeft="$2">
+                        (auto-set to 1 hour after start)
+                      </Text>
+                    )}
+                  </Text>
+                  <DateTimePicker
+                    value={endDate}
+                    onChange={(newValue) => setEndDate(newValue)}
+                    disabled={isLoading || !startDate}
+                    minDate={startDate || dayjs()}
+                    minutesStep={15}
+                    slotProps={{
+                      textField: {
+                        fullWidth: true,
+                        size: 'small',
+                        placeholder: startDate ? "Select end date and time" : "Select start time first",
+                        sx: {
+                          '& .MuiOutlinedInput-root': {
+                            fontSize: '15px',
+                            borderRadius: '6px',
+                          },
                         },
                       },
-                    },
-                  }}
+                    }}
+                  />
+                </YStack>
+              </XStack>
+
+              <YStack marginBottom="$6" width="100%">
+                <MarkdownEditor
+                  value={topic}
+                  onChange={setTopic}
+                  label="Topic"
+                  instructions="Briefly describe the event. You can use markdown formatting for rich text."
+                  height={180}
+                  disabled={isLoading}
                 />
-              </div>
-            </div>
+              </YStack>
 
-            <div style={{ marginBottom: '24px', width: '100%', boxSizing: 'border-box' }}>
-              <MarkdownEditor
-                value={topic}
-                onChange={setTopic}
-                label="Topic"
-                instructions="Briefly describe the event. You can use markdown formatting for rich text."
-                height={180}
-                disabled={isLoading}
-              />
-            </div>
+              <YStack marginBottom="$6" width="100%">
+                <FileUpload
+                  files={files}
+                  onFilesChange={setFiles}
+                  label="Event Documents"
+                  instructions={`Upload documents related to this event. Maximum file size: ${MAX_FILE_SIZE / 1024 / 1024}MB. You can select multiple files at once.`}
+                  disabled={isLoading}
+                />
+              </YStack>
 
-            <div style={{ marginBottom: '24px', width: '100%', boxSizing: 'border-box' }}>
-              <FileUpload
-                files={files}
-                onFilesChange={setFiles}
-                label="Event Documents"
-                instructions={`Upload documents related to this event. Maximum file size: ${MAX_FILE_SIZE / 1024 / 1024}MB. You can select multiple files at once.`}
-                disabled={isLoading}
-              />
-            </div>
-
-            <div
-              style={{
-                display: 'flex',
-                gap: '12px',
-                justifyContent: 'flex-end',
-                width: '100%',
-                boxSizing: 'border-box',
-              }}
-            >
-              <button
-                type="button"
-                onClick={handleClose}
-                disabled={isLoading}
-                style={{
-                  padding: '10px 20px',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '6px',
-                  fontSize: '15px',
-                  fontWeight: '500',
-                  color: '#374151',
-                  background: '#ffffff',
-                  cursor: isLoading ? 'not-allowed' : 'pointer',
-                  opacity: isLoading ? 0.6 : 1,
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isLoading || !title.trim()}
-                style={{
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '15px',
-                  fontWeight: '500',
-                  color: '#ffffff',
-                  background: isLoading || !title.trim() ? '#94a3b8' : '#1e293b',
-                  cursor: isLoading || !title.trim() ? 'not-allowed' : 'pointer',
-                  transition: 'background 0.2s',
-                }}
-              >
-                {isLoading ? 'Creating...' : 'Create Event'}
-              </button>
-            </div>
+              <XStack gap="$3" justifyContent="flex-end" width="100%">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onPress={handleClose}
+                  disabled={isLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={isLoading || !title.trim()}
+                >
+                  {isLoading ? 'Creating...' : 'Create Event'}
+                </Button>
+              </XStack>
+            </YStack>
           </form>
         </LocalizationProvider>
-      </div>
-    </div>
+      </Sheet.Frame>
+    </Sheet>
   );
 }

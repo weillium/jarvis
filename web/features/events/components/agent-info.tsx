@@ -7,6 +7,7 @@ import { ContextDatabaseVisualization } from '@/features/events/components/conte
 import { GlossaryVisualization } from '@/features/context/components/glossary-visualization';
 import { ResearchResultsVisualization } from '@/features/context/components/research-results-visualization';
 import { VersionHistory } from '@/features/context/components/version-history';
+import { YStack, XStack, Text, Card, Button, Alert } from '@jarvis/ui-core';
 
 interface AgentInfoProps {
   eventId: string;
@@ -19,31 +20,31 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
   const [isResearchExpanded, setIsResearchExpanded] = useState(false);
 
   const getStatusColor = (status: AgentInfoType['status'] | null, stage?: string | null): string => {
-    if (!status) return '#6b7280';
+    if (!status) return '$gray11';
     
-    if (status === 'error') return '#ef4444'; // red
-    if (status === 'ended') return '#6b7280'; // gray
-    if (status === 'paused') return '#f59e0b'; // amber
+    if (status === 'error') return '$red11';
+    if (status === 'ended') return '$gray11';
+    if (status === 'paused') return '$yellow11';
     if (status === 'active') {
-      return stage === 'running' ? '#3b82f6' : stage === 'testing' ? '#8b5cf6' : '#3b82f6'; // blue/purple
+      return stage === 'running' ? '$blue11' : stage === 'testing' ? '$purple11' : '$blue11';
     }
     if (status === 'idle') {
       switch (stage) {
-        case 'blueprint': return '#8b5cf6'; // purple
-        case 'researching': return '#f59e0b'; // amber
-        case 'building_glossary': return '#f59e0b'; // amber
-        case 'building_chunks': return '#f59e0b'; // amber
-        case 'regenerating_research': return '#f59e0b'; // amber
-        case 'regenerating_glossary': return '#f59e0b'; // amber
-        case 'regenerating_chunks': return '#f59e0b'; // amber
-        case 'context_complete': return '#10b981'; // green
-        case 'testing': return '#8b5cf6'; // purple
-        case 'ready': return '#10b981'; // green
-        case 'prepping': return '#f59e0b'; // amber
-        default: return '#64748b'; // gray
+        case 'blueprint': return '$purple11';
+        case 'researching': return '$yellow11';
+        case 'building_glossary': return '$yellow11';
+        case 'building_chunks': return '$yellow11';
+        case 'regenerating_research': return '$yellow11';
+        case 'regenerating_glossary': return '$yellow11';
+        case 'regenerating_chunks': return '$yellow11';
+        case 'context_complete': return '$green11';
+        case 'testing': return '$purple11';
+        case 'ready': return '$green11';
+        case 'prepping': return '$yellow11';
+        default: return '$gray11';
       }
     }
-    return '#6b7280';
+    return '$gray11';
   };
 
   const getStatusLabel = (status: AgentInfoType['status'] | null, stage?: string | null): string => {
@@ -77,145 +78,93 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
   // Loading state
   if (loading) {
     return (
-      <div style={{
-        background: '#ffffff',
-        border: '1px solid #e2e8f0',
-        borderRadius: '12px',
-        padding: '32px 24px',
-        marginBottom: '24px',
-      }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px',
-        }}>
-          <div style={{
-            width: '56px',
-            height: '56px',
-            borderRadius: '50%',
-            background: '#f1f5f9',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '28px',
-          }}>
+      <Card variant="outlined" padding="$8" marginBottom="$6">
+        <XStack alignItems="center" gap="$4">
+          <YStack
+            width={56}
+            height={56}
+            borderRadius="$10"
+            backgroundColor="$gray2"
+            alignItems="center"
+            justifyContent="center"
+            fontSize={28}
+          >
             🤖
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{
-              height: '20px',
-              background: '#e2e8f0',
-              borderRadius: '4px',
-              marginBottom: '8px',
-              width: '200px',
-            }} />
-            <div style={{
-              height: '16px',
-              background: '#e2e8f0',
-              borderRadius: '4px',
-              width: '150px',
-            }} />
-          </div>
-        </div>
-      </div>
+          </YStack>
+          <YStack flex={1} gap="$2">
+            <YStack
+              height={20}
+              backgroundColor="$gray3"
+              borderRadius="$1"
+              width={200}
+            />
+            <YStack
+              height={16}
+              backgroundColor="$gray3"
+              borderRadius="$1"
+              width={150}
+            />
+          </YStack>
+        </XStack>
+      </Card>
     );
   }
 
   // Error state
   if (error) {
     return (
-      <div style={{
-        background: '#ffffff',
-        border: '1px solid #fee2e2',
-        borderRadius: '12px',
-        padding: '32px 24px',
-        marginBottom: '24px',
-      }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px',
-        }}>
-          <div style={{
-            width: '56px',
-            height: '56px',
-            borderRadius: '50%',
-            background: '#fee2e2',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '28px',
-          }}>
+      <Card variant="outlined" padding="$8" marginBottom="$6" borderColor="$red3">
+        <XStack alignItems="center" gap="$4">
+          <YStack
+            width={56}
+            height={56}
+            borderRadius="$10"
+            backgroundColor="$red2"
+            alignItems="center"
+            justifyContent="center"
+            fontSize={28}
+          >
             ⚠️
-          </div>
-          <div>
-            <h3 style={{
-              fontSize: '20px',
-              fontWeight: '600',
-              color: '#0f172a',
-              margin: '0 0 4px 0',
-            }}>
+          </YStack>
+          <YStack>
+            <Text fontSize="$5" fontWeight="600" color="$color" marginBottom="$1" margin={0}>
               Agent Information
-            </h3>
-            <p style={{
-              fontSize: '14px',
-              color: '#ef4444',
-              margin: 0,
-            }}>
+            </Text>
+            <Text fontSize="$3" color="$red11" margin={0}>
               {error}
-            </p>
-          </div>
-        </div>
-      </div>
+            </Text>
+          </YStack>
+        </XStack>
+      </Card>
     );
   }
 
   // No agent state
   if (!agent) {
     return (
-      <div style={{
-        background: '#ffffff',
-        border: '1px solid #e2e8f0',
-        borderRadius: '12px',
-        padding: '32px 24px',
-        marginBottom: '24px',
-      }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px',
-        }}>
-          <div style={{
-            width: '56px',
-            height: '56px',
-            borderRadius: '50%',
-            background: '#f1f5f9',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '28px',
-          }}>
+      <Card variant="outlined" padding="$8" marginBottom="$6">
+        <XStack alignItems="center" gap="$4">
+          <YStack
+            width={56}
+            height={56}
+            borderRadius="$10"
+            backgroundColor="$gray2"
+            alignItems="center"
+            justifyContent="center"
+            fontSize={28}
+          >
             🤖
-          </div>
-          <div>
-            <h3 style={{
-              fontSize: '20px',
-              fontWeight: '600',
-              color: '#0f172a',
-              margin: '0 0 4px 0',
-            }}>
+          </YStack>
+          <YStack>
+            <Text fontSize="$5" fontWeight="600" color="$color" marginBottom="$1" margin={0}>
               Agent Information
-            </h3>
-            <p style={{
-              fontSize: '14px',
-              color: '#64748b',
-              margin: 0,
-            }}>
+            </Text>
+            <Text fontSize="$3" color="$gray11" margin={0}>
               No agent associated with this event
-            </p>
-          </div>
-        </div>
-      </div>
+            </Text>
+          </YStack>
+        </XStack>
+      </Card>
     );
   }
 
@@ -233,488 +182,391 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
   const statusLabel = getStatusLabel(agent.status, agent.stage);
 
   return (
-    <div style={{
-      background: '#ffffff',
-      border: '1px solid #e2e8f0',
-      borderRadius: '12px',
-      padding: '32px 24px',
-      marginBottom: '24px',
-    }}>
+    <Card variant="outlined" padding="$8" marginBottom="$6">
       {/* Header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '16px',
-        marginBottom: '24px',
-      }}>
-        <div style={{
-          width: '56px',
-          height: '56px',
-          borderRadius: '50%',
-          background: '#f1f5f9',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '28px',
-        }}>
+      <XStack alignItems="center" gap="$4" marginBottom="$6">
+        <YStack
+          width={56}
+          height={56}
+          borderRadius="$10"
+          backgroundColor="$gray2"
+          alignItems="center"
+          justifyContent="center"
+          fontSize={28}
+        >
           🤖
-        </div>
-        <div style={{ flex: 1 }}>
-          <h3 style={{
-            fontSize: '20px',
-            fontWeight: '600',
-            color: '#0f172a',
-            margin: '0 0 8px 0',
-          }}>
+        </YStack>
+        <YStack flex={1}>
+          <Text fontSize="$5" fontWeight="600" color="$color" marginBottom="$2" margin={0}>
             Agent Information
-          </h3>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            flexWrap: 'wrap',
-          }}>
-            <span
-              style={{
-                padding: '6px 14px',
-                borderRadius: '12px',
-                fontSize: '13px',
-                fontWeight: '600',
-                backgroundColor: `${statusColor}20`,
-                color: statusColor,
-                border: `1px solid ${statusColor}40`,
-              }}
+          </Text>
+          <XStack alignItems="center" gap="$3" flexWrap="wrap">
+            <YStack
+              padding="$1.5 $3.5"
+              borderRadius="$5"
+              backgroundColor="$gray2"
+              borderWidth={1}
+              borderColor="$borderColor"
             >
-              {statusLabel}
-            </span>
-            <span style={{
-              fontSize: '13px',
-              color: '#64748b',
-            }}>
+              <Text fontSize="$3" fontWeight="600" color={statusColor}>
+                {statusLabel}
+              </Text>
+            </YStack>
+            <Text fontSize="$3" color="$gray11">
               Model Set: {agent.model_set}
-            </span>
-          </div>
-        </div>
-      </div>
+            </Text>
+          </XStack>
+        </YStack>
+      </XStack>
 
       {/* Agent Details Grid */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-        gap: '20px',
-        paddingTop: '20px',
-        borderTop: '1px solid #e2e8f0',
-        marginBottom: (contextStats || blueprint) ? '24px' : '0',
-      }}>
-        <div>
-          <div style={{
-            fontSize: '12px',
-            fontWeight: '600',
-            color: '#64748b',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            marginBottom: '6px',
-          }}>
+      <XStack
+        flexWrap="wrap"
+        gap="$5"
+        paddingTop="$5"
+        borderTopWidth={1}
+        borderTopColor="$borderColor"
+        marginBottom={(contextStats || blueprint) ? '$6' : 0}
+        $sm={{ flexDirection: 'column' }}
+        $md={{ flexDirection: 'row' }}
+      >
+        <YStack minWidth={180} flex={1}>
+          <Text
+            fontSize="$2"
+            fontWeight="600"
+            color="$gray11"
+            textTransform="uppercase"
+            letterSpacing={0.5}
+            marginBottom="$1.5"
+          >
             Agent ID
-          </div>
-          <div style={{
-            fontSize: '13px',
-            fontWeight: '500',
-            color: '#0f172a',
-            fontFamily: 'monospace',
-            wordBreak: 'break-all',
-          }}>
+          </Text>
+          <Text fontSize="$3" fontWeight="500" color="$color" fontFamily="$mono" wordBreak="break-all">
             {agent.id.substring(0, 8)}...
-          </div>
-        </div>
-        <div>
-          <div style={{
-            fontSize: '12px',
-            fontWeight: '600',
-            color: '#64748b',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            marginBottom: '6px',
-          }}>
+          </Text>
+        </YStack>
+        <YStack minWidth={180} flex={1}>
+          <Text
+            fontSize="$2"
+            fontWeight="600"
+            color="$gray11"
+            textTransform="uppercase"
+            letterSpacing={0.5}
+            marginBottom="$1.5"
+          >
             Status
-          </div>
-          <div style={{
-            fontSize: '14px',
-            fontWeight: '500',
-            color: statusColor,
-          }}>
+          </Text>
+          <Text fontSize="$3" fontWeight="500" color={statusColor}>
             {statusLabel}
-          </div>
-        </div>
-        <div>
-          <div style={{
-            fontSize: '12px',
-            fontWeight: '600',
-            color: '#64748b',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            marginBottom: '6px',
-          }}>
+          </Text>
+        </YStack>
+        <YStack minWidth={180} flex={1}>
+          <Text
+            fontSize="$2"
+            fontWeight="600"
+            color="$gray11"
+            textTransform="uppercase"
+            letterSpacing={0.5}
+            marginBottom="$1.5"
+          >
             Model Set
-          </div>
-          <div style={{
-            fontSize: '14px',
-            fontWeight: '500',
-            color: '#0f172a',
-          }}>
+          </Text>
+          <Text fontSize="$3" fontWeight="500" color="$color">
             {agent.model_set}
-          </div>
-        </div>
-        <div>
-          <div style={{
-            fontSize: '12px',
-            fontWeight: '600',
-            color: '#64748b',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            marginBottom: '6px',
-          }}>
+          </Text>
+        </YStack>
+        <YStack minWidth={180} flex={1}>
+          <Text
+            fontSize="$2"
+            fontWeight="600"
+            color="$gray11"
+            textTransform="uppercase"
+            letterSpacing={0.5}
+            marginBottom="$1.5"
+          >
             Created
-          </div>
-          <div style={{
-            fontSize: '13px',
-            fontWeight: '500',
-            color: '#0f172a',
-          }}>
+          </Text>
+          <Text fontSize="$3" fontWeight="500" color="$color">
             {formatDate(agent.created_at)}
-          </div>
-        </div>
-      </div>
+          </Text>
+        </YStack>
+      </XStack>
 
       {/* Context Statistics */}
       {contextStats && (
-        <div style={{
-          paddingTop: '24px',
-          borderTop: '1px solid #e2e8f0',
-          marginBottom: '24px',
-        }}>
-          <h4 style={{
-            fontSize: '16px',
-            fontWeight: '600',
-            color: '#0f172a',
-            margin: '0 0 16px 0',
-          }}>
+        <YStack
+          paddingTop="$6"
+          borderTopWidth={1}
+          borderTopColor="$borderColor"
+          marginBottom="$6"
+        >
+          <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$4" margin={0}>
             Context Library
-          </h4>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-            gap: '16px',
-          }}>
-            <div style={{
-              padding: '16px',
-              background: '#f8fafc',
-              borderRadius: '8px',
-              border: '1px solid #e2e8f0',
-            }}>
-              <div style={{
-                fontSize: '24px',
-                fontWeight: '700',
-                color: '#3b82f6',
-                marginBottom: '4px',
-              }}>
-                {contextStats.chunkCount.toLocaleString()}
-              </div>
-              <div style={{
-                fontSize: '12px',
-                fontWeight: '500',
-                color: '#64748b',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-              }}>
-                Context Chunks
-              </div>
-              {blueprint?.target_chunk_count && (
-                <div style={{
-                  fontSize: '11px',
-                  color: '#94a3b8',
-                  marginTop: '4px',
-                }}>
-                  Target: {blueprint.target_chunk_count.toLocaleString()}
-                </div>
-              )}
-            </div>
-            <div style={{
-              padding: '16px',
-              background: '#f8fafc',
-              borderRadius: '8px',
-              border: '1px solid #e2e8f0',
-            }}>
-              <div style={{
-                fontSize: '24px',
-                fontWeight: '700',
-                color: '#10b981',
-                marginBottom: '4px',
-              }}>
-                {contextStats.glossaryTermCount.toLocaleString()}
-              </div>
-              <div style={{
-                fontSize: '12px',
-                fontWeight: '500',
-                color: '#64748b',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-              }}>
-                Glossary Terms
-              </div>
-            </div>
-          </div>
-        </div>
+          </Text>
+          <XStack
+            flexWrap="wrap"
+            gap="$4"
+            $sm={{ flexDirection: 'column' }}
+            $md={{ flexDirection: 'row' }}
+          >
+            <Card variant="outlined" backgroundColor="$gray1" padding="$4" flex={1} minWidth={150}>
+              <YStack gap="$1">
+                <Text fontSize="$7" fontWeight="700" color="$blue6" marginBottom="$1">
+                  {contextStats.chunkCount.toLocaleString()}
+                </Text>
+                <Text
+                  fontSize="$2"
+                  fontWeight="500"
+                  color="$gray11"
+                  textTransform="uppercase"
+                  letterSpacing={0.5}
+                >
+                  Context Chunks
+                </Text>
+                {blueprint?.target_chunk_count && (
+                  <Text fontSize="$1" color="$gray5" marginTop="$1">
+                    Target: {blueprint.target_chunk_count.toLocaleString()}
+                  </Text>
+                )}
+              </YStack>
+            </Card>
+            <Card variant="outlined" backgroundColor="$gray1" padding="$4" flex={1} minWidth={150}>
+              <YStack gap="$1">
+                <Text fontSize="$7" fontWeight="700" color="$green11" marginBottom="$1">
+                  {contextStats.glossaryTermCount.toLocaleString()}
+                </Text>
+                <Text
+                  fontSize="$2"
+                  fontWeight="500"
+                  color="$gray11"
+                  textTransform="uppercase"
+                  letterSpacing={0.5}
+                >
+                  Glossary Terms
+                </Text>
+              </YStack>
+            </Card>
+          </XStack>
+        </YStack>
       )}
 
       {/* Blueprint Information */}
       {blueprint && (
-        <div style={{
-          paddingTop: '24px',
-          borderTop: '1px solid #e2e8f0',
-          marginBottom: '24px',
-        }}>
-          <h4 style={{
-            fontSize: '16px',
-            fontWeight: '600',
-            color: '#0f172a',
-            margin: '0 0 16px 0',
-          }}>
+        <YStack
+          paddingTop="$6"
+          borderTopWidth={1}
+          borderTopColor="$borderColor"
+          marginBottom="$6"
+        >
+          <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$4" margin={0}>
             Context Blueprint
-          </h4>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-            gap: '16px',
-          }}>
+          </Text>
+          <XStack
+            flexWrap="wrap"
+            gap="$4"
+            $sm={{ flexDirection: 'column' }}
+            $md={{ flexDirection: 'row' }}
+          >
             {blueprint.target_chunk_count && (
-              <div>
-                <div style={{
-                  fontSize: '12px',
-                  fontWeight: '600',
-                  color: '#64748b',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  marginBottom: '6px',
-                }}>
+              <YStack minWidth={150} flex={1}>
+                <Text
+                  fontSize="$2"
+                  fontWeight="600"
+                  color="$gray11"
+                  textTransform="uppercase"
+                  letterSpacing={0.5}
+                  marginBottom="$1.5"
+                >
                   Target Chunks
-                </div>
-                <div style={{
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  color: '#0f172a',
-                }}>
+                </Text>
+                <Text fontSize="$3" fontWeight="500" color="$color">
                   {blueprint.target_chunk_count.toLocaleString()}
-                </div>
-              </div>
+                </Text>
+              </YStack>
             )}
             {blueprint.quality_tier && (
-              <div>
-                <div style={{
-                  fontSize: '12px',
-                  fontWeight: '600',
-                  color: '#64748b',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  marginBottom: '6px',
-                }}>
+              <YStack minWidth={150} flex={1}>
+                <Text
+                  fontSize="$2"
+                  fontWeight="600"
+                  color="$gray11"
+                  textTransform="uppercase"
+                  letterSpacing={0.5}
+                  marginBottom="$1.5"
+                >
                   Quality Tier
-                </div>
-                <div style={{
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  color: '#0f172a',
-                }}>
+                </Text>
+                <Text fontSize="$3" fontWeight="500" color="$color">
                   {blueprint.quality_tier}
-                </div>
-              </div>
+                </Text>
+              </YStack>
             )}
             {blueprint.estimated_cost !== null && (
-              <div>
-                <div style={{
-                  fontSize: '12px',
-                  fontWeight: '600',
-                  color: '#64748b',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  marginBottom: '6px',
-                }}>
+              <YStack minWidth={150} flex={1}>
+                <Text
+                  fontSize="$2"
+                  fontWeight="600"
+                  color="$gray11"
+                  textTransform="uppercase"
+                  letterSpacing={0.5}
+                  marginBottom="$1.5"
+                >
                   Estimated Cost
-                </div>
-                <div style={{
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  color: '#0f172a',
-                }}>
+                </Text>
+                <Text fontSize="$3" fontWeight="500" color="$color">
                   ${blueprint.estimated_cost.toFixed(2)}
-                </div>
-              </div>
+                </Text>
+              </YStack>
             )}
             {blueprint.status && (
-              <div>
-                <div style={{
-                  fontSize: '12px',
-                  fontWeight: '600',
-                  color: '#64748b',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  marginBottom: '6px',
-                }}>
+              <YStack minWidth={150} flex={1}>
+                <Text
+                  fontSize="$2"
+                  fontWeight="600"
+                  color="$gray11"
+                  textTransform="uppercase"
+                  letterSpacing={0.5}
+                  marginBottom="$1.5"
+                >
                   Blueprint Status
-                </div>
-                <div style={{
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  color: blueprint.status === 'approved' || blueprint.status === 'completed' ? '#10b981' : '#64748b',
-                }}>
+                </Text>
+                <Text
+                  fontSize="$3"
+                  fontWeight="500"
+                  color={blueprint.status === 'approved' || blueprint.status === 'completed' ? '$green11' : '$gray11'}
+                >
                   {blueprint.status}
-                </div>
-              </div>
+                </Text>
+              </YStack>
             )}
-          </div>
-        </div>
+          </XStack>
+        </YStack>
       )}
 
       {/* Context Generation Section */}
-      <div style={{
-        paddingTop: '24px',
-        borderTop: '1px solid #e2e8f0',
-        marginBottom: '24px',
-      }}>
+      <YStack
+        paddingTop="$6"
+        borderTopWidth={1}
+        borderTopColor="$borderColor"
+        marginBottom="$6"
+      >
         <ContextGenerationPanel eventId={eventId} embedded={true} />
-      </div>
+      </YStack>
 
       {/* Context Database Section - Collapsible */}
       {contextStats && contextStats.chunkCount > 0 && (
-        <div style={{
-          paddingTop: '24px',
-          borderTop: '1px solid #e2e8f0',
-          marginBottom: '24px',
-        }}>
-          <button
-            onClick={() => setIsDatabaseExpanded(!isDatabaseExpanded)}
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '12px 0',
-              background: 'transparent',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '16px',
-              fontWeight: '600',
-              color: '#0f172a',
-            }}
+        <YStack
+          paddingTop="$6"
+          borderTopWidth={1}
+          borderTopColor="$borderColor"
+          marginBottom="$6"
+        >
+          <Button
+            variant="ghost"
+            width="100%"
+            justifyContent="space-between"
+            padding="$3 0"
+            onPress={() => setIsDatabaseExpanded(!isDatabaseExpanded)}
           >
-            <span>Context Database ({contextStats.chunkCount.toLocaleString()} chunks)</span>
-            <span style={{
-              fontSize: '18px',
-              transform: isDatabaseExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
-              transition: 'transform 0.2s',
-            }}>
+            <Text fontSize="$4" fontWeight="600" color="$color">
+              Context Database ({contextStats.chunkCount.toLocaleString()} chunks)
+            </Text>
+            <Text
+              fontSize="$5"
+              style={{
+                transform: isDatabaseExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 0.2s',
+              }}
+            >
               ▼
-            </span>
-          </button>
+            </Text>
+          </Button>
           {isDatabaseExpanded && (
-            <div style={{
-              marginTop: '16px',
-            }}>
+            <YStack marginTop="$4">
               <ContextDatabaseVisualization eventId={eventId} agentStatus={agent.status} agentStage={agent.stage} embedded={true} />
-            </div>
+            </YStack>
           )}
-        </div>
+        </YStack>
       )}
 
       {/* Glossary Section - Collapsible, only show when context is complete */}
       {agent.status === 'idle' && agent.stage === 'context_complete' && contextStats && contextStats.glossaryTermCount > 0 && (
-        <div style={{
-          paddingTop: '24px',
-          borderTop: '1px solid #e2e8f0',
-        }}>
-          <button
-            onClick={() => setIsGlossaryExpanded(!isGlossaryExpanded)}
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '12px 0',
-              background: 'transparent',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '16px',
-              fontWeight: '600',
-              color: '#0f172a',
-            }}
+        <YStack
+          paddingTop="$6"
+          borderTopWidth={1}
+          borderTopColor="$borderColor"
+        >
+          <Button
+            variant="ghost"
+            width="100%"
+            justifyContent="space-between"
+            padding="$3 0"
+            onPress={() => setIsGlossaryExpanded(!isGlossaryExpanded)}
           >
-            <span>Glossary ({contextStats.glossaryTermCount.toLocaleString()} terms)</span>
-            <span style={{
-              fontSize: '18px',
-              transform: isGlossaryExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
-              transition: 'transform 0.2s',
-            }}>
+            <Text fontSize="$4" fontWeight="600" color="$color">
+              Glossary ({contextStats.glossaryTermCount.toLocaleString()} terms)
+            </Text>
+            <Text
+              fontSize="$5"
+              style={{
+                transform: isGlossaryExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 0.2s',
+              }}
+            >
               ▼
-            </span>
-          </button>
+            </Text>
+          </Button>
           {isGlossaryExpanded && (
-            <div style={{
-              marginTop: '16px',
-            }}>
+            <YStack marginTop="$4">
               <GlossaryVisualization eventId={eventId} embedded={true} />
-            </div>
+            </YStack>
           )}
-        </div>
+        </YStack>
       )}
 
       {/* Research Results Section - Collapsible */}
-      <div style={{
-        paddingTop: '24px',
-        borderTop: '1px solid #e2e8f0',
-        marginBottom: '24px',
-      }}>
-        <button
-          onClick={() => setIsResearchExpanded(!isResearchExpanded)}
-          style={{
-            width: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '12px 0',
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '16px',
-            fontWeight: '600',
-            color: '#0f172a',
-          }}
+      <YStack
+        paddingTop="$6"
+        borderTopWidth={1}
+        borderTopColor="$borderColor"
+        marginBottom="$6"
+      >
+        <Button
+          variant="ghost"
+          width="100%"
+          justifyContent="space-between"
+          padding="$3 0"
+          onPress={() => setIsResearchExpanded(!isResearchExpanded)}
         >
-          <span>Research Results</span>
-          <span style={{
-            fontSize: '18px',
-            transform: isResearchExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
-            transition: 'transform 0.2s',
-          }}>
+          <Text fontSize="$4" fontWeight="600" color="$color">
+            Research Results
+          </Text>
+          <Text
+            fontSize="$5"
+            style={{
+              transform: isResearchExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+              transition: 'transform 0.2s',
+            }}
+          >
             ▼
-          </span>
-        </button>
+          </Text>
+        </Button>
         {isResearchExpanded && (
-          <div style={{
-            marginTop: '16px',
-          }}>
+          <YStack marginTop="$4">
             <ResearchResultsVisualization eventId={eventId} embedded={true} />
-          </div>
+          </YStack>
         )}
-      </div>
+      </YStack>
 
-      {/* Version History Section - Collapsible */}
-      <div style={{
-        paddingTop: '24px',
-        borderTop: '1px solid #e2e8f0',
-        marginBottom: '24px',
-      }}>
+      {/* Version History Section */}
+      <YStack
+        paddingTop="$6"
+        borderTopWidth={1}
+        borderTopColor="$borderColor"
+        marginBottom="$6"
+      >
         <VersionHistory eventId={eventId} embedded={true} />
-      </div>
-    </div>
+      </YStack>
+    </Card>
   );
 }
