@@ -7,6 +7,7 @@ import { EditEventModal } from './edit-event-modal';
 import { useEventDocsQuery } from '@/shared/hooks/use-event-docs-query';
 import { useEventQuery } from '@/shared/hooks/use-event-query';
 import { DocumentListItem } from './document-list-item';
+import { YStack, XStack, Text, Card, Button } from '@jarvis/ui-core';
 
 interface EventDetailProps {
   eventId: string;
@@ -43,16 +44,29 @@ export function EventDetail({ eventId, event, onEventUpdate }: EventDetailProps)
     }
   };
 
-  const getStatusColor = (status: EventWithStatus['status']): string => {
+  const getStatusColor = (status: EventWithStatus['status']) => {
     switch (status) {
       case 'live':
-        return '#10b981'; // green
+        return '$green11';
       case 'scheduled':
-        return '#3b82f6'; // blue
+        return '$blue6';
       case 'ended':
-        return '#6b7280'; // gray
+        return '$gray11';
       default:
-        return '#6b7280';
+        return '$gray11';
+    }
+  };
+
+  const getStatusBgColor = (status: EventWithStatus['status']) => {
+    switch (status) {
+      case 'live':
+        return '$green2';
+      case 'scheduled':
+        return '$blue2';
+      case 'ended':
+        return '$gray2';
+      default:
+        return '$gray2';
     }
   };
 
@@ -70,225 +84,173 @@ export function EventDetail({ eventId, event, onEventUpdate }: EventDetailProps)
   };
 
   return (
-    <div style={{
-      padding: '32px',
-    }}>
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: '24px',
-        gap: '16px',
-      }}>
-        <div style={{ flex: 1 }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            marginBottom: '12px',
-          }}>
-            <h1 style={{
-              fontSize: '32px',
-              fontWeight: '700',
-              color: '#0f172a',
-              margin: 0,
-            }}>
+    <YStack padding="$8">
+      <XStack
+        justifyContent="space-between"
+        alignItems="flex-start"
+        marginBottom="$6"
+        gap="$4"
+      >
+        <YStack flex={1}>
+          <XStack alignItems="center" gap="$3" marginBottom="$3">
+            <Text fontSize="$9" fontWeight="700" color="$color" margin={0}>
               {currentEvent.title}
-            </h1>
-            <span
-              style={{
-                padding: '6px 12px',
-                borderRadius: '16px',
-                fontSize: '13px',
-                fontWeight: '600',
-                backgroundColor: `${getStatusColor(currentEvent.status)}20`,
-                color: getStatusColor(currentEvent.status),
-              }}
+            </Text>
+            <YStack
+              paddingHorizontal="$3"
+              paddingVertical="$1.5"
+              borderRadius="$5"
+              backgroundColor={getStatusBgColor(currentEvent.status)}
             >
-              {getStatusLabel(currentEvent.status)}
-            </span>
-          </div>
-        </div>
-        <button
-          onClick={() => setIsEditModalOpen(true)}
-          style={{
-            padding: '8px 16px',
-            border: '1px solid #e2e8f0',
-            borderRadius: '6px',
-            fontSize: '14px',
-            fontWeight: '500',
-            color: '#374151',
-            background: '#ffffff',
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = '#f8fafc';
-            e.currentTarget.style.borderColor = '#cbd5e1';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = '#ffffff';
-            e.currentTarget.style.borderColor = '#e2e8f0';
-          }}
+              <Text
+                fontSize="$3"
+                fontWeight="600"
+                color={getStatusColor(currentEvent.status)}
+              >
+                {getStatusLabel(currentEvent.status)}
+              </Text>
+            </YStack>
+          </XStack>
+        </YStack>
+        <Button
+          variant="outline"
+          size="sm"
+          onPress={() => setIsEditModalOpen(true)}
         >
           Edit
-        </button>
-      </div>
+        </Button>
+      </XStack>
 
       {currentEvent.topic && (
-        <div style={{
-          marginBottom: '24px',
-          padding: '16px',
-          background: '#f8fafc',
-          borderRadius: '8px',
-          border: '1px solid #e2e8f0',
-        }}>
-          <h3 style={{
-            fontSize: '14px',
-            fontWeight: '600',
-            color: '#374151',
-            margin: '0 0 12px 0',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-          }}>
-            Description
-          </h3>
-          <div
-            style={{
-              fontSize: '15px',
-              color: '#374151',
-              lineHeight: '1.6',
-              whiteSpace: 'pre-wrap',
-            }}
-          >
-            {currentEvent.topic}
-          </div>
-        </div>
+        <Card
+          variant="outlined"
+          backgroundColor="$gray1"
+          marginBottom="$6"
+          padding="$4"
+        >
+          <YStack gap="$3">
+            <Text
+              fontSize="$3"
+              fontWeight="600"
+              color="$gray9"
+              textTransform="uppercase"
+              letterSpacing={0.5}
+              margin={0}
+            >
+              Description
+            </Text>
+            <Text
+              fontSize="$4"
+              color="$gray9"
+              lineHeight={1.6}
+              whiteSpace="pre-wrap"
+            >
+              {currentEvent.topic}
+            </Text>
+          </YStack>
+        </Card>
       )}
 
       {/* Event Documents Section */}
-      <div style={{ marginBottom: '24px' }}>
-        <h3 style={{
-          fontSize: '14px',
-          fontWeight: '600',
-          color: '#374151',
-          margin: '0 0 12px 0',
-          textTransform: 'uppercase',
-          letterSpacing: '0.5px',
-        }}>
+      <YStack marginBottom="$6">
+        <Text
+          fontSize="$3"
+          fontWeight="600"
+          color="$gray9"
+          textTransform="uppercase"
+          letterSpacing={0.5}
+          marginBottom="$3"
+        >
           Documents {docs && `(${docs.length})`}
-        </h3>
+        </Text>
         
         {docsLoading ? (
-          <p style={{ fontSize: '14px', color: '#64748b', margin: 0 }}>
+          <Text fontSize="$3" color="$gray11" margin={0}>
             Loading documents...
-          </p>
+          </Text>
         ) : !docs || docs.length === 0 ? (
-          <p style={{ fontSize: '14px', color: '#64748b', margin: 0 }}>
+          <Text fontSize="$3" color="$gray11" margin={0}>
             No documents attached
-          </p>
+          </Text>
         ) : (
-          <div>
+          <YStack>
             {docs.map((doc) => (
               <DocumentListItem
                 key={doc.id}
                 doc={doc}
               />
             ))}
-          </div>
+          </YStack>
         )}
-      </div>
+      </YStack>
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-        gap: '24px',
-      }}>
-        <div>
-          <div style={{
-            fontSize: '12px',
-            fontWeight: '600',
-            color: '#64748b',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            marginBottom: '8px',
-          }}>
+      <XStack
+        flexWrap="wrap"
+        gap="$6"
+        $sm={{ flexDirection: 'column' }}
+        $md={{ flexDirection: 'row' }}
+      >
+        <YStack minWidth={200} flex={1}>
+          <Text
+            fontSize="$2"
+            fontWeight="600"
+            color="$gray11"
+            textTransform="uppercase"
+            letterSpacing={0.5}
+            marginBottom="$2"
+          >
             Start Time
-          </div>
-          <div style={{
-            fontSize: '16px',
-            fontWeight: '500',
-            color: '#0f172a',
-          }}>
+          </Text>
+          <Text fontSize="$4" fontWeight="500" color="$color">
             {formatDateTime(currentEvent.start_time)}
-          </div>
+          </Text>
           {currentEvent.start_time && (
-            <div style={{
-              fontSize: '13px',
-              color: '#64748b',
-              marginTop: '4px',
-            }}>
+            <Text fontSize="$3" color="$gray11" marginTop="$1">
               {formatDate(currentEvent.start_time)}
-            </div>
+            </Text>
           )}
-        </div>
+        </YStack>
 
-        <div>
-          <div style={{
-            fontSize: '12px',
-            fontWeight: '600',
-            color: '#64748b',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            marginBottom: '8px',
-          }}>
+        <YStack minWidth={200} flex={1}>
+          <Text
+            fontSize="$2"
+            fontWeight="600"
+            color="$gray11"
+            textTransform="uppercase"
+            letterSpacing={0.5}
+            marginBottom="$2"
+          >
             End Time
-          </div>
-          <div style={{
-            fontSize: '16px',
-            fontWeight: '500',
-            color: '#0f172a',
-          }}>
+          </Text>
+          <Text fontSize="$4" fontWeight="500" color="$color">
             {formatDateTime(currentEvent.end_time)}
-          </div>
+          </Text>
           {currentEvent.end_time && (
-            <div style={{
-              fontSize: '13px',
-              color: '#64748b',
-              marginTop: '4px',
-            }}>
+            <Text fontSize="$3" color="$gray11" marginTop="$1">
               {formatDate(currentEvent.end_time)}
-            </div>
+            </Text>
           )}
-        </div>
+        </YStack>
 
-        <div>
-          <div style={{
-            fontSize: '12px',
-            fontWeight: '600',
-            color: '#64748b',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            marginBottom: '8px',
-          }}>
+        <YStack minWidth={200} flex={1}>
+          <Text
+            fontSize="$2"
+            fontWeight="600"
+            color="$gray11"
+            textTransform="uppercase"
+            letterSpacing={0.5}
+            marginBottom="$2"
+          >
             Created
-          </div>
-          <div style={{
-            fontSize: '16px',
-            fontWeight: '500',
-            color: '#0f172a',
-          }}>
+          </Text>
+          <Text fontSize="$4" fontWeight="500" color="$color">
             {formatDate(currentEvent.created_at)}
-          </div>
-          <div style={{
-            fontSize: '13px',
-            color: '#64748b',
-            marginTop: '4px',
-          }}>
+          </Text>
+          <Text fontSize="$3" color="$gray11" marginTop="$1">
             {formatDateTime(currentEvent.created_at)}
-          </div>
-        </div>
-      </div>
+          </Text>
+        </YStack>
+      </XStack>
 
       <EditEventModal
         isOpen={isEditModalOpen}
@@ -302,7 +264,7 @@ export function EventDetail({ eventId, event, onEventUpdate }: EventDetailProps)
           }
         }}
       />
-    </div>
+    </YStack>
   );
 }
 

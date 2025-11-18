@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { supabase } from '@/shared/lib/supabase/client';
 import type { EventDoc } from '@/shared/types/event-doc';
 import { getFileExtension, getFileType, getFileIcon, getFilenameFromPath } from '@/shared/utils/file-utils';
+import { YStack, XStack, Text, Card, Button, Alert } from '@jarvis/ui-core';
 
 interface DocumentCardProps {
   doc: EventDoc;
@@ -50,101 +51,64 @@ export function DocumentCard({ doc, eventId }: DocumentCardProps) {
   };
 
   return (
-    <div
-      style={{
-        background: '#ffffff',
-        border: '1px solid #e2e8f0',
-        borderRadius: '8px',
-        padding: '16px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '12px',
-        transition: 'all 0.2s',
-        cursor: 'pointer',
+    <Card
+      padding="$4"
+      cursor="pointer"
+      hoverStyle={{
+        borderColor: '$borderColorHover',
+        shadowColor: '$color',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
       }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = '#cbd5e1';
-        e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.05)';
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = '#e2e8f0';
-        e.currentTarget.style.boxShadow = 'none';
-      }}
-      onClick={handleDownload}
+      onPress={handleDownload}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <div
-          style={{
-            fontSize: '32px',
-            lineHeight: '1',
-            flexShrink: 0,
-          }}
-        >
-          {icon}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: '14px',
-              fontWeight: '500',
-              color: '#0f172a',
-              marginBottom: '4px',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-            title={displayName}
-          >
-            {displayName}
-          </div>
-          <div
-            style={{
-              fontSize: '12px',
-              color: '#64748b',
-              textTransform: 'uppercase',
-            }}
-          >
-            {extension || 'file'}
-          </div>
-        </div>
-      </div>
+      <YStack gap="$3">
+        <XStack alignItems="center" gap="$3">
+          <Text fontSize="$9" lineHeight={1} flexShrink={0}>
+            {icon}
+          </Text>
+          <YStack flex={1} minWidth={0}>
+            <Text
+              fontSize="$3"
+              fontWeight="500"
+              color="$color"
+              marginBottom="$1"
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {displayName}
+            </Text>
+            <Text
+              fontSize="$2"
+              color="$gray11"
+              textTransform="uppercase"
+            >
+              {extension || 'file'}
+            </Text>
+          </YStack>
+        </XStack>
 
-      {downloadError && (
-        <div
-          style={{
-            fontSize: '12px',
-            color: '#dc2626',
-            padding: '8px',
-            background: '#fee2e2',
-            borderRadius: '4px',
-          }}
-        >
-          {downloadError}
-        </div>
-      )}
+        {downloadError && (
+          <Alert variant="error">
+            <Text fontSize="$2">{downloadError}</Text>
+          </Alert>
+        )}
 
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          handleDownload();
-        }}
-        disabled={isDownloading}
-        style={{
-          padding: '8px 12px',
-          background: isDownloading ? '#94a3b8' : '#1e293b',
-          color: '#ffffff',
-          border: 'none',
-          borderRadius: '6px',
-          fontSize: '13px',
-          fontWeight: '500',
-          cursor: isDownloading ? 'not-allowed' : 'pointer',
-          transition: 'background 0.2s',
-          width: '100%',
-        }}
-      >
-        {isDownloading ? 'Preparing...' : 'Download'}
-      </button>
-    </div>
+        <Button
+          onPress={(e: any) => {
+            e?.stopPropagation();
+            handleDownload();
+          }}
+          disabled={isDownloading}
+          width="100%"
+          size="sm"
+        >
+          {isDownloading ? 'Preparing...' : 'Download'}
+        </Button>
+      </YStack>
+    </Card>
   );
 }
 

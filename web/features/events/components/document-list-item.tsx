@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import type { EventDoc } from '@/shared/types/event-doc';
 import { getFileExtension, getFileType, getFilenameFromPath } from '@/shared/utils/file-utils';
 import { supabase } from '@/shared/lib/supabase/client';
+import { XStack, YStack, Text, Input, Button } from '@jarvis/ui-core';
 
 interface DocumentListItemProps {
   doc: EventDoc;
@@ -196,155 +197,90 @@ export function DocumentListItem({ doc, onRemove, onUpdateName, onDownload, isRe
   };
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-        padding: '12px',
-        background: '#f8fafc',
-        border: '1px solid #e2e8f0',
-        borderRadius: '6px',
-        marginBottom: '8px',
-      }}
+    <XStack
+      alignItems="center"
+      gap="$3"
+      padding="$3"
+      backgroundColor="$gray1"
+      borderWidth={1}
+      borderColor="$borderColor"
+      borderRadius="$3"
+      marginBottom="$2"
     >
       <FileIcon fileType={fileType} />
       
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <YStack flex={1} minWidth={0}>
         {onUpdateName ? (
-          <input
+          <Input
             type="text"
             value={editedName}
-            onChange={handleNameChange}
+            onChange={(e: any) => handleNameChange(e)}
             onKeyDown={handleNameKeyDown}
             disabled={isRemoving || isUpdating}
-            style={{
-              width: '100%',
-              padding: '4px 8px',
-              border: '1px solid #e2e8f0',
-              borderRadius: '4px',
-              fontSize: '14px',
-              fontWeight: '500',
-              color: '#0f172a',
-              background: isRemoving || isUpdating ? '#f8fafc' : '#ffffff',
-              boxSizing: 'border-box',
-            }}
-            title={editedName}
+            fontSize="$3"
+            fontWeight="500"
+            padding="$1"
+            backgroundColor={isRemoving || isUpdating ? '$gray1' : '$background'}
           />
         ) : (
-          <div
-            style={{
-              fontSize: '14px',
-              fontWeight: '500',
-              color: '#0f172a',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-            title={displayName}
+          <Text
+            fontSize="$3"
+            fontWeight="500"
+            color="$color"
+            numberOfLines={1}
+            ellipsizeMode="tail"
           >
             {displayName}
-          </div>
+          </Text>
         )}
-        <div
-          style={{
-            fontSize: '12px',
-            color: '#64748b',
-            marginTop: '4px',
-          }}
-        >
+        <Text fontSize="$2" color="$gray11" marginTop="$1">
           {fileTypeDisplay} • {new Date(doc.created_at).toLocaleDateString()}
-        </div>
-      </div>
+        </Text>
+      </YStack>
 
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+      <XStack gap="$2" alignItems="center">
         {(onDownload !== undefined || (!onRemove && !onUpdateName)) && (
-          <button
-            type="button"
-            onClick={handleDownload}
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={handleDownload}
             disabled={isDownloading || isRemoving}
-            style={{
-              padding: '6px',
-              background: 'transparent',
-              color: '#0f172a',
-              border: '1px solid #0f172a',
-              borderRadius: '4px',
-              cursor: isDownloading ? 'not-allowed' : 'pointer',
-              transition: 'all 0.2s',
-              flexShrink: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              opacity: isDownloading ? 0.6 : 1,
-            }}
-            onMouseEnter={(e) => {
-              if (!isDownloading) {
-                e.currentTarget.style.background = '#f8fafc';
-                e.currentTarget.style.borderColor = '#475569';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!isDownloading) {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.borderColor = '#0f172a';
-              }
-            }}
+            padding="$1.5"
+            opacity={isDownloading ? 0.6 : 1}
             title={isDownloading ? 'Downloading...' : 'Download document'}
           >
             {isDownloading ? (
-              <span style={{ fontSize: '12px' }}>...</span>
+              <Text fontSize="$2">...</Text>
             ) : (
               <DownloadIcon />
             )}
-          </button>
+          </Button>
         )}
 
         {onRemove && (
-          <button
-            type="button"
-            onClick={handleRemoveClick}
+          <Button
+            variant={showConfirm ? 'primary' : 'outline'}
+            size="sm"
+            onPress={handleRemoveClick}
             disabled={isRemoving}
-            style={{
-              padding: '6px',
-              background: showConfirm ? '#dc2626' : 'transparent',
-              color: showConfirm ? '#ffffff' : '#dc2626',
-              border: showConfirm ? 'none' : '1px solid #dc2626',
-              borderRadius: '4px',
-              cursor: isRemoving ? 'not-allowed' : 'pointer',
-              transition: 'all 0.2s',
-              flexShrink: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              opacity: isRemoving ? 0.6 : 1,
-            }}
-            onMouseEnter={(e) => {
-              if (!isRemoving && !showConfirm) {
-                e.currentTarget.style.background = '#fee2e2';
-                e.currentTarget.style.color = '#991b1b';
-                e.currentTarget.style.borderColor = '#dc2626';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!isRemoving && !showConfirm) {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.color = '#dc2626';
-                e.currentTarget.style.borderColor = '#dc2626';
-              }
-            }}
+            padding="$1.5"
+            backgroundColor={showConfirm ? '$red6' : 'transparent'}
+            borderColor={showConfirm ? undefined : '$red6'}
+            color={showConfirm ? '$background' : '$red6'}
+            opacity={isRemoving ? 0.6 : 1}
             title={isRemoving ? 'Removing...' : showConfirm ? 'Click to confirm removal' : 'Remove document'}
           >
             {isRemoving ? (
-              <span style={{ fontSize: '12px' }}>Removing...</span>
+              <Text fontSize="$2">Removing...</Text>
             ) : showConfirm ? (
-              <span style={{ fontSize: '12px' }}>Confirm?</span>
+              <Text fontSize="$2">Confirm?</Text>
             ) : (
               <RemoveIcon />
             )}
-          </button>
+          </Button>
         )}
-      </div>
-    </div>
+      </XStack>
+    </XStack>
   );
 }
 
