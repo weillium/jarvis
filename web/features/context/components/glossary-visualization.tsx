@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useGlossaryQuery } from '@/shared/hooks/use-glossary-query';
+import { YStack, XStack, Text, Button, Input, Card, Alert } from '@jarvis/ui-core';
 
 interface GlossaryVisualizationProps {
   eventId: string;
@@ -44,123 +45,80 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
 
   if (isLoading) {
     return (
-      <div style={{
-        background: '#ffffff',
-        border: '1px solid #e2e8f0',
-        borderRadius: '12px',
-        padding: '24px',
-        textAlign: 'center',
-        color: '#64748b',
-      }}>
-        Loading glossary...
-      </div>
+      <Card variant="outlined" padding="$6" alignItems="center">
+        <Text fontSize="$3" color="$gray11">
+          Loading glossary...
+        </Text>
+      </Card>
     );
   }
 
   if (error) {
     return (
-      <div style={{
-        background: '#ffffff',
-        border: '1px solid #e2e8f0',
-        borderRadius: '12px',
-        padding: '24px',
-        textAlign: 'center',
-        color: '#ef4444',
-      }}>
-        Error loading glossary: {error instanceof Error ? error.message : 'Unknown error'}
-      </div>
+      <Alert variant="error">
+        <Text fontSize="$3" margin={0}>
+          Error loading glossary: {error instanceof Error ? error.message : 'Unknown error'}
+        </Text>
+      </Alert>
     );
   }
 
   if (!glossaryData || glossaryData.count === 0) {
     return (
-      <div style={{
-        background: '#ffffff',
-        border: '1px solid #e2e8f0',
-        borderRadius: '12px',
-        padding: '24px',
-        textAlign: 'center',
-        color: '#64748b',
-      }}>
-        <p>No glossary terms available yet.</p>
-      </div>
+      <Card variant="outlined" padding="$6" alignItems="center">
+        <Text fontSize="$3" color="$gray11" margin={0}>
+          No glossary terms available yet.
+        </Text>
+      </Card>
     );
   }
 
   return (
-    <div style={{
-      background: embedded ? 'transparent' : '#ffffff',
-      border: embedded ? 'none' : '1px solid #e2e8f0',
-      borderRadius: embedded ? '0' : '12px',
-      padding: embedded ? '0' : '24px',
-    }}>
+    <YStack
+      backgroundColor={embedded ? 'transparent' : '$background'}
+      borderWidth={embedded ? 0 : 1}
+      borderColor={embedded ? 'transparent' : '$borderColor'}
+      borderRadius={embedded ? 0 : '$4'}
+      padding={embedded ? 0 : '$6'}
+    >
       {/* Header - only show when not embedded */}
       {!embedded && (
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '20px',
-        }}>
-          <h3 style={{
-            fontSize: '20px',
-            fontWeight: '600',
-            color: '#0f172a',
-            margin: 0,
-          }}>
+        <XStack
+          justifyContent="space-between"
+          alignItems="center"
+          marginBottom="$5"
+        >
+          <Text fontSize="$5" fontWeight="600" color="$color" margin={0}>
             Glossary
-          </h3>
-          <span style={{
-            fontSize: '14px',
-            color: '#64748b',
-          }}>
+          </Text>
+          <Text fontSize="$3" color="$gray11" margin={0}>
             {glossaryData.count} {glossaryData.count === 1 ? 'term' : 'terms'}
-          </span>
-        </div>
+          </Text>
+        </XStack>
       )}
 
       {/* Search and Filter */}
-      <div style={{
-        display: 'flex',
-        gap: '12px',
-        marginBottom: '20px',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-      }}>
-        <input
-          type="text"
+      <XStack
+        gap="$3"
+        marginBottom="$5"
+        flexWrap="wrap"
+        alignItems="center"
+      >
+        <Input
+          flex={1}
+          minWidth={200}
           placeholder="Search terms..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{
-            flex: 1,
-            minWidth: '200px',
-            padding: '8px 12px',
-            border: '1px solid #e2e8f0',
-            borderRadius: '6px',
-            fontSize: '14px',
-          }}
+          onChange={(e: any) => setSearch(e.target.value)}
         />
-        <button
-          onClick={handleRefresh}
+        <Button
+          variant="outline"
+          size="sm"
+          onPress={handleRefresh}
           disabled={isFetching}
-          style={{
-            padding: '8px 16px',
-            border: '1px solid #e2e8f0',
-            borderRadius: '6px',
-            fontSize: '14px',
-            fontWeight: '500',
-            background: '#ffffff',
-            color: '#374151',
-            cursor: isFetching ? 'not-allowed' : 'pointer',
-            opacity: isFetching ? 0.6 : 1,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-          }}
         >
           ↻ {isFetching ? 'Refreshing...' : 'Refresh'}
-        </button>
+        </Button>
         {categories.length > 0 && (
           <select
             value={selectedCategory || ''}
@@ -171,6 +129,7 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
               borderRadius: '6px',
               fontSize: '14px',
               background: '#ffffff',
+              fontFamily: 'inherit',
             }}
           >
             <option value="">All Categories</option>
@@ -181,203 +140,179 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
             ))}
           </select>
         )}
-      </div>
+      </XStack>
 
       {/* Terms List */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <YStack gap="$3">
         {displayTerms.map((term) => {
           const isExpanded = expandedTerms.has(term.id);
 
           return (
-            <div
+            <Card
               key={term.id}
-              style={{
-                border: '1px solid #e2e8f0',
-                borderRadius: '8px',
-                overflow: 'hidden',
-              }}
+              variant="outlined"
+              overflow="hidden"
             >
               {/* Term Header */}
-              <div
-                onClick={() => toggleTerm(term.id)}
-                style={{
-                  padding: '12px 16px',
-                  background: isExpanded ? '#f8fafc' : '#ffffff',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  transition: 'background 0.2s',
-                }}
+              <Button
+                variant="ghost"
+                width="100%"
+                padding="$3 $4"
+                backgroundColor={isExpanded ? '$gray1' : '$background'}
+                justifyContent="space-between"
+                onPress={() => toggleTerm(term.id)}
               >
-                <div style={{ flex: 1 }}>
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    marginBottom: '4px',
-                  }}>
-                    <span style={{
-                      fontSize: '16px',
-                      fontWeight: '600',
-                      color: '#0f172a',
-                    }}>
+                <YStack flex={1} gap="$1">
+                  <XStack alignItems="center" gap="$2" marginBottom="$1">
+                    <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
                       {term.term}
-                    </span>
+                    </Text>
                     {term.acronym_for && (
-                      <span style={{
-                        fontSize: '12px',
-                        color: '#64748b',
-                        fontStyle: 'italic',
-                      }}>
+                      <Text fontSize="$2" color="$gray11" fontStyle="italic" margin={0}>
                         ({term.acronym_for})
-                      </span>
+                      </Text>
                     )}
                     {term.category && (
-                      <span style={{
-                        display: 'inline-block',
-                        padding: '2px 8px',
-                        background: '#e0e7ff',
-                        color: '#4338ca',
-                        borderRadius: '4px',
-                        fontSize: '11px',
-                        fontWeight: '500',
-                      }}>
-                        {term.category}
-                      </span>
+                      <YStack
+                        padding="$0.5 $2"
+                        backgroundColor="$blue2"
+                        borderRadius="$1"
+                      >
+                        <Text fontSize="$1" fontWeight="500" color="$blue11" margin={0}>
+                          {term.category}
+                        </Text>
+                      </YStack>
                     )}
-                  </div>
-                  <div style={{
-                    fontSize: '14px',
-                    color: '#64748b',
-                    lineHeight: '1.4',
-                  }}>
+                  </XStack>
+                  <Text fontSize="$3" color="$gray11" lineHeight={1.4} margin={0}>
                     {term.definition}
-                  </div>
-                </div>
-                <div style={{
-                  fontSize: '20px',
-                  color: '#64748b',
-                  marginLeft: '16px',
-                  transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
-                  transition: 'transform 0.2s',
-                }}>
+                  </Text>
+                </YStack>
+                <Text
+                  fontSize="$5"
+                  color="$gray11"
+                  marginLeft="$4"
+                  style={{
+                    transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.2s',
+                  }}
+                  margin={0}
+                >
                   ▶
-                </div>
-              </div>
+                </Text>
+              </Button>
 
               {/* Expanded Details */}
               {isExpanded && (
-                <div style={{
-                  padding: '16px',
-                  background: '#f8fafc',
-                  borderTop: '1px solid #e2e8f0',
-                }}>
+                <YStack
+                  padding="$4"
+                  backgroundColor="$gray1"
+                  borderTopWidth={1}
+                  borderTopColor="$borderColor"
+                >
                   {/* Usage Examples */}
                   {term.usage_examples && term.usage_examples.length > 0 && (
-                    <div style={{ marginBottom: '16px' }}>
-                      <h5 style={{
-                        fontSize: '12px',
-                        fontWeight: '600',
-                        color: '#64748b',
-                        marginBottom: '8px',
-                        textTransform: 'uppercase',
-                      }}>
+                    <YStack marginBottom="$4">
+                      <Text
+                        fontSize="$1"
+                        fontWeight="600"
+                        color="$gray11"
+                        textTransform="uppercase"
+                        marginBottom="$2"
+                        margin={0}
+                      >
                         Usage Examples
-                      </h5>
-                      <ul style={{
-                        margin: 0,
-                        paddingLeft: '20px',
-                        color: '#475569',
-                        fontSize: '14px',
-                      }}>
+                      </Text>
+                      <YStack as="ul" margin={0} paddingLeft="$5" color="$gray9" fontSize="$3" gap="$1">
                         {term.usage_examples.map((example, i) => (
-                          <li key={i} style={{ marginBottom: '4px', fontStyle: 'italic' }}>
+                          <Text as="li" key={i} fontStyle="italic" margin={0}>
                             "{example}"
-                          </li>
+                          </Text>
                         ))}
-                      </ul>
-                    </div>
+                      </YStack>
+                    </YStack>
                   )}
 
                   {/* Related Terms */}
                   {term.related_terms && term.related_terms.length > 0 && (
-                    <div style={{ marginBottom: '16px' }}>
-                      <h5 style={{
-                        fontSize: '12px',
-                        fontWeight: '600',
-                        color: '#64748b',
-                        marginBottom: '8px',
-                        textTransform: 'uppercase',
-                      }}>
+                    <YStack marginBottom="$4">
+                      <Text
+                        fontSize="$1"
+                        fontWeight="600"
+                        color="$gray11"
+                        textTransform="uppercase"
+                        marginBottom="$2"
+                        margin={0}
+                      >
                         Related Terms
-                      </h5>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      </Text>
+                      <XStack flexWrap="wrap" gap="$1.5">
                         {term.related_terms.map((related, i) => (
-                          <span
+                          <YStack
                             key={i}
-                            style={{
-                              display: 'inline-block',
-                              padding: '4px 8px',
-                              background: '#e2e8f0',
-                              color: '#475569',
-                              borderRadius: '4px',
-                              fontSize: '12px',
-                            }}
+                            padding="$1 $2"
+                            backgroundColor="$gray3"
+                            borderRadius="$1"
                           >
-                            {related}
-                          </span>
+                            <Text fontSize="$2" color="$gray9" margin={0}>
+                              {related}
+                            </Text>
+                          </YStack>
                         ))}
-                      </div>
-                    </div>
+                      </XStack>
+                    </YStack>
                   )}
 
                   {/* Metadata */}
-                  <div style={{
-                    display: 'flex',
-                    gap: '16px',
-                    fontSize: '12px',
-                    color: '#64748b',
-                    paddingTop: '12px',
-                    borderTop: '1px solid #e2e8f0',
-                  }}>
+                  <XStack
+                    gap="$4"
+                    fontSize="$2"
+                    color="$gray11"
+                    paddingTop="$3"
+                    borderTopWidth={1}
+                    borderTopColor="$borderColor"
+                    flexWrap="wrap"
+                  >
                     {term.confidence_score !== null && (
-                      <div>
-                        <strong>Confidence:</strong> {(term.confidence_score * 100).toFixed(0)}%
-                      </div>
+                      <Text margin={0}>
+                        <Text fontWeight="600" margin={0}>Confidence:</Text> {(term.confidence_score * 100).toFixed(0)}%
+                      </Text>
                     )}
                     {term.agent_utility && term.agent_utility.length > 0 && (
-                      <div>
-                        <strong>Agent Utility:</strong>{' '}
+                      <Text margin={0}>
+                        <Text fontWeight="600" margin={0}>Agent Utility:</Text>{' '}
                         {term.agent_utility
                           .map((agent) => agent.charAt(0).toUpperCase() + agent.slice(1))
                           .join(', ')}
-                      </div>
+                      </Text>
                     )}
                     {term.source && (
-                      <div>
-                        <strong>Source:</strong> {term.source}
-                      </div>
+                      <Text margin={0}>
+                        <Text fontWeight="600" margin={0}>Source:</Text> {term.source}
+                      </Text>
                     )}
                     {term.source_url && (
-                      <div>
-                        <a
+                      <Text margin={0}>
+                        <Text
+                          as="a"
                           href={term.source_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          style={{ color: '#3b82f6', textDecoration: 'none' }}
+                          color="$blue11"
+                          textDecoration="none"
+                          margin={0}
                         >
                           View Source →
-                        </a>
-                      </div>
+                        </Text>
+                      </Text>
                     )}
-                  </div>
-                </div>
+                  </XStack>
+                </YStack>
               )}
-            </div>
+            </Card>
           );
         })}
-      </div>
-    </div>
+      </YStack>
+    </YStack>
   );
 }

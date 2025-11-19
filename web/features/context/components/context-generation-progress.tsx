@@ -1,5 +1,7 @@
 'use client';
 
+import { YStack, XStack, Text } from '@jarvis/ui-core';
+
 interface ContextGenerationProgressProps {
   status: string;
   stage: string;
@@ -69,75 +71,71 @@ export function ContextGenerationProgress({
   };
 
   return (
-    <div>
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '8px',
-      }}>
-        <span style={{
-          fontSize: '14px',
-          fontWeight: '500',
-          color: '#0f172a',
-        }}>
+    <YStack>
+      <XStack
+        justifyContent="space-between"
+        alignItems="center"
+        marginBottom="$2"
+      >
+        <Text fontSize="$3" fontWeight="500" color="$color" margin={0}>
           {getStageLabel(stage, blueprintStatus)}
-        </span>
+        </Text>
         {progress && (
-          <span style={{
-            fontSize: '14px',
-            color: '#64748b',
-          }}>
+          <Text fontSize="$3" color="$gray11" margin={0}>
             {getProgressLabel()} ({progress.percentage}%)
-          </span>
+          </Text>
         )}
-      </div>
+      </XStack>
 
       {/* Progress bar */}
       {progress ? (
-        <div style={{
-          width: '100%',
-          height: '8px',
-          background: '#e2e8f0',
-          borderRadius: '4px',
-          overflow: 'hidden',
-        }}>
-          <div style={{
-            width: `${Math.min(progress.percentage, 100)}%`,
-            height: '100%',
-            background: '#3b82f6',
-            borderRadius: '4px',
-            transition: 'width 0.3s ease',
-          }} />
-        </div>
+        <YStack
+          width="100%"
+          height={8}
+          backgroundColor="$gray3"
+          borderRadius="$1"
+          overflow="hidden"
+        >
+          <YStack
+            width={`${Math.min(progress.percentage, 100)}%`}
+            height="100%"
+            backgroundColor="$blue6"
+            borderRadius="$1"
+            style={{
+              transition: 'width 0.3s ease',
+            }}
+          />
+        </YStack>
       ) : (
-        <div style={{
-          width: '100%',
-          height: '8px',
-          background: '#e2e8f0',
-          borderRadius: '4px',
-          overflow: 'hidden',
-          position: 'relative',
-        }}>
-          <div style={{
-            width: '100%',
-            height: '100%',
-            background: 'linear-gradient(90deg, #3b82f6 0%, #60a5fa 50%, #3b82f6 100%)',
-            backgroundSize: '200% 100%',
-            animation: 'pulse 2s ease-in-out infinite',
-            borderRadius: '4px',
-          }} />
-        </div>
+        <YStack
+          width="100%"
+          height={8}
+          backgroundColor="$gray3"
+          borderRadius="$1"
+          overflow="hidden"
+          position="relative"
+        >
+          <YStack
+            width="100%"
+            height="100%"
+            backgroundColor="$blue6"
+            borderRadius="$1"
+            style={{
+              background: 'linear-gradient(90deg, #3b82f6 0%, #60a5fa 50%, #3b82f6 100%)',
+              backgroundSize: '200% 100%',
+              animation: 'pulse 2s ease-in-out infinite',
+            }}
+          />
+        </YStack>
       )}
 
       {/* Stage indicators */}
-      <div style={{
-        display: 'flex',
-        gap: '8px',
-        marginTop: '16px',
-        flexWrap: 'wrap',
-      }}>
-        {['blueprint_generating', 'researching', 'building_glossary', 'building_chunks', 'context_complete'].map((s, index) => {
+      <XStack
+        gap="$2"
+        marginTop="$4"
+        flexWrap="wrap"
+      >
+        {['blueprint_generating', 'researching', 'building_glossary', 'building_chunks', 'context_complete'].map((s) => {
           // Handle both 'blueprint' and 'blueprint_generating' as the same stage
           // Handle regeneration stages as the same as their non-regeneration counterparts
           const isActive = stage === s || 
@@ -148,27 +146,42 @@ export function ContextGenerationProgress({
           const isCompleted = getStageOrder(stage) > getStageOrder(s);
 
           return (
-            <div
+            <XStack
               key={s}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '4px 8px',
-                background: isCompleted ? '#dcfce7' : isActive ? '#dbeafe' : '#f1f5f9',
-                color: isCompleted ? '#166534' : isActive ? '#1e40af' : '#64748b',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: isActive ? '500' : '400',
-              }}
+              alignItems="center"
+              gap="$1"
+              padding="$1 $2"
+              backgroundColor={
+                isCompleted ? '$green2' : isActive ? '$blue2' : '$gray2'
+              }
+              borderRadius="$2"
             >
-              {isCompleted && '✓ '}
-              {getStageLabel(s)}
-            </div>
+              <Text
+                fontSize="$2"
+                fontWeight={isActive ? '500' : '400'}
+                color={
+                  isCompleted ? '$green11' : isActive ? '$blue11' : '$gray11'
+                }
+                margin={0}
+              >
+                {isCompleted && '✓ '}
+                {getStageLabel(s)}
+              </Text>
+            </XStack>
           );
         })}
-      </div>
-    </div>
+      </XStack>
+      <style jsx global>{`
+        @keyframes pulse {
+          0%, 100% {
+            background-position: 0% 50%;
+          }
+          50% {
+            background-position: 100% 50%;
+          }
+        }
+      `}</style>
+    </YStack>
   );
 }
 

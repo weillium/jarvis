@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useResearchQuery } from '@/shared/hooks/use-research-query';
 import type { ResearchResult } from '@/shared/hooks/use-research-query';
+import { YStack, XStack, Text, Button, Input, Card, Alert } from '@jarvis/ui-core';
 
 interface ResearchResultsVisualizationProps {
   eventId: string;
@@ -35,13 +36,26 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
   const getApiColor = (api: string): string => {
     switch (api) {
       case 'exa':
-        return '#10b981'; // green
+        return '$green11';
       case 'wikipedia':
-        return '#8b5cf6'; // purple
+        return '$purple11';
       case 'llm_stub':
-        return '#3b82f6'; // blue
+        return '$blue11';
       default:
-        return '#64748b'; // gray
+        return '$gray11';
+    }
+  };
+
+  const getApiColorHex = (api: string): string => {
+    switch (api) {
+      case 'exa':
+        return '#10b981';
+      case 'wikipedia':
+        return '#8b5cf6';
+      case 'llm_stub':
+        return '#3b82f6';
+      default:
+        return '#64748b';
     }
   };
 
@@ -77,202 +91,154 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
 
   if (isLoading) {
     return (
-      <div style={{
-        background: embedded ? 'transparent' : '#ffffff',
-        border: embedded ? 'none' : '1px solid #e2e8f0',
-        borderRadius: embedded ? '0' : '12px',
-        padding: embedded ? '0' : '24px',
-        marginBottom: embedded ? '0' : '24px',
-      }}>
-        <div style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
-          Loading research results...
-        </div>
-      </div>
+      <YStack
+        backgroundColor={embedded ? 'transparent' : '$background'}
+        borderWidth={embedded ? 0 : 1}
+        borderColor={embedded ? 'transparent' : '$borderColor'}
+        borderRadius={embedded ? 0 : '$4'}
+        padding={embedded ? 0 : '$6'}
+        marginBottom={embedded ? 0 : '$6'}
+      >
+        <YStack padding="$6" alignItems="center">
+          <Text fontSize="$3" color="$gray11">
+            Loading research results...
+          </Text>
+        </YStack>
+      </YStack>
     );
   }
 
   if (error) {
     return (
-      <div style={{
-        background: embedded ? 'transparent' : '#ffffff',
-        border: embedded ? 'none' : '1px solid #e2e8f0',
-        borderRadius: embedded ? '0' : '12px',
-        padding: embedded ? '0' : '24px',
-        marginBottom: embedded ? '0' : '24px',
-      }}>
-        <div style={{ padding: '24px', textAlign: 'center', color: '#ef4444' }}>
+      <Alert variant="error">
+        <Text fontSize="$3" margin={0}>
           Error loading research results: {error instanceof Error ? error.message : 'Unknown error'}
-        </div>
-      </div>
+        </Text>
+      </Alert>
     );
   }
 
   if (!researchData || researchData.count === 0) {
     return (
-      <div style={{
-        background: embedded ? 'transparent' : '#ffffff',
-        border: embedded ? 'none' : '1px solid #e2e8f0',
-        borderRadius: embedded ? '0' : '12px',
-        padding: embedded ? '0' : '24px',
-        marginBottom: embedded ? '0' : '24px',
-      }}>
-        <div style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
-          <p>No research results available yet.</p>
-          <p style={{ fontSize: '12px', marginTop: '8px', opacity: 0.8 }}>
+      <YStack
+        backgroundColor={embedded ? 'transparent' : '$background'}
+        borderWidth={embedded ? 0 : 1}
+        borderColor={embedded ? 'transparent' : '$borderColor'}
+        borderRadius={embedded ? 0 : '$4'}
+        padding={embedded ? 0 : '$6'}
+        marginBottom={embedded ? 0 : '$6'}
+      >
+        <YStack padding="$6" alignItems="center">
+          <Text fontSize="$3" color="$gray11" marginBottom="$2" margin={0}>
+            No research results available yet.
+          </Text>
+          <Text fontSize="$2" color="$gray11" opacity={0.8} margin={0}>
             Research results will appear here after the research phase completes.
-          </p>
-        </div>
-      </div>
+          </Text>
+        </YStack>
+      </YStack>
     );
   }
 
   return (
-    <div style={{
-      background: embedded ? 'transparent' : '#ffffff',
-      border: embedded ? 'none' : '1px solid #e2e8f0',
-      borderRadius: embedded ? '0' : '12px',
-      padding: embedded ? '0' : '24px',
-      marginBottom: embedded ? '0' : '24px',
-    }}>
+    <YStack
+      backgroundColor={embedded ? 'transparent' : '$background'}
+      borderWidth={embedded ? 0 : 1}
+      borderColor={embedded ? 'transparent' : '$borderColor'}
+      borderRadius={embedded ? 0 : '$4'}
+      padding={embedded ? 0 : '$6'}
+      marginBottom={embedded ? 0 : '$6'}
+    >
       {/* Header - only show when not embedded */}
       {!embedded && (
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '20px',
-        }}>
-          <div>
-            <h3 style={{
-              fontSize: '20px',
-              fontWeight: '600',
-              color: '#0f172a',
-              margin: '0 0 4px 0',
-            }}>
+        <XStack
+          justifyContent="space-between"
+          alignItems="center"
+          marginBottom="$5"
+        >
+          <YStack>
+            <Text fontSize="$5" fontWeight="600" color="$color" marginBottom="$1" margin={0}>
               Research Results
-            </h3>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              fontSize: '13px',
-              color: '#64748b',
-            }}>
-              <span>
+            </Text>
+            <XStack alignItems="center" gap="$3">
+              <Text fontSize="$2" color="$gray11" margin={0}>
                 {researchData.count} {researchData.count === 1 ? 'result' : 'results'}
-              </span>
+              </Text>
               {researchData.avgQualityScore > 0 && (
-                <span>
+                <Text fontSize="$2" color="$gray11" margin={0}>
                   Avg Quality: {(researchData.avgQualityScore * 100).toFixed(0)}%
-                </span>
+                </Text>
               )}
-            </div>
-          </div>
-        {!embedded && (
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            style={{
-              padding: '8px 16px',
-              border: '1px solid #e2e8f0',
-              borderRadius: '6px',
-              fontSize: '14px',
-              fontWeight: '500',
-              color: '#374151',
-              background: '#ffffff',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = '#f8fafc';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = '#ffffff';
-            }}
-          >
-            {isExpanded ? 'Collapse' : 'Expand'}
-          </button>
-        )}
-      </div>
+            </XStack>
+          </YStack>
+          {!embedded && (
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={() => setIsExpanded(!isExpanded)}
+            >
+              {isExpanded ? 'Collapse' : 'Expand'}
+            </Button>
+          )}
+        </XStack>
       )}
 
       {/* Stats Overview */}
       {researchData.byApi && Object.keys(researchData.byApi).length > 0 && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
-          gap: '12px',
-          marginBottom: '20px',
-          padding: '16px',
-          background: '#f8fafc',
-          borderRadius: '8px',
-        }}>
+        <XStack
+          flexWrap="wrap"
+          gap="$3"
+          marginBottom="$5"
+          padding="$4"
+          backgroundColor="$gray1"
+          borderRadius="$3"
+          $sm={{ flexDirection: 'column' }}
+          $md={{ flexDirection: 'row' }}
+        >
           {Object.entries(researchData.byApi).map(([api, count]) => (
-            <div key={api}>
-              <div style={{
-                fontSize: '11px',
-                fontWeight: '600',
-                color: '#64748b',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-                marginBottom: '4px',
-              }}>
+            <YStack key={api} flex={1} minWidth={120}>
+              <Text
+                fontSize="$1"
+                fontWeight="600"
+                color="$gray11"
+                textTransform="uppercase"
+                letterSpacing={0.5}
+                marginBottom="$1"
+                margin={0}
+              >
                 {getApiLabel(api)}
-              </div>
-              <div style={{
-                fontSize: '20px',
-                fontWeight: '700',
-                color: '#0f172a',
-              }}>
+              </Text>
+              <Text fontSize="$5" fontWeight="700" color="$color" margin={0}>
                 {count}
-              </div>
-            </div>
+              </Text>
+            </YStack>
           ))}
-        </div>
+        </XStack>
       )}
 
       {/* Search and Filters */}
       {isExpanded && researchData.count > 0 && (
-        <div style={{
-          display: 'flex',
-          gap: '12px',
-          marginBottom: '12px',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-        }}>
-          <input
-            type="text"
+        <XStack
+          gap="$3"
+          marginBottom="$3"
+          flexWrap="wrap"
+          alignItems="center"
+        >
+          <Input
+            flex={1}
+            minWidth={200}
             placeholder="Search results..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              flex: 1,
-              minWidth: '200px',
-              padding: '8px 12px',
-              border: '1px solid #e2e8f0',
-              borderRadius: '6px',
-              fontSize: '14px',
-            }}
+            onChange={(e: any) => setSearchQuery(e.target.value)}
           />
-          <button
-            onClick={handleRefresh}
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={handleRefresh}
             disabled={isFetching}
-            style={{
-              padding: '8px 16px',
-              border: '1px solid #e2e8f0',
-              borderRadius: '6px',
-              fontSize: '14px',
-              fontWeight: '500',
-              background: '#ffffff',
-              color: '#374151',
-              cursor: isFetching ? 'not-allowed' : 'pointer',
-              opacity: isFetching ? 0.6 : 1,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
           >
             ↻ {isFetching ? 'Refreshing...' : 'Refresh'}
-          </button>
+          </Button>
           {apis.length > 0 && (
             <select
               value={filterByApi || ''}
@@ -283,6 +249,7 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
                 borderRadius: '6px',
                 fontSize: '13px',
                 background: '#ffffff',
+                fontFamily: 'inherit',
               }}
             >
               <option value="">All APIs</option>
@@ -294,154 +261,137 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
             </select>
           )}
           {(filterByApi || searchQuery) && (
-            <button
-              onClick={() => {
+            <Button
+              variant="ghost"
+              size="sm"
+              onPress={() => {
                 setFilterByApi(null);
                 setSearchQuery('');
               }}
-              style={{
-                padding: '8px 12px',
-                border: '1px solid #e2e8f0',
-                borderRadius: '6px',
-                fontSize: '13px',
-                background: '#ffffff',
-                cursor: 'pointer',
-                color: '#64748b',
-              }}
             >
               Clear Filters
-            </button>
+            </Button>
           )}
-        </div>
+        </XStack>
       )}
 
       {/* Results List */}
       {isExpanded && (
-        <div style={{
-          marginTop: '20px',
-          maxHeight: '600px',
-          overflowY: 'auto',
-          border: '1px solid #e2e8f0',
-          borderRadius: '8px',
-          background: '#f8fafc',
-        }}>
+        <YStack
+          marginTop="$5"
+          maxHeight={600}
+          overflow="scroll"
+          borderWidth={1}
+          borderColor="$borderColor"
+          borderRadius="$3"
+          backgroundColor="$gray1"
+        >
           {filteredResults.length === 0 ? (
-            <div style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
-              No research results match the selected filter.
-            </div>
+            <YStack padding="$6" alignItems="center">
+              <Text fontSize="$3" color="$gray11">
+                No research results match the selected filter.
+              </Text>
+            </YStack>
           ) : (
-            <div style={{ padding: '8px' }}>
+            <YStack padding="$2">
               {filteredResults.map((result) => {
                 const isExpandedResult = expandedResults.has(result.id);
                 return (
-                  <div
+                  <Card
                     key={result.id}
-                    style={{
-                      padding: '16px',
-                      marginBottom: '8px',
-                      background: '#ffffff',
-                      borderRadius: '6px',
-                      border: '1px solid #e2e8f0',
-                      transition: 'all 0.2s',
-                    }}
+                    variant="outlined"
+                    padding="$4"
+                    marginBottom="$2"
+                    backgroundColor="$background"
                   >
                     {/* Result Header */}
-                    <div
-                      onClick={() => toggleResult(result.id)}
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'flex-start',
-                        cursor: 'pointer',
-                        marginBottom: isExpandedResult ? '12px' : '0',
-                      }}
+                    <Button
+                      variant="ghost"
+                      width="100%"
+                      justifyContent="space-between"
+                      alignItems="flex-start"
+                      padding={0}
+                      marginBottom={isExpandedResult ? '$3' : 0}
+                      onPress={() => toggleResult(result.id)}
                     >
-                      <div style={{ flex: 1 }}>
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          marginBottom: '8px',
-                        }}>
-                          <div style={{
-                            width: '8px',
-                            height: '8px',
-                            borderRadius: '50%',
-                            background: getApiColor(result.api),
-                          }} />
-                          <span style={{
-                            fontSize: '12px',
-                            fontWeight: '600',
-                            color: '#64748b',
-                            textTransform: 'uppercase',
-                          }}>
+                      <YStack flex={1} gap="$2">
+                        <XStack alignItems="center" gap="$2" marginBottom="$2">
+                          <YStack
+                            width={8}
+                            height={8}
+                            borderRadius="$10"
+                            backgroundColor={getApiColorHex(result.api)}
+                          />
+                          <Text
+                            fontSize="$2"
+                            fontWeight="600"
+                            color="$gray11"
+                            textTransform="uppercase"
+                            margin={0}
+                          >
                             {getApiLabel(result.api)}
-                          </span>
-                        </div>
-                        <div style={{
-                          fontSize: '14px',
-                          fontWeight: '600',
-                          color: '#0f172a',
-                          marginBottom: '4px',
-                        }}>
+                          </Text>
+                        </XStack>
+                        <Text fontSize="$3" fontWeight="600" color="$color" marginBottom="$1" margin={0}>
                           Query: {result.query}
-                        </div>
+                        </Text>
                         {!isExpandedResult && (
-                          <div style={{
-                            fontSize: '13px',
-                            color: '#64748b',
-                            lineHeight: '1.5',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                          }}>
+                          <Text
+                            fontSize="$2"
+                            color="$gray11"
+                            lineHeight={1.5}
+                            numberOfLines={2}
+                            margin={0}
+                          >
                             {result.content}
-                          </div>
+                          </Text>
                         )}
-                      </div>
-                      <div style={{
-                        fontSize: '20px',
-                        color: '#64748b',
-                        marginLeft: '16px',
-                        transform: isExpandedResult ? 'rotate(90deg)' : 'rotate(0deg)',
-                        transition: 'transform 0.2s',
-                      }}>
+                      </YStack>
+                      <Text
+                        fontSize="$5"
+                        color="$gray11"
+                        marginLeft="$4"
+                        style={{
+                          transform: isExpandedResult ? 'rotate(90deg)' : 'rotate(0deg)',
+                          transition: 'transform 0.2s',
+                        }}
+                        margin={0}
+                      >
                         ▶
-                      </div>
-                    </div>
+                      </Text>
+                    </Button>
 
                     {/* Expanded Details */}
                     {isExpandedResult && (
-                      <div style={{
-                        paddingTop: '12px',
-                        borderTop: '1px solid #e2e8f0',
-                      }}>
-                        <div style={{
-                          fontSize: '13px',
-                          color: '#374151',
-                          lineHeight: '1.6',
-                          marginBottom: '12px',
-                          whiteSpace: 'pre-wrap',
-                        }}>
+                      <YStack
+                        paddingTop="$3"
+                        borderTopWidth={1}
+                        borderTopColor="$borderColor"
+                      >
+                        <Text
+                          fontSize="$2"
+                          color="$gray9"
+                          lineHeight={1.6}
+                          marginBottom="$3"
+                          whiteSpace="pre-wrap"
+                          margin={0}
+                        >
                           {result.content}
-                        </div>
-                        <div style={{
-                          display: 'flex',
-                          gap: '16px',
-                          fontSize: '12px',
-                          color: '#64748b',
-                          paddingTop: '12px',
-                          borderTop: '1px solid #e2e8f0',
-                        }}>
+                        </Text>
+                        <XStack
+                          gap="$4"
+                          paddingTop="$3"
+                          borderTopWidth={1}
+                          borderTopColor="$borderColor"
+                          flexWrap="wrap"
+                        >
                           {result.quality_score !== null && (
-                            <div>
-                              <strong>Quality:</strong> {(result.quality_score * 100).toFixed(0)}%
-                            </div>
+                            <Text fontSize="$2" color="$gray11" margin={0}>
+                              <Text fontWeight="600" margin={0}>Quality:</Text> {(result.quality_score * 100).toFixed(0)}%
+                            </Text>
                           )}
                           {result.source_url && (
-                            <div>
+                            <Text fontSize="$2" color="$gray11" margin={0}>
                               <a
                                 href={result.source_url}
                                 target="_blank"
@@ -450,46 +400,45 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
                               >
                                 View Source →
                               </a>
-                            </div>
+                            </Text>
                           )}
-                          <div>
-                            <strong>Created:</strong> {new Date(result.created_at).toLocaleString()}
-                          </div>
-                        </div>
+                          <Text fontSize="$2" color="$gray11" margin={0}>
+                            <Text fontWeight="600" margin={0}>Created:</Text> {new Date(result.created_at).toLocaleString()}
+                          </Text>
+                        </XStack>
                         {result.metadata && Object.keys(result.metadata).length > 0 && (
-                          <details style={{
-                            marginTop: '12px',
-                            fontSize: '11px',
-                            color: '#64748b',
-                          }}>
-                            <summary style={{
-                              cursor: 'pointer',
-                              fontWeight: '500',
-                            }}>
+                          <details style={{ marginTop: '12px', fontSize: '11px', color: '#64748b' }}>
+                            <summary style={{ cursor: 'pointer', fontWeight: '500' }}>
                               Metadata
                             </summary>
-                            <pre style={{
-                              marginTop: '8px',
-                              padding: '8px',
-                              background: '#f8fafc',
-                              borderRadius: '4px',
-                              overflow: 'auto',
-                              fontSize: '11px',
-                            }}>
-                              {JSON.stringify(result.metadata, null, 2)}
-                            </pre>
+                            <YStack
+                              marginTop="$2"
+                              padding="$2"
+                              backgroundColor="$gray1"
+                              borderRadius="$1"
+                            >
+                              <Text
+                                fontSize="$1"
+                                fontFamily="$mono"
+                                color="$gray11"
+                                whiteSpace="pre-wrap"
+                                margin={0}
+                              >
+                                {JSON.stringify(result.metadata, null, 2)}
+                              </Text>
+                            </YStack>
                           </details>
                         )}
-                      </div>
+                      </YStack>
                     )}
-                  </div>
+                  </Card>
                 );
               })}
-            </div>
+            </YStack>
           )}
-        </div>
+        </YStack>
       )}
-    </div>
+    </YStack>
   );
 }
 
