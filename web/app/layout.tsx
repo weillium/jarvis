@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { QueryProvider } from '@/shared/providers/query-provider';
 import { TamaguiProvider } from '@jarvis/ui-core';
+import '../styles/globals.css';
 
 export const metadata = {
   title: "Jarvis – Intelligent Event Context",
@@ -14,7 +15,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body style={{ margin: 0, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif" }}>
+      <body>
         <TamaguiProvider>
           <QueryProvider>
             {children}

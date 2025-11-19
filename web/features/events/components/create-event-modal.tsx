@@ -1,10 +1,7 @@
 'use client';
 
 import { useState, FormEvent, useEffect, useMemo } from 'react';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import dayjs, { Dayjs } from 'dayjs';
+import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import { supabase } from '@/shared/lib/supabase/client';
@@ -140,8 +137,8 @@ async function uploadFile(
 export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModalProps) {
   const [title, setTitle] = useState('');
   const [topic, setTopic] = useState('');
-  const [startDate, setStartDate] = useState<Dayjs | null>(null);
-  const [endDate, setEndDate] = useState<Dayjs | null>(null);
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -155,8 +152,9 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
   // Auto-set end date to 1 hour after start date when start date changes
   useEffect(() => {
     if (startDate) {
-      const oneHourLater = startDate.add(1, 'hour');
-      setEndDate(oneHourLater);
+      const start = dayjs(startDate);
+      const oneHourLater = start.add(1, 'hour');
+      setEndDate(oneHourLater.format('YYYY-MM-DDTHH:mm'));
     }
   }, [startDate]);
 
@@ -185,11 +183,14 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
       }
 
       // Validate date logic
-      if (endDate.isBefore(startDate) || endDate.isSame(startDate)) {
+      const start = dayjs(startDate);
+      const end = dayjs(endDate);
+
+      if (end.isBefore(start) || end.isSame(start)) {
         throw new Error('End time must be after start time');
       }
       
-      const diffHours = endDate.diff(startDate, 'hour', true);
+      const diffHours = end.diff(start, 'hour', true);
       if (diffHours > 12) {
         throw new Error('End time must be within 12 hours of start time');
       }
@@ -205,11 +206,11 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
       }
 
       // Convert dates to UTC timestamps
-      const startDateString = startDate.format('YYYY-MM-DD HH:mm:ss');
+      const startDateString = start.format('YYYY-MM-DD HH:mm:ss');
       const startDateInTimezone = dayjs.tz(startDateString, timezone);
       eventData.start_time = startDateInTimezone.utc().toISOString();
 
-      const endDateString = endDate.format('YYYY-MM-DD HH:mm:ss');
+      const endDateString = end.format('YYYY-MM-DD HH:mm:ss');
       const endDateInTimezone = dayjs.tz(endDateString, timezone);
       eventData.end_time = endDateInTimezone.utc().toISOString();
 
@@ -263,8 +264,8 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
       // Reset form and close modal only after complete success
       setTitle('');
       setTopic('');
-      setStartDate(null);
-      setEndDate(null);
+      setStartDate('');
+      setEndDate('');
       setFiles([]);
       setUploadProgress({});
       setError(null);
@@ -284,8 +285,8 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
     if (!createEventMutation.isPending) {
       setTitle('');
       setTopic('');
-      setStartDate(null);
-      setEndDate(null);
+      setStartDate('');
+      setEndDate('');
       setFiles([]);
       setUploadProgress({});
       setError(null);
@@ -348,168 +349,150 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
           </Button>
         </XStack>
 
-        <LocalizationProvider dateAdapter={AdapterDayjs}>
-          <form onSubmit={handleSubmit}>
-            <YStack padding="$8" gap="$6">
-              {error && (
-                <Alert variant="error" style={{ whiteSpace: 'pre-line' }}>
-                  {error}
-                </Alert>
-              )}
+        <form onSubmit={handleSubmit}>
+          <YStack padding="$8" gap="$6">
+            {error && (
+              <Alert variant="error" style={{ whiteSpace: 'pre-line' }}>
+                {error}
+              </Alert>
+            )}
 
-              <XStack
-                gap="$6"
-                marginBottom="$6"
-                $sm={{ flexDirection: 'column' }}
-                $md={{ flexDirection: 'row' }}
-              >
-                <YStack flex={1} width="100%">
-                  <Text
-                    htmlFor="title"
-                    as="label"
-                    fontSize="$3"
-                    fontWeight="500"
-                    color="$gray9"
-                    marginBottom="$2"
-                    display="block"
-                  >
-                    Title <Text color="$red11">*</Text>
-                  </Text>
-                  <Input
-                    id="title"
-                    type="text"
-                    value={title}
-                    onChange={(e: any) => setTitle(e.target.value)}
-                    required
-                    disabled={isLoading}
-                    placeholder="Enter event title"
-                    width="100%"
-                  />
-                </YStack>
+            <XStack
+              gap="$6"
+              marginBottom="$6"
+              $sm={{ flexDirection: 'column' }}
+              $md={{ flexDirection: 'row' }}
+            >
+              <YStack flex={1} width="100%">
+                <Text
+                  htmlFor="title"
+                  as="label"
+                  fontSize="$3"
+                  fontWeight="500"
+                  color="$gray9"
+                  marginBottom="$2"
+                  display="block"
+                >
+                  Title <Text color="$red11">*</Text>
+                </Text>
+                <Input
+                  id="title"
+                  type="text"
+                  value={title}
+                  onChange={(e: any) => setTitle(e.target.value)}
+                  required
+                  disabled={isLoading}
+                  placeholder="Enter event title"
+                  width="100%"
+                />
+              </YStack>
 
-                <YStack flex={1} width="100%">
-                  <Text
-                    htmlFor="timezone"
-                    as="label"
-                    fontSize="$3"
-                    fontWeight="500"
-                    color="$gray9"
-                    marginBottom="$2"
-                    display="block"
-                  >
-                    Timezone
-                  </Text>
-                  <select
-                    id="timezone"
-                    value={timezone}
-                    onChange={(e) => setTimezone(e.target.value)}
-                    disabled={isLoading}
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '6px',
-                      fontSize: '15px',
-                      backgroundColor: isLoading ? '#f8fafc' : '#ffffff',
-                      boxSizing: 'border-box',
-                      cursor: isLoading ? 'not-allowed' : 'pointer',
-                      appearance: 'none',
-                      backgroundImage: isLoading
-                        ? 'none'
-                        : `url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L6 6L11 1' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
-                      backgroundRepeat: 'no-repeat',
-                      backgroundPosition: 'right 12px center',
-                      paddingRight: '40px',
-                      fontFamily: 'inherit',
-                    }}
-                  >
-                    {timezones.map((tz) => (
-                      <option key={tz} value={tz}>
-                        {tz}
-                      </option>
-                    ))}
-                  </select>
-                </YStack>
-              </XStack>
+              <YStack flex={1} width="100%">
+                <Text
+                  htmlFor="timezone"
+                  as="label"
+                  fontSize="$3"
+                  fontWeight="500"
+                  color="$gray9"
+                  marginBottom="$2"
+                  display="block"
+                >
+                  Timezone
+                </Text>
+                <select
+                  id="timezone"
+                  value={timezone}
+                  onChange={(e) => setTimezone(e.target.value)}
+                  disabled={isLoading}
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '6px',
+                    fontSize: '15px',
+                    backgroundColor: isLoading ? '#f8fafc' : '#ffffff',
+                    boxSizing: 'border-box',
+                    cursor: isLoading ? 'not-allowed' : 'pointer',
+                    appearance: 'none',
+                    backgroundImage: isLoading
+                      ? 'none'
+                      : `url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L6 6L11 1' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 12px center',
+                    paddingRight: '40px',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  {timezones.map((tz) => (
+                    <option key={tz} value={tz}>
+                      {tz}
+                    </option>
+                  ))}
+                </select>
+              </YStack>
+            </XStack>
 
-              <XStack
-                gap="$6"
-                marginBottom="$6"
-                $sm={{ flexDirection: 'column' }}
-                $md={{ flexDirection: 'row' }}
-              >
-                <YStack flex={1} width="100%">
-                  <Text
-                    htmlFor="start_time"
-                    as="label"
-                    fontSize="$3"
-                    fontWeight="500"
-                    color="$gray9"
-                    marginBottom="$2"
-                    display="block"
-                  >
-                    Start Time <Text color="$red11">*</Text>
-                  </Text>
-                  <DateTimePicker
-                    value={startDate}
-                    onChange={(newValue) => setStartDate(newValue)}
-                    disabled={isLoading}
-                    minDate={dayjs()}
-                    minutesStep={15}
-                    slotProps={{
-                      textField: {
-                        fullWidth: true,
-                        size: 'small',
-                        sx: {
-                          '& .MuiOutlinedInput-root': {
-                            fontSize: '15px',
-                            borderRadius: '6px',
-                          },
-                        },
-                      },
-                    }}
-                  />
-                </YStack>
+            <XStack
+              gap="$6"
+              marginBottom="$6"
+              $sm={{ flexDirection: 'column' }}
+              $md={{ flexDirection: 'row' }}
+            >
+              <YStack flex={1} width="100%">
+                <Text
+                  htmlFor="start_time"
+                  as="label"
+                  fontSize="$3"
+                  fontWeight="500"
+                  color="$gray9"
+                  marginBottom="$2"
+                  display="block"
+                >
+                  Start Time <Text color="$red11">*</Text>
+                </Text>
+                <Input
+                  id="start_time"
+                  type="datetime-local"
+                  value={startDate}
+                  onChange={(e: any) => setStartDate(e.target.value)}
+                  required
+                  disabled={isLoading}
+                  min={dayjs().format('YYYY-MM-DDTHH:mm')}
+                  step={900}
+                  width="100%"
+                />
+              </YStack>
 
-                <YStack flex={1} width="100%">
-                  <Text
-                    htmlFor="end_time"
-                    as="label"
-                    fontSize="$3"
-                    fontWeight="500"
-                    color="$gray9"
-                    marginBottom="$2"
-                    display="block"
-                  >
-                    End Time <Text color="$red11">*</Text>
-                    {startDate && endDate && (
-                      <Text fontSize="$2" color="$gray11" fontWeight="400" marginLeft="$2">
-                        (auto-set to 1 hour after start)
-                      </Text>
-                    )}
-                  </Text>
-                  <DateTimePicker
-                    value={endDate}
-                    onChange={(newValue) => setEndDate(newValue)}
-                    disabled={isLoading || !startDate}
-                    minDate={startDate || dayjs()}
-                    minutesStep={15}
-                    slotProps={{
-                      textField: {
-                        fullWidth: true,
-                        size: 'small',
-                        placeholder: startDate ? "Select end date and time" : "Select start time first",
-                        sx: {
-                          '& .MuiOutlinedInput-root': {
-                            fontSize: '15px',
-                            borderRadius: '6px',
-                          },
-                        },
-                      },
-                    }}
-                  />
-                </YStack>
-              </XStack>
+              <YStack flex={1} width="100%">
+                <Text
+                  htmlFor="end_time"
+                  as="label"
+                  fontSize="$3"
+                  fontWeight="500"
+                  color="$gray9"
+                  marginBottom="$2"
+                  display="block"
+                >
+                  End Time <Text color="$red11">*</Text>
+                  {startDate && endDate && (
+                    <Text fontSize="$2" color="$gray11" fontWeight="400" marginLeft="$2">
+                      (auto-set to 1 hour after start)
+                    </Text>
+                  )}
+                </Text>
+                <Input
+                  id="end_time"
+                  type="datetime-local"
+                  value={endDate}
+                  onChange={(e: any) => setEndDate(e.target.value)}
+                  required
+                  disabled={isLoading || !startDate}
+                  min={startDate || dayjs().format('YYYY-MM-DDTHH:mm')}
+                  step={900}
+                  width="100%"
+                />
+              </YStack>
+            </XStack>
 
               <YStack marginBottom="$6" width="100%">
                 <MarkdownEditor
@@ -551,7 +534,6 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
               </XStack>
             </YStack>
           </form>
-        </LocalizationProvider>
       </Sheet.Frame>
     </Sheet>
   );
