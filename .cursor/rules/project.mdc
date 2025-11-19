@@ -22,17 +22,23 @@ alwaysApply: true
 - React Query is the *only* source of server state.
 - prefer **query / mutation hooks** instead of custom fetch + useState.
 - use absolute imports `@/*` in web code.
-- new UI work should align with the upcoming shared Tamagui renderer; avoid adding net-new Tailwind-only patterns unless coordinated.
+- **use Tamagui components from `@jarvis/ui-core`** for all UI work; TailwindCSS and Material-UI are removed.
+- import shared primitives: `Button`, `Input`, `Textarea`, `Card`, `Alert`, `YStack`, `XStack`, `Text`, `Sheet` from `@jarvis/ui-core`.
+- use Tamagui tokens (`$color`, `$gray11`, `$blue6`, etc.) and spacing (`$4`, `$6`, etc.) for styling.
 
 ## mobile
 - Expo + React Native app; keep platform-specific code inside `/mobile`.
 - use React Query as the single source of server state here as well.
-- prefer Tamagui-compatible primitives for new components so we can converge on the shared renderer.
+- **use Tamagui components from `@jarvis/ui-core`** for all UI work; same shared components as web.
+- import shared primitives: `Button`, `Input`, `Textarea`, `Card`, `Alert`, `YStack`, `XStack`, `Text`, `Sheet` from `@jarvis/ui-core`.
+- `TamaguiProvider` is already set up in `mobile/app/_layout.tsx`.
 
 ## packages
-- hosts shared UI building blocks consumed by both `/web` and `/mobile`.
+- `packages/ui-core` hosts shared Tamagui components and configuration consumed by both `/web` and `/mobile`.
 - ensure exports remain platform-agnostic (Tamagui primitives, universal hooks, or pure logic).
-- if platform-specific variants are required, gate them behind explicit sub-entries (e.g., `packages/ui/web` vs `packages/ui/native`).
+- Tamagui config lives in `packages/ui-core/src/tamagui.config.ts`; theme tokens defined there.
+- base components: `Button`, `Input`, `Textarea`, `Card`, `Alert` in `packages/ui-core/src/components/`.
+- if platform-specific variants are required, gate them behind explicit sub-entries (e.g., `packages/ui-core/web` vs `packages/ui-core/native`).
 
 ## supabase
 - every DB change is done via: `supabase migration new <name>`
