@@ -432,34 +432,20 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
           >
             ↻ {isFetching ? 'Refreshing...' : 'Refresh'}
           </Button>
-          <select
+          <Select
             value={filterByRank || ''}
             onChange={(e) => setFilterByRank(e.target.value || null)}
-            style={{
-              padding: '8px 12px',
-              border: '1px solid #e2e8f0',
-              borderRadius: '6px',
-              fontSize: '13px',
-              background: '#ffffff',
-              fontFamily: 'inherit',
-            }}
+            size="sm"
           >
             <option value="">All Ranks</option>
             <option value="ranked">Ranked Only</option>
             <option value="unranked">Unranked Only</option>
           </select>
           {researchSources.length > 0 && (
-            <select
+            <Select
               value={filterByResearchSource || ''}
               onChange={(e) => setFilterByResearchSource(e.target.value || null)}
-              style={{
-                padding: '8px 12px',
-                border: '1px solid #e2e8f0',
-                borderRadius: '6px',
-                fontSize: '13px',
-                background: '#ffffff',
-                fontFamily: 'inherit',
-              }}
+              size="sm"
             >
               <option value="">All Research Sources</option>
               {researchSources.map((source) => (

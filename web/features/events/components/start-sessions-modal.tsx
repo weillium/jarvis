@@ -1,6 +1,6 @@
 'use client';
 
-import { YStack, XStack, Text, Button, Sheet } from '@jarvis/ui-core';
+import { YStack, XStack, Text, Button, Modal } from '@jarvis/ui-core';
 
 interface StartSessionsModalProps {
   isOpen: boolean;
@@ -44,58 +44,14 @@ export function StartSessionsModal({
   const hasSelection = selection.transcript || selection.cards || selection.facts;
 
   return (
-    <Sheet
-      modal
-      open={isOpen}
-      onOpenChange={(open) => {
-        if (!open && !isSubmitting) {
-          onClose();
-        }
-      }}
-      snapPoints={[70]}
-      dismissOnSnapToBottom
-      zIndex={1000}
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Start Agent Sessions"
+      maxWidth={600}
+      showCloseButton={!isSubmitting}
     >
-      <Sheet.Overlay
-        animation="lazy"
-        enterStyle={{ opacity: 0 }}
-        exitStyle={{ opacity: 0 }}
-        opacity={0.5}
-        backgroundColor="black"
-      />
-      <Sheet.Handle />
-      <Sheet.Frame
-        padding={0}
-        backgroundColor="$background"
-        borderRadius="$4"
-        maxWidth={600}
-        width="100%"
-      >
-        <XStack
-          padding="$6"
-          borderBottomWidth={1}
-          borderBottomColor="$borderColor"
-          justifyContent="space-between"
-          alignItems="center"
-        >
-          <Text fontSize="$7" fontWeight="600" color="$color" margin={0}>
-            Start Agent Sessions
-          </Text>
-          <Button
-            variant="ghost"
-            size="sm"
-            onPress={onClose}
-            disabled={isSubmitting}
-            circular
-            width={32}
-            height={32}
-            padding={0}
-          >
-            ×
-          </Button>
-        </XStack>
-
-        <YStack padding="$6" gap="$5">
+      <YStack gap="$5">
           <Text fontSize="$3" color="$gray11" margin={0}>
             Select which agent sessions you want to start:
           </Text>
@@ -169,9 +125,8 @@ export function StartSessionsModal({
               {isSubmitting ? 'Starting…' : 'Start Selected Agents'}
             </Button>
           </XStack>
-        </YStack>
-      </Sheet.Frame>
-    </Sheet>
+      </YStack>
+    </Modal>
   );
 }
 

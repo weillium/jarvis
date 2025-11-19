@@ -18,7 +18,7 @@ import { ChunksPlanTable } from './chunks-plan-table';
 import { AudienceProfileSection } from './audience-profile-section';
 import { AgentAlignmentSection } from './agent-alignment-section';
 import { CostBreakdownSection } from './cost-breakdown-section';
-import { YStack, XStack, Text, Card, Alert } from '@jarvis/ui-core';
+import { YStack, XStack, Text, Card, Alert, Badge } from '@jarvis/ui-core';
 
 interface BlueprintDisplayProps {
   eventId: string;
@@ -215,37 +215,35 @@ export function BlueprintDisplay({
           {/* Important Details */}
           {importantDetails && importantDetails.length > 0 && (
             <YStack marginBottom="$5">
-              <Text fontSize="$3" fontWeight="600" color="$color" marginBottom="$2" margin={0}>
+              <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$3" margin={0}>
                 Important Details
               </Text>
-              <ul style={{ margin: 0, paddingLeft: '20px', color: '#475569', fontSize: '14px' }}>
+              <YStack margin={0} paddingLeft="$5" gap="$1">
                 {importantDetails.map((detail, i) => (
-                  <li key={i} style={{ marginBottom: '4px' }}>
-                    <Text fontSize="$3" color="$gray9" margin={0}>{detail}</Text>
-                  </li>
+                  <XStack key={i} margin={0} gap="$2">
+                    <Text fontSize="$3" color="$gray9" margin={0} lineHeight={1.6}>
+                      •
+                    </Text>
+                    <Text fontSize="$3" color="$gray9" margin={0} lineHeight={1.6} flex={1}>
+                      {detail}
+                    </Text>
+                  </XStack>
                 ))}
-              </ul>
+              </YStack>
             </YStack>
           )}
 
           {/* Inferred Topics */}
           {inferredTopics && inferredTopics.length > 0 && (
             <YStack marginBottom="$5">
-              <Text fontSize="$3" fontWeight="600" color="$color" marginBottom="$2" margin={0}>
+              <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$3" margin={0}>
                 Inferred Topics
               </Text>
-              <XStack flexWrap="wrap" gap="$1.5">
+              <XStack flexWrap="wrap" gap="$2">
                 {inferredTopics.map((topic, i) => (
-                  <YStack
-                    key={i}
-                    padding="$1 $2.5"
-                    backgroundColor="$blue2"
-                    borderRadius="$2"
-                  >
-                    <Text fontSize="$2" color="$blue11" margin={0}>
-                      {topic}
-                    </Text>
-                  </YStack>
+                  <Badge key={i} variant="blue" size="md">
+                    {topic}
+                  </Badge>
                 ))}
               </XStack>
             </YStack>
@@ -254,21 +252,14 @@ export function BlueprintDisplay({
           {/* Key Terms */}
           {keyTerms && keyTerms.length > 0 && (
             <YStack marginBottom="$5">
-              <Text fontSize="$3" fontWeight="600" color="$color" marginBottom="$2" margin={0}>
+              <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$3" margin={0}>
                 Key Terms
               </Text>
-              <XStack flexWrap="wrap" gap="$1.5">
+              <XStack flexWrap="wrap" gap="$2">
                 {keyTerms.map((term, i) => (
-                  <YStack
-                    key={i}
-                    padding="$1 $2.5"
-                    backgroundColor="$yellow2"
-                    borderRadius="$2"
-                  >
-                    <Text fontSize="$2" color="$yellow11" margin={0}>
-                      {term}
-                    </Text>
-                  </YStack>
+                  <Badge key={i} variant="yellow" size="md">
+                    {term}
+                  </Badge>
                 ))}
               </XStack>
             </YStack>
@@ -381,37 +372,35 @@ export function BlueprintDisplay({
           {/* Important Details */}
           {importantDetails && importantDetails.length > 0 && (
             <YStack marginBottom="$5">
-              <Text fontSize="$3" fontWeight="600" color="$color" marginBottom="$2" margin={0}>
+              <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$3" margin={0}>
                 Important Details
               </Text>
-              <ul style={{ margin: 0, paddingLeft: '20px', color: '#475569', fontSize: '14px' }}>
+              <YStack margin={0} paddingLeft="$5" gap="$1">
                 {importantDetails.map((detail, i) => (
-                  <li key={i} style={{ marginBottom: '4px' }}>
-                    <Text fontSize="$3" color="$gray9" margin={0}>{detail}</Text>
-                  </li>
+                  <XStack key={i} margin={0} gap="$2">
+                    <Text fontSize="$3" color="$gray9" margin={0} lineHeight={1.6}>
+                      •
+                    </Text>
+                    <Text fontSize="$3" color="$gray9" margin={0} lineHeight={1.6} flex={1}>
+                      {detail}
+                    </Text>
+                  </XStack>
                 ))}
-              </ul>
+              </YStack>
             </YStack>
           )}
 
           {/* Inferred Topics */}
           {inferredTopics && inferredTopics.length > 0 && (
             <YStack marginBottom="$5">
-              <Text fontSize="$3" fontWeight="600" color="$color" marginBottom="$2" margin={0}>
+              <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$3" margin={0}>
                 Inferred Topics
               </Text>
-              <XStack flexWrap="wrap" gap="$1.5">
+              <XStack flexWrap="wrap" gap="$2">
                 {inferredTopics.map((topic, i) => (
-                  <YStack
-                    key={i}
-                    padding="$1 $2.5"
-                    backgroundColor="$blue2"
-                    borderRadius="$2"
-                  >
-                    <Text fontSize="$2" color="$blue11" margin={0}>
-                      {topic}
-                    </Text>
-                  </YStack>
+                  <Badge key={i} variant="blue" size="md">
+                    {topic}
+                  </Badge>
                 ))}
               </XStack>
             </YStack>
@@ -420,21 +409,14 @@ export function BlueprintDisplay({
           {/* Key Terms */}
           {keyTerms && keyTerms.length > 0 && (
             <YStack marginBottom="$5">
-              <Text fontSize="$3" fontWeight="600" color="$color" marginBottom="$2" margin={0}>
+              <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$3" margin={0}>
                 Key Terms
               </Text>
-              <XStack flexWrap="wrap" gap="$1.5">
+              <XStack flexWrap="wrap" gap="$2">
                 {keyTerms.map((term, i) => (
-                  <YStack
-                    key={i}
-                    padding="$1 $2.5"
-                    backgroundColor="$yellow2"
-                    borderRadius="$2"
-                  >
-                    <Text fontSize="$2" color="$yellow11" margin={0}>
-                      {term}
-                    </Text>
-                  </YStack>
+                  <Badge key={i} variant="yellow" size="md">
+                    {term}
+                  </Badge>
                 ))}
               </XStack>
             </YStack>

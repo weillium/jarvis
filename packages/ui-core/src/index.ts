@@ -8,6 +8,9 @@ export { Input } from './components/Input';
 export { Textarea } from './components/Textarea';
 export { Card } from './components/Card';
 export { Alert } from './components/Alert';
+export { Modal } from './components/Modal';
+export { Badge } from './components/Badge';
+export { Select } from './components/Select';
 
 // Re-export commonly used Tamagui components for convenience
 export {

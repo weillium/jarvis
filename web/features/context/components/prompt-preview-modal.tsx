@@ -1,6 +1,6 @@
 'use client';
 
-import { YStack, XStack, Text, Button, Card, Sheet } from '@jarvis/ui-core';
+import { YStack, XStack, Text, Button, Card, Modal } from '@jarvis/ui-core';
 
 interface PromptPreviewModalProps {
   isOpen: boolean;
@@ -31,38 +31,14 @@ export function PromptPreviewModal({
   }
 
   return (
-    <Sheet
-      modal
-      open={isOpen}
-      onOpenChange={(open) => {
-        if (!open && !isRegenerating) {
-          onClose();
-        }
-      }}
-      snapPoints={[90]}
-      dismissOnSnapToBottom
-      zIndex={1000}
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Confirm Prompt Before Generation"
+      maxWidth={900}
+      showCloseButton={!isRegenerating}
     >
-      <Sheet.Overlay
-        animation="lazy"
-        enterStyle={{ opacity: 0 }}
-        exitStyle={{ opacity: 0 }}
-        opacity={0.5}
-        backgroundColor="black"
-      />
-      <Sheet.Handle />
-      <Sheet.Frame
-        padding={0}
-        backgroundColor="$background"
-        borderRadius="$4"
-        maxWidth={900}
-        width="100%"
-        maxHeight="90vh"
-      >
-        <YStack padding="$6" gap="$5" flex={1} overflow="scroll">
-          <Text fontSize="$5" fontWeight="600" color="$color" margin={0}>
-            Confirm Prompt Before Generation
-          </Text>
+      <YStack gap="$5" flex={1}>
 
           {/* Event Info */}
           <Card variant="outlined" backgroundColor="$gray1" padding="$4">
@@ -134,9 +110,8 @@ export function PromptPreviewModal({
               {isRegenerating ? 'Starting...' : 'Confirm'}
             </Button>
           </XStack>
-        </YStack>
-      </Sheet.Frame>
-    </Sheet>
+      </YStack>
+    </Modal>
   );
 }
 

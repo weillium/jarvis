@@ -173,7 +173,7 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
             fontWeight="500"
             color="$color"
             fontFamily="$mono"
-            wordBreak="break-all"
+            style={{ wordBreak: 'break-all' }}
           >
             {agent.id.substring(0, 8)}...
           </Text>

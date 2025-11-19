@@ -6,7 +6,7 @@ import type { CardPayload } from '@/shared/types/card';
 import { useUpdateCardActiveStatusMutation } from '@/shared/hooks/use-mutations';
 import { useCardAuditLog } from '@/shared/hooks/use-card-audit-log';
 import { CardAuditHistory } from './card-audit-history';
-import { YStack, XStack, Text, Button, Alert, Sheet, Textarea } from '@jarvis/ui-core';
+import { YStack, XStack, Text, Button, Alert, Modal, Textarea } from '@jarvis/ui-core';
 
 interface CardModerationModalProps {
   eventId: string;
@@ -70,59 +70,17 @@ export function CardModerationModal({
   };
 
   return (
-    <Sheet
-      modal
-      open={isOpen}
-      onOpenChange={(open) => {
-        if (!open && !updateCardStatus.isPending) {
-          handleClose();
-        }
-      }}
-      snapPoints={[90]}
-      dismissOnSnapToBottom
-      zIndex={1200}
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      title="Moderate Card"
+      maxWidth={720}
+      showCloseButton={!updateCardStatus.isPending}
     >
-      <Sheet.Overlay
-        animation="lazy"
-        enterStyle={{ opacity: 0 }}
-        exitStyle={{ opacity: 0 }}
-        opacity={0.55}
-        backgroundColor="rgba(15, 23, 42, 0.55)"
-        style={{ backdropFilter: 'blur(6px)' }}
-      />
-      <Sheet.Handle />
-      <Sheet.Frame
-        padding={0}
-        backgroundColor="$background"
-        borderRadius="$5"
-        maxWidth={720}
-        width="96vw"
-        maxHeight="90vh"
-      >
-        <YStack padding="$8" gap="$6" overflowY="scroll">
-          <XStack justifyContent="space-between" alignItems="center">
-            <YStack>
-              <Text fontSize="$6" fontWeight="700" color="$color" margin={0}>
-                Moderate Card
-              </Text>
-              <Text fontSize="$3" color="$gray11" marginTop="$2" margin={0}>
-                Review the content and provide a reason if you choose to deactivate.
-              </Text>
-            </YStack>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              onPress={handleClose}
-              disabled={updateCardStatus.isPending}
-              circular
-              width={36}
-              height={36}
-              padding={0}
-            >
-              ×
-            </Button>
-          </XStack>
+      <YStack gap="$6">
+        <Text fontSize="$3" color="$gray11" margin={0}>
+          Review the content and provide a reason if you choose to deactivate.
+        </Text>
 
           <XStack justifyContent="center">
             <CardDisplay card={cardPayload} timestamp={timestamp} />
@@ -208,8 +166,7 @@ export function CardModerationModal({
             </YStack>
           )}
         </YStack>
-      </Sheet.Frame>
-    </Sheet>
+    </Modal>
   );
 }
 

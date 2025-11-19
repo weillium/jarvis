@@ -114,11 +114,17 @@ export function LiveTranscripts({ eventId }: LiveTranscriptsProps) {
       </Alert>
 
       {transcripts.length === 0 ? (
-        <YStack padding="$6" alignItems="center">
-          <Text fontSize="$3" color="$gray5">
+        <Card
+          variant="outlined"
+          padding="$16 $6"
+          borderRadius="$5"
+          borderStyle="dashed"
+          borderColor="$gray4"
+        >
+          <Text textAlign="center" color="$gray5" fontSize="$3" margin={0}>
             No transcripts in ring buffer yet. Transcripts will appear as they are processed during the event.
           </Text>
-        </YStack>
+        </Card>
       ) : (
         <YStack
           gap="$3"
@@ -134,6 +140,7 @@ export function LiveTranscripts({ eventId }: LiveTranscriptsProps) {
                 key={transcript.id}
                 variant="outlined"
                 padding="$4"
+                marginBottom="$3"
               >
                 <XStack
                   justifyContent="space-between"
@@ -156,7 +163,7 @@ export function LiveTranscripts({ eventId }: LiveTranscriptsProps) {
                       color="$gray9"
                       lineHeight={1.6}
                       whiteSpace="pre-wrap"
-                      wordBreak="break-word"
+                      style={{ wordBreak: 'break-word' }}
                       margin={0}
                     >
                       {transcript.text}

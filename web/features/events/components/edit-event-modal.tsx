@@ -17,7 +17,7 @@ import { supabase } from '@/shared/lib/supabase/client';
 import { withTimeout } from '@/shared/utils/promise-timeout';
 import { validateFiles, MAX_FILE_SIZE } from '@/shared/utils/file-validation';
 import { getFilenameFromPath, getFileExtension, getFileType } from '@/shared/utils/file-utils';
-import { YStack, XStack, Text, Button, Input, Alert, Sheet } from '@jarvis/ui-core';
+import { YStack, XStack, Text, Button, Input, Alert, Modal, Select } from '@jarvis/ui-core';
 
 // Extend dayjs with plugins
 dayjs.extend(utc);
@@ -345,60 +345,14 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
   };
 
   return (
-    <Sheet
-      modal
-      open={isOpen}
-      onOpenChange={(open) => {
-        if (!open && !loading) {
-          handleClose();
-        }
-      }}
-      snapPoints={[95]}
-      dismissOnSnapToBottom
-      zIndex={1000}
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      title="Edit Event"
+      maxWidth={1200}
     >
-      <Sheet.Overlay
-        animation="lazy"
-        enterStyle={{ opacity: 0 }}
-        exitStyle={{ opacity: 0 }}
-        opacity={0.5}
-        backgroundColor="black"
-      />
-      <Sheet.Handle />
-      <Sheet.Frame
-        padding={0}
-        backgroundColor="$background"
-        borderRadius="$4"
-        maxWidth={1200}
-        width="100%"
-        maxHeight="95vh"
-      >
-        <XStack
-          padding="$6"
-          borderBottomWidth={1}
-          borderBottomColor="$borderColor"
-          justifyContent="space-between"
-          alignItems="center"
-        >
-          <Text fontSize="$7" fontWeight="600" color="$color" margin={0}>
-            Edit Event
-          </Text>
-          <Button
-            variant="ghost"
-            size="sm"
-            onPress={handleClose}
-            disabled={loading}
-            circular
-            width={32}
-            height={32}
-            padding={0}
-          >
-            ×
-          </Button>
-        </XStack>
-
-        <form onSubmit={handleSubmit}>
-          <YStack padding="$8" gap="$6">
+      <form onSubmit={handleSubmit}>
+        <YStack gap="$6">
             {error && (
               <Alert variant="error">
                 {error}
@@ -447,22 +401,13 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
                 >
                   Timezone
                 </Text>
-                <select
+                <Select
                   id="edit-timezone"
                   value={timezone}
                   onChange={(e) => setTimezone(e.target.value)}
                   disabled={loading}
-                  style={{
-                    width: '100%',
-                    padding: '12px 16px',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '6px',
-                    fontSize: '15px',
-                    backgroundColor: loading ? '#f8fafc' : '#ffffff',
-                    boxSizing: 'border-box',
-                    cursor: loading ? 'not-allowed' : 'pointer',
-                    fontFamily: 'inherit',
-                  }}
+                  size="md"
+                  style={{ width: '100%' }}
                 >
                   {timezones.map((tz) => (
                     <option key={tz} value={tz}>
@@ -595,8 +540,7 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
               </XStack>
             </YStack>
           </form>
-      </Sheet.Frame>
-    </Sheet>
+    </Modal>
   );
 }
 

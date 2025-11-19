@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useContextVersionsQuery } from '@/shared/hooks/use-context-versions-query';
-import { YStack, XStack, Text, Card, Button, Input, Alert } from '@jarvis/ui-core';
+import { YStack, XStack, Text, Card, Button, Input, Alert, Select } from '@jarvis/ui-core';
 
 interface VersionHistoryProps {
   eventId: string;
@@ -260,17 +260,10 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
           >
             ↻ {refreshing ? 'Refreshing...' : 'Refresh'}
           </Button>
-          <select
+          <Select
             value={filterByType || ''}
             onChange={(e) => setFilterByType(e.target.value || null)}
-            style={{
-              padding: '8px 12px',
-              border: '1px solid #e2e8f0',
-              borderRadius: '6px',
-              fontSize: '13px',
-              background: '#ffffff',
-              fontFamily: 'inherit',
-            }}
+            size="sm"
           >
             <option value="">All Types</option>
             {uniqueTypes.map((type) => (
@@ -306,8 +299,9 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
               <Card
                 key={cycle.id}
                 variant="outlined"
-                padding="$3 $4"
-                backgroundColor="$gray1"
+                padding="$4"
+                backgroundColor="$background"
+                marginBottom="$3"
               >
                 <XStack
                   justifyContent="space-between"
@@ -556,17 +550,10 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
           >
             ↻ {refreshing ? 'Refreshing...' : 'Refresh'}
           </Button>
-          <select
+          <Select
             value={filterByType || ''}
             onChange={(e) => setFilterByType(e.target.value || null)}
-            style={{
-              padding: '8px 12px',
-              border: '1px solid #e2e8f0',
-              borderRadius: '6px',
-              fontSize: '13px',
-              background: '#ffffff',
-              fontFamily: 'inherit',
-            }}
+            size="sm"
           >
             <option value="">All Types</option>
             {uniqueTypes.map((type) => (
@@ -602,8 +589,9 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
               <Card
                 key={cycle.id}
                 variant="outlined"
-                padding="$3 $4"
-                backgroundColor="$gray1"
+                padding="$4"
+                backgroundColor="$background"
+                marginBottom="$3"
               >
                 <XStack
                   justifyContent="space-between"

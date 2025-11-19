@@ -11,7 +11,7 @@ import { useCreateEventMutation } from '@/shared/hooks/use-mutations';
 import { withTimeout } from '@/shared/utils/promise-timeout';
 import { validateFiles, MAX_FILE_SIZE } from '@/shared/utils/file-validation';
 import { getFileExtension, getFileType } from '@/shared/utils/file-utils';
-import { YStack, XStack, Text, Button, Input, Alert, Sheet } from '@jarvis/ui-core';
+import { YStack, XStack, Text, Button, Input, Alert, Modal, Select } from '@jarvis/ui-core';
 
 // Extend dayjs with plugins
 dayjs.extend(utc);
@@ -297,60 +297,14 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
   const isLoading = createEventMutation.isPending || Object.keys(uploadProgress).length > 0;
 
   return (
-    <Sheet
-      modal
-      open={isOpen}
-      onOpenChange={(open) => {
-        if (!open && !isLoading) {
-          handleClose();
-        }
-      }}
-      snapPoints={[95]}
-      dismissOnSnapToBottom
-      zIndex={1000}
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      title="Create New Event"
+      maxWidth={1200}
     >
-      <Sheet.Overlay
-        animation="lazy"
-        enterStyle={{ opacity: 0 }}
-        exitStyle={{ opacity: 0 }}
-        opacity={0.5}
-        backgroundColor="black"
-      />
-      <Sheet.Handle />
-      <Sheet.Frame
-        padding={0}
-        backgroundColor="$background"
-        borderRadius="$4"
-        maxWidth={1200}
-        width="100%"
-        maxHeight="95vh"
-      >
-        <XStack
-          padding="$6"
-          borderBottomWidth={1}
-          borderBottomColor="$borderColor"
-          justifyContent="space-between"
-          alignItems="center"
-        >
-          <Text fontSize="$7" fontWeight="600" color="$color" margin={0}>
-            Create New Event
-          </Text>
-          <Button
-            variant="ghost"
-            size="sm"
-            onPress={handleClose}
-            disabled={isLoading}
-            circular
-            width={32}
-            height={32}
-            padding={0}
-          >
-            ×
-          </Button>
-        </XStack>
-
-        <form onSubmit={handleSubmit}>
-          <YStack padding="$8" gap="$6">
+      <form onSubmit={handleSubmit}>
+        <YStack gap="$6">
             {error && (
               <Alert variant="error" style={{ whiteSpace: 'pre-line' }}>
                 {error}
@@ -399,29 +353,13 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
                 >
                   Timezone
                 </Text>
-                <select
+                <Select
                   id="timezone"
                   value={timezone}
                   onChange={(e) => setTimezone(e.target.value)}
                   disabled={isLoading}
-                  style={{
-                    width: '100%',
-                    padding: '12px 16px',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '6px',
-                    fontSize: '15px',
-                    backgroundColor: isLoading ? '#f8fafc' : '#ffffff',
-                    boxSizing: 'border-box',
-                    cursor: isLoading ? 'not-allowed' : 'pointer',
-                    appearance: 'none',
-                    backgroundImage: isLoading
-                      ? 'none'
-                      : `url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L6 6L11 1' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
-                    backgroundRepeat: 'no-repeat',
-                    backgroundPosition: 'right 12px center',
-                    paddingRight: '40px',
-                    fontFamily: 'inherit',
-                  }}
+                  size="md"
+                  style={{ width: '100%' }}
                 >
                   {timezones.map((tz) => (
                     <option key={tz} value={tz}>
@@ -534,7 +472,6 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
               </XStack>
             </YStack>
           </form>
-      </Sheet.Frame>
-    </Sheet>
+    </Modal>
   );
 }

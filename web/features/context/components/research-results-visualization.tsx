@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useResearchQuery } from '@/shared/hooks/use-research-query';
 import type { ResearchResult } from '@/shared/hooks/use-research-query';
-import { YStack, XStack, Text, Button, Input, Card, Alert } from '@jarvis/ui-core';
+import { YStack, XStack, Text, Button, Input, Card, Alert, Select } from '@jarvis/ui-core';
 
 interface ResearchResultsVisualizationProps {
   eventId: string;
@@ -240,17 +240,10 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
             ↻ {isFetching ? 'Refreshing...' : 'Refresh'}
           </Button>
           {apis.length > 0 && (
-            <select
+            <Select
               value={filterByApi || ''}
               onChange={(e) => setFilterByApi(e.target.value || null)}
-              style={{
-                padding: '8px 12px',
-                border: '1px solid #e2e8f0',
-                borderRadius: '6px',
-                fontSize: '13px',
-                background: '#ffffff',
-                fontFamily: 'inherit',
-              }}
+              size="sm"
             >
               <option value="">All APIs</option>
               {apis.map((api) => (
@@ -301,7 +294,7 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
                     key={result.id}
                     variant="outlined"
                     padding="$4"
-                    marginBottom="$2"
+                    marginBottom="$3"
                     backgroundColor="$background"
                   >
                     {/* Result Header */}
@@ -332,14 +325,14 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
                             {getApiLabel(result.api)}
                           </Text>
                         </XStack>
-                        <Text fontSize="$3" fontWeight="600" color="$color" marginBottom="$1" margin={0}>
-                          Query: {result.query}
+                        <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$2" margin={0} textAlign="left">
+                          {result.query}
                         </Text>
                         {!isExpandedResult && (
                           <Text
-                            fontSize="$2"
-                            color="$gray11"
-                            lineHeight={1.5}
+                            fontSize="$3"
+                            color="$gray9"
+                            lineHeight={1.6}
                             numberOfLines={2}
                             margin={0}
                           >
@@ -369,7 +362,7 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
                         borderTopColor="$borderColor"
                       >
                         <Text
-                          fontSize="$2"
+                          fontSize="$3"
                           color="$gray9"
                           lineHeight={1.6}
                           marginBottom="$3"

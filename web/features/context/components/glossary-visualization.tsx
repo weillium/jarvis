@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useGlossaryQuery } from '@/shared/hooks/use-glossary-query';
-import { YStack, XStack, Text, Button, Input, Card, Alert } from '@jarvis/ui-core';
+import { YStack, XStack, Text, Button, Input, Card, Alert, Select } from '@jarvis/ui-core';
 
 interface GlossaryVisualizationProps {
   eventId: string;
@@ -120,17 +120,10 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
           ↻ {isFetching ? 'Refreshing...' : 'Refresh'}
         </Button>
         {categories.length > 0 && (
-          <select
+          <Select
             value={selectedCategory || ''}
             onChange={(e) => setSelectedCategory(e.target.value || null)}
-            style={{
-              padding: '8px 12px',
-              border: '1px solid #e2e8f0',
-              borderRadius: '6px',
-              fontSize: '14px',
-              background: '#ffffff',
-              fontFamily: 'inherit',
-            }}
+            size="sm"
           >
             <option value="">All Categories</option>
             {categories.map((cat) => (
@@ -138,7 +131,7 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
                 {cat}
               </option>
             ))}
-          </select>
+          </Select>
         )}
       </XStack>
 
@@ -152,17 +145,19 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
               key={term.id}
               variant="outlined"
               overflow="hidden"
+              padding={0}
+              marginBottom="$3"
             >
               {/* Term Header */}
               <Button
                 variant="ghost"
                 width="100%"
-                padding="$3 $4"
+                padding="$4"
                 backgroundColor={isExpanded ? '$gray1' : '$background'}
                 justifyContent="space-between"
                 onPress={() => toggleTerm(term.id)}
               >
-                <YStack flex={1} gap="$1">
+                <YStack flex={1} gap="$2">
                   <XStack alignItems="center" gap="$2" marginBottom="$1">
                     <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
                       {term.term}
@@ -184,7 +179,7 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
                       </YStack>
                     )}
                   </XStack>
-                  <Text fontSize="$3" color="$gray11" lineHeight={1.4} margin={0}>
+                  <Text fontSize="$3" color="$gray9" lineHeight={1.6} margin={0}>
                     {term.definition}
                   </Text>
                 </YStack>
@@ -209,6 +204,7 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
                   backgroundColor="$gray1"
                   borderTopWidth={1}
                   borderTopColor="$borderColor"
+                  gap="$3"
                 >
                   {/* Usage Examples */}
                   {term.usage_examples && term.usage_examples.length > 0 && (
@@ -223,11 +219,16 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
                       >
                         Usage Examples
                       </Text>
-                      <YStack as="ul" margin={0} paddingLeft="$5" color="$gray9" fontSize="$3" gap="$1">
+                      <YStack margin={0} paddingLeft="$5" gap="$1">
                         {term.usage_examples.map((example, i) => (
-                          <Text as="li" key={i} fontStyle="italic" margin={0}>
-                            "{example}"
-                          </Text>
+                          <XStack key={i} margin={0} gap="$2">
+                            <Text fontSize="$3" color="$gray9" margin={0} lineHeight={1.6}>
+                              •
+                            </Text>
+                            <Text fontSize="$3" color="$gray9" fontStyle="italic" margin={0} lineHeight={1.6} flex={1}>
+                              "{example}"
+                            </Text>
+                          </XStack>
                         ))}
                       </YStack>
                     </YStack>

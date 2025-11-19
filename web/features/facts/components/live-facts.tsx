@@ -193,13 +193,19 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
       </Alert>
 
       {factsArray.length === 0 ? (
-        <YStack padding="$6" alignItems="center">
-          <Text fontSize="$3" color="$gray5">
+        <Card
+          variant="outlined"
+          padding="$16 $6"
+          borderRadius="$5"
+          borderStyle="dashed"
+          borderColor="$gray4"
+        >
+          <Text textAlign="center" color="$gray5" fontSize="$3" margin={0}>
             {initialLoadError
               ? `Failed to load facts: ${initialLoadError}`
               : 'No facts tracked yet. Facts will appear as they are extracted during the event.'}
           </Text>
-        </YStack>
+        </Card>
       ) : (
         <YStack gap="$3">
           {factsArray.map((fact) => (
@@ -207,6 +213,7 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
                 key={fact.key}
                 variant="outlined"
                 padding="$4"
+                marginBottom="$3"
               >
                 <XStack
                   justifyContent="space-between"
@@ -228,7 +235,7 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
                       color="$gray9"
                       lineHeight={1.5}
                       whiteSpace="pre-wrap"
-                      wordBreak="break-word"
+                      style={{ wordBreak: 'break-word' }}
                       fontFamily={typeof fact.value !== 'string' ? '$mono' : undefined}
                       margin={0}
                     >

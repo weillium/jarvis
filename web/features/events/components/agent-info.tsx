@@ -241,7 +241,7 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
           >
             Agent ID
           </Text>
-          <Text fontSize="$3" fontWeight="500" color="$color" fontFamily="$mono" wordBreak="break-all">
+          <Text fontSize="$3" fontWeight="500" color="$color" fontFamily="$mono" style={{ wordBreak: 'break-all' }}>
             {agent.id.substring(0, 8)}...
           </Text>
         </YStack>

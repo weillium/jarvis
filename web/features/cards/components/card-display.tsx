@@ -275,7 +275,7 @@ export function CardDisplay({
               lineHeight={1.6}
               color="$gray8"
               whiteSpace="pre-wrap"
-              wordBreak="break-word"
+              style={{ wordBreak: 'break-word' }}
               margin={0}
             >
               {transcript.text}

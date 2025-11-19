@@ -499,7 +499,7 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
                     color="$color"
                     fontFamily="$mono"
                     whiteSpace="pre-wrap"
-                    wordBreak="break-word"
+                    style={{ wordBreak: 'break-word' }}
                     margin={0}
                   >
                     {log.message}
