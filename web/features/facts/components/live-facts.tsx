@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSSEStream } from '@/shared/hooks/use-sse-stream';
 import type { SSEMessage, SSEFactMessage } from '@/shared/types/card';
+import { YStack, XStack, Text, Button, Card, Alert } from '@jarvis/ui-core';
 
 interface LiveFactsProps {
   eventId: string;
@@ -146,147 +147,138 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
     return a.key.localeCompare(b.key);
   });
 
+  const connectionVariant = connectionStatus === 'connected' ? 'success' : connectionStatus === 'connecting' ? 'warning' : 'error';
+  const connectionColor = connectionStatus === 'connected' ? '$green11' : connectionStatus === 'connecting' ? '$yellow11' : '$red11';
+  const connectionColorHex = connectionStatus === 'connected' ? '#22c55e' : connectionStatus === 'connecting' ? '#eab308' : '#ef4444';
+
   return (
-    <div>
+    <YStack>
       {/* Connection Status */}
-      <div
-        style={{
-          marginBottom: '20px',
-          padding: '12px 16px',
-          background: connectionStatus === 'connected' ? '#f0fdf4' : connectionStatus === 'connecting' ? '#fffbeb' : '#fef2f2',
-          border: `1px solid ${connectionStatus === 'connected' ? '#86efac' : connectionStatus === 'connecting' ? '#fde047' : '#fca5a5'}`,
-          borderRadius: '8px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div
-            style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              background: connectionStatus === 'connected' ? '#22c55e' : connectionStatus === 'connecting' ? '#eab308' : '#ef4444',
-            }}
-          />
-          <span
-            style={{
-              fontSize: '14px',
-              fontWeight: '500',
-              color: connectionStatus === 'connected' ? '#166534' : connectionStatus === 'connecting' ? '#854d0e' : '#991b1b',
-            }}
-          >
-            {connectionStatus === 'connected'
-              ? 'Connected - Receiving live updates'
-              : connectionStatus === 'connecting'
-              ? 'Connecting...'
-              : 'Disconnected'}
-          </span>
-        </div>
-        {connectionStatus === 'disconnected' && (
-          <button
-            onClick={reconnect}
-            style={{
-              padding: '6px 12px',
-              background: '#1e293b',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '12px',
-              fontWeight: '500',
-              cursor: 'pointer',
-            }}
-          >
-            Reconnect
-          </button>
-        )}
-      </div>
+      <Alert variant={connectionVariant} marginBottom="$5">
+        <XStack
+          alignItems="center"
+          justifyContent="space-between"
+          width="100%"
+        >
+          <XStack alignItems="center" gap="$2">
+            <YStack
+              width={8}
+              height={8}
+              borderRadius="$10"
+              backgroundColor={connectionColorHex}
+            />
+            <Text
+              fontSize="$3"
+              fontWeight="500"
+              color={connectionColor}
+              margin={0}
+            >
+              {connectionStatus === 'connected'
+                ? 'Connected - Receiving live updates'
+                : connectionStatus === 'connecting'
+                ? 'Connecting...'
+                : 'Disconnected'}
+            </Text>
+          </XStack>
+          {connectionStatus === 'disconnected' && (
+            <Button
+              variant="primary"
+              size="sm"
+              onPress={reconnect}
+            >
+              Reconnect
+            </Button>
+          )}
+        </XStack>
+      </Alert>
 
       {factsArray.length === 0 ? (
-        <div
-          style={{
-            padding: '24px',
-            textAlign: 'center',
-            color: '#94a3b8',
-            fontSize: '14px',
-          }}
-        >
-          {initialLoadError
-            ? `Failed to load facts: ${initialLoadError}`
-            : 'No facts tracked yet. Facts will appear as they are extracted during the event.'}
-        </div>
+        <YStack padding="$6" alignItems="center">
+          <Text fontSize="$3" color="$gray5">
+            {initialLoadError
+              ? `Failed to load facts: ${initialLoadError}`
+              : 'No facts tracked yet. Facts will appear as they are extracted during the event.'}
+          </Text>
+        </YStack>
       ) : (
-        <div
-          style={{
-            display: 'grid',
-            gap: '12px',
-          }}
-        >
+        <YStack gap="$3">
           {factsArray.map((fact) => (
-            <div
-              key={fact.key}
-              style={{
-                background: '#ffffff',
-                border: '1px solid #e2e8f0',
-                borderRadius: '8px',
-                padding: '16px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
-              }}
-            >
-              <div style={{ flex: 1 }}>
-                <div
-                  style={{
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    color: '#0f172a',
-                    marginBottom: '4px',
-                    textTransform: 'capitalize',
-                  }}
-                >
-                  {fact.key.replace(/_/g, ' ')}
-                </div>
-                <div
-                  style={{
-                    fontSize: '15px',
-                    color: '#334155',
-                    lineHeight: '1.5',
-                  }}
-                >
-                  {typeof fact.value === 'string'
-                    ? fact.value
-                    : JSON.stringify(fact.value, null, 2)}
-                </div>
-                <div
-                  style={{
-                    marginTop: '8px',
-                    fontSize: '12px',
-                    color: '#94a3b8',
-                  }}
-                >
-                  Updated {new Date(fact.updated_at).toLocaleTimeString()}
-                </div>
-              </div>
-              <div
-                style={{
-                  marginLeft: '16px',
-                  padding: '4px 8px',
-                  background: fact.confidence >= 0.7 ? '#f0fdf4' : fact.confidence >= 0.5 ? '#fffbeb' : '#fef2f2',
-                  color: fact.confidence >= 0.7 ? '#166534' : fact.confidence >= 0.5 ? '#854d0e' : '#991b1b',
-                  borderRadius: '6px',
-                  fontSize: '12px',
-                  fontWeight: '500',
-                }}
+              <Card
+                key={fact.key}
+                variant="outlined"
+                padding="$4"
               >
-                {(fact.confidence * 100).toFixed(0)}% confident
-              </div>
-            </div>
-          ))}
-        </div>
+                <XStack
+                  justifyContent="space-between"
+                  alignItems="flex-start"
+                  gap="$4"
+                >
+                  <YStack flex={1} gap="$2">
+                    <Text
+                      fontSize="$3"
+                      fontWeight="600"
+                      color="$color"
+                      textTransform="capitalize"
+                      margin={0}
+                    >
+                      {fact.key.replace(/_/g, ' ')}
+                    </Text>
+                    <Text
+                      fontSize="$3"
+                      color="$gray9"
+                      lineHeight={1.5}
+                      whiteSpace="pre-wrap"
+                      wordBreak="break-word"
+                      fontFamily={typeof fact.value !== 'string' ? '$mono' : undefined}
+                      margin={0}
+                    >
+                      {typeof fact.value === 'string'
+                        ? fact.value
+                        : JSON.stringify(fact.value, null, 2)}
+                    </Text>
+                    <Text
+                      fontSize="$2"
+                      color="$gray5"
+                      margin={0}
+                    >
+                      Updated {new Date(fact.updated_at).toLocaleTimeString()}
+                    </Text>
+                  </YStack>
+                  <YStack
+                    padding="$1 $2"
+                    backgroundColor={
+                      fact.confidence >= 0.7
+                        ? '$green2'
+                        : fact.confidence >= 0.5
+                        ? '$yellow2'
+                        : '$red2'
+                    }
+                    borderRadius="$2"
+                    alignItems="center"
+                    justifyContent="center"
+                    minWidth={100}
+                  >
+                    <Text
+                      fontSize="$2"
+                      fontWeight="500"
+                      color={
+                        fact.confidence >= 0.7
+                          ? '$green11'
+                          : fact.confidence >= 0.5
+                          ? '$yellow11'
+                          : '$red11'
+                      }
+                      margin={0}
+                    >
+                      {(fact.confidence * 100).toFixed(0)}% confident
+                    </Text>
+                  </YStack>
+                </XStack>
+              </Card>
+            ))}
+        </YStack>
       )}
-    </div>
+    </YStack>
   );
 }
 

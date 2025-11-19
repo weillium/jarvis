@@ -5,6 +5,7 @@ import { useTranscriptsQuery } from '@/shared/hooks/use-transcripts-query';
 import { useSSEStream } from '@/shared/hooks/use-sse-stream';
 import type { SSEMessage } from '@/shared/types/card';
 import { formatDistanceToNow } from 'date-fns';
+import { YStack, XStack, Text, Button, Card, Alert } from '@jarvis/ui-core';
 
 interface LiveTranscriptsProps {
   eventId: string;
@@ -47,199 +48,149 @@ export function LiveTranscripts({ eventId }: LiveTranscriptsProps) {
 
   if (isLoading) {
     return (
-      <div
-        style={{
-          padding: '24px',
-          textAlign: 'center',
-          color: '#94a3b8',
-          fontSize: '14px',
-        }}
-      >
-        Loading transcripts...
-      </div>
+      <YStack padding="$6" alignItems="center">
+        <Text fontSize="$3" color="$gray5">
+          Loading transcripts...
+        </Text>
+      </YStack>
     );
   }
 
   if (error) {
     return (
-      <div
-        style={{
-          padding: '24px',
-          textAlign: 'center',
-          color: '#dc2626',
-          fontSize: '14px',
-        }}
-      >
-        Error loading transcripts: {error instanceof Error ? error.message : 'Unknown error'}
-      </div>
+      <Alert variant="error">
+        <Text fontSize="$3" margin={0}>
+          Error loading transcripts: {error instanceof Error ? error.message : 'Unknown error'}
+        </Text>
+      </Alert>
     );
   }
 
   const transcripts = data?.transcripts || [];
 
+  const connectionVariant = connectionStatus === 'connected' ? 'success' : connectionStatus === 'connecting' ? 'warning' : 'error';
+  const connectionColor = connectionStatus === 'connected' ? '$green11' : connectionStatus === 'connecting' ? '$yellow11' : '$red11';
+  const connectionColorHex = connectionStatus === 'connected' ? '#22c55e' : connectionStatus === 'connecting' ? '#eab308' : '#ef4444';
+
   return (
-    <div>
+    <YStack>
       {/* Connection Status */}
-      <div
-        style={{
-          marginBottom: '20px',
-          padding: '12px 16px',
-          background: connectionStatus === 'connected' ? '#f0fdf4' : connectionStatus === 'connecting' ? '#fffbeb' : '#fef2f2',
-          border: `1px solid ${connectionStatus === 'connected' ? '#86efac' : connectionStatus === 'connecting' ? '#fde047' : '#fca5a5'}`,
-          borderRadius: '8px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div
-            style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              background: connectionStatus === 'connected' ? '#22c55e' : connectionStatus === 'connecting' ? '#eab308' : '#ef4444',
-            }}
-          />
-          <span
-            style={{
-              fontSize: '14px',
-              fontWeight: '500',
-              color: connectionStatus === 'connected' ? '#166534' : connectionStatus === 'connecting' ? '#854d0e' : '#991b1b',
-            }}
-          >
-            {connectionStatus === 'connected'
-              ? 'Connected - Receiving live updates'
-              : connectionStatus === 'connecting'
-              ? 'Connecting...'
-              : 'Disconnected'}
-          </span>
-        </div>
-        {connectionStatus === 'disconnected' && (
-          <button
-            onClick={reconnect}
-            style={{
-              padding: '6px 12px',
-              background: '#1e293b',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '12px',
-              fontWeight: '500',
-              cursor: 'pointer',
-            }}
-          >
-            Reconnect
-          </button>
-        )}
-      </div>
+      <Alert variant={connectionVariant} marginBottom="$5">
+        <XStack
+          alignItems="center"
+          justifyContent="space-between"
+          width="100%"
+        >
+          <XStack alignItems="center" gap="$2">
+            <YStack
+              width={8}
+              height={8}
+              borderRadius="$10"
+              backgroundColor={connectionColorHex}
+            />
+            <Text
+              fontSize="$3"
+              fontWeight="500"
+              color={connectionColor}
+              margin={0}
+            >
+              {connectionStatus === 'connected'
+                ? 'Connected - Receiving live updates'
+                : connectionStatus === 'connecting'
+                ? 'Connecting...'
+                : 'Disconnected'}
+            </Text>
+          </XStack>
+          {connectionStatus === 'disconnected' && (
+            <Button
+              variant="primary"
+              size="sm"
+              onPress={reconnect}
+            >
+              Reconnect
+            </Button>
+          )}
+        </XStack>
+      </Alert>
 
       {transcripts.length === 0 ? (
-        <div
-          style={{
-            padding: '24px',
-            textAlign: 'center',
-            color: '#94a3b8',
-            fontSize: '14px',
-          }}
-        >
-          No transcripts in ring buffer yet. Transcripts will appear as they are processed during the event.
-        </div>
+        <YStack padding="$6" alignItems="center">
+          <Text fontSize="$3" color="$gray5">
+            No transcripts in ring buffer yet. Transcripts will appear as they are processed during the event.
+          </Text>
+        </YStack>
       ) : (
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px',
-            maxHeight: 'calc(100vh - 300px)',
-            overflowY: 'auto',
-          }}
+        <YStack
+          gap="$3"
+          maxHeight="calc(100vh - 300px)"
+          overflowY="auto"
         >
           {transcripts.map((transcript) => {
             const timestamp = new Date(transcript.at_ms);
             const timeAgo = formatDistanceToNow(timestamp, { addSuffix: true });
 
             return (
-              <div
+              <Card
                 key={transcript.id}
-                style={{
-                  background: '#ffffff',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '8px',
-                  padding: '16px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8px',
-                }}
+                variant="outlined"
+                padding="$4"
               >
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start',
-                    gap: '12px',
-                  }}
+                <XStack
+                  justifyContent="space-between"
+                  alignItems="flex-start"
+                  gap="$3"
                 >
-                  <div style={{ flex: 1 }}>
+                  <YStack flex={1} gap="$2">
                     {transcript.speaker && (
-                      <div
-                        style={{
-                          fontSize: '13px',
-                          fontWeight: '600',
-                          color: '#475569',
-                          marginBottom: '4px',
-                        }}
+                      <Text
+                        fontSize="$2"
+                        fontWeight="600"
+                        color="$gray9"
+                        margin={0}
                       >
                         {transcript.speaker}
-                      </div>
+                      </Text>
                     )}
-                    <div
-                      style={{
-                        fontSize: '15px',
-                        color: '#334155',
-                        lineHeight: '1.6',
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word',
-                      }}
+                    <Text
+                      fontSize="$3"
+                      color="$gray9"
+                      lineHeight={1.6}
+                      whiteSpace="pre-wrap"
+                      wordBreak="break-word"
+                      margin={0}
                     >
                       {transcript.text}
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'flex-end',
-                      gap: '4px',
-                      minWidth: '120px',
-                    }}
+                    </Text>
+                  </YStack>
+                  <YStack
+                    alignItems="flex-end"
+                    gap="$1"
+                    minWidth={120}
                   >
-                    <div
-                      style={{
-                        fontSize: '12px',
-                        color: '#94a3b8',
-                        whiteSpace: 'nowrap',
-                      }}
+                    <Text
+                      fontSize="$2"
+                      color="$gray5"
+                      whiteSpace="nowrap"
+                      margin={0}
                     >
                       {timeAgo}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: '11px',
-                        color: '#cbd5e1',
-                        fontFamily: 'monospace',
-                      }}
+                    </Text>
+                    <Text
+                      fontSize="$1"
+                      color="$gray4"
+                      fontFamily="$mono"
+                      margin={0}
                     >
                       Seq: {transcript.seq}
-                    </div>
-                  </div>
-                </div>
-              </div>
+                    </Text>
+                  </YStack>
+                </XStack>
+              </Card>
             );
           })}
-        </div>
+        </YStack>
       )}
-    </div>
+    </YStack>
   );
 }
 
