@@ -6,6 +6,7 @@ import type { CardPayload } from '@/shared/types/card';
 import { useUpdateCardActiveStatusMutation } from '@/shared/hooks/use-mutations';
 import { useCardAuditLog } from '@/shared/hooks/use-card-audit-log';
 import { CardAuditHistory } from './card-audit-history';
+import { YStack, XStack, Text, Button, Alert, Sheet, Textarea } from '@jarvis/ui-core';
 
 interface CardModerationModalProps {
   eventId: string;
@@ -69,234 +70,146 @@ export function CardModerationModal({
   };
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        backgroundColor: 'rgba(15, 23, 42, 0.55)',
-        backdropFilter: 'blur(6px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1200,
-        padding: '24px',
+    <Sheet
+      modal
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open && !updateCardStatus.isPending) {
+          handleClose();
+        }
       }}
-      onClick={handleClose}
+      snapPoints={[90]}
+      dismissOnSnapToBottom
+      zIndex={1200}
     >
-      <div
-        onClick={(event) => event.stopPropagation()}
-        style={{
-          background: '#ffffff',
-          borderRadius: '20px',
-          width: 'min(720px, 96vw)',
-          maxHeight: '90vh',
-          overflowY: 'auto',
-          boxShadow: '0 40px 80px rgba(15, 23, 42, 0.25)',
-          padding: '32px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '24px',
-        }}
+      <Sheet.Overlay
+        animation="lazy"
+        enterStyle={{ opacity: 0 }}
+        exitStyle={{ opacity: 0 }}
+        opacity={0.55}
+        backgroundColor="rgba(15, 23, 42, 0.55)"
+        style={{ backdropFilter: 'blur(6px)' }}
+      />
+      <Sheet.Handle />
+      <Sheet.Frame
+        padding={0}
+        backgroundColor="$background"
+        borderRadius="$5"
+        maxWidth={720}
+        width="96vw"
+        maxHeight="90vh"
       >
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <div>
-            <h2
-              style={{
-                margin: 0,
-                fontSize: '24px',
-                fontWeight: 700,
-                color: '#0f172a',
-              }}
-            >
-              Moderate Card
-            </h2>
-            <p
-              style={{
-                margin: '8px 0 0 0',
-                fontSize: '14px',
-                color: '#64748b',
-              }}
-            >
-              Review the content and provide a reason if you choose to deactivate.
-            </p>
-          </div>
+        <YStack padding="$8" gap="$6" overflowY="scroll">
+          <XStack justifyContent="space-between" alignItems="center">
+            <YStack>
+              <Text fontSize="$6" fontWeight="700" color="$color" margin={0}>
+                Moderate Card
+              </Text>
+              <Text fontSize="$3" color="$gray11" marginTop="$2" margin={0}>
+                Review the content and provide a reason if you choose to deactivate.
+              </Text>
+            </YStack>
 
-          <button
-            onClick={handleClose}
-            disabled={updateCardStatus.isPending}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#94a3b8',
-              fontSize: '28px',
-              cursor: updateCardStatus.isPending ? 'not-allowed' : 'pointer',
-              lineHeight: 1,
-              width: '36px',
-              height: '36px',
-              borderRadius: '999px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'background 0.2s ease',
-            }}
-            onMouseEnter={(event) => {
-              if (!updateCardStatus.isPending) {
-                event.currentTarget.style.background = 'rgba(15, 23, 42, 0.06)';
-              }
-            }}
-            onMouseLeave={(event) => {
-              event.currentTarget.style.background = 'transparent';
-            }}
-          >
-            ×
-          </button>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <CardDisplay card={cardPayload} timestamp={timestamp} />
-        </div>
-
-        {mutationError && (
-          <div
-            style={{
-              padding: '12px 16px',
-              borderRadius: '10px',
-              background: '#fef2f2',
-              color: '#b91c1c',
-              fontSize: '13px',
-            }}
-          >
-            {mutationError}
-          </div>
-        )}
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <label
-            htmlFor="moderation-reason"
-            style={{
-              fontSize: '14px',
-              fontWeight: 600,
-              color: '#334155',
-            }}
-          >
-            Moderation reason (optional)
-          </label>
-          <textarea
-            id="moderation-reason"
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-            rows={4}
-            placeholder="Add context for deactivating this card..."
-            style={{
-              width: '100%',
-              padding: '12px',
-              borderRadius: '12px',
-              border: '1px solid #cbd5f5',
-              fontSize: '14px',
-              resize: 'vertical',
-              minHeight: '120px',
-              color: '#1f2937',
-            }}
-          />
-        </div>
-
-        <div
-          style={{
-            display: 'flex',
-            gap: '12px',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => setShowHistory((previous) => !previous)}
-            style={{
-              background: 'rgba(59, 130, 246, 0.12)',
-              color: '#1d4ed8',
-              border: 'none',
-              borderRadius: '999px',
-              padding: '8px 16px',
-              fontSize: '13px',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            {showHistory ? 'Hide moderation history' : 'View moderation history'}
-          </button>
-
-          <div style={{ display: 'flex', gap: '12px' }}>
-            <button
-              type="button"
-              onClick={handleClose}
+            <Button
+              variant="ghost"
+              size="sm"
+              onPress={handleClose}
               disabled={updateCardStatus.isPending}
-              style={{
-                background: '#ffffff',
-                color: '#475569',
-                border: '1px solid #e2e8f0',
-                borderRadius: '999px',
-                padding: '10px 20px',
-                fontSize: '14px',
-                fontWeight: 600,
-                cursor: updateCardStatus.isPending ? 'not-allowed' : 'pointer',
-              }}
+              circular
+              width={36}
+              height={36}
+              padding={0}
             >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleDeactivate}
-              disabled={updateCardStatus.isPending}
-              style={{
-                background: '#f97316',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '999px',
-                padding: '10px 20px',
-                fontSize: '14px',
-                fontWeight: 600,
-                cursor: updateCardStatus.isPending ? 'not-allowed' : 'pointer',
-                opacity: updateCardStatus.isPending ? 0.65 : 1,
-              }}
-            >
-              {updateCardStatus.isPending ? 'Deactivating…' : 'Deactivate card'}
-            </button>
-          </div>
-        </div>
+              ×
+            </Button>
+          </XStack>
 
-        {showHistory && (
-          <div
-            style={{
-              borderTop: '1px solid #e2e8f0',
-              paddingTop: '16px',
-            }}
-          >
-            <h3
-              style={{
-                margin: '0 0 12px 0',
-                fontSize: '16px',
-                fontWeight: 600,
-                color: '#0f172a',
-              }}
+          <XStack justifyContent="center">
+            <CardDisplay card={cardPayload} timestamp={timestamp} />
+          </XStack>
+
+          {mutationError && (
+            <Alert variant="error">
+              <Text fontSize="$2" margin={0}>{mutationError}</Text>
+            </Alert>
+          )}
+
+          <YStack gap="$4">
+            <Text
+              htmlFor="moderation-reason"
+              as="label"
+              fontSize="$3"
+              fontWeight="600"
+              color="$gray9"
+              display="block"
             >
-              Moderation history
-            </h3>
-            <CardAuditHistory
-              entries={auditEntries}
-              isLoading={auditLoading}
-              error={auditErrorMessage}
+              Moderation reason (optional)
+            </Text>
+            <Textarea
+              id="moderation-reason"
+              value={reason}
+              onChange={(e: any) => setReason(e.target.value)}
+              rows={4}
+              placeholder="Add context for deactivating this card..."
+              minHeight={120}
             />
-          </div>
-        )}
-      </div>
-    </div>
+          </YStack>
+
+          <XStack
+            gap="$3"
+            alignItems="center"
+            justifyContent="space-between"
+            flexWrap="wrap"
+          >
+            <Button
+              variant="primary"
+              size="sm"
+              onPress={() => setShowHistory((previous) => !previous)}
+              backgroundColor="$blue2"
+              color="$blue11"
+            >
+              {showHistory ? 'Hide moderation history' : 'View moderation history'}
+            </Button>
+
+            <XStack gap="$3">
+              <Button
+                variant="outline"
+                onPress={handleClose}
+                disabled={updateCardStatus.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onPress={handleDeactivate}
+                disabled={updateCardStatus.isPending}
+                backgroundColor="#f97316"
+                opacity={updateCardStatus.isPending ? 0.65 : 1}
+              >
+                {updateCardStatus.isPending ? 'Deactivating…' : 'Deactivate card'}
+              </Button>
+            </XStack>
+          </XStack>
+
+          {showHistory && (
+            <YStack
+              borderTopWidth={1}
+              borderTopColor="$borderColor"
+              paddingTop="$4"
+            >
+              <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$3" margin={0}>
+                Moderation history
+              </Text>
+              <CardAuditHistory
+                entries={auditEntries}
+                isLoading={auditLoading}
+                error={auditErrorMessage}
+              />
+            </YStack>
+          )}
+        </YStack>
+      </Sheet.Frame>
+    </Sheet>
   );
 }
 

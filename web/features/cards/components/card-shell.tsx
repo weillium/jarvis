@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { YStack, Card } from '@jarvis/ui-core';
 
 interface CardShellProps {
   children: ReactNode;
@@ -8,13 +9,13 @@ interface CardShellProps {
 
 export function CardShell({ children }: CardShellProps) {
   return (
-    <div
+    <YStack
       data-card-shell
+      flexShrink={0}
+      width={360}
+      maxWidth="min(360px, calc(100vw - 120px))"
+      scrollSnapAlign="center"
       style={{
-        flex: '0 0 auto',
-        width: '360px',
-        maxWidth: 'min(360px, calc(100vw - 120px))',
-        scrollSnapAlign: 'center',
         transition: 'transform 0.3s ease, box-shadow 0.3s ease',
         transform: 'translateY(0)',
         boxShadow: '0 0 0 rgba(15, 23, 42, 0)',
@@ -28,21 +29,21 @@ export function CardShell({ children }: CardShellProps) {
         event.currentTarget.style.boxShadow = '0 0 0 rgba(15, 23, 42, 0)';
       }}
     >
-      <div
+      <Card
+        variant="elevated"
+        padding="$6"
+        borderRadius="$6"
+        minHeight={420}
         style={{
           background: 'linear-gradient(160deg, #ffffff 0%, #f8fafc 60%, #eef2ff 100%)',
-          borderRadius: '24px',
-          padding: '24px',
           boxShadow: '0 18px 40px rgba(15, 23, 42, 0.15)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '16px',
-          minHeight: '420px',
         }}
       >
-        {children}
-      </div>
-    </div>
+        <YStack gap="$4">
+          {children}
+        </YStack>
+      </Card>
+    </YStack>
   );
 }
 

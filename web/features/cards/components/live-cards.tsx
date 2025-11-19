@@ -17,6 +17,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { CardModerationModal } from './card-moderation-modal';
 import { useTranscriptsQuery, type Transcript } from '@/shared/hooks/use-transcripts-query';
 import { CardDisplay } from './card-display';
+import { YStack, XStack, Text, Button, Card, Alert } from '@jarvis/ui-core';
 
 interface LiveCardsProps {
   eventId: string;
@@ -152,198 +153,188 @@ export function LiveCards({ eventId }: LiveCardsProps) {
     });
   };
 
+  const getConnectionStatusColor = () => {
+    switch (connectionStatus) {
+      case 'connected':
+        return '$green11';
+      case 'connecting':
+        return '$yellow11';
+      case 'disconnected':
+        return '$red11';
+      default:
+        return '$gray11';
+    }
+  };
+
+  const getConnectionStatusBgColor = () => {
+    switch (connectionStatus) {
+      case 'connected':
+        return '$green2';
+      case 'connecting':
+        return '$yellow2';
+      case 'disconnected':
+        return '$red2';
+      default:
+        return '$gray2';
+    }
+  };
+
+  const getConnectionStatusBorderColor = () => {
+    switch (connectionStatus) {
+      case 'connected':
+        return '$green4';
+      case 'connecting':
+        return '$yellow4';
+      case 'disconnected':
+        return '$red4';
+      default:
+        return '$gray4';
+    }
+  };
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          background: connectionStatus === 'connected' ? 'rgba(34, 197, 94, 0.08)' : connectionStatus === 'connecting' ? 'rgba(250, 204, 21, 0.12)' : 'rgba(248, 113, 113, 0.12)',
-          borderRadius: '16px',
-          padding: '14px 18px',
-          border: `1px solid ${
-            connectionStatus === 'connected'
-              ? 'rgba(22, 163, 74, 0.3)'
-              : connectionStatus === 'connecting'
-              ? 'rgba(202, 138, 4, 0.3)'
-              : 'rgba(220, 38, 38, 0.3)'
-          }`,
-        }}
+    <YStack gap="$6">
+      <Card
+        variant="outlined"
+        padding="$3.5 $4.5"
+        borderRadius="$4"
+        backgroundColor={getConnectionStatusBgColor()}
+        borderColor={getConnectionStatusBorderColor()}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div
-            style={{
-              width: '10px',
-              height: '10px',
-              borderRadius: '50%',
-              background:
-                connectionStatus === 'connected'
-                  ? '#16a34a'
-                  : connectionStatus === 'connecting'
-                  ? '#ca8a04'
-                  : '#dc2626',
-            }}
-          />
-          <span
-            style={{
-              fontSize: '14px',
-              fontWeight: 600,
-              color:
-                connectionStatus === 'connected'
-                  ? '#166534'
-                  : connectionStatus === 'connecting'
-                  ? '#854d0e'
-                  : '#991b1b',
-            }}
-          >
-            {connectionStatus === 'connected'
-              ? 'Connected — receiving live updates'
-              : connectionStatus === 'connecting'
-              ? 'Connecting to live stream…'
-              : 'Disconnected from stream'}
-          </span>
-        </div>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          {connectionStatus === 'disconnected' && (
-            <button
-              onClick={reconnect}
-              style={{
-                padding: '8px 16px',
-                borderRadius: '999px',
-                background: '#0f172a',
-                color: '#f8fafc',
-                border: 'none',
-                fontSize: '12px',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
+        <XStack alignItems="center" justifyContent="space-between">
+          <XStack alignItems="center" gap="$3">
+            <YStack
+              width={10}
+              height={10}
+              borderRadius="$10"
+              backgroundColor={getConnectionStatusColor()}
+            />
+            <Text
+              fontSize="$3"
+              fontWeight="600"
+              color={getConnectionStatusColor()}
+              margin={0}
             >
-              Reconnect
-            </button>
-          )}
-          {error && (
-            <span
-              style={{
-                fontSize: '12px',
-                color: '#dc2626',
-              }}
-            >
-              {error.message}
-            </span>
-          )}
-        </div>
-      </div>
+              {connectionStatus === 'connected'
+                ? 'Connected — receiving live updates'
+                : connectionStatus === 'connecting'
+                ? 'Connecting to live stream…'
+                : 'Disconnected from stream'}
+            </Text>
+          </XStack>
+          <XStack gap="$3" alignItems="center">
+            {connectionStatus === 'disconnected' && (
+              <Button
+                variant="primary"
+                size="sm"
+                onPress={reconnect}
+                backgroundColor="$color"
+                color="$gray1"
+              >
+                Reconnect
+              </Button>
+            )}
+            {error && (
+              <Text fontSize="$2" color="$red11" margin={0}>
+                {error.message}
+              </Text>
+            )}
+          </XStack>
+        </XStack>
+      </Card>
 
       {isLoading ? (
-        <div
-          style={{
-            padding: '64px 24px',
-            textAlign: 'center',
-            color: '#94a3b8',
-            fontSize: '15px',
-            borderRadius: '20px',
-            border: '1px dashed rgba(148, 163, 184, 0.4)',
-          }}
+        <Card
+          variant="outlined"
+          padding="$16 $6"
+          borderRadius="$5"
+          borderStyle="dashed"
+          borderColor="$gray4"
         >
-          Loading cards…
-        </div>
+          <Text textAlign="center" color="$gray5" fontSize="$3" margin={0}>
+            Loading cards…
+          </Text>
+        </Card>
       ) : cards.length === 0 ? (
-        <div
-          style={{
-            padding: '64px 24px',
-            textAlign: 'center',
-            color: '#94a3b8',
-            fontSize: '15px',
-            borderRadius: '20px',
-            border: '1px dashed rgba(148, 163, 184, 0.4)',
-          }}
+        <Card
+          variant="outlined"
+          padding="$16 $6"
+          borderRadius="$5"
+          borderStyle="dashed"
+          borderColor="$gray4"
         >
-          {connectionStatus === 'connecting'
-            ? 'Waiting for connection…'
-            : connectionStatus === 'connected'
-            ? 'No cards yet. Cards will appear as the event progresses.'
-            : 'Disconnected. Click reconnect to try again.'}
-        </div>
+          <Text textAlign="center" color="$gray5" fontSize="$3" margin={0}>
+            {connectionStatus === 'connecting'
+              ? 'Waiting for connection…'
+              : connectionStatus === 'connected'
+              ? 'No cards yet. Cards will appear as the event progresses.'
+              : 'Disconnected. Click reconnect to try again.'}
+          </Text>
+        </Card>
       ) : (
-        <div style={{ position: 'relative' }}>
+        <YStack position="relative">
           {canScroll && (
-            <div
-              style={{
-                position: 'absolute',
-                top: '50%',
-                left: '-32px',
-                transform: 'translateY(-50%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                pointerEvents: 'none',
-              }}
+            <YStack
+              position="absolute"
+              top="50%"
+              left={-32}
+              style={{ transform: 'translateY(-50%)' }}
+              alignItems="center"
+              justifyContent="center"
+              pointerEvents="none"
             >
-              <button
-                type="button"
-                onClick={() => handleScroll('prev')}
+              <Button
+                variant="primary"
+                onPress={() => handleScroll('prev')}
+                width={44}
+                height={44}
+                borderRadius="$10"
+                backgroundColor="$background"
+                color="$gray9"
                 style={{
                   pointerEvents: 'auto',
-                  width: '44px',
-                  height: '44px',
-                  borderRadius: '999px',
-                  border: 'none',
-                  background: '#ffffff',
                   boxShadow: '0 10px 30px rgba(15, 23, 42, 0.18)',
-                  fontSize: '20px',
-                  fontWeight: 700,
-                  color: '#1e293b',
-                  cursor: 'pointer',
                 }}
               >
                 ‹
-              </button>
-            </div>
+              </Button>
+            </YStack>
           )}
 
           {canScroll && (
-            <div
-              style={{
-                position: 'absolute',
-                top: '50%',
-                right: '-32px',
-                transform: 'translateY(-50%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                pointerEvents: 'none',
-              }}
+            <YStack
+              position="absolute"
+              top="50%"
+              right={-32}
+              style={{ transform: 'translateY(-50%)' }}
+              alignItems="center"
+              justifyContent="center"
+              pointerEvents="none"
             >
-              <button
-                type="button"
-                onClick={() => handleScroll('next')}
+              <Button
+                variant="primary"
+                onPress={() => handleScroll('next')}
+                width={44}
+                height={44}
+                borderRadius="$10"
+                backgroundColor="$background"
+                color="$gray9"
                 style={{
                   pointerEvents: 'auto',
-                  width: '44px',
-                  height: '44px',
-                  borderRadius: '999px',
-                  border: 'none',
-                  background: '#ffffff',
                   boxShadow: '0 10px 30px rgba(15, 23, 42, 0.18)',
-                  fontSize: '20px',
-                  fontWeight: 700,
-                  color: '#1e293b',
-                  cursor: 'pointer',
                 }}
               >
                 ›
-              </button>
-            </div>
+              </Button>
+            </YStack>
           )}
 
-          <div
+          <XStack
             ref={scrollerRef}
+            gap="$6"
+            overflowX="auto"
+            padding="$3 $1"
             style={{
-              display: 'flex',
-              gap: '24px',
-              overflowX: 'auto',
-              padding: '12px 4px 12px 4px',
               scrollSnapType: 'x mandatory',
               scrollbarWidth: 'none',
               msOverflowStyle: 'none',
@@ -369,8 +360,8 @@ export function LiveCards({ eventId }: LiveCardsProps) {
                 />
               );
             })}
-          </div>
-        </div>
+          </XStack>
+        </YStack>
       )}
 
       {moderationTarget && moderationTargetPayload && (
@@ -383,7 +374,7 @@ export function LiveCards({ eventId }: LiveCardsProps) {
           onClose={() => setModerationCardId(null)}
         />
       )}
-    </div>
+    </YStack>
   );
 }
 
