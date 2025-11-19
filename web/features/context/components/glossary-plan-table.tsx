@@ -2,6 +2,7 @@
 
 import type { BlueprintGlossaryPlan } from '@/shared/hooks/use-blueprint-full-query';
 import { formatPurpose } from './blueprint-display-utils';
+import { YStack, Text } from '@jarvis/ui-core';
 
 interface GlossaryPlanTableProps {
   glossaryPlan: BlueprintGlossaryPlan;
@@ -9,15 +10,10 @@ interface GlossaryPlanTableProps {
 
 export function GlossaryPlanTable({ glossaryPlan }: GlossaryPlanTableProps) {
   return (
-    <div style={{ marginBottom: '20px' }}>
-      <h5 style={{
-        fontSize: '14px',
-        fontWeight: '600',
-        color: '#0f172a',
-        marginBottom: '8px',
-      }}>
+    <YStack marginBottom="$5">
+      <Text fontSize="$3" fontWeight="600" color="$color" marginBottom="$2" margin={0}>
         Glossary Plan
-      </h5>
+      </Text>
       <div style={{ overflowX: 'auto' }}>
         <table style={{
           width: '100%',
@@ -68,10 +64,10 @@ export function GlossaryPlanTable({ glossaryPlan }: GlossaryPlanTableProps) {
           </tbody>
         </table>
       </div>
-      <div style={{ marginTop: '8px', fontSize: '12px', color: '#475569' }}>
-        <strong>Estimated Count:</strong> {glossaryPlan.estimated_count}
-      </div>
-    </div>
+      <Text fontSize="$2" color="$gray9" marginTop="$2" margin={0}>
+        <Text fontWeight="600" margin={0}>Estimated Count:</Text> {glossaryPlan.estimated_count}
+      </Text>
+    </YStack>
   );
 }
 

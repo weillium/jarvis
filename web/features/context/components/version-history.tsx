@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useContextVersionsQuery } from '@/shared/hooks/use-context-versions-query';
+import { YStack, XStack, Text, Card, Button, Input, Alert } from '@jarvis/ui-core';
 
 interface VersionHistoryProps {
   eventId: string;
@@ -74,15 +75,32 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
   const getStatusColor = (status: string): string => {
     switch (status) {
       case 'completed':
-        return '#10b981'; // green
+        return '$green11';
       case 'processing':
-        return '#3b82f6'; // blue
+        return '$blue11';
       case 'started':
-        return '#f59e0b'; // amber
+        return '$yellow11';
       case 'failed':
-        return '#ef4444'; // red
+        return '$red11';
       case 'superseded':
-        return '#64748b'; // gray
+        return '$gray11';
+      default:
+        return '$gray11';
+    }
+  };
+
+  const getStatusColorHex = (status: string): string => {
+    switch (status) {
+      case 'completed':
+        return '#10b981';
+      case 'processing':
+        return '#3b82f6';
+      case 'started':
+        return '#f59e0b';
+      case 'failed':
+        return '#ef4444';
+      case 'superseded':
+        return '#64748b';
       default:
         return '#64748b';
     }
@@ -171,38 +189,43 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
     }
 
     return (
-      <div style={{ marginTop: '6px' }}>
-        <strong>Chat Completions:</strong>
+      <YStack marginTop="$1.5">
+        <Text fontSize="$1" fontWeight="600" color="$gray11" marginBottom="$1" margin={0}>
+          Chat Completions:
+        </Text>
         <ul style={{ marginTop: '4px', paddingLeft: '18px', color: '#475569' }}>
           {completions.map((item, index) => (
             <li key={index} style={{ marginBottom: '2px' }}>
-              {item.model ? `${item.model}` : 'Model unknown'}
-              {item.cost !== undefined
-                ? ` · $${item.cost.toFixed(4)}`
-                : null}
-              {item.usage
-                ? ` · tokens: ${item.usage.total_tokens ?? '-'} (prompt ${item.usage.prompt_tokens ?? '-'}, completion ${item.usage.completion_tokens ?? '-'})`
-                : null}
+              <Text fontSize="$1" color="$gray9" margin={0}>
+                {item.model ? `${item.model}` : 'Model unknown'}
+                {item.cost !== undefined
+                  ? ` · $${item.cost.toFixed(4)}`
+                  : null}
+                {item.usage
+                  ? ` · tokens: ${item.usage.total_tokens ?? '-'} (prompt ${item.usage.prompt_tokens ?? '-'}, completion ${item.usage.completion_tokens ?? '-'})`
+                  : null}
+              </Text>
             </li>
           ))}
         </ul>
-      </div>
+      </YStack>
     );
   };
 
   if (loading) {
+    if (embedded) {
+      return (
+        <YStack padding="$6" alignItems="center">
+          <Text color="$gray11">Loading version history...</Text>
+        </YStack>
+      );
+    }
     return (
-      <div style={{
-        background: embedded ? 'transparent' : '#ffffff',
-        border: embedded ? 'none' : '1px solid #e2e8f0',
-        borderRadius: embedded ? '0' : '12px',
-        padding: embedded ? '0' : '24px',
-        marginBottom: embedded ? '0' : '24px',
-      }}>
-        <div style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
-          Loading version history...
-        </div>
-      </div>
+      <Card variant="outlined" padding="$6" marginBottom="$6">
+        <YStack padding="$6" alignItems="center">
+          <Text color="$gray11">Loading version history...</Text>
+        </YStack>
+      </Card>
     );
   }
 
@@ -210,100 +233,33 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
     return null; // Don't show if no history
   }
 
-  return (
-    <div style={{
-      background: embedded ? 'transparent' : '#ffffff',
-      border: embedded ? 'none' : '1px solid #e2e8f0',
-      borderRadius: embedded ? '0' : '12px',
-      padding: embedded ? '0' : '24px',
-      marginBottom: embedded ? '0' : '24px',
-    }}>
-      {/* Header - only show when not embedded */}
-      {!embedded && (
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '20px',
-        }}>
-          <div>
-            <h3 style={{
-              fontSize: '20px',
-              fontWeight: '600',
-              color: '#0f172a',
-              margin: '0 0 4px 0',
-            }}>
-              Version History
-            </h3>
-            <div style={{
-              fontSize: '13px',
-              color: '#64748b',
-            }}>
-              {versionData.count} {versionData.count === 1 ? 'generation cycle' : 'generation cycles'}
-            </div>
-          </div>
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            style={{
-              padding: '8px 16px',
-              border: '1px solid #e2e8f0',
-              borderRadius: '6px',
-              fontSize: '14px',
-              fontWeight: '500',
-              color: '#374151',
-              background: '#ffffff',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-            }}
-          >
-            {isExpanded ? 'Collapse' : 'Expand'}
-          </button>
-        </div>
-      )}
+  if (embedded) {
+    return (
+      <YStack>
 
       {/* Search and Filters */}
       {isExpanded && uniqueTypes.length > 0 && (
-        <div style={{
-          display: 'flex',
-          gap: '12px',
-          marginBottom: '12px',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-        }}>
-          <input
-            type="text"
+        <XStack
+          gap="$3"
+          marginBottom="$3"
+          flexWrap="wrap"
+          alignItems="center"
+        >
+          <Input
+            flex={1}
+            minWidth={200}
             placeholder="Search cycles..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              flex: 1,
-              minWidth: '200px',
-              padding: '8px 12px',
-              border: '1px solid #e2e8f0',
-              borderRadius: '6px',
-              fontSize: '14px',
-            }}
+            onChange={(e: any) => setSearchQuery(e.target.value)}
           />
-          <button
-            onClick={fetchVersionHistory}
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={fetchVersionHistory}
             disabled={refreshing}
-            style={{
-              padding: '8px 16px',
-              border: '1px solid #e2e8f0',
-              borderRadius: '6px',
-              fontSize: '14px',
-              fontWeight: '500',
-              background: '#ffffff',
-              color: '#374151',
-              cursor: refreshing ? 'not-allowed' : 'pointer',
-              opacity: refreshing ? 0.6 : 1,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
           >
-            {refreshing ? '↻' : '↻'} {refreshing ? 'Refreshing...' : 'Refresh'}
-          </button>
+            ↻ {refreshing ? 'Refreshing...' : 'Refresh'}
+          </Button>
           <select
             value={filterByType || ''}
             onChange={(e) => setFilterByType(e.target.value || null)}
@@ -313,6 +269,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
               borderRadius: '6px',
               fontSize: '13px',
               background: '#ffffff',
+              fontFamily: 'inherit',
             }}
           >
             <option value="">All Types</option>
@@ -323,67 +280,44 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
             ))}
           </select>
           {(filterByType || searchQuery) && (
-            <button
-              onClick={() => {
+            <Button
+              variant="ghost"
+              size="sm"
+              onPress={() => {
                 setFilterByType(null);
                 setSearchQuery('');
               }}
-              style={{
-                padding: '8px 12px',
-                border: '1px solid #e2e8f0',
-                borderRadius: '6px',
-                fontSize: '13px',
-                background: '#ffffff',
-                cursor: 'pointer',
-                color: '#64748b',
-              }}
             >
               Clear Filters
-            </button>
+            </Button>
           )}
-        </div>
+        </XStack>
       )}
 
       {/* Cycles List */}
       {isExpanded && (
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '8px',
-        }}>
+        <YStack gap="$2">
           {filteredCycles.length === 0 ? (
-            <div style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
-              No cycles match the selected filter.
-            </div>
+            <YStack padding="$6" alignItems="center">
+              <Text color="$gray11">No cycles match the selected filter.</Text>
+            </YStack>
           ) : (
             filteredCycles.map((cycle) => (
-              <div
+              <Card
                 key={cycle.id}
-                style={{
-                  padding: '12px 16px',
-                  background: '#f8fafc',
-                  borderRadius: '6px',
-                  border: '1px solid #e2e8f0',
-                }}
+                variant="outlined"
+                padding="$3 $4"
+                backgroundColor="$gray1"
               >
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: '8px',
-                }}>
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                  }}>
-                    <span style={{
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      color: '#0f172a',
-                    }}>
+                <XStack
+                  justifyContent="space-between"
+                  alignItems="center"
+                  marginBottom="$2"
+                >
+                  <XStack alignItems="center" gap="$2">
+                    <Text fontSize="$3" fontWeight="600" color="$color" margin={0}>
                       {getTypeLabel(cycle.cycle_type)}
-                    </span>
+                    </Text>
                     {(() => {
                       const componentLabel = getComponentLabel(cycle.component);
                       const typeLabel = getTypeLabel(cycle.cycle_type);
@@ -396,110 +330,97 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                       }
 
                       return (
-                      <span style={{
-                        fontSize: '11px',
-                        padding: '2px 8px',
-                        background: '#f3f4f6',
-                        color: '#64748b',
-                        borderRadius: '4px',
-                      }}>
-                        {componentLabel}
-                      </span>
+                        <YStack
+                          padding="$0.5 $2"
+                          backgroundColor="$gray2"
+                          borderRadius="$1"
+                        >
+                          <Text fontSize="$1" color="$gray11" margin={0}>
+                            {componentLabel}
+                          </Text>
+                        </YStack>
                       );
                     })()}
-                  </div>
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                  }}>
+                  </XStack>
+                  <XStack alignItems="center" gap="$2">
                     {cycle.cost !== null && cycle.cost !== undefined && (
-                      <span style={{
-                        fontSize: '12px',
-                        padding: '4px 8px',
-                        background: '#ecfdf5',
-                        color: '#065f46',
-                        borderRadius: '4px',
-                        fontWeight: '600',
-                        border: '1px solid #a7f3d0',
-                      }}>
-                        ${cycle.cost.toFixed(4)}
-                      </span>
+                      <YStack
+                        padding="$1 $2"
+                        backgroundColor="$green2"
+                        borderRadius="$1"
+                        borderWidth={1}
+                        borderColor="$green3"
+                      >
+                        <Text fontSize="$2" fontWeight="600" color="$green11" margin={0}>
+                          ${cycle.cost.toFixed(4)}
+                        </Text>
+                      </YStack>
                     )}
-                    <span style={{
-                      fontSize: '11px',
-                      padding: '4px 8px',
-                      background: getStatusColor(cycle.status),
-                      color: '#ffffff',
-                      borderRadius: '4px',
-                      fontWeight: '500',
-                      textTransform: 'uppercase',
-                    }}>
-                      {cycle.status}
-                    </span>
-                  </div>
-                </div>
-                <div style={{
-                  display: 'flex',
-                  gap: '16px',
-                  fontSize: '12px',
-                  color: '#64748b',
-                }}>
+                    <YStack
+                      padding="$1 $2"
+                      backgroundColor={getStatusColorHex(cycle.status)}
+                      borderRadius="$1"
+                    >
+                      <Text
+                        fontSize="$1"
+                        fontWeight="500"
+                        color="#ffffff"
+                        textTransform="uppercase"
+                        margin={0}
+                      >
+                        {cycle.status}
+                      </Text>
+                    </YStack>
+                  </XStack>
+                </XStack>
+                <XStack gap="$4" flexWrap="wrap">
                   {cycle.progress_total > 0 && (
-                    <span>
+                    <Text fontSize="$2" color="$gray11" margin={0}>
                       Progress: {cycle.progress_current} / {cycle.progress_total} (
                       {Math.round((cycle.progress_current / cycle.progress_total) * 100)}%)
-                    </span>
+                    </Text>
                   )}
-                  <span>
+                  <Text fontSize="$2" color="$gray11" margin={0}>
                     Started: {new Date(cycle.started_at).toLocaleString()}
-                  </span>
+                  </Text>
                   {cycle.completed_at && (
-                    <span>
+                    <Text fontSize="$2" color="$gray11" margin={0}>
                       Completed: {new Date(cycle.completed_at).toLocaleString()}
-                    </span>
+                    </Text>
                   )}
-                </div>
+                </XStack>
                 {cycle.error_message && (
-                  <div style={{
-                    marginTop: '8px',
-                    padding: '8px',
-                    background: '#fee2e2',
-                    border: '1px solid #fecaca',
-                    borderRadius: '4px',
-                    fontSize: '12px',
-                    color: '#991b1b',
-                  }}>
-                    <strong>Error:</strong> {cycle.error_message}
-                  </div>
+                  <YStack marginTop="$2">
+                    <Alert variant="error">
+                      <Text fontWeight="600" margin={0}>Error:</Text> {cycle.error_message}
+                    </Alert>
+                  </YStack>
                 )}
                 {cycle.cost_breakdown && (
-                  <details style={{
-                    marginTop: '8px',
-                    padding: '8px',
-                    background: '#f8fafc',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '4px',
-                    fontSize: '11px',
-                  }}>
+                  <details style={{ marginTop: '8px' }}>
                     <summary style={{
                       cursor: 'pointer',
                       fontWeight: '500',
+                      fontSize: '11px',
                       color: '#374151',
                       marginBottom: '4px',
                     }}>
                       Cost Breakdown
                     </summary>
-                    <div style={{
-                      marginTop: '4px',
-                      paddingLeft: '12px',
-                      color: '#64748b',
-                    }}>
-                      <div>
-                        <strong>Total:</strong>{' '}
+                    <YStack
+                      marginTop="$1"
+                      paddingLeft="$3"
+                      padding="$2"
+                      backgroundColor="$gray1"
+                      borderRadius="$1"
+                      borderWidth={1}
+                      borderColor="$borderColor"
+                    >
+                      <Text fontSize="$1" color="$gray11" marginBottom="$1" margin={0}>
+                        <Text fontWeight="600" margin={0}>Total:</Text>{' '}
                         ${cycle.cost_breakdown.total?.toFixed(4) ?? '0.0000'}{' '}
                         {cycle.cost_breakdown.currency || 'USD'}
-                      </div>
+                      </Text>
                       {cycle.cost_breakdown.breakdown?.openai && (() => {
                         const openaiBreakdown = cycle.cost_breakdown.breakdown?.openai;
                         const openaiTotal =
@@ -507,42 +428,48 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                             ? openaiBreakdown.total.toFixed(4)
                             : '0.0000';
                         return (
-                        <div style={{ marginTop: '4px' }}>
-                          <strong>OpenAI:</strong> ${openaiTotal}
-                          {openaiBreakdown?.chat_completions?.length > 0 && (
-                            <span> ({openaiBreakdown.chat_completions.length} chat completion{openaiBreakdown.chat_completions.length > 1 ? 's' : ''})</span>
-                          )}
-                          {openaiBreakdown?.embeddings?.length > 0 && (
-                            <span> ({openaiBreakdown.embeddings.length} embedding{openaiBreakdown.embeddings.length > 1 ? 's' : ''})</span>
-                          )}
-                          {renderChatCompletions(openaiBreakdown?.chat_completions || [])}
-                          {openaiBreakdown?.embeddings &&
-                            openaiBreakdown.embeddings.length > 0 && (
-                              <div style={{ marginTop: '6px' }}>
-                                <strong>Embeddings:</strong>
-                                <ul style={{ marginTop: '4px', paddingLeft: '18px', color: '#475569' }}>
-                                  {openaiBreakdown.embeddings.map(
-                                    (
-                                      item: {
-                                        cost?: number;
-                                        model?: string;
-                                        usage?: { total_tokens?: number };
-                                      },
-                                      index: number
-                                    ) => (
-                                      <li key={index} style={{ marginBottom: '2px' }}>
-                                        {item.model ? `${item.model}` : 'Model unknown'}
-                                        {item.cost !== undefined ? ` · $${item.cost.toFixed(4)}` : null}
-                                        {item.usage?.total_tokens !== undefined
-                                          ? ` · tokens: ${item.usage.total_tokens}`
-                                          : null}
-                                      </li>
-                                    )
-                                  )}
-                                </ul>
-                              </div>
-                            )}
-                        </div>
+                          <YStack marginTop="$1" gap="$1.5">
+                            <Text fontSize="$1" color="$gray11" margin={0}>
+                              <Text fontWeight="600" margin={0}>OpenAI:</Text> ${openaiTotal}
+                              {openaiBreakdown?.chat_completions?.length > 0 && (
+                                <Text margin={0}> ({openaiBreakdown.chat_completions.length} chat completion{openaiBreakdown.chat_completions.length > 1 ? 's' : ''})</Text>
+                              )}
+                              {openaiBreakdown?.embeddings?.length > 0 && (
+                                <Text margin={0}> ({openaiBreakdown.embeddings.length} embedding{openaiBreakdown.embeddings.length > 1 ? 's' : ''})</Text>
+                              )}
+                            </Text>
+                            {renderChatCompletions(openaiBreakdown?.chat_completions || [])}
+                            {openaiBreakdown?.embeddings &&
+                              openaiBreakdown.embeddings.length > 0 && (
+                                <YStack marginTop="$1.5">
+                                  <Text fontSize="$1" fontWeight="600" color="$gray11" marginBottom="$1" margin={0}>
+                                    Embeddings:
+                                  </Text>
+                                  <ul style={{ marginTop: '4px', paddingLeft: '18px', color: '#475569' }}>
+                                    {openaiBreakdown.embeddings.map(
+                                      (
+                                        item: {
+                                          cost?: number;
+                                          model?: string;
+                                          usage?: { total_tokens?: number };
+                                        },
+                                        index: number
+                                      ) => (
+                                        <li key={index} style={{ marginBottom: '2px' }}>
+                                          <Text fontSize="$1" color="$gray9" margin={0}>
+                                            {item.model ? `${item.model}` : 'Model unknown'}
+                                            {item.cost !== undefined ? ` · $${item.cost.toFixed(4)}` : null}
+                                            {item.usage?.total_tokens !== undefined
+                                              ? ` · tokens: ${item.usage.total_tokens}`
+                                              : null}
+                                          </Text>
+                                        </li>
+                                      )
+                                    )}
+                                  </ul>
+                                </YStack>
+                              )}
+                          </YStack>
                         );
                       })()}
                       {cycle.cost_breakdown.breakdown?.exa && (() => {
@@ -552,34 +479,332 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                             ? exaBreakdown.total.toFixed(4)
                             : '0.0000';
                         return (
-                        <div style={{ marginTop: '4px' }}>
-                          <strong>Exa:</strong> ${exaTotal}
-                          {exaBreakdown?.search?.queries > 0 && (
-                            <span> ({exaBreakdown.search.queries} search{exaBreakdown.search.queries > 1 ? 'es' : ''})</span>
-                          )}
-                          {exaBreakdown?.research?.queries > 0 && (
-                            <span> ({exaBreakdown.research.queries} research task{exaBreakdown.research.queries > 1 ? 's' : ''})</span>
-                          )}
-                          {exaBreakdown?.answer?.queries > 0 && (
-                            <span> ({exaBreakdown.answer.queries} answer{exaBreakdown.answer.queries > 1 ? 's' : ''})</span>
-                          )}
-                        </div>
+                          <YStack marginTop="$1">
+                            <Text fontSize="$1" color="$gray11" margin={0}>
+                              <Text fontWeight="600" margin={0}>Exa:</Text> ${exaTotal}
+                              {exaBreakdown?.search?.queries > 0 && (
+                                <Text margin={0}> ({exaBreakdown.search.queries} search{exaBreakdown.search.queries > 1 ? 'es' : ''})</Text>
+                              )}
+                              {exaBreakdown?.research?.queries > 0 && (
+                                <Text margin={0}> ({exaBreakdown.research.queries} research task{exaBreakdown.research.queries > 1 ? 's' : ''})</Text>
+                              )}
+                              {exaBreakdown?.answer?.queries > 0 && (
+                                <Text margin={0}> ({exaBreakdown.answer.queries} answer{exaBreakdown.answer.queries > 1 ? 's' : ''})</Text>
+                              )}
+                            </Text>
+                          </YStack>
                         );
                       })()}
                       {cycle.cost_breakdown.pricing_version && (
-                        <div style={{ marginTop: '4px', fontSize: '10px', color: '#94a3b8' }}>
+                        <Text fontSize="$1" color="$gray5" marginTop="$1" margin={0}>
                           Pricing version: {cycle.cost_breakdown.pricing_version}
-                        </div>
+                        </Text>
                       )}
-                    </div>
+                    </YStack>
                   </details>
                 )}
-              </div>
+              </Card>
             ))
           )}
-        </div>
+        </YStack>
       )}
-    </div>
+      </YStack>
+    );
+  }
+
+  return (
+    <Card variant="outlined" padding="$6" marginBottom="$6">
+      {/* Header - only show when not embedded */}
+      <XStack justifyContent="space-between" alignItems="center" marginBottom="$5">
+        <YStack>
+          <Text fontSize="$5" fontWeight="600" color="$color" marginBottom="$1" margin={0}>
+            Version History
+          </Text>
+          <Text fontSize="$2" color="$gray11" margin={0}>
+            {versionData.count} {versionData.count === 1 ? 'generation cycle' : 'generation cycles'}
+          </Text>
+        </YStack>
+        <Button
+          variant="outline"
+          size="sm"
+          onPress={() => setIsExpanded(!isExpanded)}
+        >
+          {isExpanded ? 'Collapse' : 'Expand'}
+        </Button>
+      </XStack>
+
+      {/* Search and Filters */}
+      {isExpanded && uniqueTypes.length > 0 && (
+        <XStack
+          gap="$3"
+          marginBottom="$3"
+          flexWrap="wrap"
+          alignItems="center"
+        >
+          <Input
+            flex={1}
+            minWidth={200}
+            placeholder="Search cycles..."
+            value={searchQuery}
+            onChange={(e: any) => setSearchQuery(e.target.value)}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={fetchVersionHistory}
+            disabled={refreshing}
+          >
+            ↻ {refreshing ? 'Refreshing...' : 'Refresh'}
+          </Button>
+          <select
+            value={filterByType || ''}
+            onChange={(e) => setFilterByType(e.target.value || null)}
+            style={{
+              padding: '8px 12px',
+              border: '1px solid #e2e8f0',
+              borderRadius: '6px',
+              fontSize: '13px',
+              background: '#ffffff',
+              fontFamily: 'inherit',
+            }}
+          >
+            <option value="">All Types</option>
+            {uniqueTypes.map((type) => (
+              <option key={type} value={type}>
+                {getTypeLabel(type)}
+              </option>
+            ))}
+          </select>
+          {(filterByType || searchQuery) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onPress={() => {
+                setFilterByType(null);
+                setSearchQuery('');
+              }}
+            >
+              Clear Filters
+            </Button>
+          )}
+        </XStack>
+      )}
+
+      {/* Cycles List */}
+      {isExpanded && (
+        <YStack gap="$2">
+          {filteredCycles.length === 0 ? (
+            <YStack padding="$6" alignItems="center">
+              <Text color="$gray11">No cycles match the selected filter.</Text>
+            </YStack>
+          ) : (
+            filteredCycles.map((cycle) => (
+              <Card
+                key={cycle.id}
+                variant="outlined"
+                padding="$3 $4"
+                backgroundColor="$gray1"
+              >
+                <XStack
+                  justifyContent="space-between"
+                  alignItems="center"
+                  marginBottom="$2"
+                >
+                  <XStack alignItems="center" gap="$2">
+                    <Text fontSize="$3" fontWeight="600" color="$color" margin={0}>
+                      {getTypeLabel(cycle.cycle_type)}
+                    </Text>
+                    {(() => {
+                      const componentLabel = getComponentLabel(cycle.component);
+                      const typeLabel = getTypeLabel(cycle.cycle_type);
+                      if (!componentLabel) {
+                        return null;
+                      }
+
+                      if (componentLabel.toLowerCase() === typeLabel.toLowerCase()) {
+                        return null;
+                      }
+
+                      return (
+                        <YStack
+                          padding="$0.5 $2"
+                          backgroundColor="$gray2"
+                          borderRadius="$1"
+                        >
+                          <Text fontSize="$1" color="$gray11" margin={0}>
+                            {componentLabel}
+                          </Text>
+                        </YStack>
+                      );
+                    })()}
+                  </XStack>
+                  <XStack alignItems="center" gap="$2">
+                    {cycle.cost !== null && cycle.cost !== undefined && (
+                      <YStack
+                        padding="$1 $2"
+                        backgroundColor="$green2"
+                        borderRadius="$1"
+                        borderWidth={1}
+                        borderColor="$green3"
+                      >
+                        <Text fontSize="$2" fontWeight="600" color="$green11" margin={0}>
+                          ${cycle.cost.toFixed(4)}
+                        </Text>
+                      </YStack>
+                    )}
+                    <YStack
+                      padding="$1 $2"
+                      backgroundColor={getStatusColorHex(cycle.status)}
+                      borderRadius="$1"
+                    >
+                      <Text
+                        fontSize="$1"
+                        fontWeight="500"
+                        color="#ffffff"
+                        textTransform="uppercase"
+                        margin={0}
+                      >
+                        {cycle.status}
+                      </Text>
+                    </YStack>
+                  </XStack>
+                </XStack>
+                <XStack gap="$4" flexWrap="wrap">
+                  {cycle.progress_total > 0 && (
+                    <Text fontSize="$2" color="$gray11" margin={0}>
+                      Progress: {cycle.progress_current} / {cycle.progress_total} (
+                      {Math.round((cycle.progress_current / cycle.progress_total) * 100)}%)
+                    </Text>
+                  )}
+                  <Text fontSize="$2" color="$gray11" margin={0}>
+                    Started: {new Date(cycle.started_at).toLocaleString()}
+                  </Text>
+                  {cycle.completed_at && (
+                    <Text fontSize="$2" color="$gray11" margin={0}>
+                      Completed: {new Date(cycle.completed_at).toLocaleString()}
+                    </Text>
+                  )}
+                </XStack>
+                {cycle.error_message && (
+                  <YStack marginTop="$2">
+                    <Alert variant="error">
+                      <Text fontWeight="600" margin={0}>Error:</Text> {cycle.error_message}
+                    </Alert>
+                  </YStack>
+                )}
+                {cycle.cost_breakdown && (
+                  <details style={{ marginTop: '8px' }}>
+                    <summary style={{
+                      cursor: 'pointer',
+                      fontWeight: '500',
+                      fontSize: '11px',
+                      color: '#374151',
+                      marginBottom: '4px',
+                    }}>
+                      Cost Breakdown
+                    </summary>
+                    <YStack
+                      marginTop="$1"
+                      paddingLeft="$3"
+                      padding="$2"
+                      backgroundColor="$gray1"
+                      borderRadius="$1"
+                      borderWidth={1}
+                      borderColor="$borderColor"
+                    >
+                      <Text fontSize="$1" color="$gray11" marginBottom="$1" margin={0}>
+                        <Text fontWeight="600" margin={0}>Total:</Text>{' '}
+                        ${cycle.cost_breakdown.total?.toFixed(4) ?? '0.0000'}{' '}
+                        {cycle.cost_breakdown.currency || 'USD'}
+                      </Text>
+                      {cycle.cost_breakdown.breakdown?.openai && (() => {
+                        const openaiBreakdown = cycle.cost_breakdown.breakdown?.openai;
+                        const openaiTotal =
+                          openaiBreakdown && typeof openaiBreakdown.total === 'number'
+                            ? openaiBreakdown.total.toFixed(4)
+                            : '0.0000';
+                        return (
+                          <YStack marginTop="$1" gap="$1.5">
+                            <Text fontSize="$1" color="$gray11" margin={0}>
+                              <Text fontWeight="600" margin={0}>OpenAI:</Text> ${openaiTotal}
+                              {openaiBreakdown?.chat_completions?.length > 0 && (
+                                <Text margin={0}> ({openaiBreakdown.chat_completions.length} chat completion{openaiBreakdown.chat_completions.length > 1 ? 's' : ''})</Text>
+                              )}
+                              {openaiBreakdown?.embeddings?.length > 0 && (
+                                <Text margin={0}> ({openaiBreakdown.embeddings.length} embedding{openaiBreakdown.embeddings.length > 1 ? 's' : ''})</Text>
+                              )}
+                            </Text>
+                            {renderChatCompletions(openaiBreakdown?.chat_completions || [])}
+                            {openaiBreakdown?.embeddings &&
+                              openaiBreakdown.embeddings.length > 0 && (
+                                <YStack marginTop="$1.5">
+                                  <Text fontSize="$1" fontWeight="600" color="$gray11" marginBottom="$1" margin={0}>
+                                    Embeddings:
+                                  </Text>
+                                  <ul style={{ marginTop: '4px', paddingLeft: '18px', color: '#475569' }}>
+                                    {openaiBreakdown.embeddings.map(
+                                      (
+                                        item: {
+                                          cost?: number;
+                                          model?: string;
+                                          usage?: { total_tokens?: number };
+                                        },
+                                        index: number
+                                      ) => (
+                                        <li key={index} style={{ marginBottom: '2px' }}>
+                                          <Text fontSize="$1" color="$gray9" margin={0}>
+                                            {item.model ? `${item.model}` : 'Model unknown'}
+                                            {item.cost !== undefined ? ` · $${item.cost.toFixed(4)}` : null}
+                                            {item.usage?.total_tokens !== undefined
+                                              ? ` · tokens: ${item.usage.total_tokens}`
+                                              : null}
+                                          </Text>
+                                        </li>
+                                      )
+                                    )}
+                                  </ul>
+                                </YStack>
+                              )}
+                          </YStack>
+                        );
+                      })()}
+                      {cycle.cost_breakdown.breakdown?.exa && (() => {
+                        const exaBreakdown = cycle.cost_breakdown.breakdown?.exa;
+                        const exaTotal =
+                          exaBreakdown && typeof exaBreakdown.total === 'number'
+                            ? exaBreakdown.total.toFixed(4)
+                            : '0.0000';
+                        return (
+                          <YStack marginTop="$1">
+                            <Text fontSize="$1" color="$gray11" margin={0}>
+                              <Text fontWeight="600" margin={0}>Exa:</Text> ${exaTotal}
+                              {exaBreakdown?.search?.queries > 0 && (
+                                <Text margin={0}> ({exaBreakdown.search.queries} search{exaBreakdown.search.queries > 1 ? 'es' : ''})</Text>
+                              )}
+                              {exaBreakdown?.research?.queries > 0 && (
+                                <Text margin={0}> ({exaBreakdown.research.queries} research task{exaBreakdown.research.queries > 1 ? 's' : ''})</Text>
+                              )}
+                              {exaBreakdown?.answer?.queries > 0 && (
+                                <Text margin={0}> ({exaBreakdown.answer.queries} answer{exaBreakdown.answer.queries > 1 ? 's' : ''})</Text>
+                              )}
+                            </Text>
+                          </YStack>
+                        );
+                      })()}
+                      {cycle.cost_breakdown.pricing_version && (
+                        <Text fontSize="$1" color="$gray5" marginTop="$1" margin={0}>
+                          Pricing version: {cycle.cost_breakdown.pricing_version}
+                        </Text>
+                      )}
+                    </YStack>
+                  </details>
+                )}
+              </Card>
+            ))
+          )}
+        </YStack>
+      )}
+    </Card>
   );
 }
 

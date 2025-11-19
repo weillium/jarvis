@@ -1,5 +1,7 @@
 'use client';
 
+import { YStack, XStack, Text, Button, Card, Sheet } from '@jarvis/ui-core';
+
 interface PromptPreviewModalProps {
   isOpen: boolean;
   promptPreview: {
@@ -29,125 +31,112 @@ export function PromptPreviewModal({
   }
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: 'rgba(0, 0, 0, 0.5)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000,
-      padding: '20px',
-    }}>
-      <div style={{
-        background: '#ffffff',
-        borderRadius: '12px',
-        padding: '24px',
-        maxWidth: '900px',
-        maxHeight: '90vh',
-        width: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-      }}>
-        <h2 style={{
-          margin: '0 0 20px 0',
-          fontSize: '20px',
-          fontWeight: '600',
-          color: '#1e293b',
-        }}>
-          Confirm Prompt Before Generation
-        </h2>
+    <Sheet
+      modal
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open && !isRegenerating) {
+          onClose();
+        }
+      }}
+      snapPoints={[90]}
+      dismissOnSnapToBottom
+      zIndex={1000}
+    >
+      <Sheet.Overlay
+        animation="lazy"
+        enterStyle={{ opacity: 0 }}
+        exitStyle={{ opacity: 0 }}
+        opacity={0.5}
+        backgroundColor="black"
+      />
+      <Sheet.Handle />
+      <Sheet.Frame
+        padding={0}
+        backgroundColor="$background"
+        borderRadius="$4"
+        maxWidth={900}
+        width="100%"
+        maxHeight="90vh"
+      >
+        <YStack padding="$6" gap="$5" flex={1} overflow="scroll">
+          <Text fontSize="$5" fontWeight="600" color="$color" margin={0}>
+            Confirm Prompt Before Generation
+          </Text>
 
-        {/* Event Info */}
-        <div style={{
-          background: '#f1f5f9',
-          borderRadius: '8px',
-          padding: '16px',
-          marginBottom: '16px',
-        }}>
-          <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '600', color: '#1e293b' }}>
-            Event Information
-          </h3>
-          <p style={{ margin: '4px 0', fontSize: '14px', color: '#64748b' }}>
-            <strong>Title:</strong> {promptPreview.event.title}
-          </p>
-          <p style={{ margin: '4px 0', fontSize: '14px', color: '#64748b' }}>
-            <strong>Topic:</strong> {promptPreview.event.topic}
-          </p>
-          {promptPreview.event.hasDocuments && (
-            <p style={{ margin: '4px 0', fontSize: '14px', color: '#64748b' }}>
-              <strong>Documents:</strong> {promptPreview.event.documentCount} document(s) available
-            </p>
-          )}
-        </div>
+          {/* Event Info */}
+          <Card variant="outlined" backgroundColor="$gray1" padding="$4">
+            <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$2" margin={0}>
+              Event Information
+            </Text>
+            <YStack gap="$1" fontSize="$3" color="$gray11">
+              <Text margin={0}>
+                <Text fontWeight="600" margin={0}>Title:</Text> {promptPreview.event.title}
+              </Text>
+              <Text margin={0}>
+                <Text fontWeight="600" margin={0}>Topic:</Text> {promptPreview.event.topic}
+              </Text>
+              {promptPreview.event.hasDocuments && (
+                <Text margin={0}>
+                  <Text fontWeight="600" margin={0}>Documents:</Text> {promptPreview.event.documentCount} document(s) available
+                </Text>
+              )}
+            </YStack>
+          </Card>
 
-        {/* User Prompt - System prompt is embedded and doesn't need to be shown separately */}
-        <div style={{ marginBottom: '20px', flex: 1, overflow: 'auto' }}>
-          <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '600', color: '#1e293b' }}>
-            User Prompt
-          </h3>
-          <pre style={{
-            background: '#f8fafc',
-            border: '1px solid #e2e8f0',
-            borderRadius: '6px',
-            padding: '12px',
-            fontSize: '12px',
-            color: '#334155',
-            overflow: 'auto',
-            maxHeight: '300px',
-            whiteSpace: 'pre-wrap',
-            fontFamily: 'monospace',
-          }}>
-            {promptPreview.user}
-          </pre>
-        </div>
+          {/* User Prompt */}
+          <YStack flex={1} gap="$2">
+            <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
+              User Prompt
+            </Text>
+            <YStack
+              backgroundColor="$gray1"
+              borderWidth={1}
+              borderColor="$borderColor"
+              borderRadius="$2"
+              padding="$3"
+              maxHeight={300}
+              overflow="scroll"
+            >
+              <Text
+                fontSize="$2"
+                color="$gray9"
+                whiteSpace="pre-wrap"
+                fontFamily="$mono"
+                margin={0}
+              >
+                {promptPreview.user}
+              </Text>
+            </YStack>
+          </YStack>
 
-        {/* Modal Actions */}
-        <div style={{
-          display: 'flex',
-          gap: '12px',
-          justifyContent: 'flex-end',
-          borderTop: '1px solid #e2e8f0',
-          paddingTop: '16px',
-        }}>
-          <button
-            onClick={onClose}
-            style={{
-              background: '#ffffff',
-              color: '#64748b',
-              border: '1px solid #e2e8f0',
-              borderRadius: '6px',
-              padding: '8px 16px',
-              fontSize: '14px',
-              fontWeight: '500',
-              cursor: 'pointer',
-            }}
+          {/* Modal Actions */}
+          <XStack
+            gap="$3"
+            justifyContent="flex-end"
+            borderTopWidth={1}
+            borderTopColor="$borderColor"
+            paddingTop="$4"
           >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={isRegenerating}
-            style={{
-              background: isRegenerating ? '#94a3b8' : '#10b981',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '6px',
-              padding: '8px 16px',
-              fontSize: '14px',
-              fontWeight: '500',
-              cursor: isRegenerating ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {isRegenerating ? 'Starting...' : 'Confirm'}
-          </button>
-        </div>
-      </div>
-    </div>
+            <Button
+              variant="outline"
+              onPress={onClose}
+              disabled={isRegenerating}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onPress={onConfirm}
+              disabled={isRegenerating}
+              backgroundColor={isRegenerating ? '$gray5' : '$green11'}
+            >
+              {isRegenerating ? 'Starting...' : 'Confirm'}
+            </Button>
+          </XStack>
+        </YStack>
+      </Sheet.Frame>
+    </Sheet>
   );
 }
 

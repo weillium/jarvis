@@ -2,6 +2,7 @@
 
 import type { BlueprintResearchPlan } from '@/shared/hooks/use-blueprint-full-query';
 import { formatCurrency, formatPurpose } from './blueprint-display-utils';
+import { YStack, Text } from '@jarvis/ui-core';
 
 interface ResearchPlanTableProps {
   researchPlan: BlueprintResearchPlan;
@@ -9,15 +10,10 @@ interface ResearchPlanTableProps {
 
 export function ResearchPlanTable({ researchPlan }: ResearchPlanTableProps) {
   return (
-    <div style={{ marginBottom: '20px' }}>
-      <h5 style={{
-        fontSize: '14px',
-        fontWeight: '600',
-        color: '#0f172a',
-        marginBottom: '8px',
-      }}>
+    <YStack marginBottom="$5">
+      <Text fontSize="$3" fontWeight="600" color="$color" marginBottom="$2" margin={0}>
         Research Plan
-      </h5>
+      </Text>
       <div style={{ overflowX: 'auto' }}>
         <table style={{
           width: '100%',
@@ -73,10 +69,10 @@ export function ResearchPlanTable({ researchPlan }: ResearchPlanTableProps) {
           </tbody>
         </table>
       </div>
-      <div style={{ marginTop: '8px', fontSize: '12px', color: '#475569' }}>
-        <strong>Total Searches:</strong> {researchPlan.total_searches} &nbsp;•&nbsp; <strong>Estimated Total Cost:</strong> {formatCurrency(researchPlan.estimated_total_cost)}
-      </div>
-    </div>
+      <Text fontSize="$2" color="$gray9" marginTop="$2" margin={0}>
+        <Text fontWeight="600" margin={0}>Total Searches:</Text> {researchPlan.total_searches} &nbsp;•&nbsp; <Text fontWeight="600" margin={0}>Estimated Total Cost:</Text> {formatCurrency(researchPlan.estimated_total_cost)}
+      </Text>
+    </YStack>
   );
 }
 

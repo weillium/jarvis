@@ -1,5 +1,7 @@
 'use client';
 
+import { YStack, XStack, Button, Card } from '@jarvis/ui-core';
+
 interface StageRegenerationControlsProps {
   embedded?: boolean;
   canStartGeneration: boolean;
@@ -41,213 +43,258 @@ export function StageRegenerationControls({
   onRegenerateStage,
   onClearContext,
 }: StageRegenerationControlsProps) {
-  return (
-    <div style={{
-      marginBottom: '20px',
-      ...(embedded ? {} : {
-        padding: '16px',
-        background: '#f8fafc',
-        borderRadius: '8px',
-        border: '1px solid #e2e8f0',
-      }),
-    }}>
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-        gap: '8px',
-      }}>
+  if (embedded) {
+    return (
+      <YStack marginBottom="$5" gap="$2">
+      <XStack
+        flexWrap="wrap"
+        gap="$2"
+        $sm={{ flexDirection: 'column' }}
+        $md={{ flexDirection: 'row' }}
+      >
         {/* Start Context Generation button - show when no blueprint or blueprint is in error */}
         {canStartGeneration && (
-          <button
-            onClick={onStartGeneration}
+          <Button
+            variant="primary"
+            size="sm"
+            onPress={onStartGeneration}
             disabled={!!isRegenerating || !!regeneratingStage}
-            style={{
-              padding: '10px 16px',
-              background: (isRegenerating) 
-                ? '#94a3b8' 
-                : '#3b82f6',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '12px',
-              fontWeight: '500',
-              cursor: (isRegenerating || regeneratingStage) 
-                ? 'not-allowed' 
-                : 'pointer',
-              transition: 'background 0.2s',
-            }}
+            backgroundColor={isRegenerating ? '$gray5' : '$blue6'}
           >
-            {isRegenerating 
-              ? 'Starting...'
-              : 'Start Context Generation'}
-          </button>
+            {isRegenerating ? 'Starting...' : 'Start Context Generation'}
+          </Button>
         )}
         
         {/* Regenerate Blueprint button - show when blueprint is ready or approved */}
         {canRegenerateBlueprint && (
-          <button
-            onClick={onRegenerateBlueprint}
+          <Button
+            variant="primary"
+            size="sm"
+            onPress={onRegenerateBlueprint}
             disabled={!!isRegenerating || !!regeneratingStage || isContextGenerationRunning}
-            style={{
-              padding: '10px 16px',
-              background: (isRegenerating || isContextGenerationRunning) 
-                ? '#94a3b8' 
-                : '#8b5cf6',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '12px',
-              fontWeight: '500',
-              cursor: (isRegenerating || regeneratingStage || isContextGenerationRunning) 
-                ? 'not-allowed' 
-                : 'pointer',
-              transition: 'background 0.2s',
-            }}
+            backgroundColor={(isRegenerating || isContextGenerationRunning) ? '$gray5' : '$purple6'}
           >
-            {isRegenerating 
-              ? 'Regenerating...'
-              : 'Regenerate Blueprint'}
-          </button>
+            {isRegenerating ? 'Regenerating...' : 'Regenerate Blueprint'}
+          </Button>
         )}
         
         {/* Approve Blueprint button - show when blueprint is ready */}
         {canApprove && (
-          <button
-            onClick={onApprove}
+          <Button
+            variant="primary"
+            size="sm"
+            onPress={onApprove}
             disabled={approving}
-            style={{
-              padding: '10px 16px',
-              background: approving 
-                ? '#94a3b8' 
-                : '#10b981',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '12px',
-              fontWeight: '500',
-              cursor: approving 
-                ? 'not-allowed' 
-                : 'pointer',
-              transition: 'background 0.2s',
-            }}
+            backgroundColor={approving ? '$gray5' : '$green11'}
           >
             {approving ? 'Approving...' : 'Approve Blueprint'}
-          </button>
+          </Button>
         )}
         {/* Stage regeneration buttons - only show when blueprint is approved */}
         {statusData?.blueprint?.status === 'approved' && (
           <>
-            <button
-              onClick={() => onRegenerateStage('research')}
+            <Button
+              variant="primary"
+              size="sm"
+              onPress={() => onRegenerateStage('research')}
               disabled={
                 !!regeneratingStage || 
                 isContextGenerationRunning ||
                 !statusData?.hasResearch ||
                 (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research')
               }
-              style={{
-                padding: '10px 16px',
-                background: (regeneratingStage === 'research' || isContextGenerationRunning || !statusData?.hasResearch || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research')) 
-                  ? '#94a3b8' 
-                  : '#3b82f6',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: '500',
-                cursor: (regeneratingStage || isContextGenerationRunning || !statusData?.hasResearch || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research')) 
-                  ? 'not-allowed' 
-                  : 'pointer',
-                transition: 'background 0.2s',
-              }}
+              backgroundColor={
+                (regeneratingStage === 'research' || isContextGenerationRunning || !statusData?.hasResearch || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research'))
+                  ? '$gray5'
+                  : '$blue6'
+              }
             >
               {(regeneratingStage === 'research' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research')) 
                 ? 'Regenerating...' 
                 : 'Regenerate Research'}
-            </button>
-            <button
-              onClick={() => onRegenerateStage('glossary')}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onPress={() => onRegenerateStage('glossary')}
               disabled={
                 !!regeneratingStage || 
                 isContextGenerationRunning ||
                 !statusData?.hasGlossary ||
                 (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary')
               }
-              style={{
-                padding: '10px 16px',
-                background: (regeneratingStage === 'glossary' || isContextGenerationRunning || !statusData?.hasGlossary || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary')) 
-                  ? '#94a3b8' 
-                  : '#3b82f6',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: '500',
-                cursor: (regeneratingStage || isContextGenerationRunning || !statusData?.hasGlossary || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary')) 
-                  ? 'not-allowed' 
-                  : 'pointer',
-                transition: 'background 0.2s',
-              }}
+              backgroundColor={
+                (regeneratingStage === 'glossary' || isContextGenerationRunning || !statusData?.hasGlossary || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary'))
+                  ? '$gray5'
+                  : '$blue6'
+              }
             >
               {(regeneratingStage === 'glossary' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary')) 
                 ? 'Regenerating...' 
                 : 'Regenerate Glossary'}
-            </button>
-            <button
-              onClick={() => onRegenerateStage('chunks')}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onPress={() => onRegenerateStage('chunks')}
               disabled={
                 !!regeneratingStage || 
                 isContextGenerationRunning ||
                 !statusData?.hasChunks ||
                 (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks')
               }
-              style={{
-                padding: '10px 16px',
-                background: (regeneratingStage === 'chunks' || isContextGenerationRunning || !statusData?.hasChunks || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks')) 
-                  ? '#94a3b8' 
-                  : '#3b82f6',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: '500',
-                cursor: (regeneratingStage || isContextGenerationRunning || !statusData?.hasChunks || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks')) 
-                  ? 'not-allowed' 
-                  : 'pointer',
-                transition: 'background 0.2s',
-              }}
+              backgroundColor={
+                (regeneratingStage === 'chunks' || isContextGenerationRunning || !statusData?.hasChunks || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks'))
+                  ? '$gray5'
+                  : '$blue6'
+              }
             >
               {(regeneratingStage === 'chunks' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks')) 
                 ? 'Regenerating...' 
                 : 'Regenerate Chunks'}
-            </button>
+            </Button>
           </>
         )}
         {onClearContext && (
-          <button
-            onClick={onClearContext}
+          <Button
+            variant="primary"
+            size="sm"
+            onPress={onClearContext}
             disabled={isClearing || !!isRegenerating || !!regeneratingStage}
-            style={{
-              padding: '10px 16px',
-              background: (isClearing || isRegenerating || regeneratingStage) 
-                ? '#94a3b8' 
-                : '#ef4444',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '12px',
-              fontWeight: '500',
-              cursor: (isClearing || isRegenerating || regeneratingStage) 
-                ? 'not-allowed' 
-                : 'pointer',
-              transition: 'background 0.2s',
-            }}
+            backgroundColor={(isClearing || isRegenerating || regeneratingStage) ? '$gray5' : '$red11'}
           >
             {isClearing ? 'Clearing...' : 'Clear Context'}
-          </button>
+          </Button>
         )}
-      </div>
-    </div>
+      </XStack>
+      </YStack>
+    );
+  }
+
+  return (
+    <Card variant="outlined" backgroundColor="$gray1" padding="$4" marginBottom="$5">
+      <XStack
+        flexWrap="wrap"
+        gap="$2"
+        $sm={{ flexDirection: 'column' }}
+        $md={{ flexDirection: 'row' }}
+      >
+        {/* Start Context Generation button - show when no blueprint or blueprint is in error */}
+        {canStartGeneration && (
+          <Button
+            variant="primary"
+            size="sm"
+            onPress={onStartGeneration}
+            disabled={!!isRegenerating || !!regeneratingStage}
+            backgroundColor={isRegenerating ? '$gray5' : '$blue6'}
+          >
+            {isRegenerating ? 'Starting...' : 'Start Context Generation'}
+          </Button>
+        )}
+        
+        {/* Regenerate Blueprint button - show when blueprint is ready or approved */}
+        {canRegenerateBlueprint && (
+          <Button
+            variant="primary"
+            size="sm"
+            onPress={onRegenerateBlueprint}
+            disabled={!!isRegenerating || !!regeneratingStage || isContextGenerationRunning}
+            backgroundColor={(isRegenerating || isContextGenerationRunning) ? '$gray5' : '$purple6'}
+          >
+            {isRegenerating ? 'Regenerating...' : 'Regenerate Blueprint'}
+          </Button>
+        )}
+        
+        {/* Approve Blueprint button - show when blueprint is ready */}
+        {canApprove && (
+          <Button
+            variant="primary"
+            size="sm"
+            onPress={onApprove}
+            disabled={approving}
+            backgroundColor={approving ? '$gray5' : '$green11'}
+          >
+            {approving ? 'Approving...' : 'Approve Blueprint'}
+          </Button>
+        )}
+        {/* Stage regeneration buttons - only show when blueprint is approved */}
+        {statusData?.blueprint?.status === 'approved' && (
+          <>
+            <Button
+              variant="primary"
+              size="sm"
+              onPress={() => onRegenerateStage('research')}
+              disabled={
+                !!regeneratingStage || 
+                isContextGenerationRunning ||
+                !statusData?.hasResearch ||
+                (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research')
+              }
+              backgroundColor={
+                (regeneratingStage === 'research' || isContextGenerationRunning || !statusData?.hasResearch || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research'))
+                  ? '$gray5'
+                  : '$blue6'
+              }
+            >
+              {(regeneratingStage === 'research' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_research')) 
+                ? 'Regenerating...' 
+                : 'Regenerate Research'}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onPress={() => onRegenerateStage('glossary')}
+              disabled={
+                !!regeneratingStage || 
+                isContextGenerationRunning ||
+                !statusData?.hasGlossary ||
+                (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary')
+              }
+              backgroundColor={
+                (regeneratingStage === 'glossary' || isContextGenerationRunning || !statusData?.hasGlossary || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary'))
+                  ? '$gray5'
+                  : '$blue6'
+              }
+            >
+              {(regeneratingStage === 'glossary' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_glossary')) 
+                ? 'Regenerating...' 
+                : 'Regenerate Glossary'}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onPress={() => onRegenerateStage('chunks')}
+              disabled={
+                !!regeneratingStage || 
+                isContextGenerationRunning ||
+                !statusData?.hasChunks ||
+                (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks')
+              }
+              backgroundColor={
+                (regeneratingStage === 'chunks' || isContextGenerationRunning || !statusData?.hasChunks || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks'))
+                  ? '$gray5'
+                  : '$blue6'
+              }
+            >
+              {(regeneratingStage === 'chunks' || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks')) 
+                ? 'Regenerating...' 
+                : 'Regenerate Chunks'}
+            </Button>
+          </>
+        )}
+        {onClearContext && (
+          <Button
+            variant="primary"
+            size="sm"
+            onPress={onClearContext}
+            disabled={isClearing || !!isRegenerating || !!regeneratingStage}
+            backgroundColor={(isClearing || isRegenerating || regeneratingStage) ? '$gray5' : '$red11'}
+          >
+            {isClearing ? 'Clearing...' : 'Clear Context'}
+          </Button>
+        )}
+      </XStack>
+    </Card>
   );
 }
 

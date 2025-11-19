@@ -1,7 +1,7 @@
 'use client';
 
-import { isRecord } from './blueprint-display-utils';
-import { formatCurrency } from './blueprint-display-utils';
+import { isRecord, formatCurrency } from './blueprint-display-utils';
+import { YStack, XStack, Text } from '@jarvis/ui-core';
 
 interface CostBreakdownSectionProps {
   costBreakdown: Record<string, unknown> | null;
@@ -13,30 +13,30 @@ export function CostBreakdownSection({ costBreakdown }: CostBreakdownSectionProp
   }
 
   return (
-    <div style={{ marginBottom: '20px' }}>
-      <h5 style={{
-        fontSize: '14px',
-        fontWeight: '600',
-        color: '#0f172a',
-        marginBottom: '8px',
-      }}>
+    <YStack marginBottom="$5">
+      <Text fontSize="$3" fontWeight="600" color="$color" marginBottom="$2" margin={0}>
         Cost Breakdown
-      </h5>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', fontSize: '12px', color: '#475569' }}>
+      </Text>
+      <XStack flexWrap="wrap" gap="$3" fontSize="$2" color="$gray9">
         {['research', 'glossary', 'chunks', 'total'].map((key) => (
-          <div key={key} style={{ minWidth: '140px' }}>
-            <div style={{ textTransform: 'capitalize', color: '#64748b', marginBottom: '2px' }}>
+          <YStack key={key} minWidth={140}>
+            <Text
+              textTransform="capitalize"
+              color="$gray11"
+              marginBottom="$0.5"
+              margin={0}
+            >
               {key === 'total' ? 'Total' : `${key.charAt(0).toUpperCase()}${key.slice(1)}`}
-            </div>
-            <div style={{ fontWeight: 600, color: '#0f172a' }}>
+            </Text>
+            <Text fontWeight="600" color="$color" margin={0}>
               {typeof costBreakdown[key] === 'number'
                 ? formatCurrency(costBreakdown[key] as number)
                 : '—'}
-            </div>
-          </div>
+            </Text>
+          </YStack>
         ))}
-      </div>
-    </div>
+      </XStack>
+    </YStack>
   );
 }
 

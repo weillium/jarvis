@@ -2,6 +2,7 @@
 
 import type { BlueprintChunksPlan } from '@/shared/hooks/use-blueprint-full-query';
 import { formatPurpose } from './blueprint-display-utils';
+import { YStack, XStack, Text } from '@jarvis/ui-core';
 
 interface ChunksPlanTableProps {
   chunksPlan: BlueprintChunksPlan;
@@ -15,42 +16,30 @@ interface ChunksPlanTableProps {
 
 export function ChunksPlanTable({ chunksPlan, chunkPlanStats, chunkPlanCoverage }: ChunksPlanTableProps) {
   return (
-    <div style={{ marginBottom: '20px' }}>
-      <h5 style={{
-        fontSize: '14px',
-        fontWeight: '600',
-        color: '#0f172a',
-        marginBottom: '8px',
-      }}>
+    <YStack marginBottom="$5">
+      <Text fontSize="$3" fontWeight="600" color="$color" marginBottom="$2" margin={0}>
         Chunks Plan
-      </h5>
+      </Text>
       {chunkPlanStats && (
-        <div style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '12px',
-          fontSize: '12px',
-          color: '#475569',
-          marginBottom: '12px',
-        }}>
-          <div>
-            <strong>{chunksPlan.sources.length}</strong> planned sources
-          </div>
-          <div>
-            <strong>{chunkPlanStats.total.toLocaleString()}</strong> estimated chunks
-          </div>
-          <div>
-            <strong>{chunkPlanStats.facts.toLocaleString()}</strong> for facts
-          </div>
-          <div>
-            <strong>{chunkPlanStats.cards.toLocaleString()}</strong> for cards
-          </div>
+        <XStack flexWrap="wrap" gap="$3" fontSize="$2" color="$gray9" marginBottom="$3">
+          <Text margin={0}>
+            <Text fontWeight="600" margin={0}>{chunksPlan.sources.length}</Text> planned sources
+          </Text>
+          <Text margin={0}>
+            <Text fontWeight="600" margin={0}>{chunkPlanStats.total.toLocaleString()}</Text> estimated chunks
+          </Text>
+          <Text margin={0}>
+            <Text fontWeight="600" margin={0}>{chunkPlanStats.facts.toLocaleString()}</Text> for facts
+          </Text>
+          <Text margin={0}>
+            <Text fontWeight="600" margin={0}>{chunkPlanStats.cards.toLocaleString()}</Text> for cards
+          </Text>
           {chunkPlanCoverage !== null && (
-            <div>
-              <strong>{chunkPlanCoverage}%</strong> of target coverage
-            </div>
+            <Text margin={0}>
+              <Text fontWeight="600" margin={0}>{chunkPlanCoverage}%</Text> of target coverage
+            </Text>
           )}
-        </div>
+        </XStack>
       )}
       <div style={{ overflowX: 'auto' }}>
         <table style={{
@@ -103,26 +92,26 @@ export function ChunksPlanTable({ chunksPlan, chunkPlanStats, chunkPlanCoverage 
           </tbody>
         </table>
       </div>
-      <div style={{ marginTop: '8px', fontSize: '12px', color: '#475569' }}>
-        <strong>Target Count (Plan):</strong> {chunksPlan.target_count}
+      <Text fontSize="$2" color="$gray9" marginTop="$2" margin={0}>
+        <Text fontWeight="600" margin={0}>Target Count (Plan):</Text> {chunksPlan.target_count}
         &nbsp;•&nbsp;
-        <strong>Quality Tier:</strong> {chunksPlan.quality_tier}
+        <Text fontWeight="600" margin={0}>Quality Tier:</Text> {chunksPlan.quality_tier}
         &nbsp;•&nbsp;
-        <strong>Ranking Strategy:</strong> {chunksPlan.ranking_strategy}
+        <Text fontWeight="600" margin={0}>Ranking Strategy:</Text> {chunksPlan.ranking_strategy}
         {chunkPlanStats && (
           <>
             &nbsp;•&nbsp;
-            <strong>Estimated Total:</strong> {chunkPlanStats.total.toLocaleString()}
+            <Text fontWeight="600" margin={0}>Estimated Total:</Text> {chunkPlanStats.total.toLocaleString()}
             {chunkPlanCoverage !== null && (
               <>
                 &nbsp;•&nbsp;
-                <strong>Coverage:</strong> {chunkPlanCoverage}%
+                <Text fontWeight="600" margin={0}>Coverage:</Text> {chunkPlanCoverage}%
               </>
             )}
           </>
         )}
-      </div>
-    </div>
+      </Text>
+    </YStack>
   );
 }
 

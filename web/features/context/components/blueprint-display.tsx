@@ -18,6 +18,7 @@ import { ChunksPlanTable } from './chunks-plan-table';
 import { AudienceProfileSection } from './audience-profile-section';
 import { AgentAlignmentSection } from './agent-alignment-section';
 import { CostBreakdownSection } from './cost-breakdown-section';
+import { YStack, XStack, Text, Card, Alert } from '@jarvis/ui-core';
 
 interface BlueprintDisplayProps {
   eventId: string;
@@ -42,37 +43,25 @@ export function BlueprintDisplay({
 
   if (isLoading) {
     return (
-      <div style={{
-        padding: '16px',
-        textAlign: 'center',
-        color: '#64748b',
-      }}>
-        Loading blueprint...
-      </div>
+      <YStack padding="$4" alignItems="center">
+        <Text color="$gray11">Loading blueprint...</Text>
+      </YStack>
     );
   }
 
   if (error) {
     return (
-      <div style={{
-        padding: '16px',
-        textAlign: 'center',
-        color: '#ef4444',
-      }}>
+      <Alert variant="error">
         Error loading blueprint: {error instanceof Error ? error.message : 'Unknown error'}
-      </div>
+      </Alert>
     );
   }
 
   if (!blueprint) {
     return (
-      <div style={{
-        padding: '16px',
-        textAlign: 'center',
-        color: '#64748b',
-      }}>
-        No blueprint available
-      </div>
+      <YStack padding="$4" alignItems="center">
+        <Text color="$gray11">No blueprint available</Text>
+      </YStack>
     );
   }
 
@@ -156,91 +145,68 @@ export function BlueprintDisplay({
   const targetChunkCount = blueprint.target_chunk_count ?? chunksPlan?.target_count ?? null;
   const qualityTier = blueprint.quality_tier ?? chunksPlan?.quality_tier ?? null;
 
-  return (
-    <div style={{
-      ...(embedded ? {} : {
-        border: '1px solid #e2e8f0',
-        borderRadius: '8px',
-        padding: '20px',
-        background: '#f8fafc',
-      }),
-    }}>
-      {/* Header - only show title when not embedded */}
-      {!embedded && (
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '16px',
-        }}>
-          <h4 style={{
-            fontSize: '18px',
-            fontWeight: '600',
-            color: '#0f172a',
-            margin: 0,
-          }}>
-            Context Blueprint
-          </h4>
-        </div>
-      )}
+  if (embedded) {
+    return (
+      <YStack>
 
       {/* Summary */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-        gap: '16px',
-        marginBottom: '16px',
-      }}>
+      <XStack
+        flexWrap="wrap"
+        gap="$4"
+        marginBottom="$4"
+        $sm={{ flexDirection: 'column' }}
+        $md={{ flexDirection: 'row' }}
+      >
         {targetChunkCount !== null && (
-          <div>
-            <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>
+          <YStack flex={1} minWidth={200}>
+            <Text fontSize="$2" color="$gray11" marginBottom="$1" margin={0}>
               Target Chunks (Plan)
-            </div>
-            <div style={{ fontSize: '16px', fontWeight: '600', color: '#0f172a' }}>
+            </Text>
+            <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
               {targetChunkCount.toLocaleString()}
-            </div>
-          </div>
+            </Text>
+          </YStack>
         )}
         {chunkPlanStats && (
-          <div>
-            <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>
+          <YStack flex={1} minWidth={200}>
+            <Text fontSize="$2" color="$gray11" marginBottom="$1" margin={0}>
               Estimated Chunks (Plan)
-            </div>
-            <div style={{ fontSize: '16px', fontWeight: '600', color: '#0f172a' }}>
+            </Text>
+            <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
               {chunkPlanStats.total.toLocaleString()}
-            </div>
+            </Text>
             {chunkPlanCoverage !== null && (
-              <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+              <Text fontSize="$1" color="$gray5" marginTop="$0.5" margin={0}>
                 {chunkPlanCoverage}% of target
-              </div>
+              </Text>
             )}
-          </div>
+          </YStack>
         )}
         {qualityTier && (
-          <div>
-            <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>
+          <YStack flex={1} minWidth={200}>
+            <Text fontSize="$2" color="$gray11" marginBottom="$1" margin={0}>
               Quality Tier
-            </div>
-            <div style={{ fontSize: '16px', fontWeight: '600', color: '#0f172a', textTransform: 'capitalize' }}>
+            </Text>
+            <Text fontSize="$4" fontWeight="600" color="$color" textTransform="capitalize" margin={0}>
               {qualityTier}
-            </div>
-          </div>
+            </Text>
+          </YStack>
         )}
         {blueprint.estimated_cost !== null && (
-          <div>
-            <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>
+          <YStack flex={1} minWidth={200}>
+            <Text fontSize="$2" color="$gray11" marginBottom="$1" margin={0}>
               Estimated Cost
-            </div>
-            <div style={{ fontSize: '16px', fontWeight: '600', color: '#0f172a' }}>
+            </Text>
+            <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
               ${blueprint.estimated_cost.toFixed(4)}
-            </div>
-          </div>
+            </Text>
+          </YStack>
         )}
-      </div>
+      </XStack>
 
       {/* Expandable details */}
       {expanded && (
-        <div style={{ marginTop: '20px' }}>
+        <YStack marginTop="$5" gap="$5">
           {/* Audience Profile */}
           {audienceProfile && (
             <AudienceProfileSection audienceProfile={audienceProfile} />
@@ -248,90 +214,64 @@ export function BlueprintDisplay({
 
           {/* Important Details */}
           {importantDetails && importantDetails.length > 0 && (
-            <div style={{ marginBottom: '20px' }}>
-              <h5 style={{
-                fontSize: '14px',
-                fontWeight: '600',
-                color: '#0f172a',
-                marginBottom: '8px',
-              }}>
+            <YStack marginBottom="$5">
+              <Text fontSize="$3" fontWeight="600" color="$color" marginBottom="$2" margin={0}>
                 Important Details
-              </h5>
-              <ul style={{
-                margin: 0,
-                paddingLeft: '20px',
-                color: '#475569',
-                fontSize: '14px',
-              }}>
+              </Text>
+              <ul style={{ margin: 0, paddingLeft: '20px', color: '#475569', fontSize: '14px' }}>
                 {importantDetails.map((detail, i) => (
                   <li key={i} style={{ marginBottom: '4px' }}>
-                    {detail}
+                    <Text fontSize="$3" color="$gray9" margin={0}>{detail}</Text>
                   </li>
                 ))}
               </ul>
-            </div>
+            </YStack>
           )}
 
           {/* Inferred Topics */}
           {inferredTopics && inferredTopics.length > 0 && (
-            <div style={{ marginBottom: '20px' }}>
-              <h5 style={{
-                fontSize: '14px',
-                fontWeight: '600',
-                color: '#0f172a',
-                marginBottom: '8px',
-              }}>
+            <YStack marginBottom="$5">
+              <Text fontSize="$3" fontWeight="600" color="$color" marginBottom="$2" margin={0}>
                 Inferred Topics
-              </h5>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              </Text>
+              <XStack flexWrap="wrap" gap="$1.5">
                 {inferredTopics.map((topic, i) => (
-                  <span
+                  <YStack
                     key={i}
-                    style={{
-                      display: 'inline-block',
-                      padding: '4px 10px',
-                      background: '#e0e7ff',
-                      color: '#4338ca',
-                      borderRadius: '6px',
-                      fontSize: '12px',
-                    }}
+                    padding="$1 $2.5"
+                    backgroundColor="$blue2"
+                    borderRadius="$2"
                   >
-                    {topic}
-                  </span>
+                    <Text fontSize="$2" color="$blue11" margin={0}>
+                      {topic}
+                    </Text>
+                  </YStack>
                 ))}
-              </div>
-            </div>
+              </XStack>
+            </YStack>
           )}
 
           {/* Key Terms */}
           {keyTerms && keyTerms.length > 0 && (
-            <div style={{ marginBottom: '20px' }}>
-              <h5 style={{
-                fontSize: '14px',
-                fontWeight: '600',
-                color: '#0f172a',
-                marginBottom: '8px',
-              }}>
+            <YStack marginBottom="$5">
+              <Text fontSize="$3" fontWeight="600" color="$color" marginBottom="$2" margin={0}>
                 Key Terms
-              </h5>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              </Text>
+              <XStack flexWrap="wrap" gap="$1.5">
                 {keyTerms.map((term, i) => (
-                  <span
+                  <YStack
                     key={i}
-                    style={{
-                      display: 'inline-block',
-                      padding: '4px 10px',
-                      background: '#fef3c7',
-                      color: '#92400e',
-                      borderRadius: '6px',
-                      fontSize: '12px',
-                    }}
+                    padding="$1 $2.5"
+                    backgroundColor="$yellow2"
+                    borderRadius="$2"
                   >
-                    {term}
-                  </span>
+                    <Text fontSize="$2" color="$yellow11" margin={0}>
+                      {term}
+                    </Text>
+                  </YStack>
                 ))}
-              </div>
-            </div>
+              </XStack>
+            </YStack>
           )}
 
           {/* Research Plan */}
@@ -360,9 +300,175 @@ export function BlueprintDisplay({
 
           {/* Cost Breakdown */}
           <CostBreakdownSection costBreakdown={costBreakdown} />
-        </div>
+        </YStack>
       )}
-    </div>
+      </YStack>
+    );
+  }
+
+  return (
+    <Card variant="outlined" backgroundColor="$gray1" padding="$5">
+      {/* Header - only show title when not embedded */}
+      <XStack justifyContent="space-between" alignItems="center" marginBottom="$4">
+        <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
+          Context Blueprint
+        </Text>
+      </XStack>
+
+      {/* Summary */}
+      <XStack
+        flexWrap="wrap"
+        gap="$4"
+        marginBottom="$4"
+        $sm={{ flexDirection: 'column' }}
+        $md={{ flexDirection: 'row' }}
+      >
+        {targetChunkCount !== null && (
+          <YStack flex={1} minWidth={200}>
+            <Text fontSize="$2" color="$gray11" marginBottom="$1" margin={0}>
+              Target Chunks (Plan)
+            </Text>
+            <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
+              {targetChunkCount.toLocaleString()}
+            </Text>
+          </YStack>
+        )}
+        {chunkPlanStats && (
+          <YStack flex={1} minWidth={200}>
+            <Text fontSize="$2" color="$gray11" marginBottom="$1" margin={0}>
+              Estimated Chunks (Plan)
+            </Text>
+            <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
+              {chunkPlanStats.total.toLocaleString()}
+            </Text>
+            {chunkPlanCoverage !== null && (
+              <Text fontSize="$1" color="$gray5" marginTop="$0.5" margin={0}>
+                {chunkPlanCoverage}% of target
+              </Text>
+            )}
+          </YStack>
+        )}
+        {qualityTier && (
+          <YStack flex={1} minWidth={200}>
+            <Text fontSize="$2" color="$gray11" marginBottom="$1" margin={0}>
+              Quality Tier
+            </Text>
+            <Text fontSize="$4" fontWeight="600" color="$color" textTransform="capitalize" margin={0}>
+              {qualityTier}
+            </Text>
+          </YStack>
+        )}
+        {blueprint.estimated_cost !== null && (
+          <YStack flex={1} minWidth={200}>
+            <Text fontSize="$2" color="$gray11" marginBottom="$1" margin={0}>
+              Estimated Cost
+            </Text>
+            <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
+              ${blueprint.estimated_cost.toFixed(4)}
+            </Text>
+          </YStack>
+        )}
+      </XStack>
+
+      {/* Expandable details */}
+      {expanded && (
+        <YStack marginTop="$5" gap="$5">
+          {/* Audience Profile */}
+          {audienceProfile && (
+            <AudienceProfileSection audienceProfile={audienceProfile} />
+          )}
+
+          {/* Important Details */}
+          {importantDetails && importantDetails.length > 0 && (
+            <YStack marginBottom="$5">
+              <Text fontSize="$3" fontWeight="600" color="$color" marginBottom="$2" margin={0}>
+                Important Details
+              </Text>
+              <ul style={{ margin: 0, paddingLeft: '20px', color: '#475569', fontSize: '14px' }}>
+                {importantDetails.map((detail, i) => (
+                  <li key={i} style={{ marginBottom: '4px' }}>
+                    <Text fontSize="$3" color="$gray9" margin={0}>{detail}</Text>
+                  </li>
+                ))}
+              </ul>
+            </YStack>
+          )}
+
+          {/* Inferred Topics */}
+          {inferredTopics && inferredTopics.length > 0 && (
+            <YStack marginBottom="$5">
+              <Text fontSize="$3" fontWeight="600" color="$color" marginBottom="$2" margin={0}>
+                Inferred Topics
+              </Text>
+              <XStack flexWrap="wrap" gap="$1.5">
+                {inferredTopics.map((topic, i) => (
+                  <YStack
+                    key={i}
+                    padding="$1 $2.5"
+                    backgroundColor="$blue2"
+                    borderRadius="$2"
+                  >
+                    <Text fontSize="$2" color="$blue11" margin={0}>
+                      {topic}
+                    </Text>
+                  </YStack>
+                ))}
+              </XStack>
+            </YStack>
+          )}
+
+          {/* Key Terms */}
+          {keyTerms && keyTerms.length > 0 && (
+            <YStack marginBottom="$5">
+              <Text fontSize="$3" fontWeight="600" color="$color" marginBottom="$2" margin={0}>
+                Key Terms
+              </Text>
+              <XStack flexWrap="wrap" gap="$1.5">
+                {keyTerms.map((term, i) => (
+                  <YStack
+                    key={i}
+                    padding="$1 $2.5"
+                    backgroundColor="$yellow2"
+                    borderRadius="$2"
+                  >
+                    <Text fontSize="$2" color="$yellow11" margin={0}>
+                      {term}
+                    </Text>
+                  </YStack>
+                ))}
+              </XStack>
+            </YStack>
+          )}
+
+          {/* Research Plan */}
+          {researchPlan && (
+            <ResearchPlanTable researchPlan={researchPlan} />
+          )}
+
+          {/* Glossary Plan */}
+          {glossaryPlan && (
+            <GlossaryPlanTable glossaryPlan={glossaryPlan} />
+          )}
+
+          {/* Chunks Plan */}
+          {chunksPlan && (
+            <ChunksPlanTable
+              chunksPlan={chunksPlan}
+              chunkPlanStats={chunkPlanStats}
+              chunkPlanCoverage={chunkPlanCoverage}
+            />
+          )}
+
+          {/* Agent Alignment */}
+          {agentAlignment && (
+            <AgentAlignmentSection agentAlignment={agentAlignment} />
+          )}
+
+          {/* Cost Breakdown */}
+          <CostBreakdownSection costBreakdown={costBreakdown} />
+        </YStack>
+      )}
+    </Card>
   );
 }
 

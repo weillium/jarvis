@@ -12,6 +12,7 @@ import {
   useApproveBlueprintMutation,
 } from '@/shared/hooks/use-mutations';
 import { useContextStatusQuery } from '@/shared/hooks/use-context-status-query';
+import { YStack, XStack, Text, Card, Alert } from '@jarvis/ui-core';
 
 interface ContextGenerationPanelProps {
   eventId: string;
@@ -213,136 +214,187 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
 
   // Show loading state when statusData is null (initial load)
   if (statusData === null) {
+    if (embedded) {
+      return (
+        <YStack padding="$4" alignItems="center">
+          <Text color="$gray11">Loading context generation status...</Text>
+        </YStack>
+      );
+    }
     return (
-      <div style={{
-        background: embedded ? 'transparent' : '#ffffff',
-        border: embedded ? 'none' : '1px solid #e2e8f0',
-        borderRadius: embedded ? '0' : '12px',
-        padding: embedded ? '16px' : '24px',
-        marginBottom: embedded ? '0' : '24px',
-        textAlign: 'center',
-        color: '#64748b',
-      }}>
-        Loading context generation status...
-      </div>
+      <Card variant="outlined" padding="$6" marginBottom="$6">
+        <Text color="$gray11">Loading context generation status...</Text>
+      </Card>
+    );
+  }
+
+  if (embedded) {
+    return (
+      <YStack>
+        {/* Consolidated error messages */}
+        {consolidatedError && (
+          <Alert variant="error" marginBottom="$4">
+            {consolidatedError}
+          </Alert>
+        )}
+        
+        {/* Blueprint error message */}
+        {hasBlueprintError && statusData?.blueprint && (
+          <Alert variant="error" marginBottom="$4">
+            <YStack gap="$2">
+              <Text fontWeight="600" margin={0}>Blueprint Generation Failed</Text>
+              <Text margin={0}>
+                Blueprint generation encountered an error. You can try generating a new blueprint.
+              </Text>
+            </YStack>
+          </Alert>
+        )}
+        
+        {/* Agent error message */}
+        {hasAgentError && (
+          <Alert variant="error" marginBottom="$4">
+            <YStack gap="$2">
+              <Text fontWeight="600" margin={0}>Agent Error</Text>
+              <Text margin={0}>
+                The agent encountered an error during context generation. Please check the logs or try resetting.
+              </Text>
+            </YStack>
+          </Alert>
+        )}
+
+        {/* No agent state */}
+        {statusData?.agent === null && (
+          <YStack padding="$6" alignItems="center">
+            <Text color="$gray11" margin={0}>
+              No agent found for this event. Please create an event with an agent first.
+            </Text>
+          </YStack>
+        )}
+
+        {/* Progress component - always show when agent exists */}
+        {statusData && statusData.agent && (
+          <YStack marginBottom="$5">
+            <ContextGenerationProgress
+              status={statusData.agent.status}
+              stage={statusData.stage}
+              progress={statusData.progress}
+              blueprintStatus={statusData?.blueprint?.status}
+            />
+          </YStack>
+        )}
+
+        {/* Stage Regeneration Controls - Modular Regeneration */}
+        {shouldShowStageControls() && (
+          <StageRegenerationControls
+            embedded={embedded}
+            canStartGeneration={canStartGeneration}
+            canRegenerateBlueprint={canRegenerateBlueprint}
+            canApprove={canApprove}
+            isRegenerating={isRegenerating}
+            regeneratingStage={regeneratingStage}
+            approving={approving}
+            isContextGenerationRunning={isContextGenerationRunning}
+            isClearing={isClearing}
+            statusData={statusData}
+            onStartGeneration={() => handleRegenerate()}
+            onRegenerateBlueprint={() => handleRegenerate()}
+            onApprove={handleApprove}
+            onRegenerateStage={handleRegenerateStage}
+            onClearContext={onClearContext}
+          />
+        )}
+
+        {/* Prompt Preview Modal */}
+        <PromptPreviewModal
+          isOpen={showPromptPreview}
+          promptPreview={promptPreview}
+          isRegenerating={isRegenerating}
+          onClose={() => {
+            setShowPromptPreview(false);
+            setPromptPreview(null);
+          }}
+          onConfirm={actuallyStartOrRegenerate}
+        />
+      </YStack>
     );
   }
 
   return (
-    <div style={{
-      background: embedded ? 'transparent' : '#ffffff',
-      border: embedded ? 'none' : '1px solid #e2e8f0',
-      borderRadius: embedded ? '0' : '12px',
-      padding: embedded ? '0' : '24px',
-      marginBottom: embedded ? '0' : '24px',
-    }}>
+    <Card variant="outlined" padding="$6" marginBottom="$6">
       {/* Header - only show when not embedded */}
-      {!embedded && (
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '20px',
-        }}>
-          <h3 style={{
-            fontSize: '20px',
-            fontWeight: '600',
-            color: '#0f172a',
-            margin: 0,
-          }}>
-            Context Generation
-          </h3>
-          {statusData?.agent && (
-            <span style={{
-              display: 'inline-block',
-              padding: '6px 12px',
-              background: getStatusColor(statusData.agent.status, statusData.agent.stage, statusData?.blueprint?.status),
-              color: '#ffffff',
-              borderRadius: '6px',
-              fontSize: '12px',
-              fontWeight: '500',
-              textTransform: 'uppercase',
-            }}>
+      <XStack justifyContent="space-between" alignItems="center" marginBottom="$5">
+        <Text fontSize="$5" fontWeight="600" color="$color" margin={0}>
+          Context Generation
+        </Text>
+        {statusData?.agent && (
+          <YStack
+            padding="$1.5 $3"
+            borderRadius="$2"
+            backgroundColor={getStatusColor(statusData.agent.status, statusData.agent.stage, statusData?.blueprint?.status)}
+          >
+            <Text
+              fontSize="$2"
+              fontWeight="500"
+              color="#ffffff"
+              textTransform="uppercase"
+              margin={0}
+            >
               {getStatusLabel(statusData.agent.status, statusData.agent.stage, statusData?.blueprint?.status)}
-            </span>
-          )}
-        </div>
-      )}
+            </Text>
+          </YStack>
+        )}
+      </XStack>
 
       {/* Consolidated error messages */}
       {consolidatedError && (
-        <div style={{
-          background: '#fee2e2',
-          border: '1px solid #fca5a5',
-          borderRadius: '8px',
-          padding: '12px',
-          marginBottom: '16px',
-          color: '#991b1b',
-          fontSize: '14px',
-        }}>
+        <Alert variant="error" marginBottom="$4">
           {consolidatedError}
-        </div>
+        </Alert>
       )}
       
       {/* Blueprint error message */}
       {hasBlueprintError && statusData?.blueprint && (
-        <div style={{
-          background: '#fee2e2',
-          border: '1px solid #fca5a5',
-          borderRadius: '8px',
-          padding: '12px',
-          marginBottom: '16px',
-          color: '#991b1b',
-          fontSize: '14px',
-        }}>
-          <strong>Blueprint Generation Failed</strong>
-          <p style={{ margin: '8px 0 0 0' }}>
-            Blueprint generation encountered an error. You can try generating a new blueprint.
-          </p>
-        </div>
+        <Alert variant="error" marginBottom="$4">
+          <YStack gap="$2">
+            <Text fontWeight="600" margin={0}>Blueprint Generation Failed</Text>
+            <Text margin={0}>
+              Blueprint generation encountered an error. You can try generating a new blueprint.
+            </Text>
+          </YStack>
+        </Alert>
       )}
       
       {/* Agent error message */}
       {hasAgentError && (
-        <div style={{
-          background: '#fee2e2',
-          border: '1px solid #fca5a5',
-          borderRadius: '8px',
-          padding: '12px',
-          marginBottom: '16px',
-          color: '#991b1b',
-          fontSize: '14px',
-        }}>
-          <strong>Agent Error</strong>
-          <p style={{ margin: '8px 0 0 0' }}>
-            The agent encountered an error during context generation. Please check the logs or try resetting.
-          </p>
-        </div>
+        <Alert variant="error" marginBottom="$4">
+          <YStack gap="$2">
+            <Text fontWeight="600" margin={0}>Agent Error</Text>
+            <Text margin={0}>
+              The agent encountered an error during context generation. Please check the logs or try resetting.
+            </Text>
+          </YStack>
+        </Alert>
       )}
 
       {/* No agent state */}
       {statusData?.agent === null && (
-        <div style={{
-          padding: '24px',
-          textAlign: 'center',
-          color: '#64748b',
-        }}>
-          <p style={{ margin: '0 0 16px 0' }}>
+        <YStack padding="$6" alignItems="center">
+          <Text color="$gray11" margin={0}>
             No agent found for this event. Please create an event with an agent first.
-          </p>
-        </div>
+          </Text>
+        </YStack>
       )}
 
       {/* Progress component - always show when agent exists */}
       {statusData && statusData.agent && (
-        <div style={{ marginBottom: '20px' }}>
+        <YStack marginBottom="$5">
           <ContextGenerationProgress
             status={statusData.agent.status}
             stage={statusData.stage}
             progress={statusData.progress}
             blueprintStatus={statusData?.blueprint?.status}
           />
-        </div>
+        </YStack>
       )}
 
       {/* Stage Regeneration Controls - Modular Regeneration */}
@@ -367,13 +419,13 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
       )}
 
       {/* Blueprint display - only show when not embedded */}
-      {!embedded && showBlueprint && statusData?.blueprint && (
-        <div style={{ marginBottom: '20px' }}>
+      {showBlueprint && statusData?.blueprint && (
+        <YStack marginBottom="$5">
           <BlueprintDisplay
             eventId={eventId}
             onRegenerate={handleRegenerate}
           />
-        </div>
+        </YStack>
       )}
 
       {/* Prompt Preview Modal */}
@@ -387,6 +439,6 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
         }}
         onConfirm={actuallyStartOrRegenerate}
       />
-    </div>
+    </Card>
   );
 }
