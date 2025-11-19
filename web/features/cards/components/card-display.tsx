@@ -1,10 +1,22 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import type { Transcript } from '@/shared/hooks/use-transcripts-query';
 import type { CardPayload } from '@/shared/types/card';
 import { CardShell } from './card-shell';
-import { YStack, XStack, Text, Button, Card } from '@jarvis/ui-core';
+import {
+  YStack,
+  XStack,
+  Button,
+  Card,
+  Badge,
+  Heading,
+  Body,
+  Label,
+  BulletList,
+} from '@jarvis/ui-core';
+import { styled } from 'tamagui';
 
 interface CardDisplayProps {
   card: CardPayload;
@@ -48,12 +60,19 @@ const normalizeTemplateName = (card: CardPayload): string => {
   return templateSource.toLowerCase();
 };
 
+const CardMedia = styled('img', {
+  width: '100%',
+  height: '100%',
+  objectFit: 'cover',
+});
+
 export function CardDisplay({
   card,
   timestamp,
   onModerate,
   transcript,
 }: CardDisplayProps) {
+  const [imageFailed, setImageFailed] = useState(false);
   const cardType = card.card_type ?? 'text';
   const templateName = normalizeTemplateName(card);
   const isDefinition = templateName.includes('definition');
@@ -66,8 +85,12 @@ export function CardDisplay({
       ? formatDistanceToNow(transcriptTimestamp, { addSuffix: true })
       : null;
 
+  useEffect(() => {
+    setImageFailed(false);
+  }, [card.image_url]);
+
   const renderImage = () => {
-    if (!card.image_url) {
+    if (!card.image_url || imageFailed) {
       return null;
     }
     return (
@@ -79,17 +102,10 @@ export function CardDisplay({
         overflow="hidden"
         backgroundColor="$gray4"
       >
-        <img
+        <CardMedia
           src={card.image_url}
           alt={card.label || card.title}
-          style={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-          }}
-          onError={(event) => {
-            (event.target as HTMLImageElement).style.display = 'none';
-          }}
+          onError={() => setImageFailed(true)}
         />
       </YStack>
     );
@@ -114,19 +130,12 @@ export function CardDisplay({
           borderColor="$blue4"
         >
           <YStack gap="$2">
-            <Text
-              fontSize="$2"
-              fontWeight="600"
-              textTransform="uppercase"
-              letterSpacing={0.08}
-              color="$blue11"
-              margin={0}
-            >
+            <Label size="xs" tone="info" uppercase>
               Definition
-            </Text>
-            <Text fontSize="$4" lineHeight={1.6} color="$gray9" margin={0}>
+            </Label>
+            <Body lineHeight={1.6} tone="muted">
               {definition}
-            </Text>
+            </Body>
           </YStack>
         </Card>
       );
@@ -138,29 +147,22 @@ export function CardDisplay({
         return null;
       }
       return (
-        <ul style={{ margin: 0, padding: '0 0 0 20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {bullets.map((bullet) => (
-            <li key={bullet}>
-              <Text fontSize="$4" lineHeight={1.6} color="$gray9" margin={0}>
-                {bullet}
-              </Text>
-            </li>
-          ))}
-        </ul>
+        <BulletList
+          items={bullets}
+          renderItem={(bullet) => (
+            <Body lineHeight={1.6} tone="muted">
+              {bullet}
+            </Body>
+          )}
+        />
       );
     }
 
     if (card.body) {
       return (
-        <Text
-          fontSize="$4"
-          lineHeight={1.65}
-          color="$gray9"
-          whiteSpace="pre-line"
-          margin={0}
-        >
+        <Body lineHeight={1.65} tone="muted" whiteSpace="pre-line">
           {card.body}
-        </Text>
+        </Body>
       );
     }
 
@@ -175,49 +177,19 @@ export function CardDisplay({
         gap="$3"
       >
         <YStack flex={1} minWidth={0}>
-          <Text
-            fontSize="$5"
-            fontWeight="700"
-            margin={0}
-            lineHeight={1.2}
-            color="$color"
-          >
+          <Heading level={4} margin={0}>
             {card.title}
-          </Text>
+          </Heading>
 
           {badgeLabel && (
-            <YStack
-              display="inline-flex"
-              alignItems="center"
-              marginTop="$2.5"
-              padding="$1 $2.5"
-              borderRadius="$10"
-              backgroundColor="$purple2"
-            >
-              <Text
-                fontSize="$2"
-                fontWeight="600"
-                textTransform="uppercase"
-                letterSpacing={0.06}
-                color="$purple11"
-                margin={0}
-              >
-                {badgeLabel}
-              </Text>
-            </YStack>
+            <Badge variant="purple" size="sm" marginTop="$2">
+              {badgeLabel}
+            </Badge>
           )}
         </YStack>
 
         {onModerate && (
-          <Button
-            variant="primary"
-            size="sm"
-            onPress={onModerate}
-            backgroundColor="$color"
-            color="$gray4"
-            borderColor="$gray5"
-            hoverStyle={{ backgroundColor: '$gray9' }}
-          >
+          <Button variant="outline" size="sm" onPress={onModerate}>
             Moderate
           </Button>
         )}
@@ -230,64 +202,33 @@ export function CardDisplay({
       {cardType === 'text_visual' && renderImage()}
 
       {cardType === 'visual' && card.label && (
-        <Text
-          fontSize="$4"
-          fontWeight="600"
-          textAlign="center"
-          color="$color"
-          margin={0}
-        >
+        <Heading level={5} align="center">
           {card.label}
-        </Text>
+        </Heading>
       )}
 
       {transcript && (
-        <Card
-          variant="outlined"
-          padding="$3.5 $4"
-          borderRadius="$4"
-          backgroundColor="$gray1"
-          borderColor="$gray4"
-        >
+        <Card variant="outlined" padding="$3.5 $4" borderRadius="$4" backgroundColor="$gray1">
           <YStack gap="$1.5">
-            <Text
-              fontSize="$2"
-              fontWeight="600"
-              textTransform="uppercase"
-              letterSpacing={0.08}
-              color="$color"
-              margin={0}
-            >
+            <Label size="xs" uppercase>
               Source transcript
-            </Text>
+            </Label>
             {transcript.speaker && (
-              <Text
-                fontSize="$2"
-                fontWeight="600"
-                color="$gray9"
-                margin={0}
-              >
+              <Body size="sm" weight="medium">
                 {transcript.speaker}
-              </Text>
+              </Body>
             )}
-            <Text
-              fontSize="$3"
-              lineHeight={1.6}
-              color="$gray8"
-              whiteSpace="pre-wrap"
-              style={{ wordBreak: 'break-word' }}
-              margin={0}
-            >
+            <Body lineHeight={1.6} tone="muted" whiteSpace="pre-wrap" wordBreak="break-word">
               {transcript.text}
-            </Text>
+            </Body>
             <XStack justifyContent="space-between">
-              <Text fontSize="$1" color="$gray11" fontFamily="$mono" margin={0}>
+              <Body size="xs" tone="muted" fontFamily="$mono">
                 Seq {transcript.seq}
-              </Text>
+              </Body>
               {transcriptTimeAgo && (
-                <Text fontSize="$1" color="$gray11" fontFamily="$mono" margin={0}>
+                <Body size="xs" tone="muted" fontFamily="$mono">
                   {transcriptTimeAgo}
-                </Text>
+                </Body>
               )}
             </XStack>
           </YStack>
@@ -304,19 +245,17 @@ export function CardDisplay({
           paddingTop="$2.5"
         >
           {card.source_seq && (
-            <Text fontSize="$2" color="$gray11" margin={0}>
+            <Body size="sm" tone="muted">
               Source #{card.source_seq}
-            </Text>
+            </Body>
           )}
           {timestamp && (
-            <Text fontSize="$2" color="$gray11" margin={0}>
+            <Body size="sm" tone="muted">
               {new Date(timestamp).toLocaleTimeString()}
-            </Text>
+            </Body>
           )}
         </XStack>
       )}
     </CardShell>
   );
 }
-
-

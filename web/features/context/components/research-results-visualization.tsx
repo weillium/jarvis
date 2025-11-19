@@ -3,7 +3,19 @@
 import { useState } from 'react';
 import { useResearchQuery } from '@/shared/hooks/use-research-query';
 import type { ResearchResult } from '@/shared/hooks/use-research-query';
-import { YStack, XStack, Text, Button, Input, Card, Alert, Select } from '@jarvis/ui-core';
+import {
+  YStack,
+  XStack,
+  Text,
+  Button,
+  Input,
+  Card,
+  Alert,
+  Select,
+  Anchor,
+  EmptyStateCard,
+  LoadingState,
+} from '@jarvis/ui-core';
 
 interface ResearchResultsVisualizationProps {
   eventId: string;
@@ -15,6 +27,7 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
   const [isExpanded, setIsExpanded] = useState(embedded); // Auto-expand when embedded
   const [filterByApi, setFilterByApi] = useState<string | null>(null);
   const [expandedResults, setExpandedResults] = useState<Set<string>>(new Set());
+  const [expandedMetadata, setExpandedMetadata] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
 
   const handleRefresh = () => {
@@ -23,6 +36,18 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
 
   const toggleResult = (resultId: string) => {
     setExpandedResults((prev) => {
+      const next = new Set(prev);
+      if (next.has(resultId)) {
+        next.delete(resultId);
+      } else {
+        next.add(resultId);
+      }
+      return next;
+    });
+  };
+
+  const toggleMetadata = (resultId: string) => {
+    setExpandedMetadata((prev) => {
       const next = new Set(prev);
       if (next.has(resultId)) {
         next.delete(resultId);
@@ -91,20 +116,13 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
 
   if (isLoading) {
     return (
-      <YStack
-        backgroundColor={embedded ? 'transparent' : '$background'}
-        borderWidth={embedded ? 0 : 1}
-        borderColor={embedded ? 'transparent' : '$borderColor'}
-        borderRadius={embedded ? 0 : '$4'}
-        padding={embedded ? 0 : '$6'}
-        marginBottom={embedded ? 0 : '$6'}
-      >
-        <YStack padding="$6" alignItems="center">
-          <Text fontSize="$3" color="$gray11">
-            Loading research results...
-          </Text>
-        </YStack>
-      </YStack>
+      <LoadingState
+        title="Loading research results"
+        description="Fetching the latest research runs."
+        align={embedded ? 'start' : 'center'}
+        padding={embedded ? '$4' : '$6'}
+        skeletons={[{ height: 32, width: '100%' }, { height: 32, width: '100%' }, { height: 32, width: '100%' }]}
+      />
     );
   }
 
@@ -120,23 +138,16 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
 
   if (!researchData || researchData.count === 0) {
     return (
-      <YStack
-        backgroundColor={embedded ? 'transparent' : '$background'}
+      <EmptyStateCard
+        title="No research results yet"
+        description="Results will appear here after the research phase completes."
+        align={embedded ? 'start' : 'center'}
+        padding={embedded ? '$4' : '$6'}
         borderWidth={embedded ? 0 : 1}
         borderColor={embedded ? 'transparent' : '$borderColor'}
-        borderRadius={embedded ? 0 : '$4'}
-        padding={embedded ? 0 : '$6'}
-        marginBottom={embedded ? 0 : '$6'}
-      >
-        <YStack padding="$6" alignItems="center">
-          <Text fontSize="$3" color="$gray11" marginBottom="$2" margin={0}>
-            No research results available yet.
-          </Text>
-          <Text fontSize="$2" color="$gray11" opacity={0.8} margin={0}>
-            Research results will appear here after the research phase completes.
-          </Text>
-        </YStack>
-      </YStack>
+        backgroundColor={embedded ? 'transparent' : '$background'}
+        titleLevel={5}
+      />
     );
   }
 
@@ -280,11 +291,14 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
           backgroundColor="$gray1"
         >
           {filteredResults.length === 0 ? (
-            <YStack padding="$6" alignItems="center">
-              <Text fontSize="$3" color="$gray11">
-                No research results match the selected filter.
-              </Text>
-            </YStack>
+            <EmptyStateCard
+              title="No results match"
+              description="Adjust or clear your filters to see research output."
+              padding="$6"
+              borderWidth={0}
+              backgroundColor="transparent"
+              titleLevel={5}
+            />
           ) : (
             <YStack padding="$2">
               {filteredResults.map((result) => {
@@ -340,17 +354,8 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
                           </Text>
                         )}
                       </YStack>
-                      <Text
-                        fontSize="$5"
-                        color="$gray11"
-                        marginLeft="$4"
-                        style={{
-                          transform: isExpandedResult ? 'rotate(90deg)' : 'rotate(0deg)',
-                          transition: 'transform 0.2s',
-                        }}
-                        margin={0}
-                      >
-                        ▶
+                      <Text fontSize="$5" color="$gray11" marginLeft="$4" margin={0}>
+                        {isExpandedResult ? '▼' : '▶'}
                       </Text>
                     </Button>
 
@@ -385,14 +390,14 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
                           )}
                           {result.source_url && (
                             <Text fontSize="$2" color="$gray11" margin={0}>
-                              <a
+                              <Anchor
                                 href={result.source_url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                style={{ color: '#3b82f6', textDecoration: 'none' }}
+                                color="$blue11"
                               >
                                 View Source →
-                              </a>
+                              </Anchor>
                             </Text>
                           )}
                           <Text fontSize="$2" color="$gray11" margin={0}>
@@ -400,27 +405,33 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
                           </Text>
                         </XStack>
                         {result.metadata && Object.keys(result.metadata).length > 0 && (
-                          <details style={{ marginTop: '12px', fontSize: '11px', color: '#64748b' }}>
-                            <summary style={{ cursor: 'pointer', fontWeight: '500' }}>
-                              Metadata
-                            </summary>
-                            <YStack
-                              marginTop="$2"
-                              padding="$2"
-                              backgroundColor="$gray1"
-                              borderRadius="$1"
+                          <YStack marginTop="$3" gap="$2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              alignSelf="flex-start"
+                              onPress={() => toggleMetadata(result.id)}
                             >
-                              <Text
-                                fontSize="$1"
-                                fontFamily="$mono"
-                                color="$gray11"
-                                whiteSpace="pre-wrap"
-                                margin={0}
+                              {expandedMetadata.has(result.id) ? 'Hide Metadata' : 'Show Metadata'}
+                            </Button>
+                            {expandedMetadata.has(result.id) && (
+                              <YStack
+                                padding="$2"
+                                backgroundColor="$gray1"
+                                borderRadius="$2"
                               >
-                                {JSON.stringify(result.metadata, null, 2)}
-                              </Text>
-                            </YStack>
-                          </details>
+                                <Text
+                                  fontSize="$1"
+                                  fontFamily="$mono"
+                                  color="$gray11"
+                                  whiteSpace="pre-wrap"
+                                  margin={0}
+                                >
+                                  {JSON.stringify(result.metadata, null, 2)}
+                                </Text>
+                              </YStack>
+                            )}
+                          </YStack>
                         )}
                       </YStack>
                     )}
@@ -434,4 +445,3 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
     </YStack>
   );
 }
-

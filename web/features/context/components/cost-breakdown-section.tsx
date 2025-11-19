@@ -1,7 +1,7 @@
 'use client';
 
 import { isRecord, formatCurrency } from './blueprint-display-utils';
-import { YStack, XStack, Text } from '@jarvis/ui-core';
+import { YStack, Heading, StatGroup, StatItem } from '@jarvis/ui-core';
 
 interface CostBreakdownSectionProps {
   costBreakdown: Record<string, unknown> | null;
@@ -13,30 +13,22 @@ export function CostBreakdownSection({ costBreakdown }: CostBreakdownSectionProp
   }
 
   return (
-    <YStack marginBottom="$5">
-      <Text fontSize="$3" fontWeight="600" color="$color" marginBottom="$2" margin={0}>
-        Cost Breakdown
-      </Text>
-      <XStack flexWrap="wrap" gap="$3" fontSize="$2" color="$gray9">
+    <YStack gap="$3">
+      <Heading level={4}>Cost Breakdown</Heading>
+      <StatGroup>
         {['research', 'glossary', 'chunks', 'total'].map((key) => (
-          <YStack key={key} minWidth={140}>
-            <Text
-              textTransform="capitalize"
-              color="$gray11"
-              marginBottom="$0.5"
-              margin={0}
-            >
-              {key === 'total' ? 'Total' : `${key.charAt(0).toUpperCase()}${key.slice(1)}`}
-            </Text>
-            <Text fontWeight="600" color="$color" margin={0}>
-              {typeof costBreakdown[key] === 'number'
+          <StatItem
+            key={key}
+            label={key === 'total' ? 'Total' : `${key.charAt(0).toUpperCase()}${key.slice(1)}`}
+            value={
+              typeof costBreakdown[key] === 'number'
                 ? formatCurrency(costBreakdown[key] as number)
-                : '—'}
-            </Text>
-          </YStack>
+                : '—'
+            }
+            size="sm"
+          />
         ))}
-      </XStack>
+      </StatGroup>
     </YStack>
   );
 }
-

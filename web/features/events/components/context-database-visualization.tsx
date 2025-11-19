@@ -4,7 +4,22 @@ import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/shared/lib/supabase/client';
 import { useContextDatabaseQuery } from '@/shared/hooks/use-context-database-query';
-import { YStack, XStack, Text, Card, Button, Input, Alert } from '@jarvis/ui-core';
+import {
+  YStack,
+  XStack,
+  Card,
+  Button,
+  Input,
+  Alert,
+  Heading,
+  Body,
+  Label,
+  Badge,
+  Select,
+  EmptyStateCard,
+  LoadingState,
+  Skeleton,
+} from '@jarvis/ui-core';
 
 interface ContextItem {
   id: string;
@@ -237,131 +252,63 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
     >
       {/* Header - only show when not embedded */}
       {!embedded && (
-        <XStack
-          justifyContent="space-between"
-          alignItems="center"
-          marginBottom="$5"
-        >
+        <XStack justifyContent="space-between" alignItems="center" marginBottom="$5">
           <YStack>
-            <Text fontSize="$5" fontWeight="600" color="$color" marginBottom="$1" margin={0}>
-              Context Database
-            </Text>
-            <XStack alignItems="center" gap="$3" fontSize="$3" color="$gray11">
-              <Text>
-                {isLoading ? 'Loading...' : `${stats?.total || 0} / 1,000 chunks`}
-              </Text>
+            <Heading level={3}>Context Database</Heading>
+            <XStack alignItems="center" gap="$3">
+              {isLoading ? (
+                <Skeleton width={140} height={16} />
+              ) : (
+                <Body tone="muted">{`${stats?.total || 0} / 1,000 chunks`}</Body>
+              )}
               {isRealTime && (
-                <XStack alignItems="center" gap="$1">
-                  <YStack
-                    width={8}
-                    height={8}
-                    borderRadius="$10"
-                    backgroundColor="$green11"
-                    opacity={0.8}
-                    style={{
-                      animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                    }}
-                  />
-                  <Text>Live</Text>
-                </XStack>
+                <Badge variant="green" size="sm">
+                  Live
+                </Badge>
               )}
             </XStack>
           </YStack>
-          {!embedded && (
-            <Button
-              variant="outline"
-              size="sm"
-              onPress={() => setIsExpanded(!isExpanded)}
-            >
-              {isExpanded ? 'Collapse' : 'Expand'}
-            </Button>
-          )}
+          <Button variant="outline" size="sm" onPress={() => setIsExpanded(!isExpanded)}>
+            {isExpanded ? 'Collapse' : 'Expand'}
+          </Button>
         </XStack>
       )}
 
       {/* Stats Overview */}
       {stats && (
-        <XStack
-          flexWrap="wrap"
-          gap="$3"
-          marginBottom="$5"
-          padding="$4"
-          backgroundColor="$gray1"
-          borderRadius="$3"
-          $sm={{ flexDirection: 'column' }}
-          $md={{ flexDirection: 'row' }}
-        >
-          <YStack flex={1} minWidth={120}>
-            <Text
-              fontSize="$1"
-              fontWeight="600"
-              color="$gray11"
-              textTransform="uppercase"
-              letterSpacing={0.5}
-              marginBottom="$1"
-            >
-              Total Chunks
-            </Text>
-            <Text fontSize="$5" fontWeight="700" color="$color">
-              {stats.total}
-            </Text>
-          </YStack>
-          <YStack flex={1} minWidth={120}>
-            <Text
-              fontSize="$1"
-              fontWeight="600"
-              color="$gray11"
-              textTransform="uppercase"
-              letterSpacing={0.5}
-              marginBottom="$1"
-            >
-              Avg Quality
-            </Text>
-            <Text
-              fontSize="$5"
-              fontWeight="700"
-              color={
-                stats.avgQualityScore >= 0.7
-                  ? '$green11'
-                  : stats.avgQualityScore >= 0.4
-                  ? '$yellow11'
-                  : '$red11'
-              }
-            >
-              {(stats.avgQualityScore * 100).toFixed(0)}%
-            </Text>
-          </YStack>
-          <YStack flex={1} minWidth={120}>
-            <Text
-              fontSize="$1"
-              fontWeight="600"
-              color="$gray11"
-              textTransform="uppercase"
-              letterSpacing={0.5}
-              marginBottom="$1"
-            >
-              Total Chars
-            </Text>
-            <Text fontSize="$5" fontWeight="700" color="$color">
-              {stats.totalChars.toLocaleString()}
-            </Text>
-          </YStack>
-        </XStack>
+        <Card variant="outlined" padding="$4" marginBottom="$5">
+          <XStack flexWrap="wrap" gap="$4" $sm={{ flexDirection: 'column' }} $md={{ flexDirection: 'row' }}>
+            <YStack flex={1} minWidth={120}>
+              <Label size="xs">Total Chunks</Label>
+              <Heading level={3}>{stats.total}</Heading>
+            </YStack>
+            <YStack flex={1} minWidth={120}>
+              <Label size="xs">Avg Quality</Label>
+              <Heading
+                level={3}
+                color={
+                  stats.avgQualityScore >= 0.7
+                    ? '$green11'
+                    : stats.avgQualityScore >= 0.4
+                    ? '$yellow11'
+                    : '$red11'
+                }
+              >
+                {(stats.avgQualityScore * 100).toFixed(0)}%
+              </Heading>
+            </YStack>
+            <YStack flex={1} minWidth={120}>
+              <Label size="xs">Total Chars</Label>
+              <Heading level={3}>{stats.totalChars.toLocaleString()}</Heading>
+            </YStack>
+          </XStack>
+        </Card>
       )}
 
       {/* Source Breakdown */}
       {stats && stats.byEnrichmentSource && Object.keys(stats.byEnrichmentSource).length > 0 && (
-        <YStack marginBottom="$5" padding="$4" backgroundColor="$gray1" borderRadius="$3">
-          <Text
-            fontSize="$2"
-            fontWeight="600"
-            color="$gray11"
-            textTransform="uppercase"
-            letterSpacing={0.5}
-            marginBottom="$3"
-          >
-            Source Breakdown
-          </Text>
+        <Card variant="outlined" padding="$4" marginBottom="$5">
+          <Label marginBottom="$3">Source Breakdown</Label>
           <XStack flexWrap="wrap" gap="$2">
             {Object.entries(stats.byEnrichmentSource).map(([source, count]) => (
               <XStack
@@ -381,29 +328,29 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
                   borderRadius="$10"
                   backgroundColor={getSourceColor(source)}
                 />
-                <Text color="$color" fontWeight="500">
-                  {getSourceLabel(source)}
-                </Text>
-                <Text color="$gray11">
-                  {count}
-                </Text>
+                <Body weight="medium">{getSourceLabel(source)}</Body>
+                <Body tone="muted">{count}</Body>
               </XStack>
             ))}
           </XStack>
-        </YStack>
+        </Card>
       )}
 
       {/* Status Indicator - Only show during active building */}
       {isPrepping && contextItems.length === 0 && (
         <Alert variant="warning" marginBottom="$5">
           <YStack gap="$2">
-            <Text>
+            <Body>
               ⚡ Building context database... Chunks will appear here as they are generated.
-            </Text>
-            <Text fontSize="$2" opacity={0.8}>
-              Agent status: <Text fontWeight="600">{agentStatus}</Text> - The worker should be processing this every 3 seconds.
+            </Body>
+            <Body size="sm" tone="muted">
+              Agent status:{' '}
+              <Body size="sm" weight="medium">
+                {agentStatus}
+              </Body>{' '}
+              - The worker should be processing this every 3 seconds.
               {!isRealTime && ' Make sure the worker is running!'}
-            </Text>
+            </Body>
           </YStack>
         </Alert>
       )}
@@ -417,13 +364,7 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
           flexWrap="wrap"
           alignItems="center"
         >
-          <Input
-            flex={1}
-            minWidth={200}
-            placeholder="Search chunks..."
-            value={searchQuery}
-            onChange={(e: any) => setSearchQuery(e.target.value)}
-          />
+          <Input flex={1} minWidth={200} placeholder="Search chunks..." value={searchQuery} onChangeText={setSearchQuery} />
           <Button
             variant="outline"
             size="sm"
@@ -440,7 +381,7 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
             <option value="">All Ranks</option>
             <option value="ranked">Ranked Only</option>
             <option value="unranked">Unranked Only</option>
-          </select>
+          </Select>
           {researchSources.length > 0 && (
             <Select
               value={filterByResearchSource || ''}
@@ -453,7 +394,7 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
                   {source}
                 </option>
               ))}
-            </select>
+            </Select>
           )}
           {(filterByRank || filterByResearchSource || searchQuery) && (
             <Button
@@ -483,9 +424,17 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
           backgroundColor="$gray1"
         >
           {isLoading ? (
-            <YStack padding="$6" alignItems="center">
-              <Text color="$gray11">Loading context items...</Text>
-            </YStack>
+            <LoadingState
+              title="Loading context items"
+              description="Fetching the most recent context chunks."
+              padding="$6"
+              align="start"
+              skeletons={[
+                { height: 64, width: '100%' },
+                { height: 64, width: '100%' },
+                { height: 64, width: '100%' },
+              ]}
+            />
           ) : error ? (
             <YStack padding="$6" alignItems="center">
               <Alert variant="error">
@@ -493,15 +442,26 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
               </Alert>
             </YStack>
           ) : filteredItems.length === 0 ? (
-            <YStack padding="$6" alignItems="center">
-              <Text color="$gray11">
-                {(filterByRank || filterByResearchSource)
-                  ? 'No context items match the selected filters.'
+            <EmptyStateCard
+              title={
+                filterByRank || filterByResearchSource
+                  ? 'No context items match'
                   : contextItems.length === 0
-                  ? 'No context items found. Expand to view chunks when they are available.'
-                  : 'No context items match the current filters.'}
-              </Text>
-            </YStack>
+                  ? 'No context items yet'
+                  : 'No context items match'
+              }
+              description={
+                filterByRank || filterByResearchSource
+                  ? 'Adjust or clear your filters to view additional items.'
+                  : contextItems.length === 0
+                  ? 'Expand this panel after context generation to see the populated database.'
+                  : 'Try refining or clearing your filters.'
+              }
+              padding="$6"
+              borderWidth={0}
+              backgroundColor="transparent"
+              titleLevel={5}
+            />
           ) : (
             <YStack padding="$2">
               {filteredItems.map((item) => {
@@ -527,15 +487,9 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
                     >
                       <XStack alignItems="center" gap="$2">
                         {item.rank !== null && (
-                          <YStack
-                            padding="$0.5 $2"
-                            backgroundColor="$blue2"
-                            borderRadius="$1"
-                          >
-                            <Text fontSize="$1" fontWeight="600" color="$blue11">
-                              Rank: {item.rank}
-                            </Text>
-                          </YStack>
+                          <Badge variant="blue" size="sm">
+                            Rank: {item.rank}
+                          </Badge>
                         )}
                         <YStack
                           width={8}
@@ -543,88 +497,62 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
                           borderRadius="$10"
                           backgroundColor={sourceColor}
                         />
-                        <Text
-                          fontSize="$2"
-                          fontWeight="600"
-                          color="$gray11"
-                          textTransform="uppercase"
-                        >
+                        <Body size="sm" weight="medium">
                           {getSourceLabel(item.metadata?.enrichment_source || item.metadata?.source || 'unknown')}
-                        </Text>
+                        </Body>
                         {item.metadata?.research_source && (
-                          <YStack
-                            padding="$0.5 $2"
-                            backgroundColor="$gray2"
-                            borderRadius="$1"
-                          >
-                            <Text fontSize="$1" fontWeight="500" color="$gray9">
-                              Research: {item.metadata.research_source}
-                            </Text>
-                          </YStack>
+                          <Badge variant="gray" size="sm">
+                            Research: {item.metadata.research_source}
+                          </Badge>
                         )}
-                      </XStack>
-                      <XStack alignItems="center" gap="$2">
-                        {qualityScore !== null && (
-                          <YStack
-                            padding="$0.5 $2"
-                            backgroundColor={
+                     </XStack>
+                     <XStack alignItems="center" gap="$2">
+                       {qualityScore !== null && (
+                          <Badge
+                            variant={
                               qualityScore >= 0.7
-                                ? '$green2'
+                                ? 'green'
                                 : qualityScore >= 0.4
-                                ? '$yellow2'
-                                : '$red2'
+                                ? 'yellow'
+                                : 'red'
                             }
-                            borderRadius="$1"
+                            size="sm"
                           >
-                            <Text fontSize="$1" fontWeight="500" color="$color">
+                            <Body size="xs" weight="medium" color="$color">
                               Quality: {(qualityScore * 100).toFixed(0)}%
-                            </Text>
-                          </YStack>
+                            </Body>
+                          </Badge>
                         )}
                         {item.metadata?.chunk_size && (
-                          <Text fontSize="$1" color="$gray5">
+                          <Body size="xs" tone="muted">
                             {typeof item.metadata.chunk_size === 'string' 
                               ? parseInt(item.metadata.chunk_size, 10) 
                               : item.metadata.chunk_size} chars
-                          </Text>
+                          </Body>
                         )}
                       </XStack>
                     </XStack>
-                    <Text
-                      fontSize="$3"
-                      color="$gray9"
-                      lineHeight={1.6}
-                      marginBottom="$2"
-                      whiteSpace="pre-wrap"
-                    >
+                    <Body lineHeight={1.6} marginBottom="$2" whiteSpace="pre-wrap">
                       {item.chunk}
-                    </Text>
+                    </Body>
                     {item.metadata && Object.keys(item.metadata).length > 0 && (
-                      <details>
-                        <summary style={{ cursor: 'pointer', fontWeight: '500', fontSize: '11px', color: '#64748b' }}>
-                          Metadata
-                        </summary>
+                      <YStack marginTop="$2" gap="$1">
+                        <Label size="xs">Metadata</Label>
                         <YStack
-                          marginTop="$2"
                           padding="$2"
                           backgroundColor="$gray1"
                           borderRadius="$1"
                         >
-                          <Text
-                            fontSize="$1"
-                            fontFamily="$mono"
-                            color="$gray11"
-                            whiteSpace="pre-wrap"
-                          >
+                          <Body size="xs" fontFamily="$mono" whiteSpace="pre-wrap">
                             {JSON.stringify(item.metadata, null, 2)}
-                          </Text>
+                          </Body>
                         </YStack>
-                      </details>
+                      </YStack>
                     )}
                     {item.metadata?.enrichment_timestamp && (
-                      <Text fontSize="$1" color="$gray5" marginTop="$1">
+                      <Body size="xs" tone="muted" marginTop="$1">
                         Added: {new Date(item.metadata.enrichment_timestamp).toLocaleTimeString()}
-                      </Text>
+                      </Body>
                     )}
                   </Card>
                 );
@@ -646,4 +574,3 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
     </YStack>
   );
 }
-

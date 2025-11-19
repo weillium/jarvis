@@ -18,7 +18,20 @@ import { ChunksPlanTable } from './chunks-plan-table';
 import { AudienceProfileSection } from './audience-profile-section';
 import { AgentAlignmentSection } from './agent-alignment-section';
 import { CostBreakdownSection } from './cost-breakdown-section';
-import { YStack, XStack, Text, Card, Alert, Badge } from '@jarvis/ui-core';
+import {
+  YStack,
+  Card,
+  Alert,
+  Badge,
+  Heading,
+  Body,
+  StatGroup,
+  StatItem,
+  BulletList,
+  TagGroup,
+  EmptyStateCard,
+  LoadingState,
+} from '@jarvis/ui-core';
 
 interface BlueprintDisplayProps {
   eventId: string;
@@ -43,9 +56,13 @@ export function BlueprintDisplay({
 
   if (isLoading) {
     return (
-      <YStack padding="$4" alignItems="center">
-        <Text color="$gray11">Loading blueprint...</Text>
-      </YStack>
+      <LoadingState
+        title="Loading blueprint"
+        description="Fetching the latest context blueprint."
+        padding="$6"
+        align="start"
+        skeletons={[{ height: 32 }, { height: 16 }, { height: 16 }]}
+      />
     );
   }
 
@@ -59,9 +76,12 @@ export function BlueprintDisplay({
 
   if (!blueprint) {
     return (
-      <YStack padding="$4" alignItems="center">
-        <Text color="$gray11">No blueprint available</Text>
-      </YStack>
+      <EmptyStateCard
+        title="No blueprint available"
+        description="Generate context to populate the blueprint."
+        padding="$6"
+        titleLevel={5}
+      />
     );
   }
 
@@ -145,312 +165,107 @@ export function BlueprintDisplay({
   const targetChunkCount = blueprint.target_chunk_count ?? chunksPlan?.target_count ?? null;
   const qualityTier = blueprint.quality_tier ?? chunksPlan?.quality_tier ?? null;
 
-  if (embedded) {
-    return (
-      <YStack>
+  const summaryStats = (
+    <StatGroup>
+      {targetChunkCount !== null && (
+        <StatItem label="Target Chunks (Plan)" value={targetChunkCount.toLocaleString()} flex={1} />
+      )}
+      {chunkPlanStats && (
+        <StatItem
+          label="Estimated Chunks (Plan)"
+          value={chunkPlanStats.total.toLocaleString()}
+          helperText={
+            chunkPlanCoverage !== null ? `${chunkPlanCoverage}% of target` : undefined
+          }
+          flex={1}
+        />
+      )}
+      {qualityTier && (
+        <StatItem
+          label="Quality Tier"
+          value={qualityTier.charAt(0).toUpperCase() + qualityTier.slice(1)}
+          flex={1}
+        />
+      )}
+      {blueprint.estimated_cost !== null && (
+        <StatItem
+          label="Estimated Cost"
+          value={`$${blueprint.estimated_cost.toFixed(4)}`}
+          flex={1}
+        />
+      )}
+    </StatGroup>
+  );
 
-      {/* Summary */}
-      <XStack
-        flexWrap="wrap"
-        gap="$4"
-        marginBottom="$4"
-        $sm={{ flexDirection: 'column' }}
-        $md={{ flexDirection: 'row' }}
-      >
-        {targetChunkCount !== null && (
-          <YStack flex={1} minWidth={200}>
-            <Text fontSize="$2" color="$gray11" marginBottom="$1" margin={0}>
-              Target Chunks (Plan)
-            </Text>
-            <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
-              {targetChunkCount.toLocaleString()}
-            </Text>
-          </YStack>
-        )}
-        {chunkPlanStats && (
-          <YStack flex={1} minWidth={200}>
-            <Text fontSize="$2" color="$gray11" marginBottom="$1" margin={0}>
-              Estimated Chunks (Plan)
-            </Text>
-            <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
-              {chunkPlanStats.total.toLocaleString()}
-            </Text>
-            {chunkPlanCoverage !== null && (
-              <Text fontSize="$1" color="$gray5" marginTop="$0.5" margin={0}>
-                {chunkPlanCoverage}% of target
-              </Text>
-            )}
-          </YStack>
-        )}
-        {qualityTier && (
-          <YStack flex={1} minWidth={200}>
-            <Text fontSize="$2" color="$gray11" marginBottom="$1" margin={0}>
-              Quality Tier
-            </Text>
-            <Text fontSize="$4" fontWeight="600" color="$color" textTransform="capitalize" margin={0}>
-              {qualityTier}
-            </Text>
-          </YStack>
-        )}
-        {blueprint.estimated_cost !== null && (
-          <YStack flex={1} minWidth={200}>
-            <Text fontSize="$2" color="$gray11" marginBottom="$1" margin={0}>
-              Estimated Cost
-            </Text>
-            <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
-              ${blueprint.estimated_cost.toFixed(4)}
-            </Text>
-          </YStack>
-        )}
-      </XStack>
+  const detailSections = (
+    <YStack gap="$5">
+      {audienceProfile && <AudienceProfileSection audienceProfile={audienceProfile} />}
 
-      {/* Expandable details */}
-      {expanded && (
-        <YStack marginTop="$5" gap="$5">
-          {/* Audience Profile */}
-          {audienceProfile && (
-            <AudienceProfileSection audienceProfile={audienceProfile} />
-          )}
-
-          {/* Important Details */}
-          {importantDetails && importantDetails.length > 0 && (
-            <YStack marginBottom="$5">
-              <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$3" margin={0}>
-                Important Details
-              </Text>
-              <YStack margin={0} paddingLeft="$5" gap="$1">
-                {importantDetails.map((detail, i) => (
-                  <XStack key={i} margin={0} gap="$2">
-                    <Text fontSize="$3" color="$gray9" margin={0} lineHeight={1.6}>
-                      •
-                    </Text>
-                    <Text fontSize="$3" color="$gray9" margin={0} lineHeight={1.6} flex={1}>
-                      {detail}
-                    </Text>
-                  </XStack>
-                ))}
-              </YStack>
-            </YStack>
-          )}
-
-          {/* Inferred Topics */}
-          {inferredTopics && inferredTopics.length > 0 && (
-            <YStack marginBottom="$5">
-              <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$3" margin={0}>
-                Inferred Topics
-              </Text>
-              <XStack flexWrap="wrap" gap="$2">
-                {inferredTopics.map((topic, i) => (
-                  <Badge key={i} variant="blue" size="md">
-                    {topic}
-                  </Badge>
-                ))}
-              </XStack>
-            </YStack>
-          )}
-
-          {/* Key Terms */}
-          {keyTerms && keyTerms.length > 0 && (
-            <YStack marginBottom="$5">
-              <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$3" margin={0}>
-                Key Terms
-              </Text>
-              <XStack flexWrap="wrap" gap="$2">
-                {keyTerms.map((term, i) => (
-                  <Badge key={i} variant="yellow" size="md">
-                    {term}
-                  </Badge>
-                ))}
-              </XStack>
-            </YStack>
-          )}
-
-          {/* Research Plan */}
-          {researchPlan && (
-            <ResearchPlanTable researchPlan={researchPlan} />
-          )}
-
-          {/* Glossary Plan */}
-          {glossaryPlan && (
-            <GlossaryPlanTable glossaryPlan={glossaryPlan} />
-          )}
-
-          {/* Chunks Plan */}
-          {chunksPlan && (
-            <ChunksPlanTable
-              chunksPlan={chunksPlan}
-              chunkPlanStats={chunkPlanStats}
-              chunkPlanCoverage={chunkPlanCoverage}
-            />
-          )}
-
-          {/* Agent Alignment */}
-          {agentAlignment && (
-            <AgentAlignmentSection agentAlignment={agentAlignment} />
-          )}
-
-          {/* Cost Breakdown */}
-          <CostBreakdownSection costBreakdown={costBreakdown} />
+      {importantDetails && importantDetails.length > 0 && (
+        <YStack gap="$3">
+          <Heading level={4}>Important Details</Heading>
+          <BulletList items={importantDetails} />
         </YStack>
       )}
+
+      {inferredTopics && inferredTopics.length > 0 && (
+        <YStack gap="$3">
+          <Heading level={4}>Inferred Topics</Heading>
+          <TagGroup>
+            {inferredTopics.map((topic, i) => (
+              <Badge key={i} variant="blue" size="md">
+                {topic}
+              </Badge>
+            ))}
+          </TagGroup>
+        </YStack>
+      )}
+
+      {keyTerms && keyTerms.length > 0 && (
+        <YStack gap="$3">
+          <Heading level={4}>Key Terms</Heading>
+          <TagGroup>
+            {keyTerms.map((term, i) => (
+              <Badge key={i} variant="yellow" size="md">
+                {term}
+              </Badge>
+            ))}
+          </TagGroup>
+        </YStack>
+      )}
+
+      {researchPlan && <ResearchPlanTable researchPlan={researchPlan} />}
+
+      {glossaryPlan && <GlossaryPlanTable glossaryPlan={glossaryPlan} />}
+
+      {chunksPlan && (
+        <ChunksPlanTable
+          chunksPlan={chunksPlan}
+          chunkPlanStats={chunkPlanStats}
+          chunkPlanCoverage={chunkPlanCoverage}
+        />
+      )}
+
+      {agentAlignment && <AgentAlignmentSection agentAlignment={agentAlignment} />}
+
+      <CostBreakdownSection costBreakdown={costBreakdown} />
+    </YStack>
+  );
+
+  if (embedded) {
+    return (
+      <YStack gap="$5">
+        {summaryStats}
+        {expanded && detailSections}
       </YStack>
     );
   }
 
   return (
-    <Card variant="outlined" backgroundColor="$gray1" padding="$5">
-      {/* Header - only show title when not embedded */}
-      <XStack justifyContent="space-between" alignItems="center" marginBottom="$4">
-        <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
-          Context Blueprint
-        </Text>
-      </XStack>
-
-      {/* Summary */}
-      <XStack
-        flexWrap="wrap"
-        gap="$4"
-        marginBottom="$4"
-        $sm={{ flexDirection: 'column' }}
-        $md={{ flexDirection: 'row' }}
-      >
-        {targetChunkCount !== null && (
-          <YStack flex={1} minWidth={200}>
-            <Text fontSize="$2" color="$gray11" marginBottom="$1" margin={0}>
-              Target Chunks (Plan)
-            </Text>
-            <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
-              {targetChunkCount.toLocaleString()}
-            </Text>
-          </YStack>
-        )}
-        {chunkPlanStats && (
-          <YStack flex={1} minWidth={200}>
-            <Text fontSize="$2" color="$gray11" marginBottom="$1" margin={0}>
-              Estimated Chunks (Plan)
-            </Text>
-            <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
-              {chunkPlanStats.total.toLocaleString()}
-            </Text>
-            {chunkPlanCoverage !== null && (
-              <Text fontSize="$1" color="$gray5" marginTop="$0.5" margin={0}>
-                {chunkPlanCoverage}% of target
-              </Text>
-            )}
-          </YStack>
-        )}
-        {qualityTier && (
-          <YStack flex={1} minWidth={200}>
-            <Text fontSize="$2" color="$gray11" marginBottom="$1" margin={0}>
-              Quality Tier
-            </Text>
-            <Text fontSize="$4" fontWeight="600" color="$color" textTransform="capitalize" margin={0}>
-              {qualityTier}
-            </Text>
-          </YStack>
-        )}
-        {blueprint.estimated_cost !== null && (
-          <YStack flex={1} minWidth={200}>
-            <Text fontSize="$2" color="$gray11" marginBottom="$1" margin={0}>
-              Estimated Cost
-            </Text>
-            <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
-              ${blueprint.estimated_cost.toFixed(4)}
-            </Text>
-          </YStack>
-        )}
-      </XStack>
-
-      {/* Expandable details */}
-      {expanded && (
-        <YStack marginTop="$5" gap="$5">
-          {/* Audience Profile */}
-          {audienceProfile && (
-            <AudienceProfileSection audienceProfile={audienceProfile} />
-          )}
-
-          {/* Important Details */}
-          {importantDetails && importantDetails.length > 0 && (
-            <YStack marginBottom="$5">
-              <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$3" margin={0}>
-                Important Details
-              </Text>
-              <YStack margin={0} paddingLeft="$5" gap="$1">
-                {importantDetails.map((detail, i) => (
-                  <XStack key={i} margin={0} gap="$2">
-                    <Text fontSize="$3" color="$gray9" margin={0} lineHeight={1.6}>
-                      •
-                    </Text>
-                    <Text fontSize="$3" color="$gray9" margin={0} lineHeight={1.6} flex={1}>
-                      {detail}
-                    </Text>
-                  </XStack>
-                ))}
-              </YStack>
-            </YStack>
-          )}
-
-          {/* Inferred Topics */}
-          {inferredTopics && inferredTopics.length > 0 && (
-            <YStack marginBottom="$5">
-              <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$3" margin={0}>
-                Inferred Topics
-              </Text>
-              <XStack flexWrap="wrap" gap="$2">
-                {inferredTopics.map((topic, i) => (
-                  <Badge key={i} variant="blue" size="md">
-                    {topic}
-                  </Badge>
-                ))}
-              </XStack>
-            </YStack>
-          )}
-
-          {/* Key Terms */}
-          {keyTerms && keyTerms.length > 0 && (
-            <YStack marginBottom="$5">
-              <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$3" margin={0}>
-                Key Terms
-              </Text>
-              <XStack flexWrap="wrap" gap="$2">
-                {keyTerms.map((term, i) => (
-                  <Badge key={i} variant="yellow" size="md">
-                    {term}
-                  </Badge>
-                ))}
-              </XStack>
-            </YStack>
-          )}
-
-          {/* Research Plan */}
-          {researchPlan && (
-            <ResearchPlanTable researchPlan={researchPlan} />
-          )}
-
-          {/* Glossary Plan */}
-          {glossaryPlan && (
-            <GlossaryPlanTable glossaryPlan={glossaryPlan} />
-          )}
-
-          {/* Chunks Plan */}
-          {chunksPlan && (
-            <ChunksPlanTable
-              chunksPlan={chunksPlan}
-              chunkPlanStats={chunkPlanStats}
-              chunkPlanCoverage={chunkPlanCoverage}
-            />
-          )}
-
-          {/* Agent Alignment */}
-          {agentAlignment && (
-            <AgentAlignmentSection agentAlignment={agentAlignment} />
-          )}
-
-          {/* Cost Breakdown */}
-          <CostBreakdownSection costBreakdown={costBreakdown} />
-        </YStack>
-      )}
+    <Card variant='outlined' backgroundColor="$gray1" padding="$5" gap="$5">
+      <Heading level={4}>Context Blueprint</Heading>
+      {summaryStats}
+      {expanded && detailSections}
     </Card>
   );
 }
-

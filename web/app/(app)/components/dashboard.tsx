@@ -1,7 +1,6 @@
 'use client';
 
-import Link from 'next/link';
-import { YStack, XStack, Text, Card } from '@jarvis/ui-core';
+import { YStack, XStack, Text, Card, Anchor, EmptyStateCard } from '@jarvis/ui-core';
 
 export default function AppDashboard() {
   return (
@@ -43,11 +42,11 @@ export default function AppDashboard() {
               {/* Placeholder: Active events count */}
               --
             </Text>
-            <Link href="/events" style={{ textDecoration: 'none' }}>
+            <Anchor href="/events" textDecorationLine="none">
               <Text fontSize="$3" color="$blue11" fontWeight="500">
                 View all →
               </Text>
-            </Link>
+            </Anchor>
           </YStack>
         </Card>
 
@@ -66,11 +65,11 @@ export default function AppDashboard() {
               {/* Placeholder: Active agents count */}
               --
             </Text>
-            <Link href="/agents" style={{ textDecoration: 'none' }}>
+            <Anchor href="/agents" textDecorationLine="none">
               <Text fontSize="$3" color="$blue11" fontWeight="500">
                 View all →
               </Text>
-            </Link>
+            </Anchor>
           </YStack>
         </Card>
 
@@ -101,10 +100,17 @@ export default function AppDashboard() {
           <Text fontSize="$6" fontWeight="600" color="$color" margin={0}>
             Recent Activity
           </Text>
-          <Text color="$gray11" fontSize="$3">
-            {/* Placeholder: Recent activity list */}
-            No recent activity to display
-          </Text>
+          <EmptyStateCard
+            title="No recent activity"
+            description="Once events start running, you'll see the latest updates here."
+            padding="$4"
+            borderRadius="$3"
+            borderWidth={1}
+            borderColor="$borderColor"
+            backgroundColor="$gray1"
+            align="start"
+            titleLevel={5}
+          />
         </YStack>
       </Card>
     </YStack>

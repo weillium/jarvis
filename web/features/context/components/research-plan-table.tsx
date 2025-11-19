@@ -2,77 +2,78 @@
 
 import type { BlueprintResearchPlan } from '@/shared/hooks/use-blueprint-full-query';
 import { formatCurrency, formatPurpose } from './blueprint-display-utils';
-import { YStack, Text } from '@jarvis/ui-core';
+import { YStack, Heading, Body, DataTable } from '@jarvis/ui-core';
 
 interface ResearchPlanTableProps {
   researchPlan: BlueprintResearchPlan;
 }
 
 export function ResearchPlanTable({ researchPlan }: ResearchPlanTableProps) {
+  const columns = [
+    {
+      key: 'query',
+      header: 'Query',
+      flex: 2,
+      minWidth: 220,
+    },
+    {
+      key: 'api',
+      header: 'API',
+      flex: 1,
+      render: (row: BlueprintResearchPlan['queries'][number]) =>
+        row.api ? row.api.toUpperCase() : '—',
+    },
+    {
+      key: 'priority',
+      header: 'Priority',
+      flex: 1,
+    },
+    {
+      key: 'estimated_cost',
+      header: 'Estimated Cost',
+      flex: 1,
+      render: (row: BlueprintResearchPlan['queries'][number]) =>
+        formatCurrency(row.estimated_cost),
+    },
+    {
+      key: 'agent_utility',
+      header: 'Serves Agents',
+      flex: 2,
+      render: (row: BlueprintResearchPlan['queries'][number]) =>
+        formatPurpose(
+          Array.isArray(row.agent_utility) ? row.agent_utility : undefined
+        ),
+    },
+    {
+      key: 'provenance_hint',
+      header: 'Provenance',
+      flex: 2,
+      truncate: true,
+      render: (row: BlueprintResearchPlan['queries'][number]) =>
+        row.provenance_hint && row.provenance_hint.trim().length > 0
+          ? row.provenance_hint
+          : '—',
+    },
+  ] as const;
+
   return (
-    <YStack marginBottom="$5">
-      <Text fontSize="$3" fontWeight="600" color="$color" marginBottom="$2" margin={0}>
-        Research Plan
-      </Text>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{
-          width: '100%',
-          borderCollapse: 'collapse',
-          fontSize: '12px',
-          background: '#ffffff',
-        }}>
-          <thead>
-            <tr>
-              {['Query', 'API', 'Priority', 'Estimated Cost', 'Serves Agents', 'Provenance'].map((header) => (
-                <th
-                  key={header}
-                  style={{
-                    textAlign: 'left',
-                    padding: '8px',
-                    borderBottom: '1px solid #e2e8f0',
-                    color: '#475569',
-                    fontWeight: 600,
-                  }}
-                >
-                  {header}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {researchPlan.queries.map((query, i) => (
-              <tr key={`${query.query}-${i}`}>
-                <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', color: '#0f172a' }}>
-                  {query.query}
-                </td>
-                <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', textTransform: 'uppercase', color: '#475569' }}>
-                  {query.api}
-                </td>
-                <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', color: '#475569' }}>
-                  {query.priority}
-                </td>
-                <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', color: '#475569' }}>
-                  {formatCurrency(query.estimated_cost)}
-                </td>
-                <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', color: '#475569' }}>
-                  {formatPurpose(
-                    Array.isArray(query.agent_utility) ? query.agent_utility : undefined
-                  )}
-                </td>
-                <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', color: '#475569' }}>
-                  {query.provenance_hint && query.provenance_hint.trim().length > 0
-                    ? query.provenance_hint
-                    : '—'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <Text fontSize="$2" color="$gray9" marginTop="$2" margin={0}>
-        <Text fontWeight="600" margin={0}>Total Searches:</Text> {researchPlan.total_searches} &nbsp;•&nbsp; <Text fontWeight="600" margin={0}>Estimated Total Cost:</Text> {formatCurrency(researchPlan.estimated_total_cost)}
-      </Text>
+    <YStack gap="$3">
+      <Heading level={4}>Research Plan</Heading>
+      <DataTable
+        columns={columns}
+        data={researchPlan.queries}
+        size="sm"
+      />
+      <Body size="sm" tone="muted">
+        <Body size="sm" weight="bold">
+          Total Searches:
+        </Body>{' '}
+        {researchPlan.total_searches} &nbsp;•&nbsp;
+        <Body size="sm" weight="bold">
+          Estimated Total Cost:
+        </Body>{' '}
+        {formatCurrency(researchPlan.estimated_total_cost)}
+      </Body>
     </YStack>
   );
 }
-

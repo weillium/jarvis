@@ -3,7 +3,7 @@
 import { useState, FormEvent } from 'react';
 import { supabase } from '@/shared/lib/supabase/client';
 import { useRouter } from 'next/navigation';
-import { YStack, XStack, Text, Button, Input, Alert } from '@jarvis/ui-core';
+import { YStack, XStack, Text, Button, Input, Alert, FormField } from '@jarvis/ui-core';
 
 type AuthMode = 'login' | 'signup';
 
@@ -87,10 +87,7 @@ export function AuthForm({ mode, onToggleMode }: AuthFormProps) {
         <YStack gap="$5">
           {error && <Alert variant="error">{error}</Alert>}
 
-          <YStack gap="$2">
-            <Text fontSize="$3" fontWeight="500" color="$gray9">
-              Email
-            </Text>
+          <FormField label="Email" required>
             <Input
               type="email"
               value={email}
@@ -99,12 +96,9 @@ export function AuthForm({ mode, onToggleMode }: AuthFormProps) {
               disabled={loading}
               autoComplete="email"
             />
-          </YStack>
+          </FormField>
 
-          <YStack gap="$2">
-            <Text fontSize="$3" fontWeight="500" color="$gray9">
-              Password
-            </Text>
+          <FormField label="Password" required>
             <Input
               type="password"
               value={password}
@@ -114,7 +108,7 @@ export function AuthForm({ mode, onToggleMode }: AuthFormProps) {
               minLength={6}
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
             />
-          </YStack>
+          </FormField>
 
           <Button
             type="submit"
@@ -144,4 +138,3 @@ export function AuthForm({ mode, onToggleMode }: AuthFormProps) {
     </YStack>
   );
 }
-

@@ -1,15 +1,10 @@
 'use client';
 
 import { useState, FormEvent, useEffect } from 'react';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import dayjs, { Dayjs } from 'dayjs';
+import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import { EventWithStatus } from '@/shared/types/event';
-import { MarkdownEditor } from '@/shared/ui/markdown-editor';
-import { FileUpload } from '@/shared/ui/file-upload';
 import { useUpdateEventMutation, useDeleteEventDocMutation, useUpdateEventDocNameMutation } from '@/shared/hooks/use-mutations';
 import { useEventDocsQuery } from '@/shared/hooks/use-event-docs-query';
 import { DocumentListItem } from './document-list-item';
@@ -17,7 +12,22 @@ import { supabase } from '@/shared/lib/supabase/client';
 import { withTimeout } from '@/shared/utils/promise-timeout';
 import { validateFiles, MAX_FILE_SIZE } from '@/shared/utils/file-validation';
 import { getFilenameFromPath, getFileExtension, getFileType } from '@/shared/utils/file-utils';
-import { YStack, XStack, Text, Button, Input, Alert, Modal, Select } from '@jarvis/ui-core';
+import {
+  YStack,
+  XStack,
+  Button,
+  Input,
+  Alert,
+  Modal,
+  Select,
+  Label,
+  Body,
+  FileUpload,
+  MarkdownEditor,
+  ModalContent,
+  FormField,
+  ButtonGroup,
+} from '@jarvis/ui-core';
 
 // Extend dayjs with plugins
 dayjs.extend(utc);
@@ -351,32 +361,20 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
       title="Edit Event"
       maxWidth={1200}
     >
-      <form onSubmit={handleSubmit}>
-        <YStack gap="$6">
+      <ModalContent
+        title="Edit Event"
+        description="Update event details, adjust scheduling, or manage reference documents."
+      >
+        <form onSubmit={handleSubmit}>
+          <YStack gap="$5">
             {error && (
               <Alert variant="error">
                 {error}
               </Alert>
             )}
 
-            <XStack
-              gap="$6"
-              marginBottom="$6"
-              $sm={{ flexDirection: 'column' }}
-              $md={{ flexDirection: 'row' }}
-            >
-              <YStack flex={1} width="100%">
-                <Text
-                  htmlFor="edit-title"
-                  as="label"
-                  fontSize="$3"
-                  fontWeight="500"
-                  color="$gray9"
-                  marginBottom="$2"
-                  display="block"
-                >
-                  Title <Text color="$red11">*</Text>
-                </Text>
+            <XStack gap="$4" $sm={{ flexDirection: 'column' }} $md={{ flexDirection: 'row' }}>
+              <FormField flex={1} label="Title" required>
                 <Input
                   id="edit-title"
                   type="text"
@@ -385,57 +383,28 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
                   required
                   disabled={loading}
                   placeholder="Enter event title"
-                  width="100%"
                 />
-              </YStack>
+              </FormField>
 
-              <YStack flex={1} width="100%">
-                <Text
-                  htmlFor="edit-timezone"
-                  as="label"
-                  fontSize="$3"
-                  fontWeight="500"
-                  color="$gray9"
-                  marginBottom="$2"
-                  display="block"
-                >
-                  Timezone
-                </Text>
+              <FormField flex={1} label="Timezone">
                 <Select
                   id="edit-timezone"
                   value={timezone}
                   onChange={(e) => setTimezone(e.target.value)}
                   disabled={loading}
                   size="md"
-                  style={{ width: '100%' }}
                 >
                   {timezones.map((tz) => (
                     <option key={tz} value={tz}>
                       {tz}
                     </option>
                   ))}
-                </select>
-              </YStack>
+                </Select>
+              </FormField>
             </XStack>
 
-            <XStack
-              gap="$6"
-              marginBottom="$6"
-              $sm={{ flexDirection: 'column' }}
-              $md={{ flexDirection: 'row' }}
-            >
-              <YStack flex={1} width="100%">
-                <Text
-                  htmlFor="edit-start_time"
-                  as="label"
-                  fontSize="$3"
-                  fontWeight="500"
-                  color="$gray9"
-                  marginBottom="$2"
-                  display="block"
-                >
-                  Start Time
-                </Text>
+            <XStack gap="$4" $sm={{ flexDirection: 'column' }} $md={{ flexDirection: 'row' }}>
+              <FormField flex={1} label="Start Time">
                 <Input
                   id="edit-start_time"
                   type="datetime-local"
@@ -443,22 +412,10 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
                   onChange={(e: any) => setStartDate(e.target.value)}
                   disabled={loading}
                   step={900}
-                  width="100%"
                 />
-              </YStack>
+              </FormField>
 
-              <YStack flex={1} width="100%">
-                <Text
-                  htmlFor="edit-end_time"
-                  as="label"
-                  fontSize="$3"
-                  fontWeight="500"
-                  color="$gray9"
-                  marginBottom="$2"
-                  display="block"
-                >
-                  End Time
-                </Text>
+              <FormField flex={1} label="End Time">
                 <Input
                   id="edit-end_time"
                   type="datetime-local"
@@ -467,80 +424,55 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
                   disabled={loading || !startDate}
                   min={startDate || undefined}
                   step={900}
-                  width="100%"
                 />
-              </YStack>
+              </FormField>
             </XStack>
 
-              <YStack marginBottom="$6" width="100%">
-                <MarkdownEditor
-                  value={topic}
-                  onChange={setTopic}
-                  label="Topic"
-                  instructions="Briefly describe the event. You can use markdown formatting for rich text."
-                  height={180}
-                  disabled={loading}
-                />
-              </YStack>
+            <MarkdownEditor
+              value={topic}
+              onChange={setTopic}
+              label="Topic"
+              instructions="Briefly describe the event. You can use markdown formatting for rich text."
+              height={180}
+              disabled={loading}
+            />
 
-              {/* Event Documents Section */}
-              <YStack marginBottom="$6" width="100%">
-                <Text
-                  fontSize="$3"
-                  fontWeight="500"
-                  color="$gray9"
-                  marginBottom="$3"
-                  display="block"
-                >
-                  Event Documents
-                </Text>
-                
-                {/* Existing Documents List */}
-                {existingDocs && existingDocs.length > 0 && (
-                  <YStack marginBottom="$4" gap="$2">
-                    {existingDocs.map((doc) => (
-                      <DocumentListItem
-                        key={doc.id}
-                        doc={doc}
-                        onRemove={() => handleRemoveDoc(doc.id)}
-                        onUpdateName={handleDocNameChange}
-                        isRemoving={removingDocs.has(doc.id)}
-                        isUpdating={false}
-                      />
-                    ))}
-                  </YStack>
-                )}
-                
-                {/* File Upload Component */}
-                <FileUpload
-                  files={newFiles}
-                  onFilesChange={setNewFiles}
-                  label={existingDocs && existingDocs.length > 0 ? "Add More Documents" : "Upload Documents"}
-                  instructions={`Upload additional documents. Maximum file size: ${MAX_FILE_SIZE / 1024 / 1024}MB.`}
-                  disabled={loading}
-                />
-              </YStack>
-
-              <XStack gap="$3" justifyContent="flex-end" width="100%">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onPress={handleClose}
-                  disabled={loading}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  variant="primary"
-                  disabled={loading || !title.trim()}
-                >
-                  {loading ? 'Updating...' : 'Update Event'}
-                </Button>
-              </XStack>
+            <YStack width="100%">
+              <Label>Event Documents</Label>
+              {existingDocs && existingDocs.length > 0 && (
+                <YStack marginTop="$3" marginBottom="$4" gap="$2">
+                  {existingDocs.map((doc) => (
+                    <DocumentListItem
+                      key={doc.id}
+                      doc={doc}
+                      onRemove={() => handleRemoveDoc(doc.id)}
+                      onUpdateName={handleDocNameChange}
+                      isRemoving={removingDocs.has(doc.id)}
+                      isUpdating={false}
+                    />
+                  ))}
+                </YStack>
+              )}
+              <FileUpload
+                files={newFiles}
+                onFilesChange={setNewFiles}
+                label={existingDocs && existingDocs.length > 0 ? 'Add More Documents' : 'Upload Documents'}
+                instructions={`Upload additional documents. Maximum file size: ${MAX_FILE_SIZE / 1024 / 1024}MB.`}
+                disabled={loading}
+              />
             </YStack>
-          </form>
+
+            <ButtonGroup>
+              <Button type="button" variant="outline" onPress={handleClose} disabled={loading}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" disabled={loading || !title.trim()}>
+                {loading ? 'Updating…' : 'Update Event'}
+              </Button>
+            </ButtonGroup>
+          </YStack>
+        </form>
+      </ModalContent>
     </Modal>
   );
 }
-

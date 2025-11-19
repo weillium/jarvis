@@ -5,13 +5,24 @@ import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import { supabase } from '@/shared/lib/supabase/client';
-import { MarkdownEditor } from '@/shared/ui/markdown-editor';
-import { FileUpload } from '@/shared/ui/file-upload';
 import { useCreateEventMutation } from '@/shared/hooks/use-mutations';
 import { withTimeout } from '@/shared/utils/promise-timeout';
 import { validateFiles, MAX_FILE_SIZE } from '@/shared/utils/file-validation';
 import { getFileExtension, getFileType } from '@/shared/utils/file-utils';
-import { YStack, XStack, Text, Button, Input, Alert, Modal, Select } from '@jarvis/ui-core';
+import {
+  YStack,
+  XStack,
+  Button,
+  Input,
+  Alert,
+  Modal,
+  Select,
+  FileUpload,
+  MarkdownEditor,
+  ModalContent,
+  FormField,
+  ButtonGroup,
+} from '@jarvis/ui-core';
 
 // Extend dayjs with plugins
 dayjs.extend(utc);
@@ -300,35 +311,22 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title="Create New Event"
       maxWidth={1200}
     >
-      <form onSubmit={handleSubmit}>
-        <YStack gap="$6">
+      <ModalContent
+        title="Create New Event"
+        description="Configure the details below to start a new event and optionally upload supporting documents."
+      >
+        <form onSubmit={handleSubmit}>
+          <YStack gap="$5">
             {error && (
-              <Alert variant="error" style={{ whiteSpace: 'pre-line' }}>
-                {error}
+              <Alert variant="error">
+                <Body whiteSpace="pre-wrap">{error}</Body>
               </Alert>
             )}
 
-            <XStack
-              gap="$6"
-              marginBottom="$6"
-              $sm={{ flexDirection: 'column' }}
-              $md={{ flexDirection: 'row' }}
-            >
-              <YStack flex={1} width="100%">
-                <Text
-                  htmlFor="title"
-                  as="label"
-                  fontSize="$3"
-                  fontWeight="500"
-                  color="$gray9"
-                  marginBottom="$2"
-                  display="block"
-                >
-                  Title <Text color="$red11">*</Text>
-                </Text>
+            <XStack gap="$4" $sm={{ flexDirection: 'column' }} $md={{ flexDirection: 'row' }}>
+              <FormField flex={1} label="Title" required>
                 <Input
                   id="title"
                   type="text"
@@ -337,57 +335,33 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
                   required
                   disabled={isLoading}
                   placeholder="Enter event title"
-                  width="100%"
                 />
-              </YStack>
+              </FormField>
 
-              <YStack flex={1} width="100%">
-                <Text
-                  htmlFor="timezone"
-                  as="label"
-                  fontSize="$3"
-                  fontWeight="500"
-                  color="$gray9"
-                  marginBottom="$2"
-                  display="block"
-                >
-                  Timezone
-                </Text>
+              <FormField flex={1} label="Timezone">
                 <Select
                   id="timezone"
                   value={timezone}
                   onChange={(e) => setTimezone(e.target.value)}
                   disabled={isLoading}
                   size="md"
-                  style={{ width: '100%' }}
                 >
                   {timezones.map((tz) => (
                     <option key={tz} value={tz}>
                       {tz}
                     </option>
                   ))}
-                </select>
-              </YStack>
+                </Select>
+              </FormField>
             </XStack>
 
-            <XStack
-              gap="$6"
-              marginBottom="$6"
-              $sm={{ flexDirection: 'column' }}
-              $md={{ flexDirection: 'row' }}
-            >
-              <YStack flex={1} width="100%">
-                <Text
-                  htmlFor="start_time"
-                  as="label"
-                  fontSize="$3"
-                  fontWeight="500"
-                  color="$gray9"
-                  marginBottom="$2"
-                  display="block"
-                >
-                  Start Time <Text color="$red11">*</Text>
-                </Text>
+            <XStack gap="$4" $sm={{ flexDirection: 'column' }} $md={{ flexDirection: 'row' }}>
+              <FormField
+                flex={1}
+                label="Start Time"
+                required
+                description="Local time when the event begins."
+              >
                 <Input
                   id="start_time"
                   type="datetime-local"
@@ -397,27 +371,15 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
                   disabled={isLoading}
                   min={dayjs().format('YYYY-MM-DDTHH:mm')}
                   step={900}
-                  width="100%"
                 />
-              </YStack>
+              </FormField>
 
-              <YStack flex={1} width="100%">
-                <Text
-                  htmlFor="end_time"
-                  as="label"
-                  fontSize="$3"
-                  fontWeight="500"
-                  color="$gray9"
-                  marginBottom="$2"
-                  display="block"
-                >
-                  End Time <Text color="$red11">*</Text>
-                  {startDate && endDate && (
-                    <Text fontSize="$2" color="$gray11" fontWeight="400" marginLeft="$2">
-                      (auto-set to 1 hour after start)
-                    </Text>
-                  )}
-                </Text>
+              <FormField
+                flex={1}
+                label="End Time"
+                required
+                description={startDate && endDate ? 'Auto-set to 1 hour after start.' : undefined}
+              >
                 <Input
                   id="end_time"
                   type="datetime-local"
@@ -427,51 +389,38 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
                   disabled={isLoading || !startDate}
                   min={startDate || dayjs().format('YYYY-MM-DDTHH:mm')}
                   step={900}
-                  width="100%"
                 />
-              </YStack>
+              </FormField>
             </XStack>
 
-              <YStack marginBottom="$6" width="100%">
-                <MarkdownEditor
-                  value={topic}
-                  onChange={setTopic}
-                  label="Topic"
-                  instructions="Briefly describe the event. You can use markdown formatting for rich text."
-                  height={180}
-                  disabled={isLoading}
-                />
-              </YStack>
+            <MarkdownEditor
+              value={topic}
+              onChange={setTopic}
+              label="Topic"
+              instructions="Briefly describe the event. You can use markdown formatting for rich text."
+              height={180}
+              disabled={isLoading}
+            />
 
-              <YStack marginBottom="$6" width="100%">
-                <FileUpload
-                  files={files}
-                  onFilesChange={setFiles}
-                  label="Event Documents"
-                  instructions={`Upload documents related to this event. Maximum file size: ${MAX_FILE_SIZE / 1024 / 1024}MB. You can select multiple files at once.`}
-                  disabled={isLoading}
-                />
-              </YStack>
+            <FileUpload
+              files={files}
+              onFilesChange={setFiles}
+              label="Event Documents"
+              instructions={`Upload documents related to this event. Maximum file size: ${MAX_FILE_SIZE / 1024 / 1024}MB. You can select multiple files at once.`}
+              disabled={isLoading}
+            />
 
-              <XStack gap="$3" justifyContent="flex-end" width="100%">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onPress={handleClose}
-                  disabled={isLoading}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  variant="primary"
-                  disabled={isLoading || !title.trim()}
-                >
-                  {isLoading ? 'Creating...' : 'Create Event'}
-                </Button>
-              </XStack>
-            </YStack>
-          </form>
+            <ButtonGroup>
+              <Button type="button" variant="outline" onPress={handleClose} disabled={isLoading}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" disabled={isLoading || !title.trim()}>
+                {isLoading ? 'Creating…' : 'Create Event'}
+              </Button>
+            </ButtonGroup>
+          </YStack>
+        </form>
+      </ModalContent>
     </Modal>
   );
 }

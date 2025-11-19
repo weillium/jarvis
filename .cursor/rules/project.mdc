@@ -23,7 +23,8 @@ alwaysApply: true
 - prefer **query / mutation hooks** instead of custom fetch + useState.
 - use absolute imports `@/*` in web code.
 - **use Tamagui components from `@jarvis/ui-core`** for all UI work; TailwindCSS and Material-UI are removed.
-- import shared primitives: `Button`, `Input`, `Textarea`, `Card`, `Alert`, `YStack`, `XStack`, `Text`, `Sheet` from `@jarvis/ui-core`.
+- import shared primitives: `Button`, `Input`, `Textarea`, `Card`, `Alert`, `YStack`, `XStack`, `Text`, `Sheet`, along with higher-level helpers like `ButtonGroup`, `FormField`, `ModalContent`, `EmptyStateCard`, and `LoadingState`.
+- prefer shared utilities (e.g., `FileUpload`, `FileListItem`, shared icons from `@jarvis/ui-core/icons`) instead of inline SVGs or emoji.
 - use Tamagui tokens (`$color`, `$gray11`, `$blue6`, etc.) and spacing (`$4`, `$6`, etc.) for styling.
 
 ## mobile
@@ -37,7 +38,8 @@ alwaysApply: true
 - `packages/ui-core` hosts shared Tamagui components and configuration consumed by both `/web` and `/mobile`.
 - ensure exports remain platform-agnostic (Tamagui primitives, universal hooks, or pure logic).
 - Tamagui config lives in `packages/ui-core/src/tamagui.config.ts`; theme tokens defined there.
-- base components: `Button`, `Input`, `Textarea`, `Card`, `Alert` in `packages/ui-core/src/components/`.
+- base components and structural helpers (`Button`, `Input`, `Textarea`, `Card`, `Alert`, `ButtonGroup`, `FormField`, `ModalContent`, `LoadingState`, etc.) live under `packages/ui-core/src/components/`.
+- shared icons are exposed via `@jarvis/ui-core/icons`; use those instead of redefining SVGs in feature code.
 - if platform-specific variants are required, gate them behind explicit sub-entries (e.g., `packages/ui-core/web` vs `packages/ui-core/native`).
 
 ## supabase

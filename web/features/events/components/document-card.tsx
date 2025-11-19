@@ -3,8 +3,17 @@
 import { useState } from 'react';
 import { supabase } from '@/shared/lib/supabase/client';
 import type { EventDoc } from '@/shared/types/event-doc';
-import { getFileExtension, getFileType, getFileIcon, getFilenameFromPath } from '@/shared/utils/file-utils';
+import { getFileExtension, getFileType, getFilenameFromPath } from '@/shared/utils/file-utils';
 import { YStack, XStack, Text, Card, Button, Alert } from '@jarvis/ui-core';
+import {
+  FilePdfIcon,
+  FileDocumentIcon,
+  FileImageIcon,
+  FileSpreadsheetIcon,
+  FilePresentationIcon,
+  FileArchiveIcon,
+  FileGenericIcon,
+} from '@jarvis/ui-core/icons';
 
 interface DocumentCardProps {
   doc: EventDoc;
@@ -19,7 +28,15 @@ export function DocumentCard({ doc, eventId }: DocumentCardProps) {
   const displayName = doc.name || getFilenameFromPath(doc.path);
   const extension = getFileExtension(displayName);
   const fileType = getFileType(extension);
-  const icon = getFileIcon(fileType);
+  const iconMap: Record<string, React.ReactNode> = {
+    pdf: <FilePdfIcon size={32} />,
+    document: <FileDocumentIcon size={32} />,
+    image: <FileImageIcon size={32} />,
+    spreadsheet: <FileSpreadsheetIcon size={32} />,
+    presentation: <FilePresentationIcon size={32} />,
+    archive: <FileArchiveIcon size={32} />,
+  };
+  const icon = iconMap[fileType] ?? <FileGenericIcon size={32} />;
 
   const handleDownload = async () => {
     setIsDownloading(true);
@@ -66,9 +83,7 @@ export function DocumentCard({ doc, eventId }: DocumentCardProps) {
     >
       <YStack gap="$3">
         <XStack alignItems="center" gap="$3">
-          <Text fontSize="$9" lineHeight={1} flexShrink={0}>
-            {icon}
-          </Text>
+          <YStack flexShrink={0}>{icon}</YStack>
           <YStack flex={1} minWidth={0}>
             <Text
               fontSize="$3"
@@ -111,4 +126,3 @@ export function DocumentCard({ doc, eventId }: DocumentCardProps) {
     </Card>
   );
 }
-

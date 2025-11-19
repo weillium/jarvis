@@ -1,331 +1,89 @@
 'use client';
 
 import { useAuth } from '@/shared/hooks/use-auth';
+import {
+  YStack,
+  XStack,
+  Card,
+  Heading,
+  Body,
+  Input,
+  Button,
+  Select,
+  FormField,
+  ButtonGroup,
+} from '@jarvis/ui-core';
 
 export default function ProfilePage() {
   const { user } = useAuth();
 
   return (
-    <div style={{
-      maxWidth: '1400px',
-      margin: '0 auto',
-    }}>
-      <div style={{
-        marginBottom: '32px',
-      }}>
-        <h1 style={{
-          fontSize: '36px',
-          fontWeight: '700',
-          color: '#0f172a',
-          margin: '0 0 8px 0',
-          letterSpacing: '-0.5px',
-        }}>
-          Profile
-        </h1>
-        <p style={{
-          fontSize: '18px',
-          color: '#64748b',
-          margin: 0,
-        }}>
-          Manage your account settings and preferences
-        </p>
-      </div>
+    <YStack maxWidth={1400} marginHorizontal="auto" width="100%" gap="$6">
+      <YStack gap="$2">
+        <Heading level={1}>Profile</Heading>
+        <Body tone="muted">Manage your account settings and preferences</Body>
+      </YStack>
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 400px',
-        gap: '24px',
-      }}>
-        <div style={{
-          background: '#ffffff',
-          border: '1px solid #e2e8f0',
-          borderRadius: '12px',
-          padding: '24px',
-        }}>
-          <h2 style={{
-            fontSize: '20px',
-            fontWeight: '600',
-            color: '#0f172a',
-            margin: '0 0 24px 0',
-          }}>
-            Account Information
-          </h2>
+      <XStack gap="$4" flexWrap="wrap" alignItems="flex-start">
+        <Card flex={1} minWidth={320} padding="$4">
+          <YStack gap="$4">
+            <Heading level={3}>Account Information</Heading>
 
-          <div style={{
-            marginBottom: '24px',
-          }}>
-            <label style={{
-              display: 'block',
-              fontSize: '14px',
-              fontWeight: '500',
-              color: '#374151',
-              marginBottom: '8px',
-            }}>
-              Email Address
-            </label>
-            <input
-              type="email"
-              value={user?.email || ''}
-              readOnly
-              style={{
-                width: '100%',
-                padding: '12px',
-                border: '1px solid #e2e8f0',
-                borderRadius: '6px',
-                fontSize: '15px',
-                background: '#f8fafc',
-                color: '#64748b',
-                boxSizing: 'border-box',
-              }}
-            />
-          </div>
+            <FormField label="Email Address">
+              <Input value={user?.email ?? ''} readOnly backgroundColor="$gray1" />
+            </FormField>
 
-          <div style={{
-            marginBottom: '24px',
-          }}>
-            <label style={{
-              display: 'block',
-              fontSize: '14px',
-              fontWeight: '500',
-              color: '#374151',
-              marginBottom: '8px',
-            }}>
-              Full Name
-            </label>
-            <input
-              type="text"
-              placeholder="Enter your full name"
-              style={{
-                width: '100%',
-                padding: '12px',
-                border: '1px solid #e2e8f0',
-                borderRadius: '6px',
-                fontSize: '15px',
-                boxSizing: 'border-box',
-              }}
-            />
-          </div>
+            <FormField label="Full Name">
+              <Input placeholder="Enter your full name" />
+            </FormField>
 
-          <div style={{
-            marginBottom: '24px',
-          }}>
-            <label style={{
-              display: 'block',
-              fontSize: '14px',
-              fontWeight: '500',
-              color: '#374151',
-              marginBottom: '8px',
-            }}>
-              Institution
-            </label>
-            <input
-              type="text"
-              placeholder="Enter your institution"
-              style={{
-                width: '100%',
-                padding: '12px',
-                border: '1px solid #e2e8f0',
-                borderRadius: '6px',
-                fontSize: '15px',
-                boxSizing: 'border-box',
-              }}
-            />
-          </div>
+            <FormField label="Institution">
+              <Input placeholder="Enter your institution" />
+            </FormField>
 
-          <div style={{
-            marginBottom: '24px',
-          }}>
-            <label style={{
-              display: 'block',
-              fontSize: '14px',
-              fontWeight: '500',
-              color: '#374151',
-              marginBottom: '8px',
-            }}>
-              Role
-            </label>
-            <select style={{
-              width: '100%',
-              padding: '12px',
-              border: '1px solid #e2e8f0',
-              borderRadius: '6px',
-              fontSize: '15px',
-              background: '#ffffff',
-              boxSizing: 'border-box',
-            }}>
-              <option>Select role...</option>
-              {/* Placeholder: Role options */}
-              <option>Event Organizer</option>
-              <option>Researcher</option>
-              <option>Administrator</option>
-            </select>
-          </div>
+            <FormField label="Role">
+              <Select>
+                <option>Select role...</option>
+                <option>Event Organizer</option>
+                <option>Researcher</option>
+                <option>Administrator</option>
+              </Select>
+            </FormField>
 
-          <button style={{
-            background: '#1e293b',
-            color: '#ffffff',
-            border: 'none',
-            padding: '12px 24px',
-            borderRadius: '8px',
-            fontSize: '15px',
-            fontWeight: '500',
-            cursor: 'pointer',
-            transition: 'background 0.2s',
-          }}>
-            {/* Placeholder: Save profile function */}
-            Save Changes
-          </button>
-        </div>
+            <ButtonGroup align="end">
+              <Button>Save Changes</Button>
+            </ButtonGroup>
+          </YStack>
+        </Card>
 
-        <div>
-          <div style={{
-            background: '#ffffff',
-            border: '1px solid #e2e8f0',
-            borderRadius: '12px',
-            padding: '24px',
-            marginBottom: '24px',
-          }}>
-            <h2 style={{
-              fontSize: '20px',
-              fontWeight: '600',
-              color: '#0f172a',
-              margin: '0 0 24px 0',
-            }}>
-              Security
-            </h2>
+        <YStack gap="$4" width={400} maxWidth="100%">
+          <Card padding="$4">
+            <YStack gap="$3">
+              <Heading level={4}>Security</Heading>
+              <FormField label="Current Password">
+                <Input type="password" placeholder="Enter current password" />
+              </FormField>
+              <FormField label="New Password">
+                <Input type="password" placeholder="Enter new password" />
+              </FormField>
+              <ButtonGroup align="end">
+                <Button variant="outline">Update Password</Button>
+              </ButtonGroup>
+            </YStack>
+          </Card>
 
-            <div style={{
-              marginBottom: '20px',
-            }}>
-              <label style={{
-                display: 'block',
-                fontSize: '14px',
-                fontWeight: '500',
-                color: '#374151',
-                marginBottom: '8px',
-              }}>
-                Current Password
-              </label>
-              <input
-                type="password"
-                placeholder="Enter current password"
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '6px',
-                  fontSize: '15px',
-                  boxSizing: 'border-box',
-                }}
-              />
-            </div>
-
-            <div style={{
-              marginBottom: '20px',
-            }}>
-              <label style={{
-                display: 'block',
-                fontSize: '14px',
-                fontWeight: '500',
-                color: '#374151',
-                marginBottom: '8px',
-              }}>
-                New Password
-              </label>
-              <input
-                type="password"
-                placeholder="Enter new password"
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '6px',
-                  fontSize: '15px',
-                  boxSizing: 'border-box',
-                }}
-              />
-            </div>
-
-            <button style={{
-              width: '100%',
-              padding: '12px',
-              border: '1px solid #e2e8f0',
-              borderRadius: '8px',
-              fontSize: '15px',
-              fontWeight: '500',
-              background: '#ffffff',
-              color: '#475569',
-              cursor: 'pointer',
-            }}>
-              {/* Placeholder: Update password function */}
-              Update Password
-            </button>
-          </div>
-
-          <div style={{
-            background: '#ffffff',
-            border: '1px solid #e2e8f0',
-            borderRadius: '12px',
-            padding: '24px',
-          }}>
-            <h2 style={{
-              fontSize: '20px',
-              fontWeight: '600',
-              color: '#0f172a',
-              margin: '0 0 16px 0',
-            }}>
-              Preferences
-            </h2>
-
-            <div style={{
-              marginBottom: '16px',
-            }}>
-              <label style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                fontSize: '15px',
-                color: '#374151',
-                cursor: 'pointer',
-              }}>
-                <input
-                  type="checkbox"
-                  style={{
-                    width: '18px',
-                    height: '18px',
-                    cursor: 'pointer',
-                  }}
-                />
-                Email notifications
-              </label>
-            </div>
-
-            <div style={{
-              marginBottom: '16px',
-            }}>
-              <label style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                fontSize: '15px',
-                color: '#374151',
-                cursor: 'pointer',
-              }}>
-                <input
-                  type="checkbox"
-                  style={{
-                    width: '18px',
-                    height: '18px',
-                    cursor: 'pointer',
-                  }}
-                />
-                Weekly summaries
-              </label>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+          <Card padding="$4">
+            <YStack gap="$3">
+              <Heading level={4}>Preferences</Heading>
+              {['Email notifications', 'Weekly summaries'].map((label) => (
+                <Button key={label} variant="ghost" justifyContent="flex-start">
+                  {label}
+                </Button>
+              ))}
+            </YStack>
+          </Card>
+        </YStack>
+      </XStack>
+    </YStack>
   );
 }
-

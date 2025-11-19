@@ -12,7 +12,7 @@ import {
   useApproveBlueprintMutation,
 } from '@/shared/hooks/use-mutations';
 import { useContextStatusQuery } from '@/shared/hooks/use-context-status-query';
-import { YStack, XStack, Text, Card, Alert } from '@jarvis/ui-core';
+import { YStack, XStack, Text, Card, Alert, EmptyStateCard, LoadingState } from '@jarvis/ui-core';
 
 interface ContextGenerationPanelProps {
   eventId: string;
@@ -214,17 +214,15 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
 
   // Show loading state when statusData is null (initial load)
   if (statusData === null) {
-    if (embedded) {
-      return (
-        <YStack padding="$4" alignItems="center">
-          <Text color="$gray11">Loading context generation status...</Text>
-        </YStack>
-      );
-    }
     return (
-      <Card variant="outlined" padding="$6" marginBottom="$6">
-        <Text color="$gray11">Loading context generation status...</Text>
-      </Card>
+      <LoadingState
+        title="Loading context generation status"
+        description="Fetching the current agent and blueprint state."
+        padding={embedded ? '$4' : '$6'}
+        align={embedded ? 'start' : 'center'}
+        skeletons={[{ height: 40 }, { height: 40 }]}
+        marginBottom={embedded ? '$4' : '$6'}
+      />
     );
   }
 
@@ -264,11 +262,16 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
 
         {/* No agent state */}
         {statusData?.agent === null && (
-          <YStack padding="$6" alignItems="center">
-            <Text color="$gray11" margin={0}>
-              No agent found for this event. Please create an event with an agent first.
-            </Text>
-          </YStack>
+          <EmptyStateCard
+            title="No agent configured"
+            description="Create an event with an agent before starting context generation."
+            padding="$4"
+            borderWidth={1}
+            borderColor="$borderColor"
+            backgroundColor="$gray1"
+            titleLevel={5}
+            align="start"
+          />
         )}
 
         {/* Progress component - always show when agent exists */}
@@ -378,11 +381,17 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
 
       {/* No agent state */}
       {statusData?.agent === null && (
-        <YStack padding="$6" alignItems="center">
-          <Text color="$gray11" margin={0}>
-            No agent found for this event. Please create an event with an agent first.
-          </Text>
-        </YStack>
+        <EmptyStateCard
+          title="No agent configured"
+          description="Create an event with an agent before starting context generation."
+          padding="$4"
+          borderWidth={1}
+          borderColor="$borderColor"
+          backgroundColor="$gray1"
+          titleLevel={5}
+          align="start"
+          marginBottom="$4"
+        />
       )}
 
       {/* Progress component - always show when agent exists */}

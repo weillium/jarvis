@@ -1,7 +1,7 @@
 'use client';
 
 import { EventWithStatus } from '@/shared/types/event';
-import { Tabs, SubTabs } from '@/shared/ui/tabs';
+import { Tabs, SubTabs } from '@jarvis/ui-core';
 import { EventDetail } from './event-detail';
 import { AgentOverview } from './agent-overview';
 import { BlueprintDisplay } from '@/features/context/components/blueprint-display';
@@ -120,4 +120,3 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
     <Tabs tabs={mainTabs} defaultTab="event" />
   );
 }
-

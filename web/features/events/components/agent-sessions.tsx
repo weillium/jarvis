@@ -18,7 +18,7 @@ import { StartSessionsModal } from './start-sessions-modal';
 import { calculateOpenAICost } from '@/shared/utils/pricing';
 import type { AgentSessionDisplay, AgentType } from './agent-sessions-utils';
 import { agentTitles, defaultAgentModels, inferPromptShareFromMetrics, formatDuration } from './agent-sessions-utils';
-import { YStack, XStack, Text, Button, Card, Alert } from '@jarvis/ui-core';
+import { YStack, XStack, Text, Button, Card, Alert, EmptyStateCard } from '@jarvis/ui-core';
 
 interface AgentSessionsProps {
   eventId: string;
@@ -531,26 +531,35 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
       )}
 
       {(enrichmentLoading || checkingSessions) && displaySessions.length === 0 && (
-        <YStack padding="$6" alignItems="center">
-          <Text fontSize="$3" color="$gray11">
-            Loading session status...
-          </Text>
-        </YStack>
+        <EmptyStateCard
+          title="Loading session status"
+          description="Checking for active agent sessions."
+          padding="$6"
+          borderWidth={1}
+          borderColor="$borderColor"
+          backgroundColor="$gray1"
+          titleLevel={5}
+          align="start"
+        />
       )}
 
       {!enrichmentLoading && !checkingSessions && displaySessions.length === 0 && !enrichmentError && (
-        <Card variant="outlined" padding="$6" alignItems="center">
-          <Text fontSize="$3" color="$gray11" marginBottom="$2" margin={0}>
-            No active agent sessions
-          </Text>
-          <Text fontSize="$2" color="$gray5" margin={0}>
-            {(agent?.status === 'idle' && (agent?.stage === 'ready' || agent?.stage === 'context_complete'))
-              ? 'Use the "Create Sessions" button above to begin.'
-              : (agent?.status === 'active' && agent?.stage === 'running')
+        <EmptyStateCard
+          title="No active agent sessions"
+          description={
+            agent?.status === 'idle' && (agent?.stage === 'ready' || agent?.stage === 'context_complete')
+              ? 'Use the “Create Sessions” button above to begin.'
+              : agent?.status === 'active' && agent?.stage === 'running'
               ? 'Waiting for sessions to be created...'
-              : 'Agent sessions are only available when the event is running.'}
-          </Text>
-        </Card>
+              : 'Agent sessions are available only when the event is running.'
+          }
+          padding="$6"
+          borderWidth={1}
+          borderColor="$borderColor"
+          backgroundColor="$gray1"
+          titleLevel={5}
+          align="start"
+        />
       )}
 
       {displaySessions.length > 0 && (
@@ -659,4 +668,3 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
     </YStack>
   );
 }
-

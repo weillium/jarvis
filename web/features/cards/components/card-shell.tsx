@@ -15,18 +15,14 @@ export function CardShell({ children }: CardShellProps) {
       width={360}
       maxWidth="min(360px, calc(100vw - 120px))"
       scrollSnapAlign="center"
-      style={{
-        transition: 'transform 0.3s ease, box-shadow 0.3s ease',
-        transform: 'translateY(0)',
-        boxShadow: '0 0 0 rgba(15, 23, 42, 0)',
-      }}
-      onMouseEnter={(event) => {
-        event.currentTarget.style.transform = 'translateY(-10px)';
-        event.currentTarget.style.boxShadow = '0 24px 50px rgba(15, 23, 42, 0.18)';
-      }}
-      onMouseLeave={(event) => {
-        event.currentTarget.style.transform = 'translateY(0)';
-        event.currentTarget.style.boxShadow = '0 0 0 rgba(15, 23, 42, 0)';
+      transition="transform 0.3s ease, box-shadow 0.3s ease"
+      shadowColor="transparent"
+      hoverStyle={{
+        transform: 'translateY(-10px)',
+        shadowColor: '$gray10',
+        shadowOffset: { width: 0, height: 24 },
+        shadowOpacity: 0.2,
+        shadowRadius: 30,
       }}
     >
       <Card
@@ -34,10 +30,11 @@ export function CardShell({ children }: CardShellProps) {
         padding="$6"
         borderRadius="$6"
         minHeight={420}
-        style={{
-          background: 'linear-gradient(160deg, #ffffff 0%, #f8fafc 60%, #eef2ff 100%)',
-          boxShadow: '0 18px 40px rgba(15, 23, 42, 0.15)',
-        }}
+        shadowColor="$gray10"
+        shadowOffset={{ width: 0, height: 18 }}
+        shadowOpacity={0.15}
+        shadowRadius={40}
+        backgroundColor="$background"
       >
         <YStack gap="$4">
           {children}
@@ -46,5 +43,3 @@ export function CardShell({ children }: CardShellProps) {
     </YStack>
   );
 }
-
-

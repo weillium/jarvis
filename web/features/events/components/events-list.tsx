@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { EventWithStatus } from '@/shared/types/event';
 import { getEvents } from '@/server/actions/event-actions';
 import { format, parseISO } from 'date-fns';
-import { YStack, XStack, Text, Card, Alert } from '@jarvis/ui-core';
+import { YStack, XStack, Text, Card, Alert, EmptyStateCard, LoadingState } from '@jarvis/ui-core';
 
 interface EventsListProps {
   searchQuery?: string;
@@ -90,11 +90,15 @@ export function EventsList({ searchQuery = '', statusFilter = 'all' }: EventsLis
 
   if (loading) {
     return (
-      <YStack alignItems="center" paddingVertical="$12" paddingHorizontal="$6">
-        <Text fontSize="$4" color="$gray11">
-          Loading events...
-        </Text>
-      </YStack>
+      <LoadingState
+        title="Loading events"
+        description="Fetching your latest events."
+        padding="$10 $6"
+        skeletons={[
+          { height: 80, width: '100%' },
+          { height: 80, width: '100%' },
+        ]}
+      />
     );
   }
 
@@ -108,38 +112,35 @@ export function EventsList({ searchQuery = '', statusFilter = 'all' }: EventsLis
 
   if (events.length === 0) {
     return (
-      <YStack alignItems="center" paddingVertical="$12" paddingHorizontal="$6">
-        <Text fontSize="$4" color="$gray11" marginBottom="$2">
-          No events found
-        </Text>
-        <Text fontSize="$3" color="$gray11">
-          {searchQuery || statusFilter !== 'all'
-            ? 'Try adjusting your search or filter criteria'
-            : 'Create your first event to get started'}
-        </Text>
-      </YStack>
+      <EmptyStateCard
+        title="No events found"
+        description={
+          searchQuery || statusFilter !== 'all'
+            ? 'Try adjusting your search or filter criteria.'
+            : 'Create your first event to get started.'
+        }
+        padding="$10 $6"
+      />
     );
   }
 
   return (
     <YStack gap="$3">
       {events.map((event) => (
-        <Link
+        <Card
           key={event.id}
-          href={`/events/${event.id}/live`}
-          style={{ textDecoration: 'none', color: 'inherit' }}
+          asChild
+          padding="$5"
+          hoverStyle={{
+            borderColor: '$borderColorHover',
+            shadowColor: '$color',
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.1,
+            shadowRadius: 3,
+            elevation: 1,
+          }}
         >
-          <Card
-            padding="$5"
-            hoverStyle={{
-              borderColor: '$borderColorHover',
-              shadowColor: '$color',
-              shadowOffset: { width: 0, height: 1 },
-              shadowOpacity: 0.1,
-              shadowRadius: 3,
-              elevation: 1,
-            }}
-          >
+          <Link href={`/events/${event.id}/live`}>
             <XStack justifyContent="space-between" alignItems="flex-start" gap="$4">
               <YStack flex={1} minWidth={0} gap="$2">
                 <XStack alignItems="center" gap="$3" marginBottom="$2">
@@ -189,10 +190,9 @@ export function EventsList({ searchQuery = '', statusFilter = 'all' }: EventsLis
                 </XStack>
               </YStack>
             </XStack>
-          </Card>
-        </Link>
+          </Link>
+        </Card>
       ))}
     </YStack>
   );
 }
-

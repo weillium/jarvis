@@ -1,10 +1,9 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '@/shared/lib/supabase/client';
-import { XStack, YStack, Text, Button, Separator } from '@jarvis/ui-core';
+import { XStack, YStack, Text, Button, Separator, Anchor } from '@jarvis/ui-core';
 
 interface AppShellNavProps {
   user: User;
@@ -52,27 +51,23 @@ export function AppShellNav({ user }: AppShellNavProps) {
         justifyContent="space-between"
         alignItems="center"
       >
-        <Link href="/" style={{ textDecoration: 'none' }}>
+        <Anchor href="/" textDecorationLine="none">
           <Text fontSize="$6" fontWeight="600" color="$blue11">
             Jarvis
           </Text>
-        </Link>
+        </Anchor>
         <XStack as="nav" gap="$6" alignItems="center">
-          <Link href="/" style={{ textDecoration: 'none' }}>
-            <Text color="$gray7" fontSize="$4" fontWeight="500">
-              Dashboard
-            </Text>
-          </Link>
-          <Link href="/events" style={{ textDecoration: 'none' }}>
-            <Text color="$gray7" fontSize="$4" fontWeight="500">
-              Events
-            </Text>
-          </Link>
-          <Link href="/agents" style={{ textDecoration: 'none' }}>
-            <Text color="$gray7" fontSize="$4" fontWeight="500">
-              Agents
-            </Text>
-          </Link>
+          {[
+            { href: '/', label: 'Dashboard' },
+            { href: '/events', label: 'Events' },
+            { href: '/agents', label: 'Agents' },
+          ].map((item) => (
+            <Anchor key={item.href} href={item.href} textDecorationLine="none">
+              <Text color="$gray7" fontSize="$4" fontWeight="500">
+                {item.label}
+              </Text>
+            </Anchor>
+          ))}
           <XStack
             alignItems="center"
             gap="$4"
@@ -81,11 +76,11 @@ export function AppShellNav({ user }: AppShellNavProps) {
             borderLeftWidth={1}
             borderLeftColor="$borderColor"
           >
-            <Link href="/profile" style={{ textDecoration: 'none' }}>
+            <Anchor href="/profile" textDecorationLine="none">
               <Text fontSize="$3" color="$gray11">
                 {user.email}
               </Text>
-            </Link>
+            </Anchor>
             <Button
               variant="outline"
               size="sm"
@@ -99,4 +94,3 @@ export function AppShellNav({ user }: AppShellNavProps) {
     </YStack>
   );
 }
-

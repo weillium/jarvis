@@ -1,8 +1,9 @@
 'use client';
 
-import { Dialog, styled, YStack, XStack, Text } from 'tamagui';
+import { Dialog, styled, YStack, XStack } from 'tamagui';
 import type { DialogProps } from 'tamagui';
 import { Button } from './Button';
+import { Heading, Body } from './Typography';
 
 export interface ModalProps extends Omit<DialogProps, 'open' | 'onOpenChange'> {
   isOpen: boolean;
@@ -11,6 +12,7 @@ export interface ModalProps extends Omit<DialogProps, 'open' | 'onOpenChange'> {
   showCloseButton?: boolean;
   maxWidth?: number | string;
   children: React.ReactNode;
+  description?: React.ReactNode;
 }
 
 const DialogContent = styled(Dialog.Content, {
@@ -40,6 +42,7 @@ export function Modal({
   isOpen,
   onClose,
   title,
+  description,
   showCloseButton = true,
   maxWidth = 1200,
   children,
@@ -73,7 +76,7 @@ export function Modal({
         enterStyle={{ opacity: 0, scale: 0.95, y: -10 }}
         exitStyle={{ opacity: 0, scale: 0.95, y: -10 }}
       >
-        {(title || showCloseButton) && (
+        {(title || description || showCloseButton) && (
           <XStack
             padding="$6"
             borderBottomWidth={1}
@@ -81,11 +84,18 @@ export function Modal({
             justifyContent="space-between"
             alignItems="center"
           >
-            {title && (
-              <Text fontSize="$7" fontWeight="600" color="$color" margin={0}>
-                {title}
-              </Text>
-            )}
+            <YStack flex={1} minWidth={0} marginRight="$4">
+              {title ? (
+                <Heading level={3} margin={0}>
+                  {title}
+                </Heading>
+              ) : null}
+              {description ? (
+                <Body tone="muted" size="sm" marginTop="$1">
+                  {description}
+                </Body>
+              ) : null}
+            </YStack>
             {showCloseButton && (
               <Button
                 variant="ghost"
@@ -108,4 +118,3 @@ export function Modal({
     </Dialog>
   );
 }
-

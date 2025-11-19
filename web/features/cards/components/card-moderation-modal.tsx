@@ -6,7 +6,20 @@ import type { CardPayload } from '@/shared/types/card';
 import { useUpdateCardActiveStatusMutation } from '@/shared/hooks/use-mutations';
 import { useCardAuditLog } from '@/shared/hooks/use-card-audit-log';
 import { CardAuditHistory } from './card-audit-history';
-import { YStack, XStack, Text, Button, Alert, Modal, Textarea } from '@jarvis/ui-core';
+import {
+  YStack,
+  XStack,
+  Button,
+  Alert,
+  Modal,
+  Textarea,
+  Body,
+  Label,
+  Badge,
+  ModalContent,
+  FormField,
+  ButtonGroup,
+} from '@jarvis/ui-core';
 
 interface CardModerationModalProps {
   eventId: string;
@@ -74,35 +87,26 @@ export function CardModerationModal({
       isOpen={isOpen}
       onClose={handleClose}
       title="Moderate Card"
+      description="Review the content and provide context if you decide to deactivate the card."
       maxWidth={720}
       showCloseButton={!updateCardStatus.isPending}
     >
-      <YStack gap="$6">
-        <Text fontSize="$3" color="$gray11" margin={0}>
-          Review the content and provide a reason if you choose to deactivate.
-        </Text>
-
+      <ModalContent
+        title="Moderate Card"
+        description="Review the card content and optionally provide context before deactivating."
+      >
+        <YStack gap="$5">
           <XStack justifyContent="center">
             <CardDisplay card={cardPayload} timestamp={timestamp} />
           </XStack>
 
           {mutationError && (
             <Alert variant="error">
-              <Text fontSize="$2" margin={0}>{mutationError}</Text>
+              <Body size="sm">{mutationError}</Body>
             </Alert>
           )}
 
-          <YStack gap="$4">
-            <Text
-              htmlFor="moderation-reason"
-              as="label"
-              fontSize="$3"
-              fontWeight="600"
-              color="$gray9"
-              display="block"
-            >
-              Moderation reason (optional)
-            </Text>
+          <FormField label="Moderation reason (optional)">
             <Textarea
               id="moderation-reason"
               value={reason}
@@ -111,63 +115,35 @@ export function CardModerationModal({
               placeholder="Add context for deactivating this card..."
               minHeight={120}
             />
-          </YStack>
+          </FormField>
 
-          <XStack
-            gap="$3"
-            alignItems="center"
-            justifyContent="space-between"
-            flexWrap="wrap"
-          >
+          <XStack gap="$3" alignItems="center" justifyContent="space-between" flexWrap="wrap">
             <Button
-              variant="primary"
+              variant={showHistory ? 'secondary' : 'outline'}
               size="sm"
               onPress={() => setShowHistory((previous) => !previous)}
-              backgroundColor="$blue2"
-              color="$blue11"
             >
               {showHistory ? 'Hide moderation history' : 'View moderation history'}
             </Button>
 
-            <XStack gap="$3">
-              <Button
-                variant="outline"
-                onPress={handleClose}
-                disabled={updateCardStatus.isPending}
-              >
+            <ButtonGroup wrap={false}>
+              <Button variant="outline" onPress={handleClose} disabled={updateCardStatus.isPending}>
                 Cancel
               </Button>
-              <Button
-                variant="primary"
-                onPress={handleDeactivate}
-                disabled={updateCardStatus.isPending}
-                backgroundColor="#f97316"
-                opacity={updateCardStatus.isPending ? 0.65 : 1}
-              >
+              <Button variant="primary" onPress={handleDeactivate} disabled={updateCardStatus.isPending}>
                 {updateCardStatus.isPending ? 'Deactivating…' : 'Deactivate card'}
               </Button>
-            </XStack>
+            </ButtonGroup>
           </XStack>
 
           {showHistory && (
-            <YStack
-              borderTopWidth={1}
-              borderTopColor="$borderColor"
-              paddingTop="$4"
-            >
-              <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$3" margin={0}>
-                Moderation history
-              </Text>
-              <CardAuditHistory
-                entries={auditEntries}
-                isLoading={auditLoading}
-                error={auditErrorMessage}
-              />
+            <YStack borderTopWidth={1} borderTopColor="$borderColor" paddingTop="$4">
+              <Label size="sm">Moderation history</Label>
+              <CardAuditHistory entries={auditEntries} isLoading={auditLoading} error={auditErrorMessage} />
             </YStack>
           )}
         </YStack>
+      </ModalContent>
     </Modal>
   );
 }
-
-

@@ -2,7 +2,21 @@
 
 import { useState } from 'react';
 import { useContextVersionsQuery } from '@/shared/hooks/use-context-versions-query';
-import { YStack, XStack, Text, Card, Button, Input, Alert, Select } from '@jarvis/ui-core';
+import {
+  YStack,
+  XStack,
+  Text,
+  Card,
+  Button,
+  Input,
+  Alert,
+  Select,
+  Body,
+  Label,
+  BulletList,
+  EmptyStateCard,
+  LoadingState,
+} from '@jarvis/ui-core';
 
 interface VersionHistoryProps {
   eventId: string;
@@ -57,6 +71,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
   const [filterByType, setFilterByType] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [expandedBreakdowns, setExpandedBreakdowns] = useState<Set<string>>(new Set());
 
   const fetchVersionHistory = async () => {
     setRefreshing(true);
@@ -190,42 +205,162 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
 
     return (
       <YStack marginTop="$1.5">
-        <Text fontSize="$1" fontWeight="600" color="$gray11" marginBottom="$1" margin={0}>
-          Chat Completions:
-        </Text>
-        <ul style={{ marginTop: '4px', paddingLeft: '18px', color: '#475569' }}>
-          {completions.map((item, index) => (
-            <li key={index} style={{ marginBottom: '2px' }}>
-              <Text fontSize="$1" color="$gray9" margin={0}>
-                {item.model ? `${item.model}` : 'Model unknown'}
-                {item.cost !== undefined
-                  ? ` · $${item.cost.toFixed(4)}`
-                  : null}
-                {item.usage
-                  ? ` · tokens: ${item.usage.total_tokens ?? '-'} (prompt ${item.usage.prompt_tokens ?? '-'}, completion ${item.usage.completion_tokens ?? '-'})`
-                  : null}
-              </Text>
-            </li>
-          ))}
-        </ul>
+        <Label size="xs">Chat Completions</Label>
+        <BulletList
+          items={completions}
+          renderItem={(item) => (
+            <Body size="xs" tone="muted">
+              {item.model ? `${item.model}` : 'Model unknown'}
+              {item.cost !== undefined ? ` · $${item.cost.toFixed(4)}` : null}
+              {item.usage
+                ? ` · tokens: ${item.usage.total_tokens ?? '-'} (prompt ${item.usage.prompt_tokens ?? '-'}, completion ${item.usage.completion_tokens ?? '-'})`
+                : null}
+            </Body>
+          )}
+        />
       </YStack>
     );
   };
 
-  if (loading) {
-    if (embedded) {
-      return (
-        <YStack padding="$6" alignItems="center">
-          <Text color="$gray11">Loading version history...</Text>
-        </YStack>
-      );
+  const renderCostBreakdown = (cycle: GenerationCycle) => {
+    if (!cycle.cost_breakdown) {
+      return null;
     }
+
+    const isExpanded = expandedBreakdowns.has(cycle.id);
+    const breakdown = cycle.cost_breakdown;
+    const openaiBreakdown = breakdown.breakdown?.openai;
+    const exaBreakdown = breakdown.breakdown?.exa;
+
     return (
-      <Card variant="outlined" padding="$6" marginBottom="$6">
-        <YStack padding="$6" alignItems="center">
-          <Text color="$gray11">Loading version history...</Text>
-        </YStack>
-      </Card>
+      <YStack marginTop="$3">
+        <Button
+          variant="ghost"
+          size="sm"
+          alignSelf="flex-start"
+          onPress={() => toggleBreakdown(cycle.id)}
+        >
+          {isExpanded ? 'Hide Cost Breakdown' : 'Show Cost Breakdown'}
+        </Button>
+        {isExpanded && (
+          <YStack
+            marginTop="$2"
+            padding="$3"
+            backgroundColor="$gray1"
+            borderRadius="$2"
+            borderWidth={1}
+            borderColor="$borderColor"
+            gap="$2"
+          >
+            <Body size="sm">
+              <Body size="sm" weight="bold">
+                Total:
+              </Body>{' '}
+              ${breakdown.total?.toFixed(4) ?? '0.0000'} {breakdown.currency || 'USD'}
+            </Body>
+
+            {openaiBreakdown && (
+              <YStack gap="$1.5">
+                <Body size="sm">
+                  <Body size="sm" weight="bold">
+                    OpenAI:
+                  </Body>{' '}
+                  $
+                  {typeof openaiBreakdown.total === 'number'
+                    ? openaiBreakdown.total.toFixed(4)
+                    : '0.0000'}
+                  {openaiBreakdown.chat_completions?.length
+                    ? ` (${openaiBreakdown.chat_completions.length} chat completion${
+                        openaiBreakdown.chat_completions.length > 1 ? 's' : ''
+                      })`
+                    : ''}
+                  {openaiBreakdown.embeddings?.length
+                    ? ` (${openaiBreakdown.embeddings.length} embedding${
+                        openaiBreakdown.embeddings.length > 1 ? 's' : ''
+                      })`
+                    : ''}
+                </Body>
+                {renderChatCompletions(openaiBreakdown.chat_completions || [])}
+                {openaiBreakdown.embeddings?.length ? (
+                  <YStack gap="$1">
+                    <Label size="xs">Embeddings</Label>
+                    <BulletList
+                      items={openaiBreakdown.embeddings}
+                      renderItem={(item) => (
+                        <Body size="xs" tone="muted">
+                          {item.model ? `${item.model}` : 'Model unknown'}
+                          {item.cost !== undefined ? ` · $${item.cost.toFixed(4)}` : null}
+                          {item.usage?.total_tokens !== undefined
+                            ? ` · tokens: ${item.usage.total_tokens}`
+                            : null}
+                        </Body>
+                      )}
+                    />
+                  </YStack>
+                ) : null}
+              </YStack>
+            )}
+
+            {exaBreakdown && (
+              <Body size="sm">
+                <Body size="sm" weight="bold">
+                  Exa:
+                </Body>{' '}
+                $
+                {typeof exaBreakdown.total === 'number'
+                  ? exaBreakdown.total.toFixed(4)
+                  : '0.0000'}
+                {exaBreakdown.search?.queries
+                  ? ` (${exaBreakdown.search.queries} search${
+                      exaBreakdown.search.queries > 1 ? 'es' : ''
+                    })`
+                  : ''}
+                {exaBreakdown.research?.queries
+                  ? ` (${exaBreakdown.research.queries} research task${
+                      exaBreakdown.research.queries > 1 ? 's' : ''
+                    })`
+                  : ''}
+                {exaBreakdown.answer?.queries
+                  ? ` (${exaBreakdown.answer.queries} answer${
+                      exaBreakdown.answer.queries > 1 ? 's' : ''
+                    })`
+                  : ''}
+              </Body>
+            )}
+
+            {breakdown.pricing_version && (
+              <Body size="xs" tone="muted">
+                Pricing version: {breakdown.pricing_version}
+              </Body>
+            )}
+          </YStack>
+        )}
+      </YStack>
+    );
+  };
+
+  const toggleBreakdown = (cycleId: string) => {
+    setExpandedBreakdowns((prev) => {
+      const next = new Set(prev);
+      if (next.has(cycleId)) {
+        next.delete(cycleId);
+      } else {
+        next.add(cycleId);
+      }
+      return next;
+    });
+  };
+
+  if (loading) {
+    return (
+      <LoadingState
+        title="Loading version history"
+        description="Fetching the latest generation cycles."
+        align={embedded ? 'start' : 'center'}
+        padding="$6"
+        skeletons={[{ height: 48 }, { height: 48 }, { height: 48 }]}
+        marginBottom={embedded ? '$3' : '$6'}
+      />
     );
   }
 
@@ -250,7 +385,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
             minWidth={200}
             placeholder="Search cycles..."
             value={searchQuery}
-            onChange={(e: any) => setSearchQuery(e.target.value)}
+            onChangeText={setSearchQuery}
           />
           <Button
             variant="outline"
@@ -271,7 +406,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                 {getTypeLabel(type)}
               </option>
             ))}
-          </select>
+          </Select>
           {(filterByType || searchQuery) && (
             <Button
               variant="ghost"
@@ -291,9 +426,14 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
       {isExpanded && (
         <YStack gap="$2">
           {filteredCycles.length === 0 ? (
-            <YStack padding="$6" alignItems="center">
-              <Text color="$gray11">No cycles match the selected filter.</Text>
-            </YStack>
+            <EmptyStateCard
+              title="No cycles match"
+              description="Adjust or clear your filters to view version history."
+              padding="$4"
+              borderWidth={0}
+              backgroundColor="transparent"
+              titleLevel={5}
+            />
           ) : (
             filteredCycles.map((cycle) => (
               <Card
@@ -390,113 +530,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                     </Alert>
                   </YStack>
                 )}
-                {cycle.cost_breakdown && (
-                  <details style={{ marginTop: '8px' }}>
-                    <summary style={{
-                      cursor: 'pointer',
-                      fontWeight: '500',
-                      fontSize: '11px',
-                      color: '#374151',
-                      marginBottom: '4px',
-                    }}>
-                      Cost Breakdown
-                    </summary>
-                    <YStack
-                      marginTop="$1"
-                      paddingLeft="$3"
-                      padding="$2"
-                      backgroundColor="$gray1"
-                      borderRadius="$1"
-                      borderWidth={1}
-                      borderColor="$borderColor"
-                    >
-                      <Text fontSize="$1" color="$gray11" marginBottom="$1" margin={0}>
-                        <Text fontWeight="600" margin={0}>Total:</Text>{' '}
-                        ${cycle.cost_breakdown.total?.toFixed(4) ?? '0.0000'}{' '}
-                        {cycle.cost_breakdown.currency || 'USD'}
-                      </Text>
-                      {cycle.cost_breakdown.breakdown?.openai && (() => {
-                        const openaiBreakdown = cycle.cost_breakdown.breakdown?.openai;
-                        const openaiTotal =
-                          openaiBreakdown && typeof openaiBreakdown.total === 'number'
-                            ? openaiBreakdown.total.toFixed(4)
-                            : '0.0000';
-                        return (
-                          <YStack marginTop="$1" gap="$1.5">
-                            <Text fontSize="$1" color="$gray11" margin={0}>
-                              <Text fontWeight="600" margin={0}>OpenAI:</Text> ${openaiTotal}
-                              {openaiBreakdown?.chat_completions?.length > 0 && (
-                                <Text margin={0}> ({openaiBreakdown.chat_completions.length} chat completion{openaiBreakdown.chat_completions.length > 1 ? 's' : ''})</Text>
-                              )}
-                              {openaiBreakdown?.embeddings?.length > 0 && (
-                                <Text margin={0}> ({openaiBreakdown.embeddings.length} embedding{openaiBreakdown.embeddings.length > 1 ? 's' : ''})</Text>
-                              )}
-                            </Text>
-                            {renderChatCompletions(openaiBreakdown?.chat_completions || [])}
-                            {openaiBreakdown?.embeddings &&
-                              openaiBreakdown.embeddings.length > 0 && (
-                                <YStack marginTop="$1.5">
-                                  <Text fontSize="$1" fontWeight="600" color="$gray11" marginBottom="$1" margin={0}>
-                                    Embeddings:
-                                  </Text>
-                                  <ul style={{ marginTop: '4px', paddingLeft: '18px', color: '#475569' }}>
-                                    {openaiBreakdown.embeddings.map(
-                                      (
-                                        item: {
-                                          cost?: number;
-                                          model?: string;
-                                          usage?: { total_tokens?: number };
-                                        },
-                                        index: number
-                                      ) => (
-                                        <li key={index} style={{ marginBottom: '2px' }}>
-                                          <Text fontSize="$1" color="$gray9" margin={0}>
-                                            {item.model ? `${item.model}` : 'Model unknown'}
-                                            {item.cost !== undefined ? ` · $${item.cost.toFixed(4)}` : null}
-                                            {item.usage?.total_tokens !== undefined
-                                              ? ` · tokens: ${item.usage.total_tokens}`
-                                              : null}
-                                          </Text>
-                                        </li>
-                                      )
-                                    )}
-                                  </ul>
-                                </YStack>
-                              )}
-                          </YStack>
-                        );
-                      })()}
-                      {cycle.cost_breakdown.breakdown?.exa && (() => {
-                        const exaBreakdown = cycle.cost_breakdown.breakdown?.exa;
-                        const exaTotal =
-                          exaBreakdown && typeof exaBreakdown.total === 'number'
-                            ? exaBreakdown.total.toFixed(4)
-                            : '0.0000';
-                        return (
-                          <YStack marginTop="$1">
-                            <Text fontSize="$1" color="$gray11" margin={0}>
-                              <Text fontWeight="600" margin={0}>Exa:</Text> ${exaTotal}
-                              {exaBreakdown?.search?.queries > 0 && (
-                                <Text margin={0}> ({exaBreakdown.search.queries} search{exaBreakdown.search.queries > 1 ? 'es' : ''})</Text>
-                              )}
-                              {exaBreakdown?.research?.queries > 0 && (
-                                <Text margin={0}> ({exaBreakdown.research.queries} research task{exaBreakdown.research.queries > 1 ? 's' : ''})</Text>
-                              )}
-                              {exaBreakdown?.answer?.queries > 0 && (
-                                <Text margin={0}> ({exaBreakdown.answer.queries} answer{exaBreakdown.answer.queries > 1 ? 's' : ''})</Text>
-                              )}
-                            </Text>
-                          </YStack>
-                        );
-                      })()}
-                      {cycle.cost_breakdown.pricing_version && (
-                        <Text fontSize="$1" color="$gray5" marginTop="$1" margin={0}>
-                          Pricing version: {cycle.cost_breakdown.pricing_version}
-                        </Text>
-                      )}
-                    </YStack>
-                  </details>
-                )}
+                {renderCostBreakdown(cycle)}
               </Card>
             ))
           )}
@@ -540,7 +574,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
             minWidth={200}
             placeholder="Search cycles..."
             value={searchQuery}
-            onChange={(e: any) => setSearchQuery(e.target.value)}
+            onChangeText={setSearchQuery}
           />
           <Button
             variant="outline"
@@ -561,7 +595,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                 {getTypeLabel(type)}
               </option>
             ))}
-          </select>
+          </Select>
           {(filterByType || searchQuery) && (
             <Button
               variant="ghost"
@@ -581,9 +615,14 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
       {isExpanded && (
         <YStack gap="$2">
           {filteredCycles.length === 0 ? (
-            <YStack padding="$6" alignItems="center">
-              <Text color="$gray11">No cycles match the selected filter.</Text>
-            </YStack>
+            <EmptyStateCard
+              title="No cycles match"
+              description="Adjust or clear your filters to view version history."
+              padding="$4"
+              borderWidth={0}
+              backgroundColor="transparent"
+              titleLevel={5}
+            />
           ) : (
             filteredCycles.map((cycle) => (
               <Card
@@ -680,113 +719,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                     </Alert>
                   </YStack>
                 )}
-                {cycle.cost_breakdown && (
-                  <details style={{ marginTop: '8px' }}>
-                    <summary style={{
-                      cursor: 'pointer',
-                      fontWeight: '500',
-                      fontSize: '11px',
-                      color: '#374151',
-                      marginBottom: '4px',
-                    }}>
-                      Cost Breakdown
-                    </summary>
-                    <YStack
-                      marginTop="$1"
-                      paddingLeft="$3"
-                      padding="$2"
-                      backgroundColor="$gray1"
-                      borderRadius="$1"
-                      borderWidth={1}
-                      borderColor="$borderColor"
-                    >
-                      <Text fontSize="$1" color="$gray11" marginBottom="$1" margin={0}>
-                        <Text fontWeight="600" margin={0}>Total:</Text>{' '}
-                        ${cycle.cost_breakdown.total?.toFixed(4) ?? '0.0000'}{' '}
-                        {cycle.cost_breakdown.currency || 'USD'}
-                      </Text>
-                      {cycle.cost_breakdown.breakdown?.openai && (() => {
-                        const openaiBreakdown = cycle.cost_breakdown.breakdown?.openai;
-                        const openaiTotal =
-                          openaiBreakdown && typeof openaiBreakdown.total === 'number'
-                            ? openaiBreakdown.total.toFixed(4)
-                            : '0.0000';
-                        return (
-                          <YStack marginTop="$1" gap="$1.5">
-                            <Text fontSize="$1" color="$gray11" margin={0}>
-                              <Text fontWeight="600" margin={0}>OpenAI:</Text> ${openaiTotal}
-                              {openaiBreakdown?.chat_completions?.length > 0 && (
-                                <Text margin={0}> ({openaiBreakdown.chat_completions.length} chat completion{openaiBreakdown.chat_completions.length > 1 ? 's' : ''})</Text>
-                              )}
-                              {openaiBreakdown?.embeddings?.length > 0 && (
-                                <Text margin={0}> ({openaiBreakdown.embeddings.length} embedding{openaiBreakdown.embeddings.length > 1 ? 's' : ''})</Text>
-                              )}
-                            </Text>
-                            {renderChatCompletions(openaiBreakdown?.chat_completions || [])}
-                            {openaiBreakdown?.embeddings &&
-                              openaiBreakdown.embeddings.length > 0 && (
-                                <YStack marginTop="$1.5">
-                                  <Text fontSize="$1" fontWeight="600" color="$gray11" marginBottom="$1" margin={0}>
-                                    Embeddings:
-                                  </Text>
-                                  <ul style={{ marginTop: '4px', paddingLeft: '18px', color: '#475569' }}>
-                                    {openaiBreakdown.embeddings.map(
-                                      (
-                                        item: {
-                                          cost?: number;
-                                          model?: string;
-                                          usage?: { total_tokens?: number };
-                                        },
-                                        index: number
-                                      ) => (
-                                        <li key={index} style={{ marginBottom: '2px' }}>
-                                          <Text fontSize="$1" color="$gray9" margin={0}>
-                                            {item.model ? `${item.model}` : 'Model unknown'}
-                                            {item.cost !== undefined ? ` · $${item.cost.toFixed(4)}` : null}
-                                            {item.usage?.total_tokens !== undefined
-                                              ? ` · tokens: ${item.usage.total_tokens}`
-                                              : null}
-                                          </Text>
-                                        </li>
-                                      )
-                                    )}
-                                  </ul>
-                                </YStack>
-                              )}
-                          </YStack>
-                        );
-                      })()}
-                      {cycle.cost_breakdown.breakdown?.exa && (() => {
-                        const exaBreakdown = cycle.cost_breakdown.breakdown?.exa;
-                        const exaTotal =
-                          exaBreakdown && typeof exaBreakdown.total === 'number'
-                            ? exaBreakdown.total.toFixed(4)
-                            : '0.0000';
-                        return (
-                          <YStack marginTop="$1">
-                            <Text fontSize="$1" color="$gray11" margin={0}>
-                              <Text fontWeight="600" margin={0}>Exa:</Text> ${exaTotal}
-                              {exaBreakdown?.search?.queries > 0 && (
-                                <Text margin={0}> ({exaBreakdown.search.queries} search{exaBreakdown.search.queries > 1 ? 'es' : ''})</Text>
-                              )}
-                              {exaBreakdown?.research?.queries > 0 && (
-                                <Text margin={0}> ({exaBreakdown.research.queries} research task{exaBreakdown.research.queries > 1 ? 's' : ''})</Text>
-                              )}
-                              {exaBreakdown?.answer?.queries > 0 && (
-                                <Text margin={0}> ({exaBreakdown.answer.queries} answer{exaBreakdown.answer.queries > 1 ? 's' : ''})</Text>
-                              )}
-                            </Text>
-                          </YStack>
-                        );
-                      })()}
-                      {cycle.cost_breakdown.pricing_version && (
-                        <Text fontSize="$1" color="$gray5" marginTop="$1" margin={0}>
-                          Pricing version: {cycle.cost_breakdown.pricing_version}
-                        </Text>
-                      )}
-                    </YStack>
-                  </details>
-                )}
+                {renderCostBreakdown(cycle)}
               </Card>
             ))
           )}
@@ -795,4 +728,3 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
     </Card>
   );
 }
-

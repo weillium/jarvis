@@ -2,7 +2,21 @@
 
 import { useState } from 'react';
 import { useGlossaryQuery } from '@/shared/hooks/use-glossary-query';
-import { YStack, XStack, Text, Button, Input, Card, Alert, Select } from '@jarvis/ui-core';
+import {
+  YStack,
+  XStack,
+  Text,
+  Button,
+  Input,
+  Card,
+  Alert,
+  Select,
+  Badge,
+  TagGroup,
+  BulletList,
+  EmptyStateCard,
+  LoadingState,
+} from '@jarvis/ui-core';
 
 interface GlossaryVisualizationProps {
   eventId: string;
@@ -45,11 +59,13 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
 
   if (isLoading) {
     return (
-      <Card variant="outlined" padding="$6" alignItems="center">
-        <Text fontSize="$3" color="$gray11">
-          Loading glossary...
-        </Text>
-      </Card>
+      <LoadingState
+        title="Loading glossary"
+        description="Fetching glossary terms for this event."
+        padding="$6"
+        align="start"
+        skeletons={[{ height: 24 }, { height: 24 }, { height: 24 }]}
+      />
     );
   }
 
@@ -65,11 +81,12 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
 
   if (!glossaryData || glossaryData.count === 0) {
     return (
-      <Card variant="outlined" padding="$6" alignItems="center">
-        <Text fontSize="$3" color="$gray11" margin={0}>
-          No glossary terms available yet.
-        </Text>
-      </Card>
+      <EmptyStateCard
+        title="No glossary terms yet"
+        description="Terms will appear here once the glossary phase completes."
+        padding="$6"
+        titleLevel={5}
+      />
     );
   }
 
@@ -183,17 +200,8 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
                     {term.definition}
                   </Text>
                 </YStack>
-                <Text
-                  fontSize="$5"
-                  color="$gray11"
-                  marginLeft="$4"
-                  style={{
-                    transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
-                    transition: 'transform 0.2s',
-                  }}
-                  margin={0}
-                >
-                  ▶
+                <Text fontSize="$5" color="$gray11" marginLeft="$4" margin={0}>
+                  {isExpanded ? '▼' : '▶'}
                 </Text>
               </Button>
 
@@ -208,59 +216,46 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
                 >
                   {/* Usage Examples */}
                   {term.usage_examples && term.usage_examples.length > 0 && (
-                    <YStack marginBottom="$4">
+                    <YStack marginBottom="$4" gap="$2">
                       <Text
                         fontSize="$1"
                         fontWeight="600"
                         color="$gray11"
                         textTransform="uppercase"
-                        marginBottom="$2"
                         margin={0}
                       >
                         Usage Examples
                       </Text>
-                      <YStack margin={0} paddingLeft="$5" gap="$1">
-                        {term.usage_examples.map((example, i) => (
-                          <XStack key={i} margin={0} gap="$2">
-                            <Text fontSize="$3" color="$gray9" margin={0} lineHeight={1.6}>
-                              •
-                            </Text>
-                            <Text fontSize="$3" color="$gray9" fontStyle="italic" margin={0} lineHeight={1.6} flex={1}>
-                              "{example}"
-                            </Text>
-                          </XStack>
-                        ))}
-                      </YStack>
+                      <BulletList
+                        items={term.usage_examples}
+                        renderItem={(example) => (
+                          <Text fontSize="$3" color="$gray9" fontStyle="italic" margin={0} lineHeight={1.6}>
+                            "{example}"
+                          </Text>
+                        )}
+                      />
                     </YStack>
                   )}
 
                   {/* Related Terms */}
                   {term.related_terms && term.related_terms.length > 0 && (
-                    <YStack marginBottom="$4">
+                    <YStack marginBottom="$4" gap="$2">
                       <Text
                         fontSize="$1"
                         fontWeight="600"
                         color="$gray11"
                         textTransform="uppercase"
-                        marginBottom="$2"
                         margin={0}
                       >
                         Related Terms
                       </Text>
-                      <XStack flexWrap="wrap" gap="$1.5">
+                      <TagGroup>
                         {term.related_terms.map((related, i) => (
-                          <YStack
-                            key={i}
-                            padding="$1 $2"
-                            backgroundColor="$gray3"
-                            borderRadius="$1"
-                          >
-                            <Text fontSize="$2" color="$gray9" margin={0}>
-                              {related}
-                            </Text>
-                          </YStack>
+                          <Badge key={i} variant="gray" size="sm">
+                            {related}
+                          </Badge>
                         ))}
-                      </XStack>
+                      </TagGroup>
                     </YStack>
                   )}
 

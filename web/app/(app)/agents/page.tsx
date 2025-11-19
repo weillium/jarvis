@@ -1,185 +1,53 @@
+import { YStack, XStack, Card, Heading, Body, Input, Select, Button, Badge } from '@jarvis/ui-core';
+
 export default function AgentsIndex() {
   return (
-    <div style={{
-      maxWidth: '1400px',
-      margin: '0 auto',
-    }}>
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '32px',
-      }}>
-        <div>
-          <h1 style={{
-            fontSize: '36px',
-            fontWeight: '700',
-            color: '#0f172a',
-            margin: '0 0 8px 0',
-            letterSpacing: '-0.5px',
-          }}>
-            Agents
-          </h1>
-          <p style={{
-            fontSize: '18px',
-            color: '#64748b',
-            margin: 0,
-          }}>
-            Manage your AI context agents
-          </p>
-        </div>
-        <button style={{
-          background: '#1e293b',
-          color: '#ffffff',
-          border: 'none',
-          padding: '12px 24px',
-          borderRadius: '8px',
-          fontSize: '15px',
-          fontWeight: '500',
-          cursor: 'pointer',
-          transition: 'background 0.2s',
-        }}>
-          {/* Placeholder: Create agent function */}
-          Create Agent
-        </button>
-      </div>
+    <YStack maxWidth={1400} marginHorizontal="auto" width="100%" gap="$6">
+      <XStack justifyContent="space-between" alignItems="center" flexWrap="wrap" gap="$4">
+        <YStack gap="$1">
+          <Heading level={1}>Agents</Heading>
+          <Body tone="muted">Manage your AI context agents</Body>
+        </YStack>
+        <Button>Create Agent</Button>
+      </XStack>
 
-      <div style={{
-        background: '#ffffff',
-        border: '1px solid #e2e8f0',
-        borderRadius: '12px',
-        overflow: 'hidden',
-      }}>
-        <div style={{
-          padding: '20px 24px',
-          borderBottom: '1px solid #e2e8f0',
-          display: 'flex',
-          gap: '16px',
-          alignItems: 'center',
-        }}>
-          <input
-            type="text"
-            placeholder="Search agents..."
-            style={{
-              flex: 1,
-              padding: '10px 16px',
-              border: '1px solid #e2e8f0',
-              borderRadius: '6px',
-              fontSize: '15px',
-            }}
-          />
-          <select style={{
-            padding: '10px 16px',
-            border: '1px solid #e2e8f0',
-            borderRadius: '6px',
-            fontSize: '15px',
-            background: '#ffffff',
-          }}>
+      <Card padding="$0">
+        <YStack borderBottomWidth={1} borderBottomColor="$borderColor" padding="$4" gap="$3">
+          <Input placeholder="Search agents..." />
+          <Select>
             <option>All Status</option>
-            {/* Placeholder: Filter options */}
             <option>Prepping</option>
             <option>Ready</option>
             <option>Running</option>
             <option>Ended</option>
-          </select>
-        </div>
+          </Select>
+        </YStack>
 
-        <div style={{
-          padding: '24px',
-        }}>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-            gap: '20px',
-          }}>
-            {/* Placeholder: Agent cards */}
+        <YStack padding="$4">
+          <XStack flexWrap="wrap" gap="$4">
             {[1, 2, 3].map((i) => (
-              <div key={i} style={{
-                border: '1px solid #e2e8f0',
-                borderRadius: '8px',
-                padding: '20px',
-                background: '#ffffff',
-              }}>
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'start',
-                  marginBottom: '12px',
-                }}>
-                  <div>
-                    <h3 style={{
-                      fontSize: '18px',
-                      fontWeight: '600',
-                      color: '#0f172a',
-                      margin: '0 0 4px 0',
-                    }}>
-                      {/* Placeholder: Agent name */}
-                      Agent {i}
-                    </h3>
-                    <p style={{
-                      fontSize: '14px',
-                      color: '#64748b',
-                      margin: 0,
-                    }}>
-                      {/* Placeholder: Event name */}
-                      Event Name Placeholder
-                    </p>
-                  </div>
-                  <span style={{
-                    fontSize: '12px',
-                    fontWeight: '500',
-                    padding: '4px 12px',
-                    borderRadius: '12px',
-                    background: '#f1f5f9',
-                    color: '#475569',
-                  }}>
-                    {/* Placeholder: Agent status */}
-                    Ready
-                  </span>
-                </div>
-                <div style={{
-                  fontSize: '14px',
-                  color: '#64748b',
-                  marginBottom: '16px',
-                }}>
-                  {/* Placeholder: Agent description */}
-                  Context agent for event processing...
-                </div>
-                <div style={{
-                  display: 'flex',
-                  gap: '8px',
-                }}>
-                  <button style={{
-                    flex: 1,
-                    padding: '8px 16px',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '6px',
-                    background: '#ffffff',
-                    color: '#475569',
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    cursor: 'pointer',
-                  }}>
-                    View Details
-                  </button>
-                  <button style={{
-                    padding: '8px 16px',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '6px',
-                    background: '#ffffff',
-                    color: '#475569',
-                    fontSize: '14px',
-                    cursor: 'pointer',
-                  }}>
-                    ⋮
-                  </button>
-                </div>
-              </div>
+              <Card key={i} flex={1} minWidth={300} padding="$4" borderWidth={1} borderColor="$borderColor">
+                <YStack gap="$3">
+                  <XStack justifyContent="space-between" alignItems="flex-start">
+                    <YStack gap="$1">
+                      <Heading level={4}>Agent {i}</Heading>
+                      <Body tone="muted">Event Name Placeholder</Body>
+                    </YStack>
+                    <Badge variant="gray">Ready</Badge>
+                  </XStack>
+                  <Body tone="muted">Context agent for event processing...</Body>
+                  <XStack gap="$2">
+                    <Button flex={1} variant="outline">
+                      View Details
+                    </Button>
+                    <Button variant="ghost">⋮</Button>
+                  </XStack>
+                </YStack>
+              </Card>
             ))}
-          </div>
-        </div>
-      </div>
-    </div>
+          </XStack>
+        </YStack>
+      </Card>
+    </YStack>
   );
 }
-

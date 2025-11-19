@@ -5,7 +5,23 @@ import { useAgentQuery } from '@/shared/hooks/use-agent-query';
 import { useContextVersionsQuery } from '@/shared/hooks/use-context-versions-query';
 import { ContextGenerationPanel } from '@/features/context/components/context-generation-panel';
 import { useResetContextMutation } from '@/shared/hooks/use-mutations';
-import { YStack, XStack, Text, Card, Alert } from '@jarvis/ui-core';
+import {
+  YStack,
+  XStack,
+  Card,
+  Alert,
+  Body,
+  Label,
+  Heading,
+  Badge,
+  StatGroup,
+  StatItem,
+  Button,
+  Text,
+  EmptyStateCard,
+  LoadingState,
+  Skeleton,
+} from '@jarvis/ui-core';
 
 interface AgentOverviewProps {
   eventId: string;
@@ -117,30 +133,39 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
 
   if (isLoading) {
     return (
-      <YStack padding="$8" alignItems="center">
-        <YStack
-          width={40}
-          height={40}
-          borderWidth={3}
-          borderColor="$borderColor"
-          borderTopColor="$blue6"
-          borderRadius="$10"
-          animation="spin"
-        />
-        <Text marginTop="$4" color="$gray11" fontSize="$3">
-          Loading agent information...
-        </Text>
-      </YStack>
+      <LoadingState
+        title="Loading agent information"
+        description="Fetching the latest agent status and context metrics."
+        align="start"
+        padding="$6"
+        skeletons={[
+          { height: 24, width: 200 },
+          { height: 24, width: 150 },
+          { height: 80, width: '100%' },
+        ]}
+      />
     );
   }
 
   if (error || !agent) {
+    const message =
+      error instanceof Error ? error.message : error ? String(error) : 'No agent found for this event';
     return (
-      <YStack padding="$8" alignItems="center">
-        <Alert variant="error">
-          {error instanceof Error ? error.message : (error ? String(error) : 'No agent found for this event')}
-        </Alert>
-      </YStack>
+      <EmptyStateCard
+        title="Agent details unavailable"
+        description={message}
+        icon={
+          <Text fontSize="$6" margin={0}>
+            🤖
+          </Text>
+        }
+        padding="$6"
+        borderWidth={1}
+        borderColor="$borderColor"
+        backgroundColor="$background"
+        titleLevel={4}
+        align="start"
+      />
     );
   }
 
@@ -148,117 +173,28 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
   const statusLabel = getStatusLabel(agent.status, agent.stage, blueprint?.status);
 
   return (
-    <YStack>
+    <YStack gap="$6">
       {/* Agent Details Grid */}
-      <XStack
-        flexWrap="wrap"
-        gap="$5"
-        marginBottom="$6"
-        $sm={{ flexDirection: 'column' }}
-        $md={{ flexDirection: 'row' }}
-      >
-        <YStack minWidth={180} flex={1}>
-          <Text
-            fontSize="$2"
-            fontWeight="600"
-            color="$gray11"
-            textTransform="uppercase"
-            letterSpacing={0.5}
-            marginBottom="$1.5"
-          >
-            Agent ID
-          </Text>
-          <Text
-            fontSize="$3"
-            fontWeight="500"
-            color="$color"
-            fontFamily="$mono"
-            style={{ wordBreak: 'break-all' }}
-          >
-            {agent.id.substring(0, 8)}...
-          </Text>
-        </YStack>
-        <YStack minWidth={180} flex={1}>
-          <Text
-            fontSize="$2"
-            fontWeight="600"
-            color="$gray11"
-            textTransform="uppercase"
-            letterSpacing={0.5}
-            marginBottom="$1.5"
-          >
-            Status
-          </Text>
-          <Text fontSize="$3" fontWeight="500" color={statusColor}>
-            {statusLabel}
-          </Text>
-        </YStack>
-        <YStack minWidth={180} flex={1}>
-          <Text
-            fontSize="$2"
-            fontWeight="600"
-            color="$gray11"
-            textTransform="uppercase"
-            letterSpacing={0.5}
-            marginBottom="$1.5"
-          >
-            Model Set
-          </Text>
-          <Text fontSize="$3" fontWeight="500" color="$color">
-            {agent.model_set}
-          </Text>
-        </YStack>
-        <YStack minWidth={180} flex={1}>
-          <Text
-            fontSize="$2"
-            fontWeight="600"
-            color="$gray11"
-            textTransform="uppercase"
-            letterSpacing={0.5}
-            marginBottom="$1.5"
-          >
-            Created
-          </Text>
-          <Text fontSize="$3" fontWeight="500" color="$color">
-            {formatDate(agent.created_at)}
-          </Text>
-        </YStack>
-        <YStack minWidth={180} flex={1}>
-          <Text
-            fontSize="$2"
-            fontWeight="600"
-            color="$gray11"
-            textTransform="uppercase"
-            letterSpacing={0.5}
-            marginBottom="$1.5"
-          >
-            Total Cost
-          </Text>
-          <XStack alignItems="center" gap="$1">
-            {totalCost !== null ? (
-              <Text fontSize="$3" fontWeight="600" color="$green11">
-                ${totalCost.toFixed(4)}
-              </Text>
-            ) : (
-              <Text fontSize="$2" color="$gray5">
-                N/A
-              </Text>
-            )}
-          </XStack>
-        </YStack>
-      </XStack>
+      <StatGroup>
+        <StatItem
+          label="Agent ID"
+          value={`${agent.id.substring(0, 8)}…`}
+          helperText="Auto generated"
+        />
+        <StatItem label="Status" value={statusLabel} helperText={agent.stage ?? undefined} />
+        <StatItem label="Model Set" value={agent.model_set} />
+        <StatItem label="Created" value={formatDate(agent.created_at)} />
+        <StatItem
+          label="Total Cost"
+          value={totalCost !== null ? `$${totalCost.toFixed(4)}` : 'N/A'}
+          helperText="Across cycles"
+        />
+      </StatGroup>
 
       {/* Context Statistics */}
       {contextStats && (
-        <YStack
-          marginBottom="$6"
-          paddingBottom="$6"
-          borderBottomWidth={1}
-          borderBottomColor="$borderColor"
-        >
-          <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$4" margin={0}>
-            Context Library
-          </Text>
+        <YStack gap="$4">
+          <Heading level={3}>Context Library</Heading>
           <XStack
             flexWrap="wrap"
             gap="$4"
@@ -267,34 +203,18 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
           >
             <Card variant="outlined" backgroundColor="$gray1" padding="$4" flex={1} minWidth={150}>
               <YStack gap="$1">
-                <Text fontSize="$7" fontWeight="700" color="$green11" marginBottom="$1">
+                <Heading level={2} color="$green11">
                   {contextStats.glossaryTermCount.toLocaleString()}
-                </Text>
-                <Text
-                  fontSize="$2"
-                  fontWeight="500"
-                  color="$gray11"
-                  textTransform="uppercase"
-                  letterSpacing={0.5}
-                >
-                  Glossary Terms
-                </Text>
+                </Heading>
+                <Label size="xs">Glossary Terms</Label>
               </YStack>
             </Card>
             <Card variant="outlined" backgroundColor="$gray1" padding="$4" flex={1} minWidth={150}>
               <YStack gap="$1">
-                <Text fontSize="$7" fontWeight="700" color="$blue6" marginBottom="$1">
+                <Heading level={2} color="$blue6">
                   {contextStats.chunkCount.toLocaleString()}
-                </Text>
-                <Text
-                  fontSize="$2"
-                  fontWeight="500"
-                  color="$gray11"
-                  textTransform="uppercase"
-                  letterSpacing={0.5}
-                >
-                  Context Chunks
-                </Text>
+                </Heading>
+                <Label size="xs">Context Chunks</Label>
               </YStack>
             </Card>
           </XStack>
@@ -303,6 +223,9 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
 
       {/* Context Generation Progress */}
       <YStack marginBottom="$6">
+        <XStack justifyContent="space-between" alignItems="center" marginBottom="$3">
+          <Heading level={3}>Context Generation</Heading>
+        </XStack>
         {resetError && (
           <Alert variant="error" marginBottom="$4">
             {resetError}
@@ -318,4 +241,3 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
     </YStack>
   );
 }
-

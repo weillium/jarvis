@@ -41,28 +41,6 @@ export function formatFileSize(bytes: number): string {
 }
 
 /**
- * Get file icon based on file type
- */
-export function getFileIcon(fileType: string): string {
-  switch (fileType) {
-    case 'pdf':
-      return '📄';
-    case 'document':
-      return '📝';
-    case 'image':
-      return '🖼️';
-    case 'spreadsheet':
-      return '📊';
-    case 'presentation':
-      return '📽️';
-    case 'archive':
-      return '📦';
-    default:
-      return '📎';
-  }
-}
-
-/**
  * Extract filename from storage path
  */
 export function getFilenameFromPath(path: string): string {
@@ -73,4 +51,3 @@ export function getFilenameFromPath(path: string): string {
   }
   return path;
 }
-

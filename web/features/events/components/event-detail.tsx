@@ -7,7 +7,18 @@ import { EditEventModal } from './edit-event-modal';
 import { useEventDocsQuery } from '@/shared/hooks/use-event-docs-query';
 import { useEventQuery } from '@/shared/hooks/use-event-query';
 import { DocumentListItem } from './document-list-item';
-import { YStack, XStack, Text, Card, Button } from '@jarvis/ui-core';
+import {
+  YStack,
+  XStack,
+  Card,
+  Button,
+  Heading,
+  Body,
+  Label,
+  Badge,
+  EmptyStateCard,
+  LoadingState,
+} from '@jarvis/ui-core';
 
 interface EventDetailProps {
   eventId: string;
@@ -83,33 +94,42 @@ export function EventDetail({ eventId, event, onEventUpdate }: EventDetailProps)
     }
   };
 
+  if (!currentEvent) {
+    return (
+      <LoadingState
+        title="Loading event details"
+        description="Fetching the latest event information."
+        padding="$6"
+        align="start"
+        skeletons={[
+          { height: 32, width: 200 },
+          { height: 24, width: 300 },
+          { height: 16, width: '100%' },
+        ]}
+      />
+    );
+  }
+
   return (
-    <YStack padding="$8">
+    <YStack padding="$8" gap="$6">
       <XStack
         justifyContent="space-between"
         alignItems="flex-start"
-        marginBottom="$6"
         gap="$4"
+        flexWrap="wrap"
       >
         <YStack flex={1}>
-          <XStack alignItems="center" gap="$3" marginBottom="$3">
-            <Text fontSize="$9" fontWeight="700" color="$color" margin={0}>
-              {currentEvent.title}
-            </Text>
-            <YStack
-              paddingHorizontal="$3"
-              paddingVertical="$1.5"
-              borderRadius="$5"
+          <XStack alignItems="center" gap="$3" marginBottom="$3" flexWrap="wrap">
+            <Heading level={1}>{currentEvent.title}</Heading>
+            <Badge
+              variant="gray"
+              size="sm"
               backgroundColor={getStatusBgColor(currentEvent.status)}
             >
-              <Text
-                fontSize="$3"
-                fontWeight="600"
-                color={getStatusColor(currentEvent.status)}
-              >
+              <Body size="sm" weight="medium" color={getStatusColor(currentEvent.status)}>
                 {getStatusLabel(currentEvent.status)}
-              </Text>
-            </YStack>
+              </Body>
+            </Badge>
           </XStack>
         </YStack>
         <Button
@@ -125,60 +145,48 @@ export function EventDetail({ eventId, event, onEventUpdate }: EventDetailProps)
         <Card
           variant="outlined"
           backgroundColor="$gray1"
-          marginBottom="$6"
           padding="$4"
           width="100%"
         >
           <YStack gap="$3" width="100%">
-            <Text
-              fontSize="$3"
-              fontWeight="600"
-              color="$gray9"
-              textTransform="uppercase"
-              letterSpacing={0.5}
-              margin={0}
-            >
-              Description
-            </Text>
-            <Text
-              fontSize="$4"
-              color="$gray9"
-              width="100%"
-              style={{ 
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-                display: 'block',
-                overflowWrap: 'break-word',
-                lineHeight: '1.6'
-              }}
+            <Label>Description</Label>
+            <Body
+              lineHeight={1.6}
+              whiteSpace="pre-wrap"
+              wordBreak="break-word"
             >
               {currentEvent.topic}
-            </Text>
+            </Body>
           </YStack>
         </Card>
       )}
 
       {/* Event Documents Section */}
       <YStack marginBottom="$6">
-        <Text
-          fontSize="$3"
-          fontWeight="600"
-          color="$gray9"
-          textTransform="uppercase"
-          letterSpacing={0.5}
-          marginBottom="$3"
-        >
+        <Label>
           Documents {docs && `(${docs.length})`}
-        </Text>
+        </Label>
         
         {docsLoading ? (
-          <Text fontSize="$3" color="$gray11" margin={0}>
-            Loading documents...
-          </Text>
+          <LoadingState
+            title="Loading documents"
+            description="Fetching any files attached to this event."
+            padding="$4"
+            align="start"
+            skeletons={[{ height: 48 }, { height: 48 }, { height: 48 }]}
+          />
         ) : !docs || docs.length === 0 ? (
-          <Text fontSize="$3" color="$gray11" margin={0}>
-            No documents attached
-          </Text>
+          <EmptyStateCard
+            title="No documents attached"
+            description="Upload reference documents in the event settings."
+            padding="$4"
+            borderRadius="$3"
+            borderWidth={1}
+            borderColor="$borderColor"
+            backgroundColor="$gray1"
+            align="start"
+            titleLevel={5}
+          />
         ) : (
           <YStack>
             {docs.map((doc) => (
@@ -197,65 +205,38 @@ export function EventDetail({ eventId, event, onEventUpdate }: EventDetailProps)
         $sm={{ flexDirection: 'column' }}
         $md={{ flexDirection: 'row' }}
       >
-        <YStack minWidth={200} flex={1}>
-          <Text
-            fontSize="$2"
-            fontWeight="600"
-            color="$gray11"
-            textTransform="uppercase"
-            letterSpacing={0.5}
-            marginBottom="$2"
-          >
-            Start Time
-          </Text>
-          <Text fontSize="$4" fontWeight="500" color="$color">
+        <YStack minWidth={200} flex={1} gap="$1">
+          <Label size="xs">Start Time</Label>
+          <Body size="lg" weight="medium">
             {formatDateTime(currentEvent.start_time)}
-          </Text>
+          </Body>
           {currentEvent.start_time && (
-            <Text fontSize="$3" color="$gray11" marginTop="$1">
+            <Body tone="muted" size="sm">
               {formatDate(currentEvent.start_time)}
-            </Text>
+            </Body>
           )}
         </YStack>
 
-        <YStack minWidth={200} flex={1}>
-          <Text
-            fontSize="$2"
-            fontWeight="600"
-            color="$gray11"
-            textTransform="uppercase"
-            letterSpacing={0.5}
-            marginBottom="$2"
-          >
-            End Time
-          </Text>
-          <Text fontSize="$4" fontWeight="500" color="$color">
+        <YStack minWidth={200} flex={1} gap="$1">
+          <Label size="xs">End Time</Label>
+          <Body size="lg" weight="medium">
             {formatDateTime(currentEvent.end_time)}
-          </Text>
+          </Body>
           {currentEvent.end_time && (
-            <Text fontSize="$3" color="$gray11" marginTop="$1">
+            <Body tone="muted" size="sm">
               {formatDate(currentEvent.end_time)}
-            </Text>
+            </Body>
           )}
         </YStack>
 
-        <YStack minWidth={200} flex={1}>
-          <Text
-            fontSize="$2"
-            fontWeight="600"
-            color="$gray11"
-            textTransform="uppercase"
-            letterSpacing={0.5}
-            marginBottom="$2"
-          >
-            Created
-          </Text>
-          <Text fontSize="$4" fontWeight="500" color="$color">
+        <YStack minWidth={200} flex={1} gap="$1">
+          <Label size="xs">Created</Label>
+          <Body size="lg" weight="medium">
             {formatDate(currentEvent.created_at)}
-          </Text>
-          <Text fontSize="$3" color="$gray11" marginTop="$1">
+          </Body>
+          <Body tone="muted" size="sm">
             {formatDateTime(currentEvent.created_at)}
-          </Text>
+          </Body>
         </YStack>
       </XStack>
 
@@ -274,4 +255,3 @@ export function EventDetail({ eventId, event, onEventUpdate }: EventDetailProps)
     </YStack>
   );
 }
-

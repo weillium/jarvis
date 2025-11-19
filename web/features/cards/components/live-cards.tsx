@@ -17,7 +17,19 @@ import { useQueryClient } from '@tanstack/react-query';
 import { CardModerationModal } from './card-moderation-modal';
 import { useTranscriptsQuery, type Transcript } from '@/shared/hooks/use-transcripts-query';
 import { CardDisplay } from './card-display';
-import { YStack, XStack, Text, Button, Card, Alert } from '@jarvis/ui-core';
+import {
+  YStack,
+  XStack,
+  Button,
+  Card,
+  Alert,
+  Badge,
+  Body,
+  HorizontalScrollArea,
+  EmptyStateCard,
+  LoadingState,
+} from '@jarvis/ui-core';
+import type { TamaguiElement } from 'tamagui';
 
 interface LiveCardsProps {
   eventId: string;
@@ -31,7 +43,7 @@ export function LiveCards({ eventId }: LiveCardsProps) {
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
   const [moderationCardId, setModerationCardId] = useState<string | null>(null);
   const queryClient = useQueryClient();
-  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const scrollerRef = useRef<TamaguiElement | null>(null);
 
   const { data: cardsData, isLoading } = useCardsQuery(eventId);
 
@@ -140,57 +152,71 @@ export function LiveCards({ eventId }: LiveCardsProps) {
   }, [isConnected, isConnecting]);
 
   const handleScroll = (direction: 'prev' | 'next') => {
-    if (!scrollerRef.current) {
+    const container = scrollerRef.current as HTMLElement | null;
+    if (!container) {
       return;
     }
 
-    const firstCard = scrollerRef.current.querySelector<HTMLElement>('[data-card-shell]');
+    const firstCard = container.querySelector<HTMLElement>('[data-card-shell]');
     const cardWidth = firstCard?.getBoundingClientRect().width ?? 360;
     const gap = 24;
-    scrollerRef.current.scrollBy({
+    container.scrollBy({
       left: (cardWidth + gap) * (direction === 'next' ? 1 : -1),
       behavior: 'smooth',
     });
   };
 
-  const getConnectionStatusColor = () => {
-    switch (connectionStatus) {
-      case 'connected':
-        return '$green11';
-      case 'connecting':
-        return '$yellow11';
-      case 'disconnected':
-        return '$red11';
-      default:
-        return '$gray11';
-    }
-  };
+  const connectionTheme = {
+    connected: {
+      background: '$green2',
+      border: '$green4',
+      color: '$green11',
+      label: 'Connected — receiving live updates',
+    },
+    connecting: {
+      background: '$yellow2',
+      border: '$yellow4',
+      color: '$yellow11',
+      label: 'Connecting to live stream…',
+    },
+    disconnected: {
+      background: '$red2',
+      border: '$red4',
+      color: '$red11',
+      label: 'Disconnected from stream',
+    },
+  } as const;
 
-  const getConnectionStatusBgColor = () => {
-    switch (connectionStatus) {
-      case 'connected':
-        return '$green2';
-      case 'connecting':
-        return '$yellow2';
-      case 'disconnected':
-        return '$red2';
-      default:
-        return '$gray2';
-    }
-  };
+  const connectionVisuals = connectionTheme[connectionStatus] ?? connectionTheme.disconnected;
 
-  const getConnectionStatusBorderColor = () => {
-    switch (connectionStatus) {
-      case 'connected':
-        return '$green4';
-      case 'connecting':
-        return '$yellow4';
-      case 'disconnected':
-        return '$red4';
-      default:
-        return '$gray4';
-    }
-  };
+  const renderScrollButton = (direction: 'prev' | 'next') => (
+    <YStack
+      position="absolute"
+      top="50%"
+      marginTop={-22}
+      left={direction === 'prev' ? -32 : undefined}
+      right={direction === 'next' ? -32 : undefined}
+      alignItems="center"
+      justifyContent="center"
+      pointerEvents="none"
+    >
+      <Button
+        variant="outline"
+        onPress={() => handleScroll(direction)}
+        width={44}
+        height={44}
+        borderRadius="$10"
+        pointerEvents="auto"
+        backgroundColor="$background"
+        shadowColor="$shadowColor"
+        shadowOffset={{ width: 0, height: 10 }}
+        shadowRadius={30}
+        shadowOpacity={0.18}
+      >
+        {direction === 'prev' ? '‹' : '›'}
+      </Button>
+    </YStack>
+  );
 
   return (
     <YStack gap="$6">
@@ -198,29 +224,20 @@ export function LiveCards({ eventId }: LiveCardsProps) {
         variant="outlined"
         padding="$3.5 $4.5"
         borderRadius="$4"
-        backgroundColor={getConnectionStatusBgColor()}
-        borderColor={getConnectionStatusBorderColor()}
+        backgroundColor={connectionVisuals.background}
+        borderColor={connectionVisuals.border}
       >
         <XStack alignItems="center" justifyContent="space-between">
           <XStack alignItems="center" gap="$3">
-            <YStack
-              width={10}
-              height={10}
-              borderRadius="$10"
-              backgroundColor={getConnectionStatusColor()}
-            />
-            <Text
-              fontSize="$3"
-              fontWeight="600"
-              color={getConnectionStatusColor()}
-              margin={0}
+            <Badge
+              variant={connectionStatus === 'connected' ? 'green' : connectionStatus === 'connecting' ? 'yellow' : 'red'}
+              size="sm"
             >
-              {connectionStatus === 'connected'
-                ? 'Connected — receiving live updates'
-                : connectionStatus === 'connecting'
-                ? 'Connecting to live stream…'
-                : 'Disconnected from stream'}
-            </Text>
+              {connectionStatus.toUpperCase()}
+            </Badge>
+            <Body size="md" weight="medium" color={connectionVisuals.color}>
+              {connectionVisuals.label}
+            </Body>
           </XStack>
           <XStack gap="$3" alignItems="center">
             {connectionStatus === 'disconnected' && (
@@ -228,118 +245,54 @@ export function LiveCards({ eventId }: LiveCardsProps) {
                 variant="primary"
                 size="sm"
                 onPress={reconnect}
-                backgroundColor="$color"
-                color="$gray1"
               >
                 Reconnect
               </Button>
             )}
             {error && (
-              <Text fontSize="$2" color="$red11" margin={0}>
+              <Body size="sm" tone="danger">
                 {error.message}
-              </Text>
+              </Body>
             )}
           </XStack>
         </XStack>
       </Card>
 
       {isLoading ? (
-        <Card
-          variant="outlined"
+        <LoadingState
+          title="Loading cards…"
+          description="Fetching the latest context cards."
           padding="$16 $6"
-          borderRadius="$5"
-          borderStyle="dashed"
-          borderColor="$gray4"
-        >
-          <Text textAlign="center" color="$gray5" fontSize="$3" margin={0}>
-            Loading cards…
-          </Text>
-        </Card>
+          skeletons={[{ height: 320 }, { height: 320 }]}
+        />
       ) : cards.length === 0 ? (
-        <Card
-          variant="outlined"
+        <EmptyStateCard
+          title={
+            connectionStatus === 'connected'
+              ? 'No cards yet'
+              : connectionStatus === 'connecting'
+              ? 'Waiting for connection…'
+              : 'Disconnected'
+          }
+          description={
+            connectionStatus === 'connecting'
+              ? 'Holding until the live stream finishes connecting.'
+              : connectionStatus === 'connected'
+              ? 'Cards will appear as soon as they are generated.'
+              : 'Click reconnect to try again.'
+          }
           padding="$16 $6"
           borderRadius="$5"
           borderStyle="dashed"
           borderColor="$gray4"
-        >
-          <Text textAlign="center" color="$gray5" fontSize="$3" margin={0}>
-            {connectionStatus === 'connecting'
-              ? 'Waiting for connection…'
-              : connectionStatus === 'connected'
-              ? 'No cards yet. Cards will appear as the event progresses.'
-              : 'Disconnected. Click reconnect to try again.'}
-          </Text>
-        </Card>
+        />
       ) : (
         <YStack position="relative">
-          {canScroll && (
-            <YStack
-              position="absolute"
-              top="50%"
-              left={-32}
-              style={{ transform: 'translateY(-50%)' }}
-              alignItems="center"
-              justifyContent="center"
-              pointerEvents="none"
-            >
-              <Button
-                variant="primary"
-                onPress={() => handleScroll('prev')}
-                width={44}
-                height={44}
-                borderRadius="$10"
-                backgroundColor="$background"
-                color="$gray9"
-                style={{
-                  pointerEvents: 'auto',
-                  boxShadow: '0 10px 30px rgba(15, 23, 42, 0.18)',
-                }}
-              >
-                ‹
-              </Button>
-            </YStack>
-          )}
+          {canScroll && renderScrollButton('prev')}
 
-          {canScroll && (
-            <YStack
-              position="absolute"
-              top="50%"
-              right={-32}
-              style={{ transform: 'translateY(-50%)' }}
-              alignItems="center"
-              justifyContent="center"
-              pointerEvents="none"
-            >
-              <Button
-                variant="primary"
-                onPress={() => handleScroll('next')}
-                width={44}
-                height={44}
-                borderRadius="$10"
-                backgroundColor="$background"
-                color="$gray9"
-                style={{
-                  pointerEvents: 'auto',
-                  boxShadow: '0 10px 30px rgba(15, 23, 42, 0.18)',
-                }}
-              >
-                ›
-              </Button>
-            </YStack>
-          )}
+          {canScroll && renderScrollButton('next')}
 
-          <XStack
-            ref={scrollerRef}
-            gap="$6"
-            overflowX="auto"
-            padding="$3 $1"
-            style={{
-              scrollSnapType: 'x mandatory',
-              scrollbarWidth: 'none',
-              msOverflowStyle: 'none',
-            }}
-          >
+          <HorizontalScrollArea ref={scrollerRef}>
             {cards.map((card) => {
               const payload = card.payload as CardPayload | null;
               if (!payload) {
@@ -360,7 +313,7 @@ export function LiveCards({ eventId }: LiveCardsProps) {
                 />
               );
             })}
-          </XStack>
+          </HorizontalScrollArea>
         </YStack>
       )}
 
@@ -377,4 +330,3 @@ export function LiveCards({ eventId }: LiveCardsProps) {
     </YStack>
   );
 }
-

@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/shared/hooks/use-auth';
+import { YStack, LoadingState } from '@jarvis/ui-core';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -31,20 +32,9 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
   if (loading) {
     return (
-      <div style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: '#f8fafc',
-      }}>
-        <div style={{
-          fontSize: '16px',
-          color: '#64748b',
-        }}>
-          Loading...
-        </div>
-      </div>
+      <YStack minHeight="100vh" alignItems="center" justifyContent="center" backgroundColor="$background" padding="$4">
+        <LoadingState title="Authenticating" description="Checking your access…" padding="$4" />
+      </YStack>
     );
   }
 
@@ -54,4 +44,3 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
   return <>{children}</>;
 }
-

@@ -1,6 +1,6 @@
 'use client';
 
-import { YStack, XStack, Text } from '@jarvis/ui-core';
+import { YStack, XStack, Text, ProgressBar } from '@jarvis/ui-core';
 
 interface ContextGenerationProgressProps {
   status: string;
@@ -88,46 +88,7 @@ export function ContextGenerationProgress({
       </XStack>
 
       {/* Progress bar */}
-      {progress ? (
-        <YStack
-          width="100%"
-          height={8}
-          backgroundColor="$gray3"
-          borderRadius="$1"
-          overflow="hidden"
-        >
-          <YStack
-            width={`${Math.min(progress.percentage, 100)}%`}
-            height="100%"
-            backgroundColor="$blue6"
-            borderRadius="$1"
-            style={{
-              transition: 'width 0.3s ease',
-            }}
-          />
-        </YStack>
-      ) : (
-        <YStack
-          width="100%"
-          height={8}
-          backgroundColor="$gray3"
-          borderRadius="$1"
-          overflow="hidden"
-          position="relative"
-        >
-          <YStack
-            width="100%"
-            height="100%"
-            backgroundColor="$blue6"
-            borderRadius="$1"
-            style={{
-              background: 'linear-gradient(90deg, #3b82f6 0%, #60a5fa 50%, #3b82f6 100%)',
-              backgroundSize: '200% 100%',
-              animation: 'pulse 2s ease-in-out infinite',
-            }}
-          />
-        </YStack>
-      )}
+      <ProgressBar value={progress?.percentage ?? null} />
 
       {/* Stage indicators */}
       <XStack
@@ -171,16 +132,6 @@ export function ContextGenerationProgress({
           );
         })}
       </XStack>
-      <style jsx global>{`
-        @keyframes pulse {
-          0%, 100% {
-            background-position: 0% 50%;
-          }
-          50% {
-            background-position: 100% 50%;
-          }
-        }
-      `}</style>
     </YStack>
   );
 }

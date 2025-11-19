@@ -5,7 +5,7 @@ import { useTranscriptsQuery } from '@/shared/hooks/use-transcripts-query';
 import { useSSEStream } from '@/shared/hooks/use-sse-stream';
 import type { SSEMessage } from '@/shared/types/card';
 import { formatDistanceToNow } from 'date-fns';
-import { YStack, XStack, Text, Button, Card, Alert } from '@jarvis/ui-core';
+import { YStack, XStack, Button, Card, Alert, Badge, Body, EmptyStateCard, LoadingState } from '@jarvis/ui-core';
 
 interface LiveTranscriptsProps {
   eventId: string;
@@ -48,20 +48,21 @@ export function LiveTranscripts({ eventId }: LiveTranscriptsProps) {
 
   if (isLoading) {
     return (
-      <YStack padding="$6" alignItems="center">
-        <Text fontSize="$3" color="$gray5">
-          Loading transcripts...
-        </Text>
-      </YStack>
+      <LoadingState
+        title="Loading transcripts"
+        description="Fetching the latest transcript buffer."
+        padding="$12 $6"
+        skeletons={[{ height: 48 }, { height: 48 }, { height: 48 }]}
+      />
     );
   }
 
   if (error) {
     return (
       <Alert variant="error">
-        <Text fontSize="$3" margin={0}>
+        <Body>
           Error loading transcripts: {error instanceof Error ? error.message : 'Unknown error'}
-        </Text>
+        </Body>
       </Alert>
     );
   }
@@ -82,24 +83,16 @@ export function LiveTranscripts({ eventId }: LiveTranscriptsProps) {
           width="100%"
         >
           <XStack alignItems="center" gap="$2">
-            <YStack
-              width={8}
-              height={8}
-              borderRadius="$10"
-              backgroundColor={connectionColorHex}
-            />
-            <Text
-              fontSize="$3"
-              fontWeight="500"
-              color={connectionColor}
-              margin={0}
-            >
+            <Badge variant={connectionStatus === 'connected' ? 'green' : connectionStatus === 'connecting' ? 'yellow' : 'red'} size="sm">
+              {connectionStatus.toUpperCase()}
+            </Badge>
+            <Body size="md" weight="medium" color={connectionColor}>
               {connectionStatus === 'connected'
                 ? 'Connected - Receiving live updates'
                 : connectionStatus === 'connecting'
                 ? 'Connecting...'
                 : 'Disconnected'}
-            </Text>
+            </Body>
           </XStack>
           {connectionStatus === 'disconnected' && (
             <Button
@@ -114,17 +107,14 @@ export function LiveTranscripts({ eventId }: LiveTranscriptsProps) {
       </Alert>
 
       {transcripts.length === 0 ? (
-        <Card
-          variant="outlined"
+        <EmptyStateCard
+          title="No transcripts yet"
+          description="Transcripts will appear as they are processed during the event."
           padding="$16 $6"
           borderRadius="$5"
           borderStyle="dashed"
           borderColor="$gray4"
-        >
-          <Text textAlign="center" color="$gray5" fontSize="$3" margin={0}>
-            No transcripts in ring buffer yet. Transcripts will appear as they are processed during the event.
-          </Text>
-        </Card>
+        />
       ) : (
         <YStack
           gap="$3"
@@ -136,12 +126,7 @@ export function LiveTranscripts({ eventId }: LiveTranscriptsProps) {
             const timeAgo = formatDistanceToNow(timestamp, { addSuffix: true });
 
             return (
-              <Card
-                key={transcript.id}
-                variant="outlined"
-                padding="$4"
-                marginBottom="$3"
-              >
+              <Card key={transcript.id} variant="outlined" padding="$4" marginBottom="$3">
                 <XStack
                   justifyContent="space-between"
                   alignItems="flex-start"
@@ -149,47 +134,25 @@ export function LiveTranscripts({ eventId }: LiveTranscriptsProps) {
                 >
                   <YStack flex={1} gap="$2">
                     {transcript.speaker && (
-                      <Text
-                        fontSize="$2"
-                        fontWeight="600"
-                        color="$gray9"
-                        margin={0}
-                      >
+                      <Body size="sm" weight="medium" tone="muted">
                         {transcript.speaker}
-                      </Text>
+                      </Body>
                     )}
-                    <Text
-                      fontSize="$3"
-                      color="$gray9"
-                      lineHeight={1.6}
-                      whiteSpace="pre-wrap"
-                      style={{ wordBreak: 'break-word' }}
-                      margin={0}
-                    >
+                    <Body lineHeight={1.6} tone="muted" whiteSpace="pre-wrap" wordBreak="break-word">
                       {transcript.text}
-                    </Text>
+                    </Body>
                   </YStack>
                   <YStack
                     alignItems="flex-end"
                     gap="$1"
                     minWidth={120}
                   >
-                    <Text
-                      fontSize="$2"
-                      color="$gray5"
-                      whiteSpace="nowrap"
-                      margin={0}
-                    >
+                    <Body size="sm" tone="muted" whiteSpace="nowrap">
                       {timeAgo}
-                    </Text>
-                    <Text
-                      fontSize="$1"
-                      color="$gray4"
-                      fontFamily="$mono"
-                      margin={0}
-                    >
+                    </Body>
+                    <Body size="xs" tone="muted" fontFamily="$mono">
                       Seq: {transcript.seq}
-                    </Text>
+                    </Body>
                   </YStack>
                 </XStack>
               </Card>
@@ -200,4 +163,3 @@ export function LiveTranscripts({ eventId }: LiveTranscriptsProps) {
     </YStack>
   );
 }
-

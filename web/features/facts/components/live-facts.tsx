@@ -3,7 +3,17 @@
 import { useState, useEffect } from 'react';
 import { useSSEStream } from '@/shared/hooks/use-sse-stream';
 import type { SSEMessage, SSEFactMessage } from '@/shared/types/card';
-import { YStack, XStack, Text, Button, Card, Alert } from '@jarvis/ui-core';
+import {
+  YStack,
+  XStack,
+  Text,
+  Button,
+  Card,
+  Alert,
+  Badge,
+  Body,
+  EmptyStateCard,
+} from '@jarvis/ui-core';
 
 interface LiveFactsProps {
   eventId: string;
@@ -161,24 +171,16 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
           width="100%"
         >
           <XStack alignItems="center" gap="$2">
-            <YStack
-              width={8}
-              height={8}
-              borderRadius="$10"
-              backgroundColor={connectionColorHex}
-            />
-            <Text
-              fontSize="$3"
-              fontWeight="500"
-              color={connectionColor}
-              margin={0}
-            >
+            <Badge variant={connectionStatus === 'connected' ? 'green' : connectionStatus === 'connecting' ? 'yellow' : 'red'} size="sm">
+              {connectionStatus.toUpperCase()}
+            </Badge>
+            <Body size="md" weight="medium" color={connectionColor}>
               {connectionStatus === 'connected'
                 ? 'Connected - Receiving live updates'
                 : connectionStatus === 'connecting'
                 ? 'Connecting...'
                 : 'Disconnected'}
-            </Text>
+            </Body>
           </XStack>
           {connectionStatus === 'disconnected' && (
             <Button
@@ -193,19 +195,18 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
       </Alert>
 
       {factsArray.length === 0 ? (
-        <Card
-          variant="outlined"
+        <EmptyStateCard
+          title={initialLoadError ? 'Unable to load facts' : 'No facts yet'}
+          description={
+            initialLoadError
+              ? `Failed to load facts: ${initialLoadError}`
+              : 'Facts will appear as they are extracted during the event.'
+          }
           padding="$16 $6"
           borderRadius="$5"
           borderStyle="dashed"
           borderColor="$gray4"
-        >
-          <Text textAlign="center" color="$gray5" fontSize="$3" margin={0}>
-            {initialLoadError
-              ? `Failed to load facts: ${initialLoadError}`
-              : 'No facts tracked yet. Facts will appear as they are extracted during the event.'}
-          </Text>
-        </Card>
+        />
       ) : (
         <YStack gap="$3">
           {factsArray.map((fact) => (
@@ -230,26 +231,20 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
                     >
                       {fact.key.replace(/_/g, ' ')}
                     </Text>
-                    <Text
-                      fontSize="$3"
-                      color="$gray9"
+                    <Body
                       lineHeight={1.5}
+                      tone="muted"
                       whiteSpace="pre-wrap"
-                      style={{ wordBreak: 'break-word' }}
+                      wordBreak="break-word"
                       fontFamily={typeof fact.value !== 'string' ? '$mono' : undefined}
-                      margin={0}
                     >
                       {typeof fact.value === 'string'
                         ? fact.value
                         : JSON.stringify(fact.value, null, 2)}
-                    </Text>
-                    <Text
-                      fontSize="$2"
-                      color="$gray5"
-                      margin={0}
-                    >
+                    </Body>
+                    <Body size="sm" tone="muted">
                       Updated {new Date(fact.updated_at).toLocaleTimeString()}
-                    </Text>
+                    </Body>
                   </YStack>
                   <YStack
                     padding="$1 $2"
@@ -265,9 +260,9 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
                     justifyContent="center"
                     minWidth={100}
                   >
-                    <Text
-                      fontSize="$2"
-                      fontWeight="500"
+                    <Body
+                      size="sm"
+                      weight="medium"
                       color={
                         fact.confidence >= 0.7
                           ? '$green11'
@@ -275,10 +270,9 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
                           ? '$yellow11'
                           : '$red11'
                       }
-                      margin={0}
                     >
                       {(fact.confidence * 100).toFixed(0)}% confident
-                    </Text>
+                    </Body>
                   </YStack>
                 </XStack>
               </Card>
@@ -288,4 +282,3 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
     </YStack>
   );
 }
-

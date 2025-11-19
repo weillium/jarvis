@@ -1,6 +1,6 @@
 'use client';
 
-import { YStack, XStack, Text, Button, Modal } from '@jarvis/ui-core';
+import { YStack, XStack, Button, Modal, Body, Label, ModalContent, ButtonGroup } from '@jarvis/ui-core';
 
 interface StartSessionsModalProps {
   isOpen: boolean;
@@ -44,89 +44,61 @@ export function StartSessionsModal({
   const hasSelection = selection.transcript || selection.cards || selection.facts;
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title="Start Agent Sessions"
-      maxWidth={600}
-      showCloseButton={!isSubmitting}
-    >
-      <YStack gap="$5">
-          <Text fontSize="$3" color="$gray11" margin={0}>
-            Select which agent sessions you want to start:
-          </Text>
-
-          <YStack gap="$3" marginBottom="$6">
-            {options.map((option) => (
-              <XStack
-                key={option.key}
-                as="label"
-                alignItems="flex-start"
-                gap="$3"
-                padding="$4"
-                borderWidth={2}
-                borderColor={selection[option.key] ? '$blue6' : '$borderColor'}
-                borderRadius="$3"
-                backgroundColor={selection[option.key] ? '$blue2' : '$background'}
-                cursor={isSubmitting ? 'not-allowed' : 'pointer'}
-                opacity={isSubmitting ? 0.6 : 1}
-                hoverStyle={
-                  !isSubmitting
-                    ? {
-                        borderColor: selection[option.key] ? '$blue7' : '$borderColorHover',
-                      }
-                    : undefined
+    <Modal isOpen={isOpen} onClose={onClose} title="Start Agent Sessions" maxWidth={600} showCloseButton={!isSubmitting}>
+      <ModalContent description="Select which agent sessions you want to start. You can mix and match multiple agents." spacing="$5">
+        <YStack gap="$3">
+          {options.map((option) => (
+            <XStack
+              key={option.key}
+              as="label"
+              alignItems="flex-start"
+              gap="$3"
+              padding="$4"
+              borderWidth={2}
+              borderColor={selection[option.key] ? '$blue6' : '$borderColor'}
+              borderRadius="$3"
+              backgroundColor={selection[option.key] ? '$blue2' : '$background'}
+              cursor={isSubmitting ? 'not-allowed' : 'pointer'}
+              opacity={isSubmitting ? 0.6 : 1}
+              hoverStyle={
+                !isSubmitting
+                  ? {
+                      borderColor: selection[option.key] ? '$blue7' : '$borderColorHover',
+                    }
+                  : undefined
+              }
+            >
+              <Button
+                variant={selection[option.key] ? 'primary' : 'outline'}
+                size="sm"
+                disabled={isSubmitting}
+                onPress={() =>
+                  !isSubmitting &&
+                  onSelectionChange({
+                    ...selection,
+                    [option.key]: !selection[option.key],
+                  })
                 }
               >
-                <input
-                  type="checkbox"
-                  checked={selection[option.key]}
-                  onChange={(e) => {
-                    if (!isSubmitting) {
-                      onSelectionChange({
-                        ...selection,
-                        [option.key]: e.target.checked,
-                      });
-                    }
-                  }}
-                  disabled={isSubmitting}
-                  style={{
-                    marginTop: '2px',
-                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                  }}
-                />
-                <YStack flex={1} gap="$1">
-                  <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
-                    {option.label}
-                  </Text>
-                  <Text fontSize="$3" color="$gray11" margin={0}>
-                    {option.description}
-                  </Text>
-                </YStack>
-              </XStack>
-            ))}
-          </YStack>
+                {selection[option.key] ? 'Selected' : 'Select'}
+              </Button>
+              <YStack flex={1} gap="$1">
+                <Label size="md">{option.label}</Label>
+                <Body tone="muted">{option.description}</Body>
+              </YStack>
+            </XStack>
+          ))}
+        </YStack>
 
-          <XStack gap="$3" justifyContent="flex-end">
-            <Button
-              type="button"
-              variant="outline"
-              onPress={onClose}
-              disabled={isSubmitting}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              onPress={onConfirm}
-              disabled={isSubmitting || !hasSelection}
-            >
-              {isSubmitting ? 'Starting…' : 'Start Selected Agents'}
-            </Button>
-          </XStack>
-      </YStack>
+        <ButtonGroup>
+          <Button type="button" variant="outline" onPress={onClose} disabled={isSubmitting}>
+            Cancel
+          </Button>
+          <Button type="button" variant="primary" onPress={onConfirm} disabled={isSubmitting || !hasSelection}>
+            {isSubmitting ? 'Starting…' : 'Start Selected Agents'}
+          </Button>
+        </ButtonGroup>
+      </ModalContent>
     </Modal>
   );
 }
-

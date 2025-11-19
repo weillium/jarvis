@@ -1,114 +1,43 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { EventDoc } from '@/shared/types/event-doc';
 import { getFileExtension, getFileType, getFilenameFromPath } from '@/shared/utils/file-utils';
 import { supabase } from '@/shared/lib/supabase/client';
-import { XStack, YStack, Text, Input, Button } from '@jarvis/ui-core';
+import { Button, Body, FileListItem } from '@jarvis/ui-core';
+import {
+  FilePdfIcon,
+  FileDocumentIcon,
+  FileImageIcon,
+  FileSpreadsheetIcon,
+  FilePresentationIcon,
+  FileArchiveIcon,
+  FileGenericIcon,
+  DownloadIcon,
+  RemoveIcon,
+} from '@jarvis/ui-core/icons';
 
 interface DocumentListItemProps {
   doc: EventDoc;
   onRemove?: () => void;
-  onUpdateName?: (docId: string, newName: string) => void; // Sync function to track changes
+  onUpdateName?: (docId: string, newName: string) => void;
   onDownload?: () => void;
   isRemoving?: boolean;
   isUpdating?: boolean;
 }
 
-// Minimalist SVG icons for file types
-function FileIcon({ fileType }: { fileType: string }) {
-  const iconStyle = {
-    width: '20px',
-    height: '20px',
-    color: '#64748b',
-    flexShrink: 0,
-  };
+const fileTypeIcons: Record<string, ReactNode> = {
+  pdf: <FilePdfIcon size={20} />,
+  document: <FileDocumentIcon size={20} />,
+  image: <FileImageIcon size={20} />,
+  spreadsheet: <FileSpreadsheetIcon size={20} />,
+  presentation: <FilePresentationIcon size={20} />,
+  archive: <FileArchiveIcon size={20} />,
+};
 
-  switch (fileType) {
-    case 'pdf':
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={iconStyle}>
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <path d="M14 2v6h6" />
-          <path d="M10 12h4" />
-          <path d="M10 16h4" />
-          <path d="M10 8h4" />
-        </svg>
-      );
-    case 'document':
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={iconStyle}>
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <path d="M14 2v6h6" />
-          <path d="M16 13H8" />
-          <path d="M16 17H8" />
-          <path d="M10 9H8" />
-        </svg>
-      );
-    case 'image':
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={iconStyle}>
-          <rect x="3" y="3" width="18" height="18" rx="2" />
-          <circle cx="8.5" cy="8.5" r="1.5" />
-          <path d="M21 15l-5-5L5 21" />
-        </svg>
-      );
-    case 'spreadsheet':
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={iconStyle}>
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <path d="M14 2v6h6" />
-          <path d="M8 13h8" />
-          <path d="M8 17h8" />
-          <path d="M8 9h8" />
-        </svg>
-      );
-    case 'presentation':
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={iconStyle}>
-          <rect x="3" y="3" width="18" height="14" rx="2" />
-          <path d="M8 21h8" />
-          <path d="M12 17v4" />
-        </svg>
-      );
-    case 'archive':
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={iconStyle}>
-          <path d="M21 8v13H3V8" />
-          <path d="M1 3h22v5H1z" />
-          <path d="M10 12h4" />
-        </svg>
-      );
-    default:
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={iconStyle}>
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <path d="M14 2v6h6" />
-          <path d="M16 13H8" />
-          <path d="M16 17H8" />
-        </svg>
-      );
-  }
-}
+const defaultFileIcon = <FileGenericIcon size={20} />;
 
-function RemoveIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '14px', height: '14px' }}>
-      <path d="M18 6L6 18" />
-      <path d="M6 6l12 12" />
-    </svg>
-  );
-}
-
-function DownloadIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '14px', height: '14px' }}>
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <polyline points="7 10 12 15 17 10" />
-      <line x1="12" y1="15" x2="12" y2="3" />
-    </svg>
-  );
-}
 
 export function DocumentListItem({ doc, onRemove, onUpdateName, onDownload, isRemoving = false, isUpdating = false }: DocumentListItemProps) {
   const [showConfirm, setShowConfirm] = useState(false);
@@ -125,21 +54,15 @@ export function DocumentListItem({ doc, onRemove, onUpdateName, onDownload, isRe
 
   // Use stored file_type if available, otherwise derive from extension
   const fileType = doc.file_type || getFileType(getFileExtension(displayName));
-  const extension = getFileExtension(displayName);
 
   // Format file type for display (PDF is all caps, others are title case)
   const fileTypeDisplay = fileType === 'pdf' 
     ? 'PDF' 
     : fileType.charAt(0).toUpperCase() + fileType.slice(1).toLowerCase();
 
-  // Handle name input change
-  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newName = e.target.value;
+  const handleNameChange = (newName: string) => {
     setEditedName(newName);
-    // Track changes in parent component
-    if (onUpdateName) {
-      onUpdateName(doc.id, newName);
-    }
+    onUpdateName?.(doc.id, newName);
   };
 
   // Handle Escape key to reset
@@ -196,91 +119,64 @@ export function DocumentListItem({ doc, onRemove, onUpdateName, onDownload, isRe
     }
   };
 
+  const icon = useMemo(() => fileTypeIcons[fileType] ?? defaultFileIcon, [fileType]);
+
+  const secondaryText = `${fileTypeDisplay} • ${new Date(doc.created_at).toLocaleDateString()}`;
+
+  const showDownloadButton = onDownload !== undefined || (!onRemove && !onUpdateName);
+
+  const actions = (
+    <>
+      {showDownloadButton && (
+        <Button
+          variant="outline"
+          size="sm"
+          onPress={handleDownload}
+          disabled={isDownloading || isRemoving}
+          padding="$1.5"
+          opacity={isDownloading ? 0.6 : 1}
+          title={isDownloading ? 'Downloading...' : 'Download document'}
+        >
+          {isDownloading ? <Body size="xs">…</Body> : <DownloadIcon />}
+        </Button>
+      )}
+      {onRemove && (
+        <Button
+          variant={showConfirm ? 'primary' : 'outline'}
+          size="sm"
+          onPress={handleRemoveClick}
+          disabled={isRemoving}
+          padding="$1.5"
+          backgroundColor={showConfirm ? '$red6' : 'transparent'}
+          borderColor={showConfirm ? undefined : '$red6'}
+          color={showConfirm ? '$background' : '$red6'}
+          opacity={isRemoving ? 0.6 : 1}
+          title={isRemoving ? 'Removing...' : showConfirm ? 'Click to confirm removal' : 'Remove document'}
+        >
+          {isRemoving ? (
+            <Body size="xs">Removing...</Body>
+          ) : showConfirm ? (
+            <Body size="xs">Confirm?</Body>
+          ) : (
+            <RemoveIcon />
+          )}
+        </Button>
+      )}
+    </>
+  );
+
   return (
-    <XStack
-      alignItems="center"
-      gap="$3"
-      padding="$3"
-      backgroundColor="$gray1"
-      borderWidth={1}
-      borderColor="$borderColor"
-      borderRadius="$3"
+    <FileListItem
+      icon={icon}
+      name={displayName}
+      editable={Boolean(onUpdateName)}
+      value={editedName}
+      onValueChange={handleNameChange}
+      onInputKeyDown={handleNameKeyDown}
+      disabled={isRemoving || isUpdating}
+      secondaryText={secondaryText}
+      actions={actions}
       marginBottom="$2"
-    >
-      <FileIcon fileType={fileType} />
-      
-      <YStack flex={1} minWidth={0}>
-        {onUpdateName ? (
-          <Input
-            type="text"
-            value={editedName}
-            onChange={(e: any) => handleNameChange(e)}
-            onKeyDown={handleNameKeyDown}
-            disabled={isRemoving || isUpdating}
-            fontSize="$3"
-            fontWeight="500"
-            padding="$1"
-            backgroundColor={isRemoving || isUpdating ? '$gray1' : '$background'}
-          />
-        ) : (
-          <Text
-            fontSize="$3"
-            fontWeight="500"
-            color="$color"
-            numberOfLines={1}
-            ellipsizeMode="tail"
-          >
-            {displayName}
-          </Text>
-        )}
-        <Text fontSize="$2" color="$gray11" marginTop="$1">
-          {fileTypeDisplay} • {new Date(doc.created_at).toLocaleDateString()}
-        </Text>
-      </YStack>
-
-      <XStack gap="$2" alignItems="center">
-        {(onDownload !== undefined || (!onRemove && !onUpdateName)) && (
-          <Button
-            variant="outline"
-            size="sm"
-            onPress={handleDownload}
-            disabled={isDownloading || isRemoving}
-            padding="$1.5"
-            opacity={isDownloading ? 0.6 : 1}
-            title={isDownloading ? 'Downloading...' : 'Download document'}
-          >
-            {isDownloading ? (
-              <Text fontSize="$2">...</Text>
-            ) : (
-              <DownloadIcon />
-            )}
-          </Button>
-        )}
-
-        {onRemove && (
-          <Button
-            variant={showConfirm ? 'primary' : 'outline'}
-            size="sm"
-            onPress={handleRemoveClick}
-            disabled={isRemoving}
-            padding="$1.5"
-            backgroundColor={showConfirm ? '$red6' : 'transparent'}
-            borderColor={showConfirm ? undefined : '$red6'}
-            color={showConfirm ? '$background' : '$red6'}
-            opacity={isRemoving ? 0.6 : 1}
-            title={isRemoving ? 'Removing...' : showConfirm ? 'Click to confirm removal' : 'Remove document'}
-          >
-            {isRemoving ? (
-              <Text fontSize="$2">Removing...</Text>
-            ) : showConfirm ? (
-              <Text fontSize="$2">Confirm?</Text>
-            ) : (
-              <RemoveIcon />
-            )}
-          </Button>
-        )}
-      </XStack>
-    </XStack>
+    />
   );
 }
-

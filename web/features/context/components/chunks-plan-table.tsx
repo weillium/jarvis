@@ -2,7 +2,14 @@
 
 import type { BlueprintChunksPlan } from '@/shared/hooks/use-blueprint-full-query';
 import { formatPurpose } from './blueprint-display-utils';
-import { YStack, XStack, Text } from '@jarvis/ui-core';
+import {
+  YStack,
+  Heading,
+  Body,
+  StatGroup,
+  StatItem,
+  DataTable,
+} from '@jarvis/ui-core';
 
 interface ChunksPlanTableProps {
   chunksPlan: BlueprintChunksPlan;
@@ -14,104 +21,122 @@ interface ChunksPlanTableProps {
   chunkPlanCoverage: number | null;
 }
 
-export function ChunksPlanTable({ chunksPlan, chunkPlanStats, chunkPlanCoverage }: ChunksPlanTableProps) {
+export function ChunksPlanTable({
+  chunksPlan,
+  chunkPlanStats,
+  chunkPlanCoverage,
+}: ChunksPlanTableProps) {
+  const columns = [
+    {
+      key: 'label',
+      header: 'Label',
+      flex: 1.5,
+      minWidth: 200,
+      render: (row: BlueprintChunksPlan['sources'][number]) => (
+        <Body weight="medium">{row.label}</Body>
+      ),
+    },
+    {
+      key: 'upstream_reference',
+      header: 'Upstream Reference',
+      flex: 2,
+      truncate: true,
+      minWidth: 220,
+      render: (row: BlueprintChunksPlan['sources'][number]) => row.upstream_reference,
+    },
+    {
+      key: 'expected_format',
+      header: 'Expected Format',
+      flex: 1,
+      render: (row: BlueprintChunksPlan['sources'][number]) =>
+        row.expected_format ? row.expected_format : '—',
+    },
+    {
+      key: 'priority',
+      header: 'Priority',
+      flex: 1,
+    },
+    {
+      key: 'estimated_chunks',
+      header: 'Estimated Chunks',
+      flex: 1,
+      render: (row: BlueprintChunksPlan['sources'][number]) =>
+        row.estimated_chunks.toLocaleString(),
+    },
+    {
+      key: 'agent_utility',
+      header: 'Agent Utility',
+      flex: 2,
+      render: (row: BlueprintChunksPlan['sources'][number]) =>
+        formatPurpose(row.agent_utility),
+    },
+  ] as const;
+
   return (
-    <YStack marginBottom="$5">
-      <Text fontSize="$3" fontWeight="600" color="$color" marginBottom="$2" margin={0}>
-        Chunks Plan
-      </Text>
+    <YStack gap="$3">
+      <Heading level={4}>Chunks Plan</Heading>
       {chunkPlanStats && (
-        <XStack flexWrap="wrap" gap="$3" fontSize="$2" color="$gray9" marginBottom="$3">
-          <Text margin={0}>
-            <Text fontWeight="600" margin={0}>{chunksPlan.sources.length}</Text> planned sources
-          </Text>
-          <Text margin={0}>
-            <Text fontWeight="600" margin={0}>{chunkPlanStats.total.toLocaleString()}</Text> estimated chunks
-          </Text>
-          <Text margin={0}>
-            <Text fontWeight="600" margin={0}>{chunkPlanStats.facts.toLocaleString()}</Text> for facts
-          </Text>
-          <Text margin={0}>
-            <Text fontWeight="600" margin={0}>{chunkPlanStats.cards.toLocaleString()}</Text> for cards
-          </Text>
+        <StatGroup>
+          <StatItem label="Planned Sources" value={chunksPlan.sources.length} size="sm" />
+          <StatItem
+            label="Estimated Chunks"
+            value={chunkPlanStats.total.toLocaleString()}
+            size="sm"
+          />
+          <StatItem
+            label="Facts Allocation"
+            value={chunkPlanStats.facts.toLocaleString()}
+            size="sm"
+          />
+          <StatItem
+            label="Cards Allocation"
+            value={chunkPlanStats.cards.toLocaleString()}
+            size="sm"
+          />
           {chunkPlanCoverage !== null && (
-            <Text margin={0}>
-              <Text fontWeight="600" margin={0}>{chunkPlanCoverage}%</Text> of target coverage
-            </Text>
+            <StatItem label="Target Coverage" value={`${chunkPlanCoverage}%`} size="sm" />
           )}
-        </XStack>
+        </StatGroup>
       )}
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{
-          width: '100%',
-          borderCollapse: 'collapse',
-          fontSize: '12px',
-          background: '#ffffff',
-        }}>
-          <thead>
-            <tr>
-              {['Label', 'Upstream Reference', 'Expected Format', 'Priority', 'Estimated Chunks', 'Agent Utility'].map((header) => (
-                <th
-                  key={header}
-                  style={{
-                    textAlign: 'left',
-                    padding: '8px',
-                    borderBottom: '1px solid #e2e8f0',
-                    color: '#475569',
-                    fontWeight: 600,
-                  }}
-                >
-                  {header}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {chunksPlan.sources.map((source, i) => (
-              <tr key={`${source.label}-${source.upstream_reference}-${i}`}>
-                <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', color: '#0f172a', fontWeight: 500 }}>
-                  {source.label}
-                </td>
-                <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', color: '#475569', maxWidth: '220px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={source.upstream_reference}>
-                  {source.upstream_reference}
-                </td>
-                <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', color: '#475569', textTransform: 'capitalize' }}>
-                  {source.expected_format}
-                </td>
-                <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', color: '#475569' }}>
-                  {source.priority}
-                </td>
-                <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', color: '#475569' }}>
-                  {source.estimated_chunks}
-                </td>
-                <td style={{ padding: '8px', borderBottom: '1px solid #f1f5f9', color: '#475569' }}>
-                  {formatPurpose(source.agent_utility)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <Text fontSize="$2" color="$gray9" marginTop="$2" margin={0}>
-        <Text fontWeight="600" margin={0}>Target Count (Plan):</Text> {chunksPlan.target_count}
+      <DataTable
+        columns={columns}
+        data={chunksPlan.sources}
+        size="sm"
+      />
+      <Body size="sm" tone="muted">
+        <Body size="sm" weight="bold">
+          Target Count (Plan):
+        </Body>{' '}
+        {chunksPlan.target_count}
         &nbsp;•&nbsp;
-        <Text fontWeight="600" margin={0}>Quality Tier:</Text> {chunksPlan.quality_tier}
+        <Body size="sm" weight="bold">
+          Quality Tier:
+        </Body>{' '}
+        {chunksPlan.quality_tier}
         &nbsp;•&nbsp;
-        <Text fontWeight="600" margin={0}>Ranking Strategy:</Text> {chunksPlan.ranking_strategy}
+        <Body size="sm" weight="bold">
+          Ranking Strategy:
+        </Body>{' '}
+        {chunksPlan.ranking_strategy}
         {chunkPlanStats && (
           <>
             &nbsp;•&nbsp;
-            <Text fontWeight="600" margin={0}>Estimated Total:</Text> {chunkPlanStats.total.toLocaleString()}
+            <Body size="sm" weight="bold">
+              Estimated Total:
+            </Body>{' '}
+            {chunkPlanStats.total.toLocaleString()}
             {chunkPlanCoverage !== null && (
               <>
                 &nbsp;•&nbsp;
-                <Text fontWeight="600" margin={0}>Coverage:</Text> {chunkPlanCoverage}%
+                <Body size="sm" weight="bold">
+                  Coverage:
+                </Body>{' '}
+                {chunkPlanCoverage}%
               </>
             )}
           </>
         )}
-      </Text>
+      </Body>
     </YStack>
   );
 }
-

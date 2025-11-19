@@ -13,6 +13,7 @@
   "dependencies": {
     "@tamagui/config": "^1.138.0",
     "@tamagui/core": "^1.138.0",
-    "tamagui": "^1.138.0"
+    "tamagui": "^1.138.0",
+    "@uiw/react-md-editor": "^4.0.8"
   }
 }

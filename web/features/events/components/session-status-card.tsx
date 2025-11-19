@@ -1,9 +1,20 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { YStack, XStack, Text, Button, Card, Alert } from '@jarvis/ui-core';
+import {
+  YStack,
+  XStack,
+  Button,
+  Card,
+  Alert,
+  Heading,
+  Body,
+  Label,
+  Badge,
+} from '@jarvis/ui-core';
 import type { AgentSessionDisplay, AgentType } from './agent-sessions-utils';
 import { getSessionStatusColor, getSessionStatusColorHex, getSessionStatusLabel, formatDate, formatDuration } from './agent-sessions-utils';
+import { styled } from 'tamagui';
 
 interface SessionStatusCardProps {
   title: string;
@@ -11,6 +22,22 @@ interface SessionStatusCardProps {
   expandedLogs: Record<AgentType, boolean>;
   setExpandedLogs: React.Dispatch<React.SetStateAction<Record<AgentType, boolean>>>;
 }
+
+const ConnectionDot = styled(YStack, {
+  width: 8,
+  height: 8,
+  borderRadius: '$10',
+  variants: {
+    animate: {
+      true: {
+        animationName: 'pulse',
+        animationDuration: '2s',
+        animationTimingFunction: 'cubic-bezier(0.4, 0, 0.6, 1)',
+        animationIterationCount: 'infinite',
+      },
+    },
+  } as const,
+});
 
 export function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: SessionStatusCardProps) {
   const [currentTime, setCurrentTime] = useState(() => Date.now());
@@ -140,36 +167,17 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
   const pingPongVariant = pingPongMissed === 0 ? 'success' : pingPongMissed === 1 ? 'warning' : 'error';
 
   return (
-    <Card variant="outlined" padding="$5">
+    <Card variant="outlined" padding="$5" gap="$4">
       {/* Header */}
-      <XStack
-        justifyContent="space-between"
-        alignItems="center"
-        marginBottom="$4"
-      >
-        <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
-          {title}
-        </Text>
-        <XStack alignItems="center" gap="$2">
-          <YStack
-            width={8}
-            height={8}
-            borderRadius="$10"
-            backgroundColor={statusColorHex}
-          />
-          <Text fontSize="$3" fontWeight="500" color={statusColor}>
-            {statusLabel}
-          </Text>
-        </XStack>
+      <XStack justifyContent="space-between" alignItems="center">
+        <Heading level={4}>{title}</Heading>
+        <Badge backgroundColor={statusColorHex} color={statusColor}>
+          {statusLabel}
+        </Badge>
       </XStack>
 
       {/* Connection Status & Runtime */}
-      <YStack
-        marginBottom="$4"
-        paddingBottom="$4"
-        borderBottomWidth={1}
-        borderBottomColor="$borderColor"
-      >
+      <YStack borderBottomWidth={1} borderBottomColor="$borderColor" paddingBottom="$4">
         {isRealtime && (
           <>
             <XStack
@@ -177,35 +185,16 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
               gap="$2"
               marginBottom="$2"
             >
-              <YStack
-                width={8}
-                height={8}
-                borderRadius="$10"
-                backgroundColor={connectionColor}
-                style={{
-                  animation: isWebSocketLive ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none',
-                }}
-              />
-              <Text
-                fontSize="$2"
-                fontWeight="600"
-                color={connectionColorToken}
-                textTransform="uppercase"
-                letterSpacing={0.5}
-              >
+              <ConnectionDot backgroundColor={connectionColor} animate={isWebSocketLive} />
+              <Body size="sm" weight="medium" color={connectionColorToken} textTransform="uppercase">
                 WebSocket: {connectionStatus}
-                {actualWebSocketState && (
-                  <Text
-                    fontSize="$1"
-                    fontWeight="400"
-                    marginLeft="$1.5"
-                    opacity={0.7}
-                    textTransform="none"
-                  >
+                {actualWebSocketState ? (
+                  <Body size="xs" tone="muted" textTransform="none">
+                    {' '}
                     ({actualWebSocketState})
-                  </Text>
-                )}
-              </Text>
+                  </Body>
+                ) : null}
+              </Body>
             </XStack>
 
             {actualWebSocketState === 'OPEN' && (
@@ -218,45 +207,37 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
                   justifyContent="space-between"
                   marginBottom="$1"
                 >
-                  <Text
-                    fontSize="$1"
-                    fontWeight="600"
-                    textTransform="uppercase"
-                    letterSpacing={0.5}
-                  >
-                    Connection Health
-                  </Text>
+                  <Label size="xs">Connection Health</Label>
                   <XStack alignItems="center" gap="$1">
                     {pingPongMissed === 0 && (
-                      <Text fontSize="$2">✓ Healthy</Text>
+                      <Body size="sm">✓ Healthy</Body>
                     )}
                     {pingPongMissed === 1 && (
-                      <Text fontSize="$2" color="$yellow11">⚠ 1 Missed</Text>
+                      <Body size="sm" color="$yellow11">
+                        ⚠ 1 Missed
+                      </Body>
                     )}
                     {pingPongMissed >= 2 && (
-                      <Text fontSize="$2" color="$red11">
+                      <Body size="sm" color="$red11">
                         ⚠⚠ {pingPongMissed} Missed
-                      </Text>
+                      </Body>
                     )}
                   </XStack>
                 </XStack>
                 {session.ping_pong?.enabled && (
-                  <XStack
-                    fontSize="$1"
-                    color="$gray11"
-                    gap="$3"
-                    flexWrap="wrap"
-                  >
+                  <XStack gap="$3" flexWrap="wrap">
                     {session.ping_pong.lastPongReceived && (
-                      <Text>
+                      <Body size="xs" tone="muted">
                         Last pong: {new Date(session.ping_pong.lastPongReceived).toLocaleTimeString()}
-                      </Text>
+                      </Body>
                     )}
-                    <Text>Ping interval: {Math.round((session.ping_pong.pingIntervalMs || 0) / 1000)}s</Text>
+                    <Body size="xs" tone="muted">
+                      Ping interval: {Math.round((session.ping_pong.pingIntervalMs || 0) / 1000)}s
+                    </Body>
                     {session.ping_pong.missedPongs > 0 && (
-                      <Text color="$red11" fontWeight="600">
+                      <Body size="xs" tone="danger" weight="medium">
                         {session.ping_pong.missedPongs}/{session.ping_pong.maxMissedPongs} missed
-                      </Text>
+                      </Body>
                     )}
                   </XStack>
                 )}
@@ -265,39 +246,30 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
           </>
         )}
 
-        <Text fontSize="$2" color="$gray11" marginBottom="$1" margin={0}>
+        <Body tone="muted" marginBottom="$1">
           {runtime ? `${runtimeLabel}: ${runtime}` : `${runtimeLabel}: N/A`}
-        </Text>
+        </Body>
         {isRealtime && (
-          <Text
-            fontSize="$2"
-            color="$gray11"
-            fontFamily="$mono"
-            marginBottom="$1"
-            margin={0}
-          >
+          <Body tone="muted" fontFamily="$mono" marginBottom="$1">
             {session.session_id === 'pending' ||
             (session.status === 'closed' &&
               session.metadata?.created_at &&
               new Date().getTime() - new Date(session.metadata.created_at).getTime() < 60000) ? (
-              <Text fontStyle="italic" color="$gray5">Pending activation</Text>
+              <Body fontStyle="italic" tone="muted">
+                Pending activation
+              </Body>
             ) : (
               <>Session: {session.session_id.substring(0, 20)}...</>
             )}
-          </Text>
+          </Body>
         )}
-        <Text fontSize="$2" color="$gray11" margin={0}>
+        <Body tone="muted">
           Model: {session.metadata.model || 'N/A'}
-        </Text>
+        </Body>
         {session.metrics_recorded_at && (
-          <Text
-            fontSize="$1"
-            color="$gray5"
-            fontStyle="italic"
-            margin={0}
-          >
+          <Body size="xs" tone="muted" fontStyle="italic">
             Metrics recorded at: {new Date(session.metrics_recorded_at).toLocaleString()}
-          </Text>
+          </Body>
         )}
       </YStack>
 
@@ -309,73 +281,42 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
           borderBottomWidth={1}
           borderBottomColor="$borderColor"
         >
-          <Text
-            fontSize="$2"
-            fontWeight="600"
-            color="$gray11"
-            textTransform="uppercase"
-            letterSpacing={0.5}
-            marginBottom="$3"
-            margin={0}
-          >
-            Token Metrics
-          </Text>
+          <Label marginBottom="$3">Token Metrics</Label>
           <XStack
             flexWrap="wrap"
             gap="$3"
             $sm={{ flexDirection: 'column' }}
             $md={{ flexDirection: 'row' }}
           >
-            <YStack flex={1} minWidth={100}>
-              <Text fontSize="$1" color="$gray5" marginBottom="$1" margin={0}>Total</Text>
-              <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
-                {session.token_metrics.total_tokens.toLocaleString()}
-              </Text>
-            </YStack>
-            <YStack flex={1} minWidth={100}>
-              <Text fontSize="$1" color="$gray5" marginBottom="$1" margin={0}>Avg</Text>
-              <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
-                {session.token_metrics.avg_tokens.toLocaleString()}
-              </Text>
-            </YStack>
-            <YStack flex={1} minWidth={100}>
-              <Text fontSize="$1" color="$gray5" marginBottom="$1" margin={0}>Max</Text>
-              <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
-                {session.token_metrics.max_tokens.toLocaleString()}
-              </Text>
-            </YStack>
-            <YStack flex={1} minWidth={100}>
-              <Text fontSize="$1" color="$gray5" marginBottom="$1" margin={0}>Requests</Text>
-              <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
-                {session.token_metrics.request_count}
-              </Text>
-            </YStack>
+            {[
+              { label: 'Total', value: session.token_metrics.total_tokens.toLocaleString() },
+              { label: 'Avg', value: session.token_metrics.avg_tokens.toLocaleString() },
+              { label: 'Max', value: session.token_metrics.max_tokens.toLocaleString() },
+              { label: 'Requests', value: session.token_metrics.request_count.toLocaleString() },
+            ].map((metric, index) => (
+              <YStack key={metric.label} flex={1} minWidth={100}>
+                <Label size="xs">{metric.label}</Label>
+                <Body size="lg" weight="medium">
+                  {metric.value}
+                </Body>
+              </YStack>
+            ))}
           </XStack>
           {(session.token_metrics.warnings > 0 || session.token_metrics.criticals > 0) && (
             <Alert
               variant={session.token_metrics.criticals > 0 ? 'error' : 'warning'}
               marginTop="$3"
             >
-              <Text fontSize="$2" margin={0}>
+              <Body size="sm">
                 {session.token_metrics.criticals > 0 && `⚠️ ${session.token_metrics.criticals} critical threshold breaches`}
                 {session.token_metrics.criticals > 0 && session.token_metrics.warnings > 0 && ' • '}
                 {session.token_metrics.warnings > 0 && `⚠️ ${session.token_metrics.warnings} warnings`}
-              </Text>
+              </Body>
             </Alert>
           )}
           {session.agent_type === 'facts' && session.token_metrics.facts_budget && (
             <Card variant="outlined" backgroundColor="$gray1" padding="$3" marginTop="$3">
-              <Text
-                fontSize="$2"
-                fontWeight="600"
-                color="$gray9"
-                textTransform="uppercase"
-                letterSpacing={0.5}
-                marginBottom="$2"
-                margin={0}
-              >
-                Facts Prompt Budget (last run)
-              </Text>
+              <Label>Facts Prompt Budget (last run)</Label>
               <XStack
                 flexWrap="wrap"
                 gap="$2.5"
@@ -383,59 +324,57 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
                 $md={{ flexDirection: 'row' }}
               >
                 <YStack flex={1} minWidth={120}>
-                  <Text fontSize="$1" color="$gray5" marginBottom="$0.5" margin={0}>Selected Facts</Text>
-                  <Text fontSize="$3" fontWeight="600" color="$color" margin={0}>
+                  <Label size="xs">Selected Facts</Label>
+                  <Body size="lg" weight="medium">
                     {session.token_metrics.facts_budget.selected} / {session.token_metrics.facts_budget.total_facts}
-                  </Text>
+                  </Body>
                 </YStack>
                 <YStack flex={1} minWidth={120}>
-                  <Text fontSize="$1" color="$gray5" marginBottom="$0.5" margin={0}>Overflow Facts</Text>
-                  <Text fontSize="$3" fontWeight="600" color="$color" margin={0}>
+                  <Label size="xs">Overflow Facts</Label>
+                  <Body size="lg" weight="medium">
                     {session.token_metrics.facts_budget.overflow}
-                  </Text>
+                  </Body>
                 </YStack>
                 <YStack flex={1} minWidth={120}>
-                  <Text fontSize="$1" color="$gray5" marginBottom="$0.5" margin={0}>Summaries Added</Text>
-                  <Text fontSize="$3" fontWeight="600" color="$color" margin={0}>
+                  <Label size="xs">Summaries Added</Label>
+                  <Body size="lg" weight="medium">
                     {session.token_metrics.facts_budget.summary}
-                  </Text>
+                  </Body>
                 </YStack>
                 <YStack flex={1} minWidth={120}>
-                  <Text fontSize="$1" color="$gray5" marginBottom="$0.5" margin={0}>Tokens Used / Budget</Text>
-                  <Text fontSize="$3" fontWeight="600" color="$color" margin={0}>
+                  <Label size="xs">Tokens Used / Budget</Label>
+                  <Body size="lg" weight="medium">
                     {session.token_metrics.facts_budget.used_tokens} / {session.token_metrics.facts_budget.budget_tokens}
-                  </Text>
+                  </Body>
                 </YStack>
               </XStack>
-              <Text fontSize="$1" color="$gray11" marginTop="$2" margin={0}>
+              <Body size="xs" tone="muted" marginTop="$2">
                 Selection Ratio:{' '}
                 {(session.token_metrics.facts_budget.selection_ratio * 100).toFixed(1)}%
-              </Text>
-              <Text fontSize="$1" color="$gray11" marginTop="$1" margin={0}>
+              </Body>
+              <Body size="xs" tone="muted">
                 Merged Clusters: {session.token_metrics.facts_budget.merged_clusters}
-              </Text>
+              </Body>
               {session.token_metrics.facts_budget.merged_facts.length > 0 && (
                 <YStack marginTop="$2.5">
-                  <Text fontSize="$1" color="$gray5" marginBottom="$1" margin={0}>
-                    Merged Facts
-                  </Text>
+                  <Label size="xs">Merged Facts</Label>
                   <YStack gap="$1" paddingLeft="$4">
                     {session.token_metrics.facts_budget.merged_facts.slice(0, 5).map((merged, idx) => (
-                      <Text key={`${merged.representative}-${idx}`} fontSize="$2" color="$gray9" margin={0}>
-                        <Text fontWeight="600">{merged.representative}</Text>
+                      <Body key={`${merged.representative}-${idx}`} tone="muted">
+                        <Body weight="medium">{merged.representative}</Body>
                         {merged.members.length > 0 && (
-                          <Text opacity={0.8}>
+                          <Body tone="muted">
                             {' '}
                             ← {merged.members.join(', ')}
-                          </Text>
+                          </Body>
                         )}
-                      </Text>
+                      </Body>
                     ))}
                   </YStack>
                   {session.token_metrics.facts_budget.merged_facts.length > 5 && (
-                    <Text fontSize="$1" color="$gray5" marginTop="$1" margin={0}>
+                    <Body size="xs" tone="muted" marginTop="$1">
                       +{session.token_metrics.facts_budget.merged_facts.length - 5} additional merges
-                    </Text>
+                    </Body>
                   )}
                 </YStack>
               )}
@@ -454,12 +393,10 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
             padding="$2 $3"
             onPress={() => setExpandedLogs(prev => ({ ...prev, [session.agent_type]: !prev[session.agent_type] }))}
           >
-            <Text fontSize="$2" fontWeight="500" color="$gray11" margin={0}>
+            <Body size="sm" weight="medium">
               Recent Logs ({session.recent_logs.length})
-            </Text>
-            <Text fontSize="$3" margin={0}>
-              {expandedLogs[session.agent_type] ? '▼' : '▶'}
-            </Text>
+            </Body>
+            <Body size="lg">{expandedLogs[session.agent_type] ? '▼' : '▶'}</Body>
           </Button>
           {expandedLogs[session.agent_type] && (
             <YStack
@@ -480,30 +417,28 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
                   backgroundColor="$background"
                   borderRadius="$1"
                   borderLeftWidth={3}
-                  borderLeftColor={
-                    log.level === 'error' ? '$red11' :
-                    log.level === 'warn' ? '$yellow11' : '$blue11'
-                  }
-                >
-                  <Text fontSize="$1" color="$gray11" marginBottom="$1" margin={0}>
-                    {new Date(log.timestamp).toLocaleTimeString()}
-                    {(() => {
-                      const seqEntry = log.context?.find(
-                        (entry) => entry.key === 'seq' && typeof entry.value === 'number'
-                      );
-                      return seqEntry ? ` • Seq ${seqEntry.value}` : null;
-                    })()}
-                  </Text>
-                  <Text
-                    fontSize="$2"
-                    color="$color"
-                    fontFamily="$mono"
-                    whiteSpace="pre-wrap"
-                    style={{ wordBreak: 'break-word' }}
-                    margin={0}
-                  >
-                    {log.message}
-                  </Text>
+              borderLeftColor={
+                log.level === 'error' ? '$red11' :
+                log.level === 'warn' ? '$yellow11' : '$blue11'
+              }
+            >
+              <Body size="xs" tone="muted" marginBottom="$1">
+                {new Date(log.timestamp).toLocaleTimeString()}
+                {(() => {
+                  const seqEntry = log.context?.find(
+                    (entry) => entry.key === 'seq' && typeof entry.value === 'number'
+                  );
+                  return seqEntry ? ` • Seq ${seqEntry.value}` : null;
+                })()}
+              </Body>
+              <Body
+                size="sm"
+                fontFamily="$mono"
+                whiteSpace="pre-wrap"
+                wordBreak="break-word"
+              >
+                {log.message}
+              </Body>
                 </YStack>
               ))}
             </YStack>
@@ -518,16 +453,16 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
         borderTopWidth={1}
         borderTopColor="$borderColor"
       >
-        <Text fontSize="$1" color="$gray5" margin={0}>
+        <Body size="xs" tone="muted">
           Created: {formatDate(session.metadata.created_at)}
-        </Text>
-        <Text fontSize="$1" color="$gray5" margin={0}>
+        </Body>
+        <Body size="xs" tone="muted">
           Updated: {formatDate(session.metadata.updated_at)}
-        </Text>
+        </Body>
         {session.metadata.closed_at && (
-          <Text fontSize="$1" color="$gray5" margin={0}>
+          <Body size="xs" tone="muted">
             Closed: {formatDate(session.metadata.closed_at)}
-          </Text>
+          </Body>
         )}
       </YStack>
 

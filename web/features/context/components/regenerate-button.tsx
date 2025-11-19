@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useStartOrRegenerateMutation } from '@/shared/hooks/use-mutations';
-import { YStack, XStack, Text, Button, Alert } from '@jarvis/ui-core';
+import { YStack, XStack, Text, Button, Alert, Spinner } from '@jarvis/ui-core';
 
 interface RegenerateButtonProps {
   eventId: string;
@@ -129,20 +129,7 @@ export function RegenerateButton({ eventId, stage, onComplete, isRegenerating: e
         >
           {getButtonLabel()}
         </Button>
-        {isCurrentlyRegenerating && (
-          <YStack
-            width={16}
-            height={16}
-            borderWidth={2}
-            borderColor="$gray11"
-            borderTopColor="transparent"
-            borderRadius="$10"
-            style={{
-              animation: 'spin 0.8s linear infinite',
-            }}
-            aria-label="Regenerating"
-          />
-        )}
+        {isCurrentlyRegenerating && <Spinner size="small" color="$gray11" />}
       </XStack>
       {error && (
         <Alert variant="error" padding="$2 $3">
@@ -151,14 +138,6 @@ export function RegenerateButton({ eventId, stage, onComplete, isRegenerating: e
           </Text>
         </Alert>
       )}
-      <style jsx global>{`
-        @keyframes spin {
-          to {
-            transform: rotate(360deg);
-          }
-        }
-      `}</style>
     </YStack>
   );
 }
-

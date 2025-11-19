@@ -7,7 +7,22 @@ import { ContextDatabaseVisualization } from '@/features/events/components/conte
 import { GlossaryVisualization } from '@/features/context/components/glossary-visualization';
 import { ResearchResultsVisualization } from '@/features/context/components/research-results-visualization';
 import { VersionHistory } from '@/features/context/components/version-history';
-import { YStack, XStack, Text, Card, Button, Alert } from '@jarvis/ui-core';
+import {
+  YStack,
+  XStack,
+  Card,
+  Button,
+  Alert,
+  Heading,
+  Body,
+  Label,
+  StatGroup,
+  StatItem,
+  Badge,
+  Text,
+  EmptyStateCard,
+  Skeleton,
+} from '@jarvis/ui-core';
 
 interface AgentInfoProps {
   eventId: string;
@@ -80,30 +95,10 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
     return (
       <Card variant="outlined" padding="$8" marginBottom="$6">
         <XStack alignItems="center" gap="$4">
-          <YStack
-            width={56}
-            height={56}
-            borderRadius="$10"
-            backgroundColor="$gray2"
-            alignItems="center"
-            justifyContent="center"
-            fontSize={28}
-          >
-            🤖
-          </YStack>
+          <Skeleton width={56} height={56} shape="circle" />
           <YStack flex={1} gap="$2">
-            <YStack
-              height={20}
-              backgroundColor="$gray3"
-              borderRadius="$1"
-              width={200}
-            />
-            <YStack
-              height={16}
-              backgroundColor="$gray3"
-              borderRadius="$1"
-              width={150}
-            />
+            <Skeleton height={20} width={200} />
+            <Skeleton height={16} width={150} />
           </YStack>
         </XStack>
       </Card>
@@ -127,12 +122,8 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
             ⚠️
           </YStack>
           <YStack>
-            <Text fontSize="$5" fontWeight="600" color="$color" marginBottom="$1" margin={0}>
-              Agent Information
-            </Text>
-            <Text fontSize="$3" color="$red11" margin={0}>
-              {error}
-            </Text>
+            <Heading level={4}>Agent Information</Heading>
+            <Body tone="danger">{error}</Body>
           </YStack>
         </XStack>
       </Card>
@@ -142,29 +133,19 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
   // No agent state
   if (!agent) {
     return (
-      <Card variant="outlined" padding="$8" marginBottom="$6">
-        <XStack alignItems="center" gap="$4">
-          <YStack
-            width={56}
-            height={56}
-            borderRadius="$10"
-            backgroundColor="$gray2"
-            alignItems="center"
-            justifyContent="center"
-            fontSize={28}
-          >
+      <EmptyStateCard
+        title="Agent information unavailable"
+        description="Attach or configure an agent for this event to view status and context."
+        icon={
+          <Text fontSize="$6" margin={0}>
             🤖
-          </YStack>
-          <YStack>
-            <Text fontSize="$5" fontWeight="600" color="$color" marginBottom="$1" margin={0}>
-              Agent Information
-            </Text>
-            <Text fontSize="$3" color="$gray11" margin={0}>
-              No agent associated with this event
-            </Text>
-          </YStack>
-        </XStack>
-      </Card>
+          </Text>
+        }
+        padding="$6"
+        marginBottom="$6"
+        align="start"
+        titleLevel={4}
+      />
     );
   }
 
@@ -197,9 +178,7 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
           🤖
         </YStack>
         <YStack flex={1}>
-          <Text fontSize="$5" fontWeight="600" color="$color" marginBottom="$2" margin={0}>
-            Agent Information
-          </Text>
+          <Heading level={4}>Agent Information</Heading>
           <XStack alignItems="center" gap="$3" flexWrap="wrap">
             <YStack
               padding="$1.5 $3.5"
@@ -208,89 +187,24 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
               borderWidth={1}
               borderColor="$borderColor"
             >
-              <Text fontSize="$3" fontWeight="600" color={statusColor}>
+              <Body size="sm" weight="medium" color={statusColor}>
                 {statusLabel}
-              </Text>
+              </Body>
             </YStack>
-            <Text fontSize="$3" color="$gray11">
+            <Body tone="muted">
               Model Set: {agent.model_set}
-            </Text>
+            </Body>
           </XStack>
         </YStack>
       </XStack>
 
       {/* Agent Details Grid */}
-      <XStack
-        flexWrap="wrap"
-        gap="$5"
-        paddingTop="$5"
-        borderTopWidth={1}
-        borderTopColor="$borderColor"
-        marginBottom={(contextStats || blueprint) ? '$6' : 0}
-        $sm={{ flexDirection: 'column' }}
-        $md={{ flexDirection: 'row' }}
-      >
-        <YStack minWidth={180} flex={1}>
-          <Text
-            fontSize="$2"
-            fontWeight="600"
-            color="$gray11"
-            textTransform="uppercase"
-            letterSpacing={0.5}
-            marginBottom="$1.5"
-          >
-            Agent ID
-          </Text>
-          <Text fontSize="$3" fontWeight="500" color="$color" fontFamily="$mono" style={{ wordBreak: 'break-all' }}>
-            {agent.id.substring(0, 8)}...
-          </Text>
-        </YStack>
-        <YStack minWidth={180} flex={1}>
-          <Text
-            fontSize="$2"
-            fontWeight="600"
-            color="$gray11"
-            textTransform="uppercase"
-            letterSpacing={0.5}
-            marginBottom="$1.5"
-          >
-            Status
-          </Text>
-          <Text fontSize="$3" fontWeight="500" color={statusColor}>
-            {statusLabel}
-          </Text>
-        </YStack>
-        <YStack minWidth={180} flex={1}>
-          <Text
-            fontSize="$2"
-            fontWeight="600"
-            color="$gray11"
-            textTransform="uppercase"
-            letterSpacing={0.5}
-            marginBottom="$1.5"
-          >
-            Model Set
-          </Text>
-          <Text fontSize="$3" fontWeight="500" color="$color">
-            {agent.model_set}
-          </Text>
-        </YStack>
-        <YStack minWidth={180} flex={1}>
-          <Text
-            fontSize="$2"
-            fontWeight="600"
-            color="$gray11"
-            textTransform="uppercase"
-            letterSpacing={0.5}
-            marginBottom="$1.5"
-          >
-            Created
-          </Text>
-          <Text fontSize="$3" fontWeight="500" color="$color">
-            {formatDate(agent.created_at)}
-          </Text>
-        </YStack>
-      </XStack>
+      <StatGroup>
+        <StatItem label="Agent ID" value={`${agent.id.substring(0, 8)}…`} />
+        <StatItem label="Status" value={statusLabel} helperText={agent.stage ?? undefined} />
+        <StatItem label="Model Set" value={agent.model_set} />
+        <StatItem label="Created" value={formatDate(agent.created_at)} />
+      </StatGroup>
 
       {/* Context Statistics */}
       {contextStats && (
@@ -300,9 +214,7 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
           borderTopColor="$borderColor"
           marginBottom="$6"
         >
-          <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$4" margin={0}>
-            Context Library
-          </Text>
+          <Heading level={3}>Context Library</Heading>
           <XStack
             flexWrap="wrap"
             gap="$4"
@@ -311,39 +223,23 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
           >
             <Card variant="outlined" backgroundColor="$gray1" padding="$4" flex={1} minWidth={150}>
               <YStack gap="$1">
-                <Text fontSize="$7" fontWeight="700" color="$blue6" marginBottom="$1">
+                <Heading level={2} color="$blue6">
                   {contextStats.chunkCount.toLocaleString()}
-                </Text>
-                <Text
-                  fontSize="$2"
-                  fontWeight="500"
-                  color="$gray11"
-                  textTransform="uppercase"
-                  letterSpacing={0.5}
-                >
-                  Context Chunks
-                </Text>
+                </Heading>
+                <Label size="xs">Context Chunks</Label>
                 {blueprint?.target_chunk_count && (
-                  <Text fontSize="$1" color="$gray5" marginTop="$1">
+                  <Body size="xs" tone="muted" marginTop="$1">
                     Target: {blueprint.target_chunk_count.toLocaleString()}
-                  </Text>
+                  </Body>
                 )}
               </YStack>
             </Card>
             <Card variant="outlined" backgroundColor="$gray1" padding="$4" flex={1} minWidth={150}>
               <YStack gap="$1">
-                <Text fontSize="$7" fontWeight="700" color="$green11" marginBottom="$1">
+                <Heading level={2} color="$green11">
                   {contextStats.glossaryTermCount.toLocaleString()}
-                </Text>
-                <Text
-                  fontSize="$2"
-                  fontWeight="500"
-                  color="$gray11"
-                  textTransform="uppercase"
-                  letterSpacing={0.5}
-                >
-                  Glossary Terms
-                </Text>
+                </Heading>
+                <Label size="xs">Glossary Terms</Label>
               </YStack>
             </Card>
           </XStack>
@@ -358,9 +254,7 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
           borderTopColor="$borderColor"
           marginBottom="$6"
         >
-          <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$4" margin={0}>
-            Context Blueprint
-          </Text>
+          <Heading level={3}>Context Blueprint</Heading>
           <XStack
             flexWrap="wrap"
             gap="$4"
@@ -369,89 +263,43 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
           >
             {blueprint.target_chunk_count && (
               <YStack minWidth={150} flex={1}>
-                <Text
-                  fontSize="$2"
-                  fontWeight="600"
-                  color="$gray11"
-                  textTransform="uppercase"
-                  letterSpacing={0.5}
-                  marginBottom="$1.5"
-                >
-                  Target Chunks
-                </Text>
-                <Text fontSize="$3" fontWeight="500" color="$color">
+                <Label size="xs">Target Chunks</Label>
+                <Body size="lg" weight="medium">
                   {blueprint.target_chunk_count.toLocaleString()}
-                </Text>
+                </Body>
               </YStack>
             )}
             {blueprint.quality_tier && (
               <YStack minWidth={150} flex={1}>
-                <Text
-                  fontSize="$2"
-                  fontWeight="600"
-                  color="$gray11"
-                  textTransform="uppercase"
-                  letterSpacing={0.5}
-                  marginBottom="$1.5"
-                >
-                  Quality Tier
-                </Text>
-                <Text fontSize="$3" fontWeight="500" color="$color">
+                <Label size="xs">Quality Tier</Label>
+                <Body size="lg" weight="medium">
                   {blueprint.quality_tier}
-                </Text>
+                </Body>
               </YStack>
             )}
             {blueprint.estimated_cost !== null && (
               <YStack minWidth={150} flex={1}>
-                <Text
-                  fontSize="$2"
-                  fontWeight="600"
-                  color="$gray11"
-                  textTransform="uppercase"
-                  letterSpacing={0.5}
-                  marginBottom="$1.5"
-                >
-                  Estimated Cost
-                </Text>
-                <Text fontSize="$3" fontWeight="500" color="$color">
+                <Label size="xs">Estimated Cost</Label>
+                <Body size="lg" weight="medium">
                   ${blueprint.estimated_cost.toFixed(2)}
-                </Text>
+                </Body>
               </YStack>
             )}
             {blueprint.status && (
               <YStack minWidth={150} flex={1}>
-                <Text
-                  fontSize="$2"
-                  fontWeight="600"
-                  color="$gray11"
-                  textTransform="uppercase"
-                  letterSpacing={0.5}
-                  marginBottom="$1.5"
-                >
-                  Blueprint Status
-                </Text>
-                <Text
-                  fontSize="$3"
-                  fontWeight="500"
+                <Label size="xs">Blueprint Status</Label>
+                <Body
+                  size="lg"
+                  weight="medium"
                   color={blueprint.status === 'approved' || blueprint.status === 'completed' ? '$green11' : '$gray11'}
                 >
                   {blueprint.status}
-                </Text>
+                </Body>
               </YStack>
             )}
           </XStack>
         </YStack>
       )}
-
-      {/* Context Generation Section */}
-      <YStack
-        paddingTop="$6"
-        borderTopWidth={1}
-        borderTopColor="$borderColor"
-        marginBottom="$6"
-      >
-        <ContextGenerationPanel eventId={eventId} embedded={true} />
-      </YStack>
 
       {/* Context Database Section - Collapsible */}
       {contextStats && contextStats.chunkCount > 0 && (
@@ -468,18 +316,10 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
             padding="$3 0"
             onPress={() => setIsDatabaseExpanded(!isDatabaseExpanded)}
           >
-            <Text fontSize="$4" fontWeight="600" color="$color">
+            <Body size="sm" weight="medium">
               Context Database ({contextStats.chunkCount.toLocaleString()} chunks)
-            </Text>
-            <Text
-              fontSize="$5"
-              style={{
-                transform: isDatabaseExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
-                transition: 'transform 0.2s',
-              }}
-            >
-              ▼
-            </Text>
+            </Body>
+            <Body size="lg">{isDatabaseExpanded ? '▼' : '▶'}</Body>
           </Button>
           {isDatabaseExpanded && (
             <YStack marginTop="$4">
@@ -503,18 +343,10 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
             padding="$3 0"
             onPress={() => setIsGlossaryExpanded(!isGlossaryExpanded)}
           >
-            <Text fontSize="$4" fontWeight="600" color="$color">
+            <Body size="sm" weight="medium">
               Glossary ({contextStats.glossaryTermCount.toLocaleString()} terms)
-            </Text>
-            <Text
-              fontSize="$5"
-              style={{
-                transform: isGlossaryExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
-                transition: 'transform 0.2s',
-              }}
-            >
-              ▼
-            </Text>
+            </Body>
+            <Body size="lg">{isGlossaryExpanded ? '▼' : '▶'}</Body>
           </Button>
           {isGlossaryExpanded && (
             <YStack marginTop="$4">
@@ -538,18 +370,10 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
           padding="$3 0"
           onPress={() => setIsResearchExpanded(!isResearchExpanded)}
         >
-          <Text fontSize="$4" fontWeight="600" color="$color">
+          <Body size="sm" weight="medium">
             Research Results
-          </Text>
-          <Text
-            fontSize="$5"
-            style={{
-              transform: isResearchExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
-              transition: 'transform 0.2s',
-            }}
-          >
-            ▼
-          </Text>
+          </Body>
+          <Body size="lg">{isResearchExpanded ? '▼' : '▶'}</Body>
         </Button>
         {isResearchExpanded && (
           <YStack marginTop="$4">
