@@ -8,7 +8,7 @@ const nextConfig = {
       { protocol: "http", hostname: "**" },
     ],
   },
-  transpilePackages: ["@jarvis/ui-core", "tamagui"],
+  transpilePackages: ["@jarvis/ui-core", "tamagui", "@tamagui/web"],
 };
 
 export default nextConfig;

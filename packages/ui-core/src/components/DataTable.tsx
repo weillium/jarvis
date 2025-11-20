@@ -2,7 +2,8 @@
 
 import { ReactNode } from 'react';
 import { XStack, YStack, styled, type StackProps } from 'tamagui';
-import { Body, Label } from './Typography';
+import { Label } from './Typography';
+import { ClampText } from './ClampText';
 
 const TableShell = styled(YStack, {
   name: 'DataTableShell',
@@ -150,13 +151,12 @@ export function DataTable<T>({
                       truncate={column.truncate}
                     >
                       {typeof value === 'string' || typeof value === 'number' ? (
-                        <Body
-                          size={size === 'sm' ? 'sm' : 'md'}
-                          numberOfLines={textLines}
-                          ellipsizeMode={column.truncate ? 'tail' : undefined}
+                        <ClampText
+                          lines={column.truncate ? 1 : undefined}
+                          fontSize={size === 'sm' ? '$2' : '$3'}
                         >
                           {value}
-                        </Body>
+                        </ClampText>
                       ) : (
                         value
                       )}

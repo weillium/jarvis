@@ -3,7 +3,8 @@
 import type { ReactNode, KeyboardEvent } from 'react';
 import { XStack, YStack, type StackProps } from 'tamagui';
 import { Input } from './Input';
-import { Body } from './Typography';
+import { Caption } from './Typography';
+import { ClampText } from './ClampText';
 
 export interface FileListItemProps extends StackProps {
   icon?: ReactNode;
@@ -37,9 +38,9 @@ export function FileListItem({
 
   const secondary =
     typeof secondaryText === 'string' ? (
-      <Body size="xs" tone="muted">
+      <Caption>
         {secondaryText}
-      </Body>
+      </Caption>
     ) : (
       secondaryText
     );
@@ -74,11 +75,11 @@ export function FileListItem({
             backgroundColor={disabled ? '$gray1' : '$background'}
           />
         ) : (
-          <Body size="sm" weight="medium" numberOfLines={1} ellipsizeMode="tail">
+          <ClampText lines={1} fontSize="$3" fontWeight="500">
             {name}
-          </Body>
+          </ClampText>
         )}
-        {secondary ? <YStack marginTop="$1">{secondary}</YStack> : null}
+        {secondary ? <YStack marginTop="$2">{secondary}</YStack> : null}
       </YStack>
 
       {actions ? (

@@ -13,6 +13,7 @@ import {
   Select,
   Body,
   Label,
+  Caption,
   BulletList,
   EmptyStateCard,
   LoadingState,
@@ -209,13 +210,13 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
         <BulletList
           items={completions}
           renderItem={(item) => (
-            <Body size="xs" tone="muted">
+            <Caption>
               {item.model ? `${item.model}` : 'Model unknown'}
               {item.cost !== undefined ? ` · $${item.cost.toFixed(4)}` : null}
               {item.usage
                 ? ` · tokens: ${item.usage.total_tokens ?? '-'} (prompt ${item.usage.prompt_tokens ?? '-'}, completion ${item.usage.completion_tokens ?? '-'})`
                 : null}
-            </Body>
+            </Caption>
           )}
         />
       </YStack>
@@ -238,7 +239,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
           variant="ghost"
           size="sm"
           alignSelf="flex-start"
-          onPress={() => toggleBreakdown(cycle.id)}
+          onClick={() => toggleBreakdown(cycle.id)}
         >
           {isExpanded ? 'Hide Cost Breakdown' : 'Show Cost Breakdown'}
         </Button>
@@ -287,13 +288,13 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                     <BulletList
                       items={openaiBreakdown.embeddings}
                       renderItem={(item) => (
-                        <Body size="xs" tone="muted">
+                        <Caption>
                           {item.model ? `${item.model}` : 'Model unknown'}
                           {item.cost !== undefined ? ` · $${item.cost.toFixed(4)}` : null}
                           {item.usage?.total_tokens !== undefined
                             ? ` · tokens: ${item.usage.total_tokens}`
                             : null}
-                        </Body>
+                        </Caption>
                       )}
                     />
                   </YStack>
@@ -329,9 +330,9 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
             )}
 
             {breakdown.pricing_version && (
-              <Body size="xs" tone="muted">
+              <Caption>
                 Pricing version: {breakdown.pricing_version}
-              </Body>
+              </Caption>
             )}
           </YStack>
         )}
@@ -390,7 +391,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
           <Button
             variant="outline"
             size="sm"
-            onPress={fetchVersionHistory}
+            onClick={fetchVersionHistory}
             disabled={refreshing}
           >
             ↻ {refreshing ? 'Refreshing...' : 'Refresh'}
@@ -411,7 +412,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
             <Button
               variant="ghost"
               size="sm"
-              onPress={() => {
+              onClick={() => {
                 setFilterByType(null);
                 setSearchQuery('');
               }}
@@ -495,15 +496,15 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                       backgroundColor={getStatusColorHex(cycle.status)}
                       borderRadius="$1"
                     >
-                      <Text
-                        fontSize="$1"
-                        fontWeight="500"
+                      <Body
+                        size="xs"
+                        weight="medium"
                         color="#ffffff"
-                        textTransform="uppercase"
+                        transform="uppercase"
                         margin={0}
                       >
                         {cycle.status}
-                      </Text>
+                      </Body>
                     </YStack>
                   </XStack>
                 </XStack>
@@ -555,7 +556,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
         <Button
           variant="outline"
           size="sm"
-          onPress={() => setIsExpanded(!isExpanded)}
+          onClick={() => setIsExpanded(!isExpanded)}
         >
           {isExpanded ? 'Collapse' : 'Expand'}
         </Button>
@@ -579,7 +580,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
           <Button
             variant="outline"
             size="sm"
-            onPress={fetchVersionHistory}
+            onClick={fetchVersionHistory}
             disabled={refreshing}
           >
             ↻ {refreshing ? 'Refreshing...' : 'Refresh'}
@@ -600,7 +601,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
             <Button
               variant="ghost"
               size="sm"
-              onPress={() => {
+              onClick={() => {
                 setFilterByType(null);
                 setSearchQuery('');
               }}
@@ -684,15 +685,15 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                       backgroundColor={getStatusColorHex(cycle.status)}
                       borderRadius="$1"
                     >
-                      <Text
-                        fontSize="$1"
-                        fontWeight="500"
+                      <Body
+                        size="xs"
+                        weight="medium"
                         color="#ffffff"
-                        textTransform="uppercase"
+                        transform="uppercase"
                         margin={0}
                       >
                         {cycle.status}
-                      </Text>
+                      </Body>
                     </YStack>
                   </XStack>
                 </XStack>

@@ -32,16 +32,16 @@ export function ModalContent({
   return (
     <YStack gap={spacing} alignItems={alignment} {...stackProps}>
       {(icon || title || description) && (
-        <YStack gap="$2" alignItems={alignment} width="100%">
+        <YStack gap="$3" alignItems={alignment} width="100%">
           {icon ? <YStack>{icon}</YStack> : null}
           {title ? (
-            <Heading level={3} textAlign={align}>
+            <Heading level={3} align={align === 'center' ? 'center' : 'left'}>
               {title}
             </Heading>
           ) : null}
           {description ? (
             typeof description === 'string' ? (
-              <Body tone="muted" textAlign={align}>
+              <Body tone="muted" align={align === 'center' ? 'center' : 'left'}>
                 {description}
               </Body>
             ) : (

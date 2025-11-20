@@ -14,9 +14,10 @@ import {
   Heading,
   Body,
   Label,
+  Caption,
   BulletList,
 } from '@jarvis/ui-core';
-import { styled } from 'tamagui';
+import { Image, styled } from 'tamagui';
 
 interface CardDisplayProps {
   card: CardPayload;
@@ -60,7 +61,7 @@ const normalizeTemplateName = (card: CardPayload): string => {
   return templateSource.toLowerCase();
 };
 
-const CardMedia = styled('img', {
+const CardMedia = styled(Image, {
   width: '100%',
   height: '100%',
   objectFit: 'cover',
@@ -103,8 +104,8 @@ export function CardDisplay({
         backgroundColor="$gray4"
       >
         <CardMedia
-          src={card.image_url}
-          alt={card.label || card.title}
+          source={{ uri: card.image_url }}
+          accessibilityLabel={card.label || card.title || 'Card media'}
           onError={() => setImageFailed(true)}
         />
       </YStack>
@@ -133,7 +134,7 @@ export function CardDisplay({
             <Label size="xs" tone="info" uppercase>
               Definition
             </Label>
-            <Body lineHeight={1.6} tone="muted">
+            <Body tone="muted">
               {definition}
             </Body>
           </YStack>
@@ -150,7 +151,7 @@ export function CardDisplay({
         <BulletList
           items={bullets}
           renderItem={(bullet) => (
-            <Body lineHeight={1.6} tone="muted">
+            <Body tone="muted">
               {bullet}
             </Body>
           )}
@@ -160,7 +161,7 @@ export function CardDisplay({
 
     if (card.body) {
       return (
-        <Body lineHeight={1.65} tone="muted" whiteSpace="pre-line">
+        <Body tone="muted" whitespace="preLine">
           {card.body}
         </Body>
       );
@@ -189,7 +190,7 @@ export function CardDisplay({
         </YStack>
 
         {onModerate && (
-          <Button variant="outline" size="sm" onPress={onModerate}>
+          <Button variant="outline" size="sm" onClick={onModerate}>
             Moderate
           </Button>
         )}
@@ -218,17 +219,17 @@ export function CardDisplay({
                 {transcript.speaker}
               </Body>
             )}
-            <Body lineHeight={1.6} tone="muted" whiteSpace="pre-wrap" wordBreak="break-word">
+            <Body tone="muted" whitespace="preWrap">
               {transcript.text}
             </Body>
             <XStack justifyContent="space-between">
-              <Body size="xs" tone="muted" fontFamily="$mono">
+              <Caption mono>
                 Seq {transcript.seq}
-              </Body>
+              </Caption>
               {transcriptTimeAgo && (
-                <Body size="xs" tone="muted" fontFamily="$mono">
+                <Caption mono>
                   {transcriptTimeAgo}
-                </Body>
+                </Caption>
               )}
             </XStack>
           </YStack>

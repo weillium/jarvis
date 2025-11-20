@@ -121,16 +121,16 @@ export function CardModerationModal({
             <Button
               variant={showHistory ? 'secondary' : 'outline'}
               size="sm"
-              onPress={() => setShowHistory((previous) => !previous)}
+              onClick={() => setShowHistory((previous) => !previous)}
             >
               {showHistory ? 'Hide moderation history' : 'View moderation history'}
             </Button>
 
             <ButtonGroup wrap={false}>
-              <Button variant="outline" onPress={handleClose} disabled={updateCardStatus.isPending}>
+              <Button variant="outline" onClick={handleClose} disabled={updateCardStatus.isPending}>
                 Cancel
               </Button>
-              <Button variant="primary" onPress={handleDeactivate} disabled={updateCardStatus.isPending}>
+              <Button variant="primary" onClick={handleDeactivate} disabled={updateCardStatus.isPending}>
                 {updateCardStatus.isPending ? 'Deactivating…' : 'Deactivate card'}
               </Button>
             </ButtonGroup>

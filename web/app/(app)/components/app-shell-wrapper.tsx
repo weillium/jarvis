@@ -28,21 +28,22 @@ function AppShell({ children }: AppShellWrapperProps) {
   }
 
   return (
-    <YStack
-      as="section"
-      minHeight="100vh"
-      backgroundColor="$gray1"
-    >
-      <AppShellNav user={user} />
+    <section>
       <YStack
-        padding="$6"
-        maxWidth={1400}
-        marginHorizontal="auto"
-        width="100%"
+        minHeight="100vh"
+        backgroundColor="$gray1"
       >
-        {children}
+        <AppShellNav user={user} />
+        <YStack
+          padding="$6"
+          maxWidth={1400}
+          marginHorizontal="auto"
+          width="100%"
+        >
+          {children}
+        </YStack>
       </YStack>
-    </YStack>
+    </section>
   );
 }
 

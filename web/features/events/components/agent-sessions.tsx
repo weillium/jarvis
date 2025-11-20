@@ -18,7 +18,7 @@ import { StartSessionsModal } from './start-sessions-modal';
 import { calculateOpenAICost } from '@/shared/utils/pricing';
 import type { AgentSessionDisplay, AgentType } from './agent-sessions-utils';
 import { agentTitles, defaultAgentModels, inferPromptShareFromMetrics, formatDuration } from './agent-sessions-utils';
-import { YStack, XStack, Text, Button, Card, Alert, EmptyStateCard } from '@jarvis/ui-core';
+import { YStack, XStack, Text, Button, Card, Alert, EmptyStateCard, Label } from '@jarvis/ui-core';
 
 interface AgentSessionsProps {
   eventId: string;
@@ -337,7 +337,7 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
               <Button
                 variant="primary"
                 size="sm"
-                onPress={handleStartSessions}
+                onClick={handleStartSessions}
                 disabled={isStartingSessions}
               >
                 {isStartingSessions
@@ -355,7 +355,7 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
             <Button
               variant="primary"
               size="sm"
-              onPress={handleCreateSessions}
+              onClick={handleCreateSessions}
               disabled={isStartingSessions}
             >
               {isStartingSessions ? 'Creating...' : 'Create Sessions'}
@@ -365,7 +365,7 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
           <Button
             variant="outline"
             size="sm"
-            onPress={handleResetSessions}
+            onClick={handleResetSessions}
             disabled={isResettingSessions}
           >
             {isResettingSessions ? 'Resetting...' : 'Reset Sessions'}
@@ -384,7 +384,7 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
             <Button
               variant="outline"
               size="sm"
-              onPress={handlePauseSessions}
+              onClick={handlePauseSessions}
               disabled={isPausing}
             >
               {isPausing ? 'Pausing...' : 'Pause Sessions'}
@@ -397,7 +397,7 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
               <Button
                 variant="outline"
                 size="sm"
-                onPress={() => setIsTestTranscriptModalOpen(true)}
+                onClick={() => setIsTestTranscriptModalOpen(true)}
               >
                 Test Transcript
               </Button>
@@ -405,7 +405,7 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
               <Button
                 variant="outline"
                 size="sm"
-                onPress={handleConfirmReady}
+                onClick={handleConfirmReady}
                 disabled={isResuming}
               >
                 {isResuming ? 'Processing...' : 'Confirm Ready'}
@@ -417,7 +417,7 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
           <Button
             variant="outline"
             size="sm"
-            onPress={() => {
+            onClick={() => {
               refetchSessions();
               reconnect();
             }}
@@ -459,15 +459,15 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
                 flex={1}
                 minWidth={160}
               >
-                <Text
-                  fontSize="$1"
-                  color="$gray11"
-                  textTransform="uppercase"
+                <Label
+                  size="xs"
+                  tone="muted"
+                  uppercase
                   letterSpacing={0.4}
                   margin={0}
                 >
                   {label}
-                </Text>
+                </Label>
                 <Text fontSize="$3" fontWeight="600" color="$color" marginTop="$1.5" margin={0}>
                   {value}
                 </Text>
@@ -476,17 +476,16 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
           </XStack>
           {runtimeCostSummary?.breakdown.length ? (
             <YStack marginTop="$4">
-              <Text
-                fontSize="$1"
-                color="$gray11"
-                textTransform="uppercase"
+              <Label
+                size="xs"
+                tone="muted"
+                uppercase
                 letterSpacing={0.4}
-                fontWeight="600"
                 marginBottom="$2"
                 margin={0}
               >
                 Cost Breakdown
-              </Text>
+              </Label>
               <YStack gap="$1">
                 {runtimeCostSummary.breakdown.map(({ agent, cost, model }) => (
                   <XStack
@@ -573,17 +572,16 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
 
             return (
               <YStack marginBottom="$8">
-                <Text
-                  fontSize="$2"
-                  fontWeight="600"
-                  color="$gray11"
-                  textTransform="uppercase"
+                <Label
+                  size="xs"
+                  tone="muted"
+                  uppercase
                   letterSpacing={0.5}
                   marginBottom="$4"
                   margin={0}
                 >
                   Realtime Sessions
-                </Text>
+                </Label>
                 <XStack
                   flexWrap="wrap"
                   gap="$4"
@@ -613,17 +611,16 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
 
             return (
               <YStack>
-                <Text
-                  fontSize="$2"
-                  fontWeight="600"
-                  color="$gray11"
-                  textTransform="uppercase"
+                <Label
+                  size="xs"
+                  tone="muted"
+                  uppercase
                   letterSpacing={0.5}
                   marginBottom="$4"
                   margin={0}
                 >
                   Stateless Sessions
-                </Text>
+                </Label>
                 <XStack
                   flexWrap="wrap"
                   gap="$4"

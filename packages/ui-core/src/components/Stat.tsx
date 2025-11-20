@@ -13,7 +13,7 @@ export const StatGroup = styled(XStack, {
 
 const StatContainer = styled(YStack, {
   name: 'StatItem',
-  gap: '$1',
+  gap: '$2',
   minWidth: 180,
 });
 

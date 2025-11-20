@@ -5,8 +5,10 @@ import type { ReactNode } from 'react';
 import type { EventDoc } from '@/shared/types/event-doc';
 import { getFileExtension, getFileType, getFilenameFromPath } from '@/shared/utils/file-utils';
 import { supabase } from '@/shared/lib/supabase/client';
-import { Button, Body, FileListItem } from '@jarvis/ui-core';
 import {
+  Button,
+  Body,
+  FileListItem,
   FilePdfIcon,
   FileDocumentIcon,
   FileImageIcon,
@@ -16,7 +18,7 @@ import {
   FileGenericIcon,
   DownloadIcon,
   RemoveIcon,
-} from '@jarvis/ui-core/icons';
+} from '@jarvis/ui-core';
 
 interface DocumentListItemProps {
   doc: EventDoc;
@@ -26,18 +28,6 @@ interface DocumentListItemProps {
   isRemoving?: boolean;
   isUpdating?: boolean;
 }
-
-const fileTypeIcons: Record<string, ReactNode> = {
-  pdf: <FilePdfIcon size={20} />,
-  document: <FileDocumentIcon size={20} />,
-  image: <FileImageIcon size={20} />,
-  spreadsheet: <FileSpreadsheetIcon size={20} />,
-  presentation: <FilePresentationIcon size={20} />,
-  archive: <FileArchiveIcon size={20} />,
-};
-
-const defaultFileIcon = <FileGenericIcon size={20} />;
-
 
 export function DocumentListItem({ doc, onRemove, onUpdateName, onDownload, isRemoving = false, isUpdating = false }: DocumentListItemProps) {
   const [showConfirm, setShowConfirm] = useState(false);
@@ -76,8 +66,7 @@ export function DocumentListItem({ doc, onRemove, onUpdateName, onDownload, isRe
     }
   };
 
-  const handleRemoveClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleRemoveClick = () => {
     if (showConfirm) {
       onRemove?.();
       setShowConfirm(false);
@@ -119,7 +108,17 @@ export function DocumentListItem({ doc, onRemove, onUpdateName, onDownload, isRe
     }
   };
 
-  const icon = useMemo(() => fileTypeIcons[fileType] ?? defaultFileIcon, [fileType]);
+  const icon = useMemo(() => {
+    const fileTypeIcons: Record<string, ReactNode> = {
+      pdf: <FilePdfIcon size={20} />,
+      document: <FileDocumentIcon size={20} />,
+      image: <FileImageIcon size={20} />,
+      spreadsheet: <FileSpreadsheetIcon size={20} />,
+      presentation: <FilePresentationIcon size={20} />,
+      archive: <FileArchiveIcon size={20} />,
+    };
+    return fileTypeIcons[fileType] ?? <FileGenericIcon size={20} />;
+  }, [fileType]);
 
   const secondaryText = `${fileTypeDisplay} • ${new Date(doc.created_at).toLocaleDateString()}`;
 
@@ -131,32 +130,28 @@ export function DocumentListItem({ doc, onRemove, onUpdateName, onDownload, isRe
         <Button
           variant="outline"
           size="sm"
-          onPress={handleDownload}
+          onClick={handleDownload}
           disabled={isDownloading || isRemoving}
-          padding="$1.5"
           opacity={isDownloading ? 0.6 : 1}
-          title={isDownloading ? 'Downloading...' : 'Download document'}
         >
-          {isDownloading ? <Body size="xs">…</Body> : <DownloadIcon />}
+          {isDownloading ? <Body size="sm">…</Body> : <DownloadIcon />}
         </Button>
       )}
       {onRemove && (
         <Button
           variant={showConfirm ? 'primary' : 'outline'}
           size="sm"
-          onPress={handleRemoveClick}
+          onClick={handleRemoveClick}
           disabled={isRemoving}
-          padding="$1.5"
           backgroundColor={showConfirm ? '$red6' : 'transparent'}
           borderColor={showConfirm ? undefined : '$red6'}
           color={showConfirm ? '$background' : '$red6'}
           opacity={isRemoving ? 0.6 : 1}
-          title={isRemoving ? 'Removing...' : showConfirm ? 'Click to confirm removal' : 'Remove document'}
         >
           {isRemoving ? (
-            <Body size="xs">Removing...</Body>
+            <Body size="sm">Removing...</Body>
           ) : showConfirm ? (
-            <Body size="xs">Confirm?</Body>
+            <Body size="sm">Confirm?</Body>
           ) : (
             <RemoveIcon />
           )}

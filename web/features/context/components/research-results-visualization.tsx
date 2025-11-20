@@ -7,6 +7,7 @@ import {
   YStack,
   XStack,
   Text,
+  Body,
   Button,
   Input,
   Card,
@@ -15,6 +16,9 @@ import {
   Anchor,
   EmptyStateCard,
   LoadingState,
+  Caption,
+  Label,
+  ClampText,
 } from '@jarvis/ui-core';
 
 interface ResearchResultsVisualizationProps {
@@ -186,7 +190,7 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
             <Button
               variant="outline"
               size="sm"
-              onPress={() => setIsExpanded(!isExpanded)}
+              onClick={() => setIsExpanded(!isExpanded)}
             >
               {isExpanded ? 'Collapse' : 'Expand'}
             </Button>
@@ -208,17 +212,16 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
         >
           {Object.entries(researchData.byApi).map(([api, count]) => (
             <YStack key={api} flex={1} minWidth={120}>
-              <Text
-                fontSize="$1"
-                fontWeight="600"
-                color="$gray11"
-                textTransform="uppercase"
+              <Label
+                size="xs"
+                tone="muted"
+                uppercase
                 letterSpacing={0.5}
                 marginBottom="$1"
                 margin={0}
               >
                 {getApiLabel(api)}
-              </Text>
+              </Label>
               <Text fontSize="$5" fontWeight="700" color="$color" margin={0}>
                 {count}
               </Text>
@@ -245,7 +248,7 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
           <Button
             variant="outline"
             size="sm"
-            onPress={handleRefresh}
+            onClick={handleRefresh}
             disabled={isFetching}
           >
             ↻ {isFetching ? 'Refreshing...' : 'Refresh'}
@@ -262,13 +265,13 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
                   {getApiLabel(api)}
                 </option>
               ))}
-            </select>
+            </Select>
           )}
           {(filterByApi || searchQuery) && (
             <Button
               variant="ghost"
               size="sm"
-              onPress={() => {
+              onClick={() => {
                 setFilterByApi(null);
                 setSearchQuery('');
               }}
@@ -319,7 +322,7 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
                       alignItems="flex-start"
                       padding={0}
                       marginBottom={isExpandedResult ? '$3' : 0}
-                      onPress={() => toggleResult(result.id)}
+                      onClick={() => toggleResult(result.id)}
                     >
                       <YStack flex={1} gap="$2">
                         <XStack alignItems="center" gap="$2" marginBottom="$2">
@@ -329,29 +332,22 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
                             borderRadius="$10"
                             backgroundColor={getApiColorHex(result.api)}
                           />
-                          <Text
-                            fontSize="$2"
-                            fontWeight="600"
-                            color="$gray11"
-                            textTransform="uppercase"
-                            margin={0}
-                          >
+                          <Label size="xs" tone="muted" uppercase margin={0}>
                             {getApiLabel(result.api)}
-                          </Text>
+                          </Label>
                         </XStack>
                         <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$2" margin={0} textAlign="left">
                           {result.query}
                         </Text>
                         {!isExpandedResult && (
-                          <Text
+                          <ClampText
+                            lines={2}
                             fontSize="$3"
                             color="$gray9"
-                            lineHeight={1.6}
-                            numberOfLines={2}
                             margin={0}
                           >
                             {result.content}
-                          </Text>
+                          </ClampText>
                         )}
                       </YStack>
                       <Text fontSize="$5" color="$gray11" marginLeft="$4" margin={0}>
@@ -366,16 +362,14 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
                         borderTopWidth={1}
                         borderTopColor="$borderColor"
                       >
-                        <Text
-                          fontSize="$3"
-                          color="$gray9"
-                          lineHeight={1.6}
+                        <Body
+                          size="md"
+                          tone="muted"
                           marginBottom="$3"
-                          whiteSpace="pre-wrap"
-                          margin={0}
+                          whitespace="preWrap"
                         >
                           {result.content}
-                        </Text>
+                        </Body>
                         <XStack
                           gap="$4"
                           paddingTop="$3"
@@ -410,7 +404,7 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
                               variant="ghost"
                               size="sm"
                               alignSelf="flex-start"
-                              onPress={() => toggleMetadata(result.id)}
+                              onClick={() => toggleMetadata(result.id)}
                             >
                               {expandedMetadata.has(result.id) ? 'Hide Metadata' : 'Show Metadata'}
                             </Button>
@@ -420,15 +414,9 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
                                 backgroundColor="$gray1"
                                 borderRadius="$2"
                               >
-                                <Text
-                                  fontSize="$1"
-                                  fontFamily="$mono"
-                                  color="$gray11"
-                                  whiteSpace="pre-wrap"
-                                  margin={0}
-                                >
+                                <Caption mono whitespace="preWrap">
                                   {JSON.stringify(result.metadata, null, 2)}
-                                </Text>
+                                </Caption>
                               </YStack>
                             )}
                           </YStack>

@@ -2,8 +2,46 @@ import { createTamagui } from 'tamagui';
 import { config as defaultConfig } from '@tamagui/config/v3';
 import { createInterFont } from '@tamagui/font-inter';
 
-// Create Inter font
-const interFont = createInterFont();
+// Base font + tokens from Tamagui
+const baseInterFont = createInterFont();
+const baseSizeTokens = defaultConfig.tokens.size || {
+  0: 0,
+  1: 11,
+  2: 12,
+  3: 13,
+  4: 14,
+  5: 16,
+  6: 18,
+  7: 20,
+  8: 22,
+  9: 30,
+  10: 42,
+  11: 53,
+  12: 64,
+  13: 96,
+  14: 128,
+  15: 256,
+};
+
+const sizeTokenSm = baseSizeTokens[3] ?? 13;
+const sizeTokenMd = baseSizeTokens[4] ?? 14;
+const sizeTokenLg = baseSizeTokens[5] ?? 16;
+
+const interFont = {
+  ...baseInterFont,
+  size: {
+    ...baseInterFont.size,
+    sm: sizeTokenSm,
+    md: sizeTokenMd,
+    lg: sizeTokenLg,
+  },
+  lineHeight: {
+    ...baseInterFont.lineHeight,
+    sm: baseInterFont.lineHeight[3] ?? 21,
+    md: baseInterFont.lineHeight[4] ?? 24,
+    lg: baseInterFont.lineHeight[5] ?? 28,
+  },
+};
 
 // Extend the base config with custom theme tokens
 // Matching current design system colors
@@ -126,15 +164,28 @@ const tamaguiConfig = createTamagui({
   },
   tokens: {
     ...defaultConfig.tokens,
-    // Custom spacing to match current design
+    // Size tokens for typography, including named variants
+    size: {
+      ...baseSizeTokens,
+      sm: sizeTokenSm,
+      md: sizeTokenMd,
+      lg: sizeTokenLg,
+    },
+    // Custom spacing to match current design while keeping Tamagui tokens
     space: {
       ...defaultConfig.tokens.space,
       0: 0,
+      0.5: 2,
       1: 4,
+      1.5: 6,
       2: 8,
+      2.5: 10,
       3: 12,
+      3.5: 14,
       4: 16,
+      4.5: 18,
       5: 20,
+      5.5: 22,
       6: 24,
       7: 28,
       8: 32,
@@ -143,7 +194,7 @@ const tamaguiConfig = createTamagui({
       11: 44,
       12: 48,
     },
-    // Custom radius
+    // Custom radius to cover all usages across apps
     radius: {
       ...defaultConfig.tokens.radius,
       0: 0,
@@ -153,6 +204,10 @@ const tamaguiConfig = createTamagui({
       4: 12,
       5: 16,
       6: 20,
+      7: 24,
+      8: 28,
+      9: 32,
+      10: 40,
     },
   },
 });
@@ -165,4 +220,3 @@ export type Conf = typeof tamaguiConfig;
 declare module 'tamagui' {
   interface TamaguiCustomConfig extends Conf {}
 }
-

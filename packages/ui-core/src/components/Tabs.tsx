@@ -34,7 +34,7 @@ export function Tabs({ tabs, defaultTab }: TabsProps) {
           return (
             <Button
               key={tab.id}
-              onPress={() => selectTab(tab.id)}
+              onClick={() => selectTab(tab.id)}
               variant="ghost"
               borderBottomWidth={2}
               borderBottomColor={isActive ? '$blue6' : 'transparent'}
@@ -70,7 +70,7 @@ export function SubTabs({ tabs, defaultTab }: SubTabsProps) {
             <Button
               key={tab.id}
               variant="ghost"
-              onPress={() => selectTab(tab.id)}
+              onClick={() => selectTab(tab.id)}
               borderBottomWidth={2}
               borderBottomColor={isActive ? '$blue6' : 'transparent'}
               color={isActive ? '$blue11' : '$gray11'}

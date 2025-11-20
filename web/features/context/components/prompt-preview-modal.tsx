@@ -4,6 +4,7 @@ import {
   YStack,
   XStack,
   Text,
+  Body,
   Button,
   Card,
   Modal,
@@ -93,17 +94,17 @@ export function PromptPreviewModal({
               maxHeight={300}
               overflow="scroll"
             >
-              <Text fontSize="$2" color="$gray9" whiteSpace="pre-wrap" fontFamily="$mono" margin={0}>
+              <Body size="sm" tone="muted" mono whitespace="preWrap">
                 {promptPreview.user}
-              </Text>
+              </Body>
             </YStack>
           </YStack>
 
           <ButtonGroup>
-            <Button variant="outline" onPress={onClose} disabled={isRegenerating}>
+            <Button variant="outline" onClick={onClose} disabled={isRegenerating}>
               Cancel
             </Button>
-            <Button variant="primary" onPress={onConfirm} disabled={isRegenerating} backgroundColor={isRegenerating ? '$gray5' : '$green11'}>
+            <Button variant="primary" onClick={onConfirm} disabled={isRegenerating} backgroundColor={isRegenerating ? '$gray5' : '$green11'}>
               {isRegenerating ? 'Starting…' : 'Confirm'}
             </Button>
           </ButtonGroup>

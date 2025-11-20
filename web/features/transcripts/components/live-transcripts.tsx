@@ -5,7 +5,7 @@ import { useTranscriptsQuery } from '@/shared/hooks/use-transcripts-query';
 import { useSSEStream } from '@/shared/hooks/use-sse-stream';
 import type { SSEMessage } from '@/shared/types/card';
 import { formatDistanceToNow } from 'date-fns';
-import { YStack, XStack, Button, Card, Alert, Badge, Body, EmptyStateCard, LoadingState } from '@jarvis/ui-core';
+import { YStack, XStack, Button, Card, Alert, Badge, Body, Caption, EmptyStateCard, LoadingState } from '@jarvis/ui-core';
 
 interface LiveTranscriptsProps {
   eventId: string;
@@ -98,7 +98,7 @@ export function LiveTranscripts({ eventId }: LiveTranscriptsProps) {
             <Button
               variant="primary"
               size="sm"
-              onPress={reconnect}
+              onClick={reconnect}
             >
               Reconnect
             </Button>
@@ -119,7 +119,7 @@ export function LiveTranscripts({ eventId }: LiveTranscriptsProps) {
         <YStack
           gap="$3"
           maxHeight="calc(100vh - 300px)"
-          overflowY="auto"
+          overflow="scroll"
         >
           {transcripts.map((transcript) => {
             const timestamp = new Date(transcript.at_ms);
@@ -138,7 +138,7 @@ export function LiveTranscripts({ eventId }: LiveTranscriptsProps) {
                         {transcript.speaker}
                       </Body>
                     )}
-                    <Body lineHeight={1.6} tone="muted" whiteSpace="pre-wrap" wordBreak="break-word">
+                    <Body tone="muted" whitespace="preWrap">
                       {transcript.text}
                     </Body>
                   </YStack>
@@ -147,12 +147,12 @@ export function LiveTranscripts({ eventId }: LiveTranscriptsProps) {
                     gap="$1"
                     minWidth={120}
                   >
-                    <Body size="sm" tone="muted" whiteSpace="nowrap">
+                    <Body size="sm" tone="muted" whitespace="nowrap">
                       {timeAgo}
                     </Body>
-                    <Body size="xs" tone="muted" fontFamily="$mono">
+                    <Caption mono>
                       Seq: {transcript.seq}
-                    </Body>
+                    </Caption>
                   </YStack>
                 </XStack>
               </Card>

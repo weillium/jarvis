@@ -57,7 +57,7 @@ export function StageRegenerationControls({
           <Button
             variant="primary"
             size="sm"
-            onPress={onStartGeneration}
+            onClick={onStartGeneration}
             disabled={!!isRegenerating || !!regeneratingStage}
             backgroundColor={isRegenerating ? '$gray5' : '$blue6'}
           >
@@ -70,7 +70,7 @@ export function StageRegenerationControls({
           <Button
             variant="primary"
             size="sm"
-            onPress={onRegenerateBlueprint}
+            onClick={onRegenerateBlueprint}
             disabled={!!isRegenerating || !!regeneratingStage || isContextGenerationRunning}
             backgroundColor={(isRegenerating || isContextGenerationRunning) ? '$gray5' : '$purple6'}
           >
@@ -83,7 +83,7 @@ export function StageRegenerationControls({
           <Button
             variant="primary"
             size="sm"
-            onPress={onApprove}
+            onClick={onApprove}
             disabled={approving}
             backgroundColor={approving ? '$gray5' : '$green11'}
           >
@@ -96,7 +96,7 @@ export function StageRegenerationControls({
             <Button
               variant="primary"
               size="sm"
-              onPress={() => onRegenerateStage('research')}
+              onClick={() => onRegenerateStage('research')}
               disabled={
                 !!regeneratingStage || 
                 isContextGenerationRunning ||
@@ -116,7 +116,7 @@ export function StageRegenerationControls({
             <Button
               variant="primary"
               size="sm"
-              onPress={() => onRegenerateStage('glossary')}
+              onClick={() => onRegenerateStage('glossary')}
               disabled={
                 !!regeneratingStage || 
                 isContextGenerationRunning ||
@@ -136,7 +136,7 @@ export function StageRegenerationControls({
             <Button
               variant="primary"
               size="sm"
-              onPress={() => onRegenerateStage('chunks')}
+              onClick={() => onRegenerateStage('chunks')}
               disabled={
                 !!regeneratingStage || 
                 isContextGenerationRunning ||
@@ -159,7 +159,7 @@ export function StageRegenerationControls({
           <Button
             variant="primary"
             size="sm"
-            onPress={onClearContext}
+            onClick={onClearContext}
             disabled={isClearing || !!isRegenerating || !!regeneratingStage}
             backgroundColor={(isClearing || isRegenerating || regeneratingStage) ? '$gray5' : '$red11'}
           >
@@ -184,7 +184,7 @@ export function StageRegenerationControls({
           <Button
             variant="primary"
             size="sm"
-            onPress={onStartGeneration}
+            onClick={onStartGeneration}
             disabled={!!isRegenerating || !!regeneratingStage}
             backgroundColor={isRegenerating ? '$gray5' : '$blue6'}
           >
@@ -197,7 +197,7 @@ export function StageRegenerationControls({
           <Button
             variant="primary"
             size="sm"
-            onPress={onRegenerateBlueprint}
+            onClick={onRegenerateBlueprint}
             disabled={!!isRegenerating || !!regeneratingStage || isContextGenerationRunning}
             backgroundColor={(isRegenerating || isContextGenerationRunning) ? '$gray5' : '$purple6'}
           >
@@ -210,7 +210,7 @@ export function StageRegenerationControls({
           <Button
             variant="primary"
             size="sm"
-            onPress={onApprove}
+            onClick={onApprove}
             disabled={approving}
             backgroundColor={approving ? '$gray5' : '$green11'}
           >
@@ -223,7 +223,7 @@ export function StageRegenerationControls({
             <Button
               variant="primary"
               size="sm"
-              onPress={() => onRegenerateStage('research')}
+              onClick={() => onRegenerateStage('research')}
               disabled={
                 !!regeneratingStage || 
                 isContextGenerationRunning ||
@@ -243,7 +243,7 @@ export function StageRegenerationControls({
             <Button
               variant="primary"
               size="sm"
-              onPress={() => onRegenerateStage('glossary')}
+              onClick={() => onRegenerateStage('glossary')}
               disabled={
                 !!regeneratingStage || 
                 isContextGenerationRunning ||
@@ -263,7 +263,7 @@ export function StageRegenerationControls({
             <Button
               variant="primary"
               size="sm"
-              onPress={() => onRegenerateStage('chunks')}
+              onClick={() => onRegenerateStage('chunks')}
               disabled={
                 !!regeneratingStage || 
                 isContextGenerationRunning ||
@@ -286,7 +286,7 @@ export function StageRegenerationControls({
           <Button
             variant="primary"
             size="sm"
-            onPress={onClearContext}
+            onClick={onClearContext}
             disabled={isClearing || !!isRegenerating || !!regeneratingStage}
             backgroundColor={(isClearing || isRegenerating || regeneratingStage) ? '$gray5' : '$red11'}
           >

@@ -15,6 +15,8 @@ const BadgeContainer = styled(YStack, {
   borderRadius: '$2',
   alignItems: 'center',
   justifyContent: 'center',
+  flexDirection: 'row',
+  gap: '$1',
   variants: {
     variant: {
       default: {
@@ -41,12 +43,14 @@ const BadgeContainer = styled(YStack, {
     },
     size: {
       sm: {
-        paddingHorizontal: '$2',
-        paddingVertical: '$1',
+        paddingHorizontal: '$2.5',
+        paddingVertical: '$1.5',
+        minHeight: '$4',
       },
       md: {
-        paddingHorizontal: '$3',
-        paddingVertical: '$1.5',
+        paddingHorizontal: '$3.5',
+        paddingVertical: '$2',
+        minHeight: '$5',
       },
     },
   } as const,
@@ -60,6 +64,7 @@ const BadgeText = styled(Text, {
   name: 'BadgeText',
   fontWeight: '500',
   margin: 0,
+  lineHeight: 1.2,
   variants: {
     variant: {
       default: {
@@ -108,4 +113,3 @@ export function Badge({ children, variant = 'default', size = 'md', ...props }: 
     </BadgeContainer>
   );
 }
-

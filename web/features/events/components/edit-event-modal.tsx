@@ -463,7 +463,7 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
             </YStack>
 
             <ButtonGroup>
-              <Button type="button" variant="outline" onPress={handleClose} disabled={loading}>
+              <Button type="button" variant="outline" onClick={handleClose} disabled={loading}>
                 Cancel
               </Button>
               <Button type="submit" variant="primary" disabled={loading || !title.trim()}>

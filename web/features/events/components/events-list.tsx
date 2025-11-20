@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { EventWithStatus } from '@/shared/types/event';
 import { getEvents } from '@/server/actions/event-actions';
 import { format, parseISO } from 'date-fns';
-import { YStack, XStack, Text, Card, Alert, EmptyStateCard, LoadingState } from '@jarvis/ui-core';
+import { YStack, XStack, Text, Card, Alert, EmptyStateCard, LoadingState, ClampText } from '@jarvis/ui-core';
 
 interface EventsListProps {
   searchQuery?: string;
@@ -164,16 +164,15 @@ export function EventsList({ searchQuery = '', statusFilter = 'all' }: EventsLis
                 </XStack>
                 
                 {event.topic && (
-                  <Text
+                  <ClampText
+                    lines={2}
                     fontSize="$3"
                     color="$gray11"
                     marginBottom="$3"
-                    numberOfLines={2}
-                    ellipsizeMode="tail"
                   >
                     {event.topic.replace(/[#*`]/g, '').substring(0, 150)}
                     {event.topic.length > 150 ? '...' : ''}
-                  </Text>
+                  </ClampText>
                 )}
 
                 <XStack gap="$6" fontSize="$3" color="$gray11">

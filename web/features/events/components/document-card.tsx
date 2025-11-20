@@ -1,11 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { supabase } from '@/shared/lib/supabase/client';
 import type { EventDoc } from '@/shared/types/event-doc';
 import { getFileExtension, getFileType, getFilenameFromPath } from '@/shared/utils/file-utils';
-import { YStack, XStack, Text, Card, Button, Alert } from '@jarvis/ui-core';
 import {
+  YStack,
+  XStack,
+  Text,
+  Card,
+  Button,
+  Alert,
+  Label,
+  ClampText,
   FilePdfIcon,
   FileDocumentIcon,
   FileImageIcon,
@@ -13,7 +20,7 @@ import {
   FilePresentationIcon,
   FileArchiveIcon,
   FileGenericIcon,
-} from '@jarvis/ui-core/icons';
+} from '@jarvis/ui-core';
 
 interface DocumentCardProps {
   doc: EventDoc;
@@ -28,15 +35,17 @@ export function DocumentCard({ doc, eventId }: DocumentCardProps) {
   const displayName = doc.name || getFilenameFromPath(doc.path);
   const extension = getFileExtension(displayName);
   const fileType = getFileType(extension);
-  const iconMap: Record<string, React.ReactNode> = {
-    pdf: <FilePdfIcon size={32} />,
-    document: <FileDocumentIcon size={32} />,
-    image: <FileImageIcon size={32} />,
-    spreadsheet: <FileSpreadsheetIcon size={32} />,
-    presentation: <FilePresentationIcon size={32} />,
-    archive: <FileArchiveIcon size={32} />,
-  };
-  const icon = iconMap[fileType] ?? <FileGenericIcon size={32} />;
+  const icon = useMemo(() => {
+    const iconMap: Record<string, React.ReactNode> = {
+      pdf: <FilePdfIcon size={32} />,
+      document: <FileDocumentIcon size={32} />,
+      image: <FileImageIcon size={32} />,
+      spreadsheet: <FileSpreadsheetIcon size={32} />,
+      presentation: <FilePresentationIcon size={32} />,
+      archive: <FileArchiveIcon size={32} />,
+    };
+    return iconMap[fileType] ?? <FileGenericIcon size={32} />;
+  }, [fileType]);
 
   const handleDownload = async () => {
     setIsDownloading(true);
@@ -79,29 +88,24 @@ export function DocumentCard({ doc, eventId }: DocumentCardProps) {
         shadowRadius: 4,
         elevation: 2,
       }}
-      onPress={handleDownload}
+      onClick={handleDownload}
     >
       <YStack gap="$3">
         <XStack alignItems="center" gap="$3">
           <YStack flexShrink={0}>{icon}</YStack>
           <YStack flex={1} minWidth={0}>
-            <Text
+            <ClampText
+              lines={1}
               fontSize="$3"
               fontWeight="500"
               color="$color"
               marginBottom="$1"
-              numberOfLines={1}
-              ellipsizeMode="tail"
             >
               {displayName}
-            </Text>
-            <Text
-              fontSize="$2"
-              color="$gray11"
-              textTransform="uppercase"
-            >
+            </ClampText>
+            <Label size="xs" tone="muted" uppercase>
               {extension || 'file'}
-            </Text>
+            </Label>
           </YStack>
         </XStack>
 
@@ -112,7 +116,7 @@ export function DocumentCard({ doc, eventId }: DocumentCardProps) {
         )}
 
         <Button
-          onPress={(e: any) => {
+          onClick={(e: any) => {
             e?.stopPropagation();
             handleDownload();
           }}

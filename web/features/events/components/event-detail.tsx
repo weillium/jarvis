@@ -135,7 +135,7 @@ export function EventDetail({ eventId, event, onEventUpdate }: EventDetailProps)
         <Button
           variant="outline"
           size="sm"
-          onPress={() => setIsEditModalOpen(true)}
+          onClick={() => setIsEditModalOpen(true)}
         >
           Edit
         </Button>
@@ -150,11 +150,7 @@ export function EventDetail({ eventId, event, onEventUpdate }: EventDetailProps)
         >
           <YStack gap="$3" width="100%">
             <Label>Description</Label>
-            <Body
-              lineHeight={1.6}
-              whiteSpace="pre-wrap"
-              wordBreak="break-word"
-            >
+            <Body whitespace="preWrap">
               {currentEvent.topic}
             </Body>
           </YStack>
@@ -205,7 +201,7 @@ export function EventDetail({ eventId, event, onEventUpdate }: EventDetailProps)
         $sm={{ flexDirection: 'column' }}
         $md={{ flexDirection: 'row' }}
       >
-        <YStack minWidth={200} flex={1} gap="$1">
+        <YStack minWidth={200} flex={1} gap="$2">
           <Label size="xs">Start Time</Label>
           <Body size="lg" weight="medium">
             {formatDateTime(currentEvent.start_time)}
@@ -217,7 +213,7 @@ export function EventDetail({ eventId, event, onEventUpdate }: EventDetailProps)
           )}
         </YStack>
 
-        <YStack minWidth={200} flex={1} gap="$1">
+        <YStack minWidth={200} flex={1} gap="$2">
           <Label size="xs">End Time</Label>
           <Body size="lg" weight="medium">
             {formatDateTime(currentEvent.end_time)}
@@ -229,7 +225,7 @@ export function EventDetail({ eventId, event, onEventUpdate }: EventDetailProps)
           )}
         </YStack>
 
-        <YStack minWidth={200} flex={1} gap="$1">
+        <YStack minWidth={200} flex={1} gap="$2">
           <Label size="xs">Created</Label>
           <Body size="lg" weight="medium">
             {formatDate(currentEvent.created_at)}

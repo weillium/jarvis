@@ -14,6 +14,7 @@ import {
   Heading,
   Body,
   Label,
+  Caption,
   Badge,
   Select,
   EmptyStateCard,
@@ -268,7 +269,7 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
               )}
             </XStack>
           </YStack>
-          <Button variant="outline" size="sm" onPress={() => setIsExpanded(!isExpanded)}>
+          <Button variant="outline" size="sm" onClick={() => setIsExpanded(!isExpanded)}>
             {isExpanded ? 'Collapse' : 'Expand'}
           </Button>
         </XStack>
@@ -368,7 +369,7 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
           <Button
             variant="outline"
             size="sm"
-            onPress={handleRefresh}
+            onClick={handleRefresh}
             disabled={isFetching}
           >
             ↻ {isFetching ? 'Refreshing...' : 'Refresh'}
@@ -400,7 +401,7 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
             <Button
               variant="ghost"
               size="sm"
-              onPress={() => {
+              onClick={() => {
                 setFilterByRank(null);
                 setFilterByResearchSource(null);
                 setSearchQuery('');
@@ -417,7 +418,7 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
         <YStack
           marginTop="$5"
           maxHeight={600}
-          overflowY="auto"
+          overflow="scroll"
           borderWidth={1}
           borderColor="$borderColor"
           borderRadius="$3"
@@ -518,21 +519,21 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
                             }
                             size="sm"
                           >
-                            <Body size="xs" weight="medium" color="$color">
+                            <Label size="xs" color="$color">
                               Quality: {(qualityScore * 100).toFixed(0)}%
-                            </Body>
+                            </Label>
                           </Badge>
                         )}
                         {item.metadata?.chunk_size && (
-                          <Body size="xs" tone="muted">
+                          <Caption>
                             {typeof item.metadata.chunk_size === 'string' 
                               ? parseInt(item.metadata.chunk_size, 10) 
                               : item.metadata.chunk_size} chars
-                          </Body>
+                          </Caption>
                         )}
                       </XStack>
                     </XStack>
-                    <Body lineHeight={1.6} marginBottom="$2" whiteSpace="pre-wrap">
+                    <Body marginBottom="$2" whitespace="preWrap">
                       {item.chunk}
                     </Body>
                     {item.metadata && Object.keys(item.metadata).length > 0 && (
@@ -543,16 +544,16 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
                           backgroundColor="$gray1"
                           borderRadius="$1"
                         >
-                          <Body size="xs" fontFamily="$mono" whiteSpace="pre-wrap">
+                          <Caption mono whitespace="preWrap">
                             {JSON.stringify(item.metadata, null, 2)}
-                          </Body>
+                          </Caption>
                         </YStack>
                       </YStack>
                     )}
                     {item.metadata?.enrichment_timestamp && (
-                      <Body size="xs" tone="muted" marginTop="$1">
+                      <Caption marginTop="$1">
                         Added: {new Date(item.metadata.enrichment_timestamp).toLocaleTimeString()}
-                      </Body>
+                      </Caption>
                     )}
                   </Card>
                 );
@@ -561,16 +562,6 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
           )}
         </YStack>
       )}
-      <style jsx global>{`
-        @keyframes pulse {
-          0%, 100% {
-            opacity: 1;
-          }
-          50% {
-            opacity: 0.5;
-          }
-        }
-      `}</style>
     </YStack>
   );
 }

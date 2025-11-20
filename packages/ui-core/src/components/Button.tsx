@@ -1,19 +1,28 @@
 'use client';
 
+import { forwardRef } from 'react';
 import { Button as TamaguiButton, styled } from 'tamagui';
 import type { ButtonProps as TamaguiButtonProps } from 'tamagui';
+import { resolvePressEvents } from '../utils/pressable';
 
 export interface ButtonProps extends TamaguiButtonProps {
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
+  onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
-export const Button = styled(TamaguiButton, {
+const ButtonFrame = styled(TamaguiButton, {
   name: 'Button',
   fontFamily: '$body',
   borderRadius: '$3',
   fontWeight: '500',
   cursor: 'pointer',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '$2',
+  minHeight: '$6',
+  // Set default fontSize to prevent auto-resolution issues
+  fontSize: '$4',
   pressStyle: {
     scale: 0.98,
     opacity: 0.9,
@@ -80,19 +89,19 @@ export const Button = styled(TamaguiButton, {
         paddingHorizontal: '$3',
         paddingVertical: '$2',
         fontSize: '$3',
-        height: '$4',
+        minHeight: '$6',
       },
       md: {
         paddingHorizontal: '$4',
         paddingVertical: '$3',
         fontSize: '$4',
-        height: '$5',
+        minHeight: '$7',
       },
       lg: {
         paddingHorizontal: '$5',
-        paddingVertical: '$4',
+        paddingVertical: '$3.5',
         fontSize: '$5',
-        height: '$6',
+        minHeight: '$8',
       },
     },
   } as const,
@@ -102,3 +111,10 @@ export const Button = styled(TamaguiButton, {
   },
 });
 
+export const Button = forwardRef<any, ButtonProps>(function Button(
+  { onPress, onClick, ...rest },
+  ref
+) {
+  const eventProps = resolvePressEvents({ onPress, onClick });
+  return <ButtonFrame ref={ref} {...eventProps} {...rest} />;
+});

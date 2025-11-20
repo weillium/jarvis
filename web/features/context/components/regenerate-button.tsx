@@ -124,7 +124,7 @@ export function RegenerateButton({ eventId, stage, onComplete, isRegenerating: e
         <Button
           variant={getButtonVariant()}
           size="sm"
-          onPress={handleStartOrRegenerate}
+          onClick={handleStartOrRegenerate}
           disabled={isDisabled()}
         >
           {getButtonLabel()}

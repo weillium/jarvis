@@ -14,7 +14,13 @@ export const PageContainer = styled(YStack, {
 
 export const PageHeader = styled(YStack, {
   name: 'PageHeader',
-  gap: '$1.5',
+  gap: '$5',
+  width: '100%',
+  minWidth: 0,
+  // Ensure proper spacing between title and subtitle
+  // Tamagui space tokens are in px but scale responsively
+  // $5 = 20px provides adequate spacing to prevent overlap
+  // Container grows to fit content height naturally
 });
 
 export const Toolbar = styled(XStack, {

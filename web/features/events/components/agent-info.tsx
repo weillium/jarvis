@@ -16,6 +16,7 @@ import {
   Heading,
   Body,
   Label,
+  Caption,
   StatGroup,
   StatItem,
   Badge,
@@ -228,9 +229,9 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
                 </Heading>
                 <Label size="xs">Context Chunks</Label>
                 {blueprint?.target_chunk_count && (
-                  <Body size="xs" tone="muted" marginTop="$1">
+                  <Caption marginTop="$1">
                     Target: {blueprint.target_chunk_count.toLocaleString()}
-                  </Body>
+                  </Caption>
                 )}
               </YStack>
             </Card>
@@ -314,7 +315,7 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
             width="100%"
             justifyContent="space-between"
             padding="$3 0"
-            onPress={() => setIsDatabaseExpanded(!isDatabaseExpanded)}
+            onClick={() => setIsDatabaseExpanded(!isDatabaseExpanded)}
           >
             <Body size="sm" weight="medium">
               Context Database ({contextStats.chunkCount.toLocaleString()} chunks)
@@ -341,7 +342,7 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
             width="100%"
             justifyContent="space-between"
             padding="$3 0"
-            onPress={() => setIsGlossaryExpanded(!isGlossaryExpanded)}
+            onClick={() => setIsGlossaryExpanded(!isGlossaryExpanded)}
           >
             <Body size="sm" weight="medium">
               Glossary ({contextStats.glossaryTermCount.toLocaleString()} terms)
@@ -368,7 +369,7 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
           width="100%"
           justifyContent="space-between"
           padding="$3 0"
-          onPress={() => setIsResearchExpanded(!isResearchExpanded)}
+          onClick={() => setIsResearchExpanded(!isResearchExpanded)}
         >
           <Body size="sm" weight="medium">
             Research Results

@@ -3,7 +3,7 @@
 import { useState, FormEvent } from 'react';
 import { supabase } from '@/shared/lib/supabase/client';
 import { useRouter } from 'next/navigation';
-import { YStack, XStack, Text, Button, Input, Alert, FormField } from '@jarvis/ui-core';
+import { YStack, XStack, Text, Button, Input, Alert, FormField, Body } from '@jarvis/ui-core';
 
 type AuthMode = 'login' | 'signup';
 
@@ -121,18 +121,18 @@ export function AuthForm({ mode, onToggleMode }: AuthFormProps) {
       </form>
 
       <XStack marginTop="$6" justifyContent="center" alignItems="center" gap="$2">
-        <Text fontSize="$3" color="$gray11">
+        <Body size="md" tone="muted" margin={0}>
           {mode === 'login' ? "Don't have an account?" : 'Already have an account?'}
-        </Text>
+        </Body>
         <Button
           variant="ghost"
           size="sm"
-          onPress={onToggleMode}
+          onClick={onToggleMode}
           paddingHorizontal={0}
         >
-          <Text textDecorationLine="underline">
+          <Body decoration="underline" weight="medium" color="$blue11" margin={0}>
             {mode === 'login' ? 'Sign up' : 'Sign in'}
-          </Text>
+          </Body>
         </Button>
       </XStack>
     </YStack>

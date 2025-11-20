@@ -24,11 +24,11 @@ export function LoadingState({
   const alignment = align === 'center' ? 'center' : 'flex-start';
 
   return (
-    <YStack alignItems={alignment} textAlign={align} gap="$3" {...stackProps}>
+    <YStack alignItems={alignment} gap="$3" {...stackProps}>
       {icon}
-      <Heading level={4}>{title}</Heading>
+      <Heading level={4} align={align === 'center' ? 'center' : 'left'}>{title}</Heading>
       {description ? (
-        <Body tone="muted" align={align}>
+        <Body tone="muted" align={align === 'center' ? 'center' : 'left'}>
           {description}
         </Body>
       ) : null}

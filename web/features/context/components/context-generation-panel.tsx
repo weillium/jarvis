@@ -12,7 +12,7 @@ import {
   useApproveBlueprintMutation,
 } from '@/shared/hooks/use-mutations';
 import { useContextStatusQuery } from '@/shared/hooks/use-context-status-query';
-import { YStack, XStack, Text, Card, Alert, EmptyStateCard, LoadingState } from '@jarvis/ui-core';
+import { YStack, XStack, Text, Card, Alert, EmptyStateCard, LoadingState, Body } from '@jarvis/ui-core';
 
 interface ContextGenerationPanelProps {
   eventId: string;
@@ -335,15 +335,15 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
             borderRadius="$2"
             backgroundColor={getStatusColor(statusData.agent.status, statusData.agent.stage, statusData?.blueprint?.status)}
           >
-            <Text
-              fontSize="$2"
-              fontWeight="500"
+            <Body
+              size="sm"
+              weight="medium"
               color="#ffffff"
-              textTransform="uppercase"
+              transform="uppercase"
               margin={0}
             >
               {getStatusLabel(statusData.agent.status, statusData.agent.stage, statusData?.blueprint?.status)}
-            </Text>
+            </Body>
           </YStack>
         )}
       </XStack>

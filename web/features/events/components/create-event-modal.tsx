@@ -321,7 +321,7 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
           <YStack gap="$5">
             {error && (
               <Alert variant="error">
-                <Body whiteSpace="pre-wrap">{error}</Body>
+                <Body whitespace="preWrap">{error}</Body>
               </Alert>
             )}
 
@@ -411,7 +411,7 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
             />
 
             <ButtonGroup>
-              <Button type="button" variant="outline" onPress={handleClose} disabled={isLoading}>
+              <Button type="button" variant="outline" onClick={handleClose} disabled={isLoading}>
                 Cancel
               </Button>
               <Button type="submit" variant="primary" disabled={isLoading || !title.trim()}>

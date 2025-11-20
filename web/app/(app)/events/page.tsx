@@ -32,7 +32,7 @@ export default function EventsIndex() {
             <Body tone="muted">Manage and monitor your academic events</Body>
           </PageHeader>
           <ToolbarSpacer />
-          <Button onPress={() => setIsModalOpen(true)}>Create Event</Button>
+          <Button onClick={() => setIsModalOpen(true)}>Create Event</Button>
         </Toolbar>
 
         <Card variant="outlined" padding="$0" overflow="hidden">

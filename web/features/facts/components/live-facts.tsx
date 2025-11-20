@@ -186,7 +186,7 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
             <Button
               variant="primary"
               size="sm"
-              onPress={reconnect}
+              onClick={reconnect}
             >
               Reconnect
             </Button>
@@ -222,22 +222,16 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
                   gap="$4"
                 >
                   <YStack flex={1} gap="$2">
-                    <Text
-                      fontSize="$3"
-                      fontWeight="600"
+                    <Body
+                      size="md"
+                      weight="bold"
                       color="$color"
-                      textTransform="capitalize"
+                      transform="capitalize"
                       margin={0}
                     >
                       {fact.key.replace(/_/g, ' ')}
-                    </Text>
-                    <Body
-                      lineHeight={1.5}
-                      tone="muted"
-                      whiteSpace="pre-wrap"
-                      wordBreak="break-word"
-                      fontFamily={typeof fact.value !== 'string' ? '$mono' : undefined}
-                    >
+                    </Body>
+                    <Body tone="muted" whitespace="preWrap" mono={typeof fact.value !== 'string'}>
                       {typeof fact.value === 'string'
                         ? fact.value
                         : JSON.stringify(fact.value, null, 2)}

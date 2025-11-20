@@ -48,6 +48,11 @@ export function Modal({
   children,
   ...dialogProps
 }: ModalProps) {
+  // Don't render the Dialog at all when closed to prevent it from always showing
+  if (!isOpen) {
+    return null;
+  }
+
   return (
     <Dialog
       modal
@@ -91,7 +96,7 @@ export function Modal({
                 </Heading>
               ) : null}
               {description ? (
-                <Body tone="muted" size="sm" marginTop="$1">
+                <Body tone="muted" size="sm" marginTop="$2">
                   {description}
                 </Body>
               ) : null}
@@ -100,7 +105,7 @@ export function Modal({
               <Button
                 variant="ghost"
                 size="sm"
-                onPress={onClose}
+                onClick={onClose}
                 circular
                 width={32}
                 height={32}
@@ -111,7 +116,7 @@ export function Modal({
             )}
           </XStack>
         )}
-        <YStack padding="$6" gap="$4" maxHeight="calc(90vh - 100px)" overflowY="auto">
+        <YStack padding="$6" gap="$4" maxHeight="calc(90vh - 100px)" overflow="scroll">
           {children}
         </YStack>
       </DialogContent>

@@ -4,7 +4,8 @@ import { useRef, useState } from 'react';
 import type { ChangeEvent, DragEvent } from 'react';
 import { YStack, XStack } from 'tamagui';
 import { Card } from './Card';
-import { Label, Body } from './Typography';
+import { Label, Body, Caption } from './Typography';
+import { ClampText } from './ClampText';
 import { Button } from './Button';
 import { FileGenericIcon } from '../icons';
 
@@ -47,18 +48,18 @@ function FileItem({ file, onRemove, disabled }: FileItemProps) {
       gap="$3"
     >
       <YStack flex={1} minWidth={0}>
-      <Body size="sm" weight="medium" numberOfLines={1}>
+      <ClampText lines={1} fontSize="$2" fontWeight="500" color="$color">
           {file.name}
-        </Body>
-        <Body size="xs" tone="muted">
+        </ClampText>
+        <Caption>
           {formatFileSize(file.size)}
-        </Body>
+        </Caption>
       </YStack>
       <Button
         variant="outline"
         size="sm"
         disabled={disabled}
-        onPress={(event) => {
+        onClick={(event) => {
           event.stopPropagation();
           onRemove();
         }}
@@ -132,9 +133,9 @@ export function FileUpload({
     <YStack width="100%">
       {label ? <Label>{label}</Label> : null}
       {instructions ? (
-        <Body size="xs" tone="muted" marginBottom="$2">
+        <Caption marginBottom="$2">
           {instructions}
-        </Body>
+        </Caption>
       ) : null}
 
       {files.length === 0 && (
@@ -148,10 +149,10 @@ export function FileUpload({
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          onPress={openPicker}
+          onClick={openPicker}
           cursor={disabled ? 'not-allowed' : 'pointer'}
         >
-          <YStack alignItems="center" gap="$2" color="$gray9" padding="$4">
+          <YStack alignItems="center" gap="$3" color="$gray9" padding="$4">
             <YStack marginBottom="$2">
               <FileGenericIcon size={48} />
             </YStack>
@@ -196,14 +197,14 @@ export function FileUpload({
             ))}
           </YStack>
           <XStack gap="$3" flexWrap="wrap">
-            <Button variant="outline" size="sm" disabled={disabled} onPress={openPicker}>
+            <Button variant="outline" size="sm" disabled={disabled} onClick={openPicker}>
               Add more files
             </Button>
             <Button
               variant="ghost"
               size="sm"
               disabled={disabled}
-              onPress={() => {
+              onClick={() => {
                 onFilesChange([]);
                 if (fileInputRef.current) {
                   fileInputRef.current.value = '';

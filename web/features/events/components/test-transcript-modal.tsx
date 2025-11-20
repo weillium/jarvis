@@ -33,8 +33,6 @@ export function TestTranscriptModal({
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!isOpen) return null;
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!text.trim()) {
@@ -95,7 +93,7 @@ export function TestTranscriptModal({
             {error && <Alert variant="error">{error}</Alert>}
 
             <ButtonGroup>
-              <Button type="button" variant="outline" onPress={handleClose} disabled={isSending}>
+              <Button type="button" variant="outline" onClick={handleClose} disabled={isSending}>
                 Cancel
               </Button>
               <Button type="submit" disabled={isSending || !text.trim()}>

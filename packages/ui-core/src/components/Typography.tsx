@@ -1,6 +1,9 @@
 'use client';
 
 import { styled, Text as TamaguiText } from 'tamagui';
+import { isWeb } from '@tamagui/constants';
+
+const webOnly = (style: Record<string, any>) => (isWeb ? style : {});
 
 const toneVariants = {
   default: {
@@ -38,12 +41,43 @@ const alignmentVariants = {
   },
 } as const;
 
+const transformVariants = {
+  none: {},
+  uppercase: {
+    textTransform: 'uppercase',
+  },
+  capitalize: {
+    textTransform: 'capitalize',
+  },
+  lowercase: {
+    textTransform: 'lowercase',
+  },
+} as const;
+
+const decorationVariants = {
+  none: {},
+  underline: {
+    textDecorationLine: 'underline',
+  },
+} as const;
+
+const whitespaceVariants = {
+  normal: {},
+  preLine: webOnly({ whiteSpace: 'pre-line' }),
+  preWrap: webOnly({ whiteSpace: 'pre-wrap' }),
+  nowrap: webOnly({ whiteSpace: 'nowrap' }),
+} as const;
+
 export const Heading = styled(TamaguiText, {
   name: 'Heading',
   fontFamily: '$heading',
   fontWeight: '600',
-  lineHeight: 1.2,
+  lineHeight: 1.5,
   margin: 0,
+  marginBottom: '$2',
+  width: '100%',
+  minWidth: 0,
+  display: 'block',
   variants: {
     level: {
       1: { fontSize: '$8' },
@@ -54,11 +88,15 @@ export const Heading = styled(TamaguiText, {
     },
     tone: toneVariants,
     align: alignmentVariants,
+    transform: transformVariants,
+    decoration: decorationVariants,
   } as const,
   defaultVariants: {
     level: 3,
     tone: 'default',
     align: 'left',
+    transform: 'none',
+    decoration: 'none',
   },
 });
 
@@ -67,6 +105,10 @@ export const Body = styled(TamaguiText, {
   fontFamily: '$body',
   lineHeight: 1.5,
   margin: 0,
+  marginBottom: '$2',
+  width: '100%',
+  minWidth: 0,
+  display: 'block',
   variants: {
     size: {
       sm: { fontSize: '$2' },
@@ -80,12 +122,23 @@ export const Body = styled(TamaguiText, {
       bold: { fontWeight: '600' },
     },
     align: alignmentVariants,
+    whitespace: whitespaceVariants,
+    mono: {
+      true: { fontFamily: '$mono' },
+      false: {},
+    },
+    transform: transformVariants,
+    decoration: decorationVariants,
   } as const,
   defaultVariants: {
     size: 'md',
     tone: 'default',
     weight: 'regular',
     align: 'left',
+    whitespace: 'normal',
+    mono: false,
+    transform: 'none',
+    decoration: 'none',
   },
 });
 
@@ -93,7 +146,12 @@ export const Label = styled(TamaguiText, {
   name: 'Label',
   fontFamily: '$body',
   fontWeight: '600',
+  lineHeight: 1.5,
   margin: 0,
+  marginBottom: '$1',
+  width: '100%',
+  minWidth: 0,
+  display: 'block',
   textTransform: 'none',
   letterSpacing: 0.2,
   variants: {
@@ -113,12 +171,18 @@ export const Label = styled(TamaguiText, {
       },
     },
     align: alignmentVariants,
+    whitespace: whitespaceVariants,
+    transform: transformVariants,
+    decoration: decorationVariants,
   } as const,
   defaultVariants: {
     size: 'sm',
     tone: 'muted',
     uppercase: false,
     align: 'left',
+    whitespace: 'normal',
+    transform: 'none',
+    decoration: 'none',
   },
 });
 
@@ -126,15 +190,30 @@ export const Caption = styled(TamaguiText, {
   name: 'Caption',
   fontFamily: '$body',
   fontSize: '$1',
-  lineHeight: 1.4,
+  lineHeight: 1.5,
   color: '$gray11',
   margin: 0,
+  marginBottom: '$1',
+  width: '100%',
+  minWidth: 0,
+  display: 'block',
   variants: {
     tone: toneVariants,
     align: alignmentVariants,
+    whitespace: whitespaceVariants,
+    mono: {
+      true: { fontFamily: '$mono' },
+      false: {},
+    },
+    transform: transformVariants,
+    decoration: decorationVariants,
   } as const,
   defaultVariants: {
     tone: 'muted',
     align: 'left',
+    whitespace: 'normal',
+    mono: false,
+    transform: 'none',
+    decoration: 'none',
   },
 });

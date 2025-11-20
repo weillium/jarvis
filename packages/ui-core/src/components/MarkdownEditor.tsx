@@ -3,7 +3,7 @@
 import '@uiw/react-md-editor/markdown-editor.css';
 import MDEditor from '@uiw/react-md-editor';
 import { YStack } from 'tamagui';
-import { Label, Body } from './Typography';
+import { Label, Body, Caption } from './Typography';
 import { Card } from './Card';
 
 export interface MarkdownEditorProps {
@@ -29,9 +29,9 @@ export function MarkdownEditor({
     <YStack width="100%">
       {label ? <Label>{label}</Label> : null}
       {instructions ? (
-        <Body size="xs" tone="muted" marginBottom="$2" fontStyle="italic">
+        <Caption marginBottom="$2" fontStyle="italic">
           {instructions}
-        </Body>
+        </Caption>
       ) : null}
 
       <Card data-color-mode="light" padding={0} borderRadius="$3" borderWidth={1}>

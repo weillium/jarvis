@@ -16,7 +16,14 @@ import {
   BulletList,
   EmptyStateCard,
   LoadingState,
+  Anchor,
+  Label,
 } from '@jarvis/ui-core';
+import { styled } from 'tamagui';
+
+const ExternalLink = styled(Anchor, {
+  textDecorationLine: 'none',
+});
 
 interface GlossaryVisualizationProps {
   eventId: string;
@@ -131,7 +138,7 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
         <Button
           variant="outline"
           size="sm"
-          onPress={handleRefresh}
+          onClick={handleRefresh}
           disabled={isFetching}
         >
           ↻ {isFetching ? 'Refreshing...' : 'Refresh'}
@@ -172,37 +179,31 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
                 padding="$4"
                 backgroundColor={isExpanded ? '$gray1' : '$background'}
                 justifyContent="space-between"
-                onPress={() => toggleTerm(term.id)}
+                onClick={() => toggleTerm(term.id)}
               >
                 <YStack flex={1} gap="$2">
                   <XStack alignItems="center" gap="$2" marginBottom="$1">
-                    <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
+                    <Body size="lg" weight="bold" margin={0}>
                       {term.term}
-                    </Text>
+                    </Body>
                     {term.acronym_for && (
-                      <Text fontSize="$2" color="$gray11" fontStyle="italic" margin={0}>
+                      <Body size="sm" tone="muted" fontStyle="italic" margin={0}>
                         ({term.acronym_for})
-                      </Text>
+                      </Body>
                     )}
                     {term.category && (
-                      <YStack
-                        padding="$0.5 $2"
-                        backgroundColor="$blue2"
-                        borderRadius="$1"
-                      >
-                        <Text fontSize="$1" fontWeight="500" color="$blue11" margin={0}>
-                          {term.category}
-                        </Text>
-                      </YStack>
+                      <Badge variant="blue" size="sm">
+                        {term.category}
+                      </Badge>
                     )}
                   </XStack>
-                  <Text fontSize="$3" color="$gray9" lineHeight={1.6} margin={0}>
+                  <Body tone="muted" margin={0}>
                     {term.definition}
-                  </Text>
+                  </Body>
                 </YStack>
-                <Text fontSize="$5" color="$gray11" marginLeft="$4" margin={0}>
+                <Body size="lg" tone="muted" marginLeft="$4" margin={0}>
                   {isExpanded ? '▼' : '▶'}
-                </Text>
+                </Body>
               </Button>
 
               {/* Expanded Details */}
@@ -217,21 +218,15 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
                   {/* Usage Examples */}
                   {term.usage_examples && term.usage_examples.length > 0 && (
                     <YStack marginBottom="$4" gap="$2">
-                      <Text
-                        fontSize="$1"
-                        fontWeight="600"
-                        color="$gray11"
-                        textTransform="uppercase"
-                        margin={0}
-                      >
+                      <Label size="xs" tone="muted" uppercase margin={0}>
                         Usage Examples
-                      </Text>
+                      </Label>
                       <BulletList
                         items={term.usage_examples}
                         renderItem={(example) => (
-                          <Text fontSize="$3" color="$gray9" fontStyle="italic" margin={0} lineHeight={1.6}>
+                          <Body tone="muted" fontStyle="italic" margin={0}>
                             "{example}"
-                          </Text>
+                          </Body>
                         )}
                       />
                     </YStack>
@@ -240,15 +235,9 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
                   {/* Related Terms */}
                   {term.related_terms && term.related_terms.length > 0 && (
                     <YStack marginBottom="$4" gap="$2">
-                      <Text
-                        fontSize="$1"
-                        fontWeight="600"
-                        color="$gray11"
-                        textTransform="uppercase"
-                        margin={0}
-                      >
+                      <Label size="xs" tone="muted" uppercase margin={0}>
                         Related Terms
-                      </Text>
+                      </Label>
                       <TagGroup>
                         {term.related_terms.map((related, i) => (
                           <Badge key={i} variant="gray" size="sm">
@@ -287,21 +276,18 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
                         <Text fontWeight="600" margin={0}>Source:</Text> {term.source}
                       </Text>
                     )}
-                    {term.source_url && (
-                      <Text margin={0}>
-                        <Text
-                          as="a"
-                          href={term.source_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          color="$blue11"
-                          textDecoration="none"
-                          margin={0}
-                        >
-                          View Source →
+                      {term.source_url && (
+                        <Text margin={0}>
+                          <ExternalLink
+                            href={term.source_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            color="$blue11"
+                          >
+                            View Source →
+                          </ExternalLink>
                         </Text>
-                      </Text>
-                    )}
+                      )}
                   </XStack>
                 </YStack>
               )}

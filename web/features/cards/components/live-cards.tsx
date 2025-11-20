@@ -202,7 +202,7 @@ export function LiveCards({ eventId }: LiveCardsProps) {
     >
       <Button
         variant="outline"
-        onPress={() => handleScroll(direction)}
+        onClick={() => handleScroll(direction)}
         width={44}
         height={44}
         borderRadius="$10"
@@ -244,7 +244,7 @@ export function LiveCards({ eventId }: LiveCardsProps) {
               <Button
                 variant="primary"
                 size="sm"
-                onPress={reconnect}
+                onClick={reconnect}
               >
                 Reconnect
               </Button>

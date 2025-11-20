@@ -25,6 +25,17 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Ensure Tamagui styles are applied */
+html, body {
+  height: 100%;
+  width: 100%;
+}
+
+/* Reset some default styles that might interfere */
+* {
+  box-sizing: border-box;
+}
+
 /* Utility animations */
 @keyframes spin {
   to {
@@ -39,11 +50,6 @@ body {
   50% {
     opacity: 0.5;
   }
-}
-
-/* Ensure Tamagui components render properly */
-* {
-  box-sizing: border-box;
 }
 
 /* Remove default link styles - let Tamagui handle it */

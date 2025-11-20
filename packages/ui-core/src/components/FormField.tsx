@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { YStack, type StackProps } from 'tamagui';
-import { Label, Body } from './Typography';
+import { Label, Body, Caption } from './Typography';
 
 export interface FormFieldProps extends StackProps {
   label?: string;
@@ -23,7 +23,7 @@ export function FormField({
   ...stackProps
 }: FormFieldProps) {
   return (
-    <YStack gap="$2" width="100%" {...stackProps}>
+    <YStack gap="$3" width="100%" {...stackProps}>
       {label ? (
         <Label htmlFor={htmlFor}>
           {label}
@@ -32,9 +32,9 @@ export function FormField({
       ) : null}
       {description ? (
         typeof description === 'string' ? (
-          <Body size="xs" tone="muted">
+          <Caption>
             {description}
-          </Body>
+          </Caption>
         ) : (
           description
         )
@@ -42,9 +42,9 @@ export function FormField({
       {children}
       {error ? (
         typeof error === 'string' ? (
-          <Body size="xs" tone="danger">
+          <Caption tone="danger">
             {error}
-          </Body>
+          </Caption>
         ) : (
           error
         )

@@ -6,12 +6,12 @@ import { Body } from './Typography';
 
 const BulletListContainer = styled(YStack, {
   name: 'BulletList',
-  gap: '$1.5',
+  gap: '$3',
 });
 
 const BulletListItem = styled(XStack, {
   name: 'BulletListItem',
-  gap: '$2',
+  gap: '$3',
   alignItems: 'flex-start',
 });
 
@@ -54,5 +54,5 @@ export function BulletList<T>({
 export const TagGroup = styled(XStack, {
   name: 'TagGroup',
   flexWrap: 'wrap',
-  gap: '$2',
+  gap: '$3',
 });

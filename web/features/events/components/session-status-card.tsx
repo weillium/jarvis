@@ -10,6 +10,7 @@ import {
   Heading,
   Body,
   Label,
+  Caption,
   Badge,
 } from '@jarvis/ui-core';
 import type { AgentSessionDisplay, AgentType } from './agent-sessions-utils';
@@ -27,16 +28,6 @@ const ConnectionDot = styled(YStack, {
   width: 8,
   height: 8,
   borderRadius: '$10',
-  variants: {
-    animate: {
-      true: {
-        animationName: 'pulse',
-        animationDuration: '2s',
-        animationTimingFunction: 'cubic-bezier(0.4, 0, 0.6, 1)',
-        animationIterationCount: 'infinite',
-      },
-    },
-  } as const,
 });
 
 export function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: SessionStatusCardProps) {
@@ -185,14 +176,17 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
               gap="$2"
               marginBottom="$2"
             >
-              <ConnectionDot backgroundColor={connectionColor} animate={isWebSocketLive} />
-              <Body size="sm" weight="medium" color={connectionColorToken} textTransform="uppercase">
+              <ConnectionDot
+                backgroundColor={connectionColor}
+                opacity={isWebSocketLive ? 1 : 0.4}
+              />
+              <Body size="sm" weight="medium" color={connectionColorToken} transform="uppercase">
                 WebSocket: {connectionStatus}
                 {actualWebSocketState ? (
-                  <Body size="xs" tone="muted" textTransform="none">
+                  <Caption>
                     {' '}
                     ({actualWebSocketState})
-                  </Body>
+                  </Caption>
                 ) : null}
               </Body>
             </XStack>
@@ -227,17 +221,17 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
                 {session.ping_pong?.enabled && (
                   <XStack gap="$3" flexWrap="wrap">
                     {session.ping_pong.lastPongReceived && (
-                      <Body size="xs" tone="muted">
+                      <Caption>
                         Last pong: {new Date(session.ping_pong.lastPongReceived).toLocaleTimeString()}
-                      </Body>
+                      </Caption>
                     )}
-                    <Body size="xs" tone="muted">
+                    <Caption>
                       Ping interval: {Math.round((session.ping_pong.pingIntervalMs || 0) / 1000)}s
-                    </Body>
+                    </Caption>
                     {session.ping_pong.missedPongs > 0 && (
-                      <Body size="xs" tone="danger" weight="medium">
+                      <Label size="xs" tone="danger">
                         {session.ping_pong.missedPongs}/{session.ping_pong.maxMissedPongs} missed
-                      </Body>
+                      </Label>
                     )}
                   </XStack>
                 )}
@@ -250,26 +244,34 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
           {runtime ? `${runtimeLabel}: ${runtime}` : `${runtimeLabel}: N/A`}
         </Body>
         {isRealtime && (
-          <Body tone="muted" fontFamily="$mono" marginBottom="$1">
+          <Body
+            tone="muted"
+            mono
+            marginBottom="$1"
+            fontStyle={
+              session.session_id === 'pending' ||
+              (session.status === 'closed' &&
+                session.metadata?.created_at &&
+                new Date().getTime() - new Date(session.metadata.created_at).getTime() < 60000)
+                ? 'italic'
+                : undefined
+            }
+          >
             {session.session_id === 'pending' ||
             (session.status === 'closed' &&
               session.metadata?.created_at &&
-              new Date().getTime() - new Date(session.metadata.created_at).getTime() < 60000) ? (
-              <Body fontStyle="italic" tone="muted">
-                Pending activation
-              </Body>
-            ) : (
-              <>Session: {session.session_id.substring(0, 20)}...</>
-            )}
+              new Date().getTime() - new Date(session.metadata.created_at).getTime() < 60000)
+              ? 'Pending activation'
+              : `Session: ${session.session_id.substring(0, 20)}…`}
           </Body>
         )}
         <Body tone="muted">
           Model: {session.metadata.model || 'N/A'}
         </Body>
         {session.metrics_recorded_at && (
-          <Body size="xs" tone="muted" fontStyle="italic">
+          <Caption fontStyle="italic">
             Metrics recorded at: {new Date(session.metrics_recorded_at).toLocaleString()}
-          </Body>
+          </Caption>
         )}
       </YStack>
 
@@ -348,13 +350,13 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
                   </Body>
                 </YStack>
               </XStack>
-              <Body size="xs" tone="muted" marginTop="$2">
+              <Caption marginTop="$2">
                 Selection Ratio:{' '}
                 {(session.token_metrics.facts_budget.selection_ratio * 100).toFixed(1)}%
-              </Body>
-              <Body size="xs" tone="muted">
+              </Caption>
+              <Caption>
                 Merged Clusters: {session.token_metrics.facts_budget.merged_clusters}
-              </Body>
+              </Caption>
               {session.token_metrics.facts_budget.merged_facts.length > 0 && (
                 <YStack marginTop="$2.5">
                   <Label size="xs">Merged Facts</Label>
@@ -372,9 +374,9 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
                     ))}
                   </YStack>
                   {session.token_metrics.facts_budget.merged_facts.length > 5 && (
-                    <Body size="xs" tone="muted" marginTop="$1">
+                    <Caption marginTop="$1">
                       +{session.token_metrics.facts_budget.merged_facts.length - 5} additional merges
-                    </Body>
+                    </Caption>
                   )}
                 </YStack>
               )}
@@ -391,7 +393,9 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
             width="100%"
             justifyContent="space-between"
             padding="$2 $3"
-            onPress={() => setExpandedLogs(prev => ({ ...prev, [session.agent_type]: !prev[session.agent_type] }))}
+            onClick={() =>
+              setExpandedLogs((prev) => ({ ...prev, [session.agent_type]: !prev[session.agent_type] }))
+            }
           >
             <Body size="sm" weight="medium">
               Recent Logs ({session.recent_logs.length})
@@ -402,7 +406,7 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
             <YStack
               marginTop="$3"
               maxHeight={300}
-              overflowY="auto"
+              overflow="scroll"
               padding="$3"
               backgroundColor="$gray1"
               borderRadius="$3"
@@ -417,28 +421,26 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
                   backgroundColor="$background"
                   borderRadius="$1"
                   borderLeftWidth={3}
-              borderLeftColor={
-                log.level === 'error' ? '$red11' :
-                log.level === 'warn' ? '$yellow11' : '$blue11'
-              }
-            >
-              <Body size="xs" tone="muted" marginBottom="$1">
-                {new Date(log.timestamp).toLocaleTimeString()}
-                {(() => {
-                  const seqEntry = log.context?.find(
-                    (entry) => entry.key === 'seq' && typeof entry.value === 'number'
-                  );
-                  return seqEntry ? ` • Seq ${seqEntry.value}` : null;
-                })()}
-              </Body>
-              <Body
-                size="sm"
-                fontFamily="$mono"
-                whiteSpace="pre-wrap"
-                wordBreak="break-word"
-              >
-                {log.message}
-              </Body>
+                  borderLeftColor={
+                    log.level === 'error'
+                      ? '$red11'
+                      : log.level === 'warn'
+                      ? '$yellow11'
+                      : '$blue11'
+                  }
+                >
+                  <Caption marginBottom="$1">
+                    {new Date(log.timestamp).toLocaleTimeString()}
+                    {(() => {
+                      const seqEntry = log.context?.find(
+                        (entry) => entry.key === 'seq' && typeof entry.value === 'number'
+                      );
+                      return seqEntry ? ` • Seq ${seqEntry.value}` : null;
+                    })()}
+                  </Caption>
+                  <Body size="sm" mono whitespace="preWrap">
+                    {log.message}
+                  </Body>
                 </YStack>
               ))}
             </YStack>
@@ -453,29 +455,19 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
         borderTopWidth={1}
         borderTopColor="$borderColor"
       >
-        <Body size="xs" tone="muted">
+        <Caption>
           Created: {formatDate(session.metadata.created_at)}
-        </Body>
-        <Body size="xs" tone="muted">
+        </Caption>
+        <Caption>
           Updated: {formatDate(session.metadata.updated_at)}
-        </Body>
+        </Caption>
         {session.metadata.closed_at && (
-          <Body size="xs" tone="muted">
+          <Caption>
             Closed: {formatDate(session.metadata.closed_at)}
-          </Body>
+          </Caption>
         )}
       </YStack>
 
-      <style jsx global>{`
-        @keyframes pulse {
-          0%, 100% {
-            opacity: 1;
-          }
-          50% {
-            opacity: 0.5;
-          }
-        }
-      `}</style>
     </Card>
   );
 }

@@ -9,7 +9,11 @@ interface TamaguiProviderProps {
 
 export function TamaguiProvider({ children }: TamaguiProviderProps) {
   return (
-    <BaseTamaguiProvider config={config} defaultTheme="light">
+    <BaseTamaguiProvider 
+      config={config} 
+      defaultTheme="light"
+      disableInjectCSS={false}
+    >
       {children}
     </BaseTamaguiProvider>
   );

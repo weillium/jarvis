@@ -33,6 +33,7 @@ export { LoadingState } from './components/LoadingState';
 export { ButtonGroup } from './components/ButtonGroup';
 export { FormField } from './components/FormField';
 export { ModalContent } from './components/ModalContent';
+export { ClampText } from './components/ClampText';
 
 // Re-export commonly used Tamagui components for convenience
 export {
