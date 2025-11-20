@@ -54,7 +54,7 @@ export function ResearchPlanTable({ researchPlan }: ResearchPlanTableProps) {
           ? row.provenance_hint
           : '—',
     },
-  ] as const;
+  ];
 
   return (
     <YStack gap="$3">

@@ -176,7 +176,7 @@ const tamaguiConfig = createTamagui({
     // Line height tokens for consistent typography
     // Note: lineHeight may not exist in defaultConfig.tokens, so we create it
     lineHeight: {
-      ...((defaultConfig.tokens as any).lineHeight || {}),
+      ...('lineHeight' in defaultConfig.tokens && defaultConfig.tokens.lineHeight ? defaultConfig.tokens.lineHeight : {}),
       sm: lineHeightSm,
       md: lineHeightMd,
       lg: lineHeightLg,
@@ -235,5 +235,6 @@ export default tamaguiConfig;
 export type Conf = typeof tamaguiConfig;
 
 declare module 'tamagui' {
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   interface TamaguiCustomConfig extends Conf {}
 }

@@ -70,7 +70,7 @@ export function ChunksPlanTable({
       render: (row: BlueprintChunksPlan['sources'][number]) =>
         formatPurpose(row.agent_utility),
     },
-  ] as const;
+  ];
 
   return (
     <YStack gap="$3">

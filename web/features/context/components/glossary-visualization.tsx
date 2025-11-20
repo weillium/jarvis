@@ -18,6 +18,7 @@ import {
   LoadingState,
   Anchor,
   Label,
+  Body,
 } from '@jarvis/ui-core';
 import { styled } from 'tamagui';
 
@@ -251,8 +252,6 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
                   {/* Metadata */}
                   <XStack
                     gap="$4"
-                    fontSize="$2"
-                    color="$gray11"
                     paddingTop="$3"
                     borderTopWidth={1}
                     borderTopColor="$borderColor"

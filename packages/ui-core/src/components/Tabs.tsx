@@ -27,7 +27,7 @@ export function Tabs({ tabs, defaultTab }: TabsProps) {
         borderBottomWidth={1}
         borderBottomColor="$borderColor"
         backgroundColor="$gray1"
-        overflow="auto"
+        overflow="scroll"
       >
         {tabs.map((tab) => {
           const isActive = activeTabId === tab.id;
@@ -63,7 +63,7 @@ export function SubTabs({ tabs, defaultTab }: SubTabsProps) {
 
   return (
     <YStack>
-      <XStack borderBottomWidth={1} borderBottomColor="$borderColor" overflow="auto" marginBottom="$4">
+      <XStack borderBottomWidth={1} borderBottomColor="$borderColor" overflow="scroll" marginBottom="$4">
         {tabs.map((tab) => {
           const isActive = activeTabId === tab.id;
           return (

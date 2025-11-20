@@ -6,7 +6,7 @@ import { Input } from './Input';
 import { Caption } from './Typography';
 import { ClampText } from './ClampText';
 
-export interface FileListItemProps extends StackProps {
+export interface FileListItemProps extends Omit<StackProps, 'inset'> {
   icon?: ReactNode;
   name: string;
   secondaryText?: ReactNode;
@@ -54,10 +54,10 @@ export function FileListItem({
       borderWidth={1}
       borderColor="$borderColor"
       borderRadius="$3"
-      {...stackProps}
+      {...(stackProps as any)}
     >
       {icon ? (
-        <YStack width={20} height={20} color="$gray9" flexShrink={0}>
+        <YStack width={20} height={20} flexShrink={0}>
           {icon}
         </YStack>
       ) : null}

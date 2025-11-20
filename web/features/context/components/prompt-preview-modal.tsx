@@ -57,7 +57,7 @@ export function PromptPreviewModal({
             <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$2" margin={0}>
               Event Information
             </Text>
-            <YStack gap="$1" fontSize="$3" color="$gray11">
+            <YStack gap="$1">
               <Text margin={0}>
                 <Text fontWeight="600" margin={0}>
                   Title:

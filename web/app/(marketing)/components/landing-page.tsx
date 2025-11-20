@@ -46,7 +46,7 @@ export default function LandingPage() {
           justifyContent="space-between"
           gap="$4"
         >
-          <Heading level="3">Jarvis</Heading>
+          <Heading level={3}>Jarvis</Heading>
           <ButtonGroup orientation="horizontal" wrap>
             <Button asChild variant="ghost" size="sm">
               <Link href="/auth">Sign In</Link>
@@ -60,8 +60,8 @@ export default function LandingPage() {
 
       {/* Hero */}
       <YStack width="100%" alignItems="center" paddingHorizontal="$6" paddingVertical="$9">
-        <YStack maxWidth={960} alignItems="center" textAlign="center" gap="$5">
-          <Heading level="1" align="center">
+        <YStack maxWidth={960} alignItems="center" gap="$5">
+          <Heading level={1} align="center">
             Intelligent Context for Academic Events
           </Heading>
           <Body size="lg" tone="muted" align="center">
@@ -86,7 +86,7 @@ export default function LandingPage() {
       {/* Features */}
       <YStack width="100%" alignItems="center" paddingHorizontal="$6" paddingVertical="$9" id="features">
         <YStack maxWidth={1100} alignItems="center" gap="$6">
-          <Heading level="2" align="center">
+          <Heading level={2} align="center">
             Powerful Features for Event Excellence
           </Heading>
           <XStack gap="$4" flexWrap="wrap" width="100%" justifyContent="center">
@@ -94,12 +94,12 @@ export default function LandingPage() {
               <Card
                 key={feature.title}
                 variant="outlined"
-                flexBasis="320px"
+                flexBasis={320}
                 flexGrow={1}
                 padding="$5"
                 gap="$2"
               >
-                <Heading level="4">{feature.title}</Heading>
+                <Heading level={4}>{feature.title}</Heading>
                 <Body tone="muted">{feature.description}</Body>
               </Card>
             ))}
@@ -110,7 +110,7 @@ export default function LandingPage() {
       {/* Use Cases */}
       <YStack width="100%" alignItems="center" backgroundColor="$gray2" paddingHorizontal="$6" paddingVertical="$9">
         <YStack maxWidth={1100} alignItems="center" gap="$4">
-          <Heading level="2" align="center">
+          <Heading level={2} align="center">
             Designed for Academic Excellence
           </Heading>
           <Body size="lg" tone="muted" align="center">
@@ -130,8 +130,8 @@ export default function LandingPage() {
 
       {/* Call to action */}
       <YStack width="100%" alignItems="center" backgroundColor="$gray10" paddingHorizontal="$6" paddingVertical="$9">
-        <YStack maxWidth={800} alignItems="center" textAlign="center" gap="$4">
-          <Heading level="2" color="$gray1" align="center">
+        <YStack maxWidth={800} alignItems="center" gap="$4">
+          <Heading level={2} color="$gray1" align="center">
             Ready to Transform Your Events?
           </Heading>
           <Body size="lg" tone="muted" align="center" color="$gray2">
@@ -153,7 +153,7 @@ export default function LandingPage() {
           flexWrap="wrap"
           gap="$3"
         >
-          <Heading level="4" color="$gray1">
+          <Heading level={4} color="$gray1">
             Jarvis
           </Heading>
           <Body size="sm" tone="muted" color="$gray3">

@@ -24,12 +24,14 @@ export const ClampText = forwardRef<any, ClampTextProps>(function ClampText(
         }
       : undefined;
 
+  const finalStyle = webStyles && style ? { ...webStyles, ...(style as Record<string, any>) } : webStyles || style;
+
   return (
     <TamaguiText
       ref={ref}
       {...rest}
       {...(!isWeb && clampLines ? { numberOfLines: clampLines, ellipsizeMode: 'tail' as const } : {})}
-      style={webStyles ? { ...webStyles, ...style } : style}
+      style={finalStyle}
     />
   );
 });

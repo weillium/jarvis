@@ -22,6 +22,7 @@ import {
   ModalContent,
   FormField,
   ButtonGroup,
+  Body,
 } from '@jarvis/ui-core';
 
 // Extend dayjs with plugins

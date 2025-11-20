@@ -298,7 +298,7 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
             approving={approving}
             isContextGenerationRunning={isContextGenerationRunning}
             isClearing={isClearing}
-            statusData={statusData}
+            statusData={statusData ?? null}
             onStartGeneration={() => handleRegenerate()}
             onRegenerateBlueprint={() => handleRegenerate()}
             onApprove={handleApprove}
@@ -418,7 +418,7 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
           approving={approving}
           isContextGenerationRunning={isContextGenerationRunning}
           isClearing={isClearing}
-          statusData={statusData}
+          statusData={statusData ?? null}
           onStartGeneration={() => handleRegenerate()}
           onRegenerateBlueprint={() => handleRegenerate()}
           onApprove={handleApprove}

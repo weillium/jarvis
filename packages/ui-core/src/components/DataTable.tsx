@@ -15,7 +15,7 @@ const TableShell = styled(YStack, {
 
 const ScrollArea = styled(YStack, {
   name: 'DataTableScroll',
-  overflowX: 'auto',
+  overflow: 'scroll',
   width: '100%',
 });
 
@@ -141,7 +141,7 @@ export function DataTable<T>({
                   const textLines = column.truncate ? 1 : undefined;
                   return (
                     <Cell
-                      key={`${rowKey}-${column.key}-${rowIndex}`}
+                      key={`${String(rowKey)}-${String(column.key)}-${rowIndex}`}
                       align={column.align}
                       size={size}
                       variant="body"

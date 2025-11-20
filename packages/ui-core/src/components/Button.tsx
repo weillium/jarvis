@@ -5,10 +5,11 @@ import { Button as TamaguiButton, styled } from 'tamagui';
 import type { ButtonProps as TamaguiButtonProps } from 'tamagui';
 import { resolvePressEvents } from '../utils/pressable';
 
-export interface ButtonProps extends TamaguiButtonProps {
+export interface ButtonProps extends Omit<TamaguiButtonProps, 'variant'> {
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
   onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  type?: 'button' | 'submit' | 'reset';
 }
 
 // Base styled component without size variant to avoid passing size to Tamagui
@@ -133,9 +134,7 @@ export const Button = forwardRef<any, ButtonProps>(function Button(
   const { onPress, onClick, size, ...rest } = props;
   const eventProps = resolvePressEvents({ onPress, onClick });
   const sizeStyles = mapButtonSizeToStyles(size);
-  // Exclude onPress and onClick from rest to avoid "Unknown event handler property" warning
-  // resolvePressEvents already handles the conversion to onClick (web) or onPress (native)
-  const { onPress: _onPress, onClick: _onClick, ...restWithoutHandlers } = rest as any;
+  // onPress and onClick are already extracted above, so rest doesn't contain them
   // Never pass size="sm|md|lg" to Tamagui - only pass fontSize="$3|$4|$5" and other style props
-  return <ButtonFrame ref={ref} {...eventProps} {...sizeStyles} {...restWithoutHandlers} />;
+  return <ButtonFrame ref={ref} {...eventProps} {...sizeStyles} {...rest} />;
 });

@@ -15,7 +15,7 @@ interface EventConnections {
 
 class ConnectionManager {
   private connections: Map<string, EventConnections> = new Map();
-  private cleanupInterval: NodeJS.Timeout;
+  private cleanupInterval: ReturnType<typeof setInterval>;
   private noConnectionLogged: Set<string> = new Set();
   private lastStatuses: Map<string, Map<string, { payload: any; storedAt: number }>> = new Map();
 

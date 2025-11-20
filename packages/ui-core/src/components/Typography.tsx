@@ -155,7 +155,7 @@ const mapBodySizeToFontSize = (size: 'sm' | 'md' | 'lg' | undefined): string => 
 // This ensures getFontSize is never called with 'sm|md|lg' - only numeric tokens like '$3|$4|$5'
 export const Body = forwardRef<any, any>(function Body(props, ref) {
   const { size, ...rest } = props;
-  const fontSize = mapBodySizeToFontSize(size);
+  const fontSize = mapBodySizeToFontSize(size as 'sm' | 'md' | 'lg' | undefined);
   // Never pass size="sm|md|lg" to Tamagui - only pass fontSize="$3|$4|$5"
   return <BodyBase ref={ref} fontSize={fontSize} {...rest} />;
 });
@@ -216,7 +216,7 @@ const mapLabelSizeToFontSize = (size: 'xs' | 'sm' | 'md' | undefined): string =>
 // This ensures getFontSize is never called with 'xs|sm|md' - only numeric tokens like '$1|$3|$4'
 export const Label = forwardRef<any, any>(function Label(props, ref) {
   const { size, ...rest } = props;
-  const fontSize = mapLabelSizeToFontSize(size);
+  const fontSize = mapLabelSizeToFontSize(size as 'xs' | 'sm' | 'md' | undefined);
   // Never pass size="xs|sm|md" to Tamagui - only pass fontSize="$1|$3|$4"
   return <LabelBase ref={ref} fontSize={fontSize} {...rest} />;
 });

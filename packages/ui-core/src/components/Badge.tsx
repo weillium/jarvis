@@ -8,6 +8,8 @@ export interface BadgeProps extends Omit<StackProps, 'children'> {
   children: React.ReactNode;
   variant?: 'default' | 'blue' | 'yellow' | 'green' | 'red' | 'purple' | 'gray' | 'success' | 'warning' | 'danger' | 'info';
   size?: 'sm' | 'md';
+  backgroundColor?: string;
+  color?: string;
 }
 
 const BadgeContainer = styled(YStack, {
@@ -133,10 +135,10 @@ const mapBadgeSizeToFontSize = (size: 'sm' | 'md' | undefined): string => {
   }
 };
 
-export function Badge({ children, variant = 'default', size = 'md', ...props }: BadgeProps) {
+export function Badge({ children, variant = 'default', size = 'md', backgroundColor, color, ...props }: BadgeProps) {
   const fontSize = mapBadgeSizeToFontSize(size);
   // Explicitly set color based on variant to ensure it's applied
-  const textColor = 
+  const textColor = color || (
     variant === 'info' ? '$blue11' :
     variant === 'success' ? '$green11' :
     variant === 'warning' ? '$yellow11' :
@@ -147,10 +149,11 @@ export function Badge({ children, variant = 'default', size = 'md', ...props }: 
     variant === 'red' ? '$red11' :
     variant === 'purple' ? '$purple11' :
     variant === 'gray' ? '$gray11' :
-    '$gray11';
+    '$gray11'
+  );
   
   return (
-    <BadgeContainer variant={variant} size={size} {...props}>
+    <BadgeContainer variant={variant} size={size} backgroundColor={backgroundColor} {...props}>
       {/* Never pass size="sm|md" to Tamagui - only pass fontSize="$3|$4" */}
       <BadgeTextBase variant={variant} fontSize={fontSize} color={textColor}>
         {children}

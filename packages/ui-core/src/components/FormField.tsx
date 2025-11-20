@@ -2,9 +2,9 @@
 
 import type { ReactNode } from 'react';
 import { YStack, type StackProps } from 'tamagui';
-import { Label, Body, Caption } from './Typography';
+import { Label, Caption } from './Typography';
 
-export interface FormFieldProps extends StackProps {
+export interface FormFieldProps extends Omit<StackProps, 'inset'> {
   label?: string;
   htmlFor?: string;
   description?: ReactNode;
@@ -23,7 +23,7 @@ export function FormField({
   ...stackProps
 }: FormFieldProps) {
   return (
-    <YStack gap="$3" width="100%" {...stackProps}>
+    <YStack gap="$3" width="100%" {...(stackProps as any)}>
       {label ? (
         <Label htmlFor={htmlFor}>
           {label}

@@ -1,67 +1,42 @@
 'use client';
 
-import { styled } from 'tamagui';
-import type { TamaguiElement } from 'tamagui';
-
-export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
+export interface SelectProps extends Omit<React.SelectHTMLAttributes<HTMLSelectElement>, 'size'> {
   size?: 'sm' | 'md';
 }
 
-const StyledSelect = styled('select', {
-  name: 'Select',
-  fontFamily: '$body',
-  borderRadius: '$2',
-  borderWidth: 1,
-  borderColor: '$borderColor',
-  backgroundColor: '$background',
-  color: '$color',
-  cursor: 'pointer',
-  transition: 'all 0.2s',
-  variants: {
-    size: {
-      sm: {
-        paddingHorizontal: '$3',
-        paddingVertical: '$2',
-        fontSize: '$3',
-        height: '$4',
-      },
-      md: {
-        paddingHorizontal: '$3',
-        paddingVertical: '$2.5',
-        fontSize: '$4',
-        height: '$5',
-      },
-    },
-  } as const,
-  defaultVariants: {
-    size: 'md',
+const sizeStyles = {
+  sm: {
+    padding: '8px 12px',
+    fontSize: '13px',
+    height: '20px',
   },
-  hoverStyle: {
-    borderColor: '$borderColorHover',
-    backgroundColor: '$backgroundHover',
+  md: {
+    padding: '10px 12px',
+    fontSize: '14px',
+    height: '24px',
   },
-  focusStyle: {
-    borderColor: '$blue6',
-    outline: 'none',
-    boxShadow: '0 0 0 2px $blue2',
-  },
-  disabledStyle: {
-    opacity: 0.6,
-    cursor: 'not-allowed',
-    backgroundColor: '$gray1',
-  },
-});
+};
 
-export function Select({ size = 'md', style, ...props }: SelectProps) {
+export function Select({ size = 'md', style, className, ...props }: SelectProps) {
+  const sizeStyle = sizeStyles[size];
+  
   return (
-    <StyledSelect
-      size={size}
-      style={{
-        ...style,
-        fontFamily: 'inherit',
-      }}
+    <select
       {...props}
+      className={className}
+      style={{
+        fontFamily: 'inherit',
+        borderRadius: '4px',
+        borderWidth: '1px',
+        borderStyle: 'solid',
+        borderColor: 'var(--borderColor, #e0e0e0)',
+        backgroundColor: 'var(--background, #ffffff)',
+        color: 'var(--color, #000000)',
+        cursor: 'pointer',
+        transition: 'all 0.2s',
+        ...sizeStyle,
+        ...style,
+      }}
     />
   );
 }
-

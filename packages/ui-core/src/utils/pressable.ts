@@ -4,30 +4,25 @@ import type { GestureResponderEvent } from 'react-native';
 import type { MouseEvent } from 'react';
 import { isWeb } from '@tamagui/constants';
 
-type PressEvent = GestureResponderEvent | MouseEvent<any>;
-type Handler = ((event: PressEvent) => void) | undefined;
+type MouseEventHandler = (event: MouseEvent<any>) => void;
+type GestureHandler = (event: GestureResponderEvent) => void;
 
 export interface PressableProps {
-  onPress?: Handler;
-  onClick?: Handler;
+  onPress?: GestureHandler | null;
+  onClick?: MouseEventHandler;
 }
 
 export const resolvePressEvents = ({ onPress, onClick }: PressableProps) => {
-  const handler = onClick ?? onPress;
-  if (!handler) {
+  if (isWeb) {
+    if (onClick) {
+      return { onClick };
+    }
     return {};
   }
 
-  if (isWeb) {
-    return {
-      onClick: handler as MouseEventHandler,
-    };
+  if (onPress) {
+    return { onPress };
   }
 
-  return {
-    onPress: handler as GestureHandler,
-  };
+  return {};
 };
-
-type MouseEventHandler = (event: MouseEvent<any>) => void;
-type GestureHandler = (event: GestureResponderEvent) => void;

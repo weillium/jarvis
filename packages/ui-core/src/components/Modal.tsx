@@ -5,13 +5,13 @@ import type { DialogProps } from 'tamagui';
 import { Button } from './Button';
 import { Heading, Body } from './Typography';
 
-export interface ModalProps extends Omit<DialogProps, 'open' | 'onOpenChange'> {
+export interface ModalProps extends Omit<DialogProps, 'open' | 'onOpenChange' | 'children'> {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
   showCloseButton?: boolean;
   maxWidth?: number | string;
-  children: React.ReactNode;
+  children?: React.ReactNode;
   description?: React.ReactNode;
 }
 

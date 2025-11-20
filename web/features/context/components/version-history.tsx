@@ -287,15 +287,18 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                     <Label size="xs">Embeddings</Label>
                     <BulletList
                       items={openaiBreakdown.embeddings}
-                      renderItem={(item) => (
-                        <Caption>
-                          {item.model ? `${item.model}` : 'Model unknown'}
-                          {item.cost !== undefined ? ` · $${item.cost.toFixed(4)}` : null}
-                          {item.usage?.total_tokens !== undefined
-                            ? ` · tokens: ${item.usage.total_tokens}`
-                            : null}
-                        </Caption>
-                      )}
+                      renderItem={(item) => {
+                        const embedding = item as { model?: string; cost?: number; usage?: { total_tokens?: number } };
+                        return (
+                          <Caption>
+                            {embedding.model ? `${embedding.model}` : 'Model unknown'}
+                            {embedding.cost !== undefined ? ` · $${embedding.cost.toFixed(4)}` : null}
+                            {embedding.usage?.total_tokens !== undefined
+                              ? ` · tokens: ${embedding.usage.total_tokens}`
+                              : null}
+                          </Caption>
+                        );
+                      }}
                     />
                   </YStack>
                 ) : null}

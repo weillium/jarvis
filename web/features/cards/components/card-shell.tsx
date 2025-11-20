@@ -14,7 +14,7 @@ export function CardShell({ children }: CardShellProps) {
       flexShrink={0}
       width={360}
       maxWidth="min(360px, calc(100vw - 120px))"
-      scrollSnapAlign="center"
+      style={{ scrollSnapAlign: 'center' }}
       transition="transform 0.3s ease, box-shadow 0.3s ease"
       shadowColor="transparent"
       hoverStyle={{

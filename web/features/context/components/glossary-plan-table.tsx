@@ -41,7 +41,7 @@ export function GlossaryPlanTable({ glossaryPlan }: GlossaryPlanTableProps) {
           Array.isArray(row.agent_utility) ? row.agent_utility : undefined
         ),
     },
-  ] as const;
+  ];
 
   return (
     <YStack gap="$3">

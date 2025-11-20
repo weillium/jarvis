@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSSEStream } from '@/shared/hooks/use-sse-stream';
 import type {
   SSEMessage,
-  Card,
+  Card as CardType,
   CardSnapshot,
   SSECardCreatedMessage,
   SSECardUpdatedMessage,
@@ -70,9 +70,9 @@ export function LiveCards({ eventId }: LiveCardsProps) {
   }, [moderationTarget]);
 
   const upsertCard = (card: CardSnapshot) => {
-    queryClient.setQueryData<Card[]>(['cards', eventId], (previousCards = []) => {
+    queryClient.setQueryData<CardType[]>(['cards', eventId], (previousCards = []) => {
       const existingIndex = previousCards.findIndex((existing) => existing.id === card.id);
-      const mappedCard: Card = {
+      const mappedCard: CardType = {
         id: card.id,
         event_id: card.event_id,
         emitted_at: card.created_at,
@@ -95,7 +95,7 @@ export function LiveCards({ eventId }: LiveCardsProps) {
   };
 
   const removeCard = (cardId: string) => {
-    queryClient.setQueryData<Card[]>(['cards', eventId], (previousCards = []) =>
+    queryClient.setQueryData<CardType[]>(['cards', eventId], (previousCards = []) =>
       previousCards.filter((card) => card.id !== cardId)
     );
   };

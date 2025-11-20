@@ -175,7 +175,7 @@ export function EventsList({ searchQuery = '', statusFilter = 'all' }: EventsLis
                   </ClampText>
                 )}
 
-                <XStack gap="$6" fontSize="$3" color="$gray11">
+                <XStack gap="$6">
                   <Text fontSize="$3" color="$gray11">
                     <Text fontWeight="600" color="$gray9">Start:</Text>{' '}
                     {formatDateTime(event.start_time)}

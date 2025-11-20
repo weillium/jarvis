@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import Link from "next/link";
 import { QueryProvider } from '@/shared/providers/query-provider';
 import { TamaguiProvider } from '@jarvis/ui-core';
@@ -11,7 +12,7 @@ export const metadata = {
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <html lang="en" suppressHydrationWarning>

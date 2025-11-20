@@ -152,7 +152,7 @@ export function FileUpload({
           onClick={openPicker}
           cursor={disabled ? 'not-allowed' : 'pointer'}
         >
-          <YStack alignItems="center" gap="$3" color="$gray9" padding="$4">
+          <YStack alignItems="center" gap="$3" padding="$4">
             <YStack marginBottom="$2">
               <FileGenericIcon size={48} />
             </YStack>

@@ -1,8 +1,8 @@
 'use client';
 
-import { YStack, Text, styled } from 'tamagui';
+import { YStack, Text, styled, type StackProps } from 'tamagui';
 
-export interface AlertProps {
+export interface AlertProps extends Omit<StackProps, 'children'> {
   variant?: 'error' | 'danger' | 'success' | 'warning' | 'info';
   children: React.ReactNode;
 }
@@ -71,7 +71,7 @@ const AlertText = styled(Text, {
   },
 });
 
-export function Alert({ variant = 'error', children }: AlertProps) {
+export function Alert({ variant = 'error', children, ...stackProps }: AlertProps) {
   // Explicitly set color based on variant to ensure it's applied
   const textColor = 
     variant === 'info' ? '$blue11' :
@@ -81,7 +81,7 @@ export function Alert({ variant = 'error', children }: AlertProps) {
     '$red11';
   
   return (
-    <AlertContainer variant={variant}>
+    <AlertContainer variant={variant} {...stackProps}>
       <AlertText variant={variant} color={textColor}>{children}</AlertText>
     </AlertContainer>
   );

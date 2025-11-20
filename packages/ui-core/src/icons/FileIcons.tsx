@@ -13,6 +13,7 @@ const createIcon = (
 ) => {
   const Icon = ({ size = 24, color = 'currentColor', ...props }: IconProps) => (
     <svg
+      {...(props as any)}
       width={size}
       height={size}
       viewBox={defaultViewBox}

@@ -39,14 +39,8 @@ export const ToolbarSpacer = styled(XStack, {
 export const HorizontalScrollArea = styled(XStack, {
   name: 'HorizontalScrollArea',
   gap: '$6',
-  overflowX: 'auto',
+  overflow: 'scroll',
   flexWrap: 'nowrap',
   paddingVertical: '$3',
   paddingHorizontal: '$1',
-  scrollSnapType: 'x mandatory',
-  scrollbarWidth: 'none',
-  msOverflowStyle: 'none',
-  '&::-webkit-scrollbar': {
-    display: 'none',
-  },
 });

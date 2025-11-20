@@ -29,8 +29,8 @@ export function EmptyStateCard({
 
   return (
     <Card padding={padding} alignItems={alignment} {...cardProps}>
-      <YStack alignItems={alignment} gap="$5" color="$gray6">
-        {icon ? <YStack color="$gray6">{icon}</YStack> : null}
+      <YStack alignItems={alignment} gap="$5">
+        {icon ? <YStack>{icon}</YStack> : null}
         <Heading level={titleLevel} align={textAlign}>
           {title}
         </Heading>

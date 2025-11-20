@@ -99,7 +99,7 @@ export default function TestTamaguiPage() {
             <Label>Buttons:</Label>
             <XStack gap="$3" flexWrap="wrap">
               <Button>Default Button</Button>
-              <Button variant="outlined">Outlined Button</Button>
+              <Button variant="outline">Outlined Button</Button>
               <Button size="sm">Small Button</Button>
               <Button size="md">Medium Button</Button>
               <Button size="lg">Large Button</Button>

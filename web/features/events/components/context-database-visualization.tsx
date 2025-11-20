@@ -321,7 +321,6 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
                 borderWidth={1}
                 borderColor={getSourceColor(source)}
                 borderRadius="$2"
-                fontSize="$3"
               >
                 <YStack
                   width={8}

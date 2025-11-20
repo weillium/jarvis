@@ -1,13 +1,18 @@
 'use client';
 
+import { forwardRef } from 'react';
 import { Card as TamaguiCard, styled } from 'tamagui';
 import type { CardProps as TamaguiCardProps } from 'tamagui';
 
 export interface CardProps extends TamaguiCardProps {
   variant?: 'default' | 'elevated' | 'outlined';
+  onDragOver?: (event: React.DragEvent) => void;
+  onDragLeave?: (event: React.DragEvent) => void;
+  onDrop?: (event: React.DragEvent) => void;
+  onClick?: (event: React.MouseEvent) => void;
 }
 
-export const Card = styled(TamaguiCard, {
+const StyledCard = styled(TamaguiCard, {
   name: 'Card',
   backgroundColor: '$background',
   borderRadius: '$4',
@@ -40,5 +45,19 @@ export const Card = styled(TamaguiCard, {
   defaultVariants: {
     variant: 'default',
   },
+});
+
+export const Card = forwardRef<any, CardProps>(function Card(props, ref) {
+  const { onDragOver, onDragLeave, onDrop, onClick, ...rest } = props;
+  return (
+    <StyledCard
+      ref={ref}
+      {...(onDragOver ? { onDragOver } : {})}
+      {...(onDragLeave ? { onDragLeave } : {})}
+      {...(onDrop ? { onDrop } : {})}
+      {...(onClick ? { onClick } : {})}
+      {...rest}
+    />
+  );
 });
 

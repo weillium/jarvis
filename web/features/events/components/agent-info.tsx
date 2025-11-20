@@ -118,9 +118,8 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
             backgroundColor="$red2"
             alignItems="center"
             justifyContent="center"
-            fontSize={28}
           >
-            ⚠️
+            <Text fontSize={28}>⚠️</Text>
           </YStack>
           <YStack>
             <Heading level={4}>Agent Information</Heading>
@@ -174,9 +173,8 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
           backgroundColor="$gray2"
           alignItems="center"
           justifyContent="center"
-          fontSize={28}
         >
-          🤖
+          <Text fontSize={28}>🤖</Text>
         </YStack>
         <YStack flex={1}>
           <Heading level={4}>Agent Information</Heading>

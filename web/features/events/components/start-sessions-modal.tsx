@@ -84,13 +84,14 @@ export function StartSessionsModal({
                       }
                     : undefined
                 }
-                onClick={handleToggle}
               >
                 <Button
                   variant={isSelected ? 'primary' : 'outline'}
                   size="sm"
                   disabled={isSubmitting}
                   onClick={handleToggle}
+                  width="100%"
+                  justifyContent="flex-start"
                 >
                   {isSelected ? 'Selected' : 'Select'}
                 </Button>

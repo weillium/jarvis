@@ -2,7 +2,7 @@
 
 import { styled, YStack, type StackProps } from 'tamagui';
 
-export const Skeleton = styled<StackProps>(YStack, {
+export const Skeleton = styled(YStack, {
   name: 'Skeleton',
   backgroundColor: '$gray3',
   borderRadius: '$2',

@@ -1,13 +1,21 @@
 'use client';
 
+import { forwardRef } from 'react';
 import { Input as TamaguiInput, styled } from 'tamagui';
 import type { InputProps as TamaguiInputProps } from 'tamagui';
 
-export interface InputProps extends TamaguiInputProps {
+export interface InputProps extends Omit<TamaguiInputProps, 'type' | 'required' | 'min' | 'step' | 'minLength' | 'autoComplete' | 'onKeyDown'> {
   error?: boolean;
+  onKeyDown?: (event: React.KeyboardEvent<HTMLInputElement>) => void;
+  type?: React.InputHTMLAttributes<HTMLInputElement>['type'];
+  required?: boolean;
+  min?: string;
+  step?: number;
+  minLength?: number;
+  autoComplete?: string;
 }
 
-export const Input = styled(TamaguiInput, {
+const StyledInput = styled(TamaguiInput, {
   name: 'Input',
   fontFamily: '$body',
   borderRadius: '$3',
@@ -41,4 +49,18 @@ export const Input = styled(TamaguiInput, {
       },
     },
   } as const,
+});
+
+export const Input = forwardRef<any, InputProps>(function Input(props, ref) {
+  const { onKeyDown, type, required, min, step, minLength, autoComplete, ...rest } = props;
+  // Pass HTML input attributes that Tamagui might not recognize via type assertion
+  const htmlProps = { type, required, min, step, minLength, autoComplete };
+  return (
+    <StyledInput
+      ref={ref}
+      onKeyDown={onKeyDown}
+      {...(htmlProps as any)}
+      {...rest}
+    />
+  );
 });
