@@ -16,7 +16,7 @@ export const Input = styled(TamaguiInput, {
   backgroundColor: '$background',
   color: '$color',
   paddingHorizontal: '$4',
-  paddingVertical: '$3',
+  paddingVertical: '$2', // Reduced from $3 (12px) to $2 (8px)
   fontSize: '$4',
   lineHeight: 1.4,
   width: '100%',

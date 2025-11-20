@@ -2,6 +2,7 @@
 
 import { styled, Text as TamaguiText } from 'tamagui';
 import { isWeb } from '@tamagui/constants';
+import { forwardRef } from 'react';
 
 const webOnly = (style: Record<string, any>) => (isWeb ? style : {});
 
@@ -72,7 +73,6 @@ export const Heading = styled(TamaguiText, {
   name: 'Heading',
   fontFamily: '$heading',
   fontWeight: '600',
-  lineHeight: 1.5,
   margin: 0,
   marginBottom: '$2',
   width: '100%',
@@ -80,6 +80,7 @@ export const Heading = styled(TamaguiText, {
   display: 'block',
   variants: {
     level: {
+      // For numeric tokens, let the font handle lineHeight automatically
       1: { fontSize: '$8' },
       2: { fontSize: '$7' },
       3: { fontSize: '$6' },
@@ -100,21 +101,16 @@ export const Heading = styled(TamaguiText, {
   },
 });
 
-export const Body = styled(TamaguiText, {
+// Base styled component without size variant to avoid passing size to Tamagui
+const BodyBase = styled(TamaguiText, {
   name: 'Body',
   fontFamily: '$body',
-  lineHeight: 1.5,
   margin: 0,
   marginBottom: '$2',
   width: '100%',
   minWidth: 0,
   display: 'block',
   variants: {
-    size: {
-      sm: { fontSize: '$2' },
-      md: { fontSize: '$3' },
-      lg: { fontSize: '$4' },
-    },
     tone: toneVariants,
     weight: {
       regular: { fontWeight: '400' },
@@ -131,7 +127,6 @@ export const Body = styled(TamaguiText, {
     decoration: decorationVariants,
   } as const,
   defaultVariants: {
-    size: 'md',
     tone: 'default',
     weight: 'regular',
     align: 'left',
@@ -142,11 +137,34 @@ export const Body = styled(TamaguiText, {
   },
 });
 
-export const Label = styled(TamaguiText, {
+// Map public size API to numeric fontSize tokens
+// This prevents getFontSize.mjs warnings by never passing 'sm|md|lg' to Tamagui
+const mapBodySizeToFontSize = (size: 'sm' | 'md' | 'lg' | undefined): string => {
+  switch (size) {
+    case 'sm':
+      return '$3'; // 13px
+    case 'lg':
+      return '$5'; // 16px
+    case 'md':
+    default:
+      return '$4'; // 14px
+  }
+};
+
+// Wrapper that intercepts size prop and maps to fontSize before passing to Tamagui
+// This ensures getFontSize is never called with 'sm|md|lg' - only numeric tokens like '$3|$4|$5'
+export const Body = forwardRef<any, any>(function Body(props, ref) {
+  const { size, ...rest } = props;
+  const fontSize = mapBodySizeToFontSize(size);
+  // Never pass size="sm|md|lg" to Tamagui - only pass fontSize="$3|$4|$5"
+  return <BodyBase ref={ref} fontSize={fontSize} {...rest} />;
+});
+
+// Base styled component without size variant to avoid passing size to Tamagui
+const LabelBase = styled(TamaguiText, {
   name: 'Label',
   fontFamily: '$body',
   fontWeight: '600',
-  lineHeight: 1.5,
   margin: 0,
   marginBottom: '$1',
   width: '100%',
@@ -155,11 +173,6 @@ export const Label = styled(TamaguiText, {
   textTransform: 'none',
   letterSpacing: 0.2,
   variants: {
-    size: {
-      xs: { fontSize: '$1' },
-      sm: { fontSize: '$2' },
-      md: { fontSize: '$3' },
-    },
     tone: toneVariants,
     uppercase: {
       true: {
@@ -176,7 +189,6 @@ export const Label = styled(TamaguiText, {
     decoration: decorationVariants,
   } as const,
   defaultVariants: {
-    size: 'sm',
     tone: 'muted',
     uppercase: false,
     align: 'left',
@@ -186,11 +198,34 @@ export const Label = styled(TamaguiText, {
   },
 });
 
+// Map public size API to numeric fontSize tokens
+// This prevents getFontSize.mjs warnings by never passing 'xs|sm|md' to Tamagui
+const mapLabelSizeToFontSize = (size: 'xs' | 'sm' | 'md' | undefined): string => {
+  switch (size) {
+    case 'xs':
+      return '$1'; // 11px
+    case 'sm':
+      return '$3'; // 13px
+    case 'md':
+    default:
+      return '$4'; // 14px
+  }
+};
+
+// Wrapper that intercepts size prop and maps to fontSize before passing to Tamagui
+// This ensures getFontSize is never called with 'xs|sm|md' - only numeric tokens like '$1|$3|$4'
+export const Label = forwardRef<any, any>(function Label(props, ref) {
+  const { size, ...rest } = props;
+  const fontSize = mapLabelSizeToFontSize(size);
+  // Never pass size="xs|sm|md" to Tamagui - only pass fontSize="$1|$3|$4"
+  return <LabelBase ref={ref} fontSize={fontSize} {...rest} />;
+});
+
 export const Caption = styled(TamaguiText, {
   name: 'Caption',
   fontFamily: '$body',
   fontSize: '$1',
-  lineHeight: 1.5,
+  // Let the font handle lineHeight automatically for numeric tokens
   color: '$gray11',
   margin: 0,
   marginBottom: '$1',

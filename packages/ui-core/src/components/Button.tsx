@@ -11,6 +11,7 @@ export interface ButtonProps extends TamaguiButtonProps {
   onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
+// Base styled component without size variant to avoid passing size to Tamagui
 const ButtonFrame = styled(TamaguiButton, {
   name: 'Button',
   fontFamily: '$body',
@@ -20,9 +21,12 @@ const ButtonFrame = styled(TamaguiButton, {
   alignItems: 'center',
   justifyContent: 'center',
   gap: '$2',
-  minHeight: '$6',
   // Set default fontSize to prevent auto-resolution issues
+  // Use numeric token $4 (14px) instead of '$md' to avoid getFontSize warnings
   fontSize: '$4',
+  minHeight: '$5',
+  paddingHorizontal: '$4',
+  paddingVertical: '$0.5', // Reduced by 25% from $1.5 to $1 (4px)
   pressStyle: {
     scale: 0.98,
     opacity: 0.9,
@@ -84,37 +88,54 @@ const ButtonFrame = styled(TamaguiButton, {
         },
       },
     },
-    size: {
-      sm: {
-        paddingHorizontal: '$3',
-        paddingVertical: '$2',
-        fontSize: '$3',
-        minHeight: '$6',
-      },
-      md: {
-        paddingHorizontal: '$4',
-        paddingVertical: '$3',
-        fontSize: '$4',
-        minHeight: '$7',
-      },
-      lg: {
-        paddingHorizontal: '$5',
-        paddingVertical: '$3.5',
-        fontSize: '$5',
-        minHeight: '$8',
-      },
-    },
   } as const,
   defaultVariants: {
     variant: 'primary',
-    size: 'md',
   },
 });
 
+// Map public size API to button style properties
+// This prevents getFontSize.mjs warnings by never passing 'sm|md|lg' to Tamagui
+const mapButtonSizeToStyles = (size: 'sm' | 'md' | 'lg' | undefined) => {
+  switch (size) {
+    case 'sm':
+      return {
+        paddingHorizontal: '$3',
+        paddingVertical: '$0.25', // Reduced by 25% from $1 to $0.75 (3px)
+        fontSize: '$3', // Use numeric token instead of '$sm'
+        minHeight: '$3.5',
+      };
+    case 'lg':
+      return {
+        paddingHorizontal: '$5',
+        paddingVertical: '$1', // Reduced by 25% from $2 to $1.5 (6px)
+        fontSize: '$5', // Use numeric token instead of '$lg'
+        // minHeight calculation: fontSize $5 (16px) * 1.5 lineHeight = 24px + paddingVertical $0.75*2 (6px) = 30px = $7.5
+        minHeight: '$7',
+      };
+    case 'md':
+    default:
+      return {
+        paddingHorizontal: '$4',
+        paddingVertical: '$0.5', // Reduced by 25% from $1.5 to $1 (4px)
+        fontSize: '$4', // Use numeric token instead of '$md'
+        minHeight: '$5',
+      };
+  }
+};
+
+// Wrapper that intercepts size prop and maps to style properties before passing to Tamagui
+// This ensures getFontSize is never called with 'sm|md|lg' - only numeric tokens like '$3|$4|$5'
 export const Button = forwardRef<any, ButtonProps>(function Button(
-  { onPress, onClick, ...rest },
+  props,
   ref
 ) {
+  const { onPress, onClick, size, ...rest } = props;
   const eventProps = resolvePressEvents({ onPress, onClick });
-  return <ButtonFrame ref={ref} {...eventProps} {...rest} />;
+  const sizeStyles = mapButtonSizeToStyles(size);
+  // Exclude onPress and onClick from rest to avoid "Unknown event handler property" warning
+  // resolvePressEvents already handles the conversion to onClick (web) or onPress (native)
+  const { onPress: _onPress, onClick: _onClick, ...restWithoutHandlers } = rest as any;
+  // Never pass size="sm|md|lg" to Tamagui - only pass fontSize="$3|$4|$5" and other style props
+  return <ButtonFrame ref={ref} {...eventProps} {...sizeStyles} {...restWithoutHandlers} />;
 });

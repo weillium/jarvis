@@ -2,46 +2,47 @@ import { createTamagui } from 'tamagui';
 import { config as defaultConfig } from '@tamagui/config/v3';
 import { createInterFont } from '@tamagui/font-inter';
 
-// Base font + tokens from Tamagui
+// Base font from Tamagui - we'll extend it with our custom sizes
 const baseInterFont = createInterFont();
-const baseSizeTokens = defaultConfig.tokens.size || {
-  0: 0,
-  1: 11,
-  2: 12,
-  3: 13,
-  4: 14,
-  5: 16,
-  6: 18,
-  7: 20,
-  8: 22,
-  9: 30,
-  10: 42,
-  11: 53,
-  12: 64,
-  13: 96,
-  14: 128,
-  15: 256,
-};
 
-const sizeTokenSm = baseSizeTokens[3] ?? 13;
-const sizeTokenMd = baseSizeTokens[4] ?? 14;
-const sizeTokenLg = baseSizeTokens[5] ?? 16;
+// Define size tokens based on standard Tamagui v3 config values
+// These correspond to size tokens $3, $4, $5 in the default config
+const sizeTokenSm = 13; // $3
+const sizeTokenMd = 14; // $4
+const sizeTokenLg = 16; // $5
 
-const interFont = {
-  ...baseInterFont,
+// Calculate proper line heights (typically 1.5x font size for readability)
+const lineHeightSm = Math.round(sizeTokenSm * 1.5);
+const lineHeightMd = Math.round(sizeTokenMd * 1.5);
+const lineHeightLg = Math.round(sizeTokenLg * 1.5);
+
+// Create font with proper size and lineHeight mappings
+// IMPORTANT: Font size values in interFont.size MUST be numeric values, not token references
+// When using font="$body" with size="sm|md|lg", Tamagui looks up interFont.size.sm/md/lg
+// and expects concrete numeric values (e.g., 13, 14, 16), NOT token strings like '$sm'
+// 
+// The spread of baseInterFont.size preserves all numeric keys (0, 1, 2, 3, etc.)
+// and we override/add sm, md, lg with our numeric values
+const interFont = createInterFont({
   size: {
+    // Spread base sizes to preserve numeric keys (0, 1, 2, 3, 4, 5, etc.)
+    // These are used when fontSize="$1", fontSize="$2", etc.
     ...baseInterFont.size,
-    sm: sizeTokenSm,
-    md: sizeTokenMd,
-    lg: sizeTokenLg,
+    // Add string keys sm, md, lg with NUMERIC values (not '$sm', '$md', '$lg')
+    // These are used when font="$body" with size="sm|md|lg"
+    sm: sizeTokenSm,  // 13 - numeric value
+    md: sizeTokenMd,  // 14 - numeric value
+    lg: sizeTokenLg,  // 16 - numeric value
   },
   lineHeight: {
+    // Spread base line heights to preserve numeric keys
     ...baseInterFont.lineHeight,
-    sm: baseInterFont.lineHeight[3] ?? 21,
-    md: baseInterFont.lineHeight[4] ?? 24,
-    lg: baseInterFont.lineHeight[5] ?? 28,
+    // Add string keys with NUMERIC line height values
+    sm: lineHeightSm,  // 20 - numeric value (1.5 * 13)
+    md: lineHeightMd,  // 21 - numeric value (1.5 * 14)
+    lg: lineHeightLg,  // 24 - numeric value (1.5 * 16)
   },
-};
+});
 
 // Extend the base config with custom theme tokens
 // Matching current design system colors
@@ -165,17 +166,27 @@ const tamaguiConfig = createTamagui({
   tokens: {
     ...defaultConfig.tokens,
     // Size tokens for typography, including named variants
+    // These must match the font size definitions above
     size: {
-      ...baseSizeTokens,
+      ...defaultConfig.tokens.size,
       sm: sizeTokenSm,
       md: sizeTokenMd,
       lg: sizeTokenLg,
+    },
+    // Line height tokens for consistent typography
+    // Note: lineHeight may not exist in defaultConfig.tokens, so we create it
+    lineHeight: {
+      ...((defaultConfig.tokens as any).lineHeight || {}),
+      sm: lineHeightSm,
+      md: lineHeightMd,
+      lg: lineHeightLg,
     },
     // Custom spacing to match current design while keeping Tamagui tokens
     space: {
       ...defaultConfig.tokens.space,
       0: 0,
       0.5: 2,
+      0.75: 3,
       1: 4,
       1.5: 6,
       2: 8,
@@ -187,11 +198,17 @@ const tamaguiConfig = createTamagui({
       5: 20,
       5.5: 22,
       6: 24,
+      6.5: 26,
       7: 28,
+      7.5: 30,
       8: 32,
+      8.5: 34,
       9: 36,
+      9.5: 38,
       10: 40,
+      10.5: 42,
       11: 44,
+      11.5: 46,
       12: 48,
     },
     // Custom radius to cover all usages across apps

@@ -3,7 +3,6 @@
 import { Input, styled } from 'tamagui';
 import type { InputProps } from 'tamagui';
 import React from 'react';
-import { isWeb } from '@tamagui/constants';
 
 export interface TextareaProps extends Omit<InputProps, 'multiline' | 'numberOfLines'> {
   error?: boolean;
@@ -21,21 +20,12 @@ const StyledTextarea = styled(Input, {
   backgroundColor: '$background',
   color: '$color',
   paddingHorizontal: '$4',
-  paddingVertical: '$3',
+  paddingVertical: '$2', // Reduced from $3 (12px) to $2 (8px)
   fontSize: '$4',
-  lineHeight: 1.5,
   width: '100%',
-  ...(isWeb
-    ? {
-        '&::placeholder': {
-          color: '$placeholderColor',
-        },
-      }
-    : {
-        placeholderTextColor: '$placeholderColor',
-        textAlignVertical: 'top',
-      }),
+  placeholderTextColor: '$placeholderColor',
   multiline: true,
+  textAlignVertical: 'top',
   focusStyle: {
     borderColor: '$blue6',
     outlineWidth: 0,
@@ -59,16 +49,11 @@ const StyledTextarea = styled(Input, {
 
 export const Textarea = React.forwardRef<any, TextareaProps>(
   ({ rows, minHeight, ...props }, ref) => {
-    const nativeLineProps =
-      !isWeb && typeof rows === 'number'
-        ? { numberOfLines: rows }
-        : undefined;
-
     return (
       <StyledTextarea
         ref={ref}
         {...props}
-        {...nativeLineProps}
+        numberOfLines={rows}
         minHeight={minHeight}
       />
     );
@@ -76,3 +61,4 @@ export const Textarea = React.forwardRef<any, TextareaProps>(
 );
 
 Textarea.displayName = 'Textarea';
+

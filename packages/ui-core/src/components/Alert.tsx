@@ -3,7 +3,7 @@
 import { YStack, Text, styled } from 'tamagui';
 
 export interface AlertProps {
-  variant?: 'error' | 'success' | 'warning' | 'info';
+  variant?: 'error' | 'danger' | 'success' | 'warning' | 'info';
   children: React.ReactNode;
 }
 
@@ -15,6 +15,11 @@ const AlertContainer = styled(YStack, {
   variants: {
     variant: {
       error: {
+        backgroundColor: '$red2',
+        borderColor: '$red4',
+      },
+      danger: {
+        // Danger variant should be red-themed (same as error)
         backgroundColor: '$red2',
         borderColor: '$red4',
       },
@@ -40,9 +45,14 @@ const AlertContainer = styled(YStack, {
 const AlertText = styled(Text, {
   name: 'AlertText',
   fontSize: '$3',
+  // Explicitly set color to ensure variant colors override any defaults
   variants: {
     variant: {
       error: {
+        color: '$red11',
+      },
+      danger: {
+        // Danger variant should be red-themed (same as error)
         color: '$red11',
       },
       success: {
@@ -52,7 +62,7 @@ const AlertText = styled(Text, {
         color: '$yellow11',
       },
       info: {
-        color: '$blue11',
+        color: '$blue11', // Info text should be blue-themed
       },
     },
   } as const,
@@ -62,9 +72,17 @@ const AlertText = styled(Text, {
 });
 
 export function Alert({ variant = 'error', children }: AlertProps) {
+  // Explicitly set color based on variant to ensure it's applied
+  const textColor = 
+    variant === 'info' ? '$blue11' :
+    variant === 'success' ? '$green11' :
+    variant === 'warning' ? '$yellow11' :
+    variant === 'danger' || variant === 'error' ? '$red11' :
+    '$red11';
+  
   return (
     <AlertContainer variant={variant}>
-      <AlertText variant={variant}>{children}</AlertText>
+      <AlertText variant={variant} color={textColor}>{children}</AlertText>
     </AlertContainer>
   );
 }

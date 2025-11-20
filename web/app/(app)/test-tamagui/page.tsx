@@ -167,19 +167,19 @@ export default function TestTamaguiPage() {
             <Label>Color Tokens:</Label>
             <XStack gap="$2" flexWrap="wrap">
               <Card padding="$3" backgroundColor="$blue6">
-                <Body color="white">Blue 6</Body>
+                <Body color="white" marginBottom={0}>Blue 6</Body>
               </Card>
               <Card padding="$3" backgroundColor="$green6">
-                <Body color="white">Green 6</Body>
+                <Body color="white" marginBottom={0}>Green 6</Body>
               </Card>
               <Card padding="$3" backgroundColor="$red6">
-                <Body color="white">Red 6</Body>
+                <Body color="white" marginBottom={0}>Red 6</Body>
               </Card>
               <Card padding="$3" backgroundColor="$yellow6">
-                <Body color="black">Yellow 6</Body>
+                <Body color="black" marginBottom={0}>Yellow 6</Body>
               </Card>
               <Card padding="$3" backgroundColor="$gray6">
-                <Body color="white">Gray 6</Body>
+                <Body color="white" marginBottom={0}>Gray 6</Body>
               </Card>
             </XStack>
           </YStack>
