@@ -48,22 +48,26 @@ export function LiveTranscripts({ eventId }: LiveTranscriptsProps) {
 
   if (isLoading) {
     return (
-      <LoadingState
-        title="Loading transcripts"
-        description="Fetching the latest transcript buffer."
-        padding="$12 $6"
-        skeletons={[{ height: 48 }, { height: 48 }, { height: 48 }]}
-      />
+      <YStack padding="$8">
+        <LoadingState
+          title="Loading transcripts"
+          description="Fetching the latest transcript buffer."
+          padding="$12 $6"
+          skeletons={[{ height: 48 }, { height: 48 }, { height: 48 }]}
+        />
+      </YStack>
     );
   }
 
   if (error) {
     return (
-      <Alert variant="error">
-        <Body>
-          Error loading transcripts: {error instanceof Error ? error.message : 'Unknown error'}
-        </Body>
-      </Alert>
+      <YStack padding="$8">
+        <Alert variant="error">
+          <Body>
+            Error loading transcripts: {error instanceof Error ? error.message : 'Unknown error'}
+          </Body>
+        </Alert>
+      </YStack>
     );
   }
 
@@ -74,19 +78,20 @@ export function LiveTranscripts({ eventId }: LiveTranscriptsProps) {
   const connectionColorHex = connectionStatus === 'connected' ? '#22c55e' : connectionStatus === 'connecting' ? '#eab308' : '#ef4444';
 
   return (
-    <YStack>
+    <YStack padding="$8">
       {/* Connection Status */}
       <Alert variant={connectionVariant} marginBottom="$5">
         <XStack
           alignItems="center"
           justifyContent="space-between"
           width="100%"
+          gap="$3"
         >
-          <XStack alignItems="center" gap="$2">
+          <XStack alignItems="center" gap="$2" flexShrink={0}>
             <Badge variant={connectionStatus === 'connected' ? 'green' : connectionStatus === 'connecting' ? 'yellow' : 'red'} size="sm">
               {connectionStatus.toUpperCase()}
             </Badge>
-            <Body size="md" weight="medium" color={connectionColor}>
+            <Body size="md" weight="medium" color={connectionColor} margin={0}>
               {connectionStatus === 'connected'
                 ? 'Connected - Receiving live updates'
                 : connectionStatus === 'connecting'
@@ -99,6 +104,7 @@ export function LiveTranscripts({ eventId }: LiveTranscriptsProps) {
               variant="primary"
               size="sm"
               onClick={reconnect}
+              flexShrink={0}
             >
               Reconnect
             </Button>
@@ -110,10 +116,9 @@ export function LiveTranscripts({ eventId }: LiveTranscriptsProps) {
         <EmptyStateCard
           title="No transcripts yet"
           description="Transcripts will appear as they are processed during the event."
-          padding="$16 $6"
-          borderRadius="$5"
-          borderStyle="dashed"
-          borderColor="$gray4"
+          padding="$6"
+          titleLevel={5}
+          align="center"
         />
       ) : (
         <YStack

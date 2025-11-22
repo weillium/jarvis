@@ -13,6 +13,7 @@ import {
   Badge,
   Input,
   Textarea,
+  SmokeTest,
 } from '@jarvis/ui-core';
 
 export default function TestTamaguiPage() {
@@ -184,6 +185,15 @@ export default function TestTamaguiPage() {
             </XStack>
           </YStack>
         </YStack>
+      </Card>
+
+      {/* Modal with Select Test */}
+      <Card padding="$4" gap="$4">
+        <Heading level={2}>Modal with Select & DateTimePicker Test</Heading>
+        <Body tone="muted" marginBottom="$4">
+          This section tests Select dropdown and DateTimePicker components inside a Modal to verify z-index stacking.
+        </Body>
+        <SmokeTest />
       </Card>
 
       {/* Error Display */}

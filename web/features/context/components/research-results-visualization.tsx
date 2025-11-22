@@ -145,11 +145,8 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
       <EmptyStateCard
         title="No research results yet"
         description="Results will appear here after the research phase completes."
-        align={embedded ? 'start' : 'center'}
-        padding={embedded ? '$4' : '$6'}
-        borderWidth={embedded ? 0 : 1}
-        borderColor={embedded ? 'transparent' : '$borderColor'}
-        backgroundColor={embedded ? 'transparent' : '$background'}
+        align="center"
+        padding="$6"
         titleLevel={5}
       />
     );
@@ -298,8 +295,6 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
               title="No results match"
               description="Adjust or clear your filters to see research output."
               padding="$6"
-              borderWidth={0}
-              backgroundColor="transparent"
               titleLevel={5}
             />
           ) : (

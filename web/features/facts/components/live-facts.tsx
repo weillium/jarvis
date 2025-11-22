@@ -162,19 +162,20 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
   const connectionColorHex = connectionStatus === 'connected' ? '#22c55e' : connectionStatus === 'connecting' ? '#eab308' : '#ef4444';
 
   return (
-    <YStack>
+    <YStack padding="$8">
       {/* Connection Status */}
       <Alert variant={connectionVariant} marginBottom="$5">
         <XStack
           alignItems="center"
           justifyContent="space-between"
           width="100%"
+          gap="$3"
         >
-          <XStack alignItems="center" gap="$2">
+          <XStack alignItems="center" gap="$2" flexShrink={0}>
             <Badge variant={connectionStatus === 'connected' ? 'green' : connectionStatus === 'connecting' ? 'yellow' : 'red'} size="sm">
               {connectionStatus.toUpperCase()}
             </Badge>
-            <Body size="md" weight="medium" color={connectionColor}>
+            <Body size="md" weight="medium" color={connectionColor} margin={0}>
               {connectionStatus === 'connected'
                 ? 'Connected - Receiving live updates'
                 : connectionStatus === 'connecting'
@@ -187,6 +188,7 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
               variant="primary"
               size="sm"
               onClick={reconnect}
+              flexShrink={0}
             >
               Reconnect
             </Button>
@@ -202,10 +204,9 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
               ? `Failed to load facts: ${initialLoadError}`
               : 'Facts will appear as they are extracted during the event.'
           }
-          padding="$16 $6"
-          borderRadius="$5"
-          borderStyle="dashed"
-          borderColor="$gray4"
+          padding="$6"
+          titleLevel={5}
+          align="center"
         />
       ) : (
         <YStack gap="$3">

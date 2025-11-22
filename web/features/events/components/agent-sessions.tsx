@@ -288,7 +288,7 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
   const hasRuntimeStats = runtimeStatsEntries.length > 0;
 
   return (
-    <YStack>
+    <YStack padding="$8">
       <XStack
         justifyContent="space-between"
         alignItems="center"
@@ -534,11 +534,8 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
           title="Loading session status"
           description="Checking for active agent sessions."
           padding="$6"
-          borderWidth={1}
-          borderColor="$borderColor"
-          backgroundColor="$gray1"
           titleLevel={5}
-          align="start"
+          align="center"
         />
       )}
 
@@ -547,17 +544,14 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
           title="No active agent sessions"
           description={
             agent?.status === 'idle' && (agent?.stage === 'ready' || agent?.stage === 'context_complete')
-              ? 'Use the “Create Sessions” button above to begin.'
+              ? 'Use the "Create Sessions" button above to begin.'
               : agent?.status === 'active' && agent?.stage === 'running'
               ? 'Waiting for sessions to be created...'
               : 'Agent sessions are available only when the event is running.'
           }
           padding="$6"
-          borderWidth={1}
-          borderColor="$borderColor"
-          backgroundColor="$gray1"
           titleLevel={5}
-          align="start"
+          align="center"
         />
       )}
 

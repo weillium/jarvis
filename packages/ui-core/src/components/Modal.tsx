@@ -58,8 +58,8 @@ const DialogContainer = styled(YStack, {
   padding: '$4',
   pointerEvents: 'none',
   zIndex: 1001,
-  // Ensure container creates proper stacking context for modal content
-  isolation: 'isolate',
+  // Removed isolation: isolate to allow Select dropdowns to appear above Modal
+  // isolation: 'isolate' was preventing Select dropdowns from appearing above even with higher z-index
 });
 
 export function Modal({
@@ -84,6 +84,9 @@ export function Modal({
           onClose();
         }
       }}
+      // Disable FocusScope to prevent conflicts with Select's FocusScope
+      // This prevents infinite focus loops when Select is inside Modal
+      disableFocusScope={true}
       {...dialogProps}
     >
       {trigger ? (

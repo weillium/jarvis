@@ -257,7 +257,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
               <Body size="sm" weight="bold">
                 Total:
               </Body>{' '}
-              ${breakdown.total?.toFixed(4) ?? '0.0000'} {breakdown.currency || 'USD'}
+              {'$' + (breakdown.total?.toFixed(4) ?? '0.0000') + ' ' + (breakdown.currency || 'USD')}
             </Body>
 
             {openaiBreakdown && (
@@ -266,10 +266,9 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                   <Body size="sm" weight="bold">
                     OpenAI:
                   </Body>{' '}
-                  $
-                  {typeof openaiBreakdown.total === 'number'
+                  {'$' + (typeof openaiBreakdown.total === 'number'
                     ? openaiBreakdown.total.toFixed(4)
-                    : '0.0000'}
+                    : '0.0000')}
                   {openaiBreakdown.chat_completions?.length
                     ? ` (${openaiBreakdown.chat_completions.length} chat completion${
                         openaiBreakdown.chat_completions.length > 1 ? 's' : ''
@@ -310,10 +309,9 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                 <Body size="sm" weight="bold">
                   Exa:
                 </Body>{' '}
-                $
-                {typeof exaBreakdown.total === 'number'
+                {'$' + (typeof exaBreakdown.total === 'number'
                   ? exaBreakdown.total.toFixed(4)
-                  : '0.0000'}
+                  : '0.0000')}
                 {exaBreakdown.search?.queries
                   ? ` (${exaBreakdown.search.queries} search${
                       exaBreakdown.search.queries > 1 ? 'es' : ''
@@ -433,9 +431,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
             <EmptyStateCard
               title="No cycles match"
               description="Adjust or clear your filters to view version history."
-              padding="$4"
-              borderWidth={0}
-              backgroundColor="transparent"
+              padding="$6"
               titleLevel={5}
             />
           ) : (
@@ -490,7 +486,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                         borderColor="$green3"
                       >
                         <Text fontSize="$2" fontWeight="600" color="$green11" margin={0}>
-                          ${cycle.cost.toFixed(4)}
+                          {'$' + cycle.cost.toFixed(4)}
                         </Text>
                       </YStack>
                     )}
@@ -530,7 +526,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                 {cycle.error_message && (
                   <YStack marginTop="$2">
                     <Alert variant="error">
-                      <Text fontWeight="600" margin={0}>Error:</Text> {cycle.error_message}
+                      <Text fontWeight="600" margin={0}>Error: {cycle.error_message}</Text>
                     </Alert>
                   </YStack>
                 )}
@@ -622,9 +618,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
             <EmptyStateCard
               title="No cycles match"
               description="Adjust or clear your filters to view version history."
-              padding="$4"
-              borderWidth={0}
-              backgroundColor="transparent"
+              padding="$6"
               titleLevel={5}
             />
           ) : (
@@ -679,7 +673,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                         borderColor="$green3"
                       >
                         <Text fontSize="$2" fontWeight="600" color="$green11" margin={0}>
-                          ${cycle.cost.toFixed(4)}
+                          {'$' + cycle.cost.toFixed(4)}
                         </Text>
                       </YStack>
                     )}
@@ -719,7 +713,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                 {cycle.error_message && (
                   <YStack marginTop="$2">
                     <Alert variant="error">
-                      <Text fontWeight="600" margin={0}>Error:</Text> {cycle.error_message}
+                      <Text fontWeight="600" margin={0}>Error: {cycle.error_message}</Text>
                     </Alert>
                   </YStack>
                 )}

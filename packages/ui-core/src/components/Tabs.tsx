@@ -50,7 +50,7 @@ export function Tabs({ tabs, defaultTab }: TabsProps) {
         </TamaguiTabs.List>
         {tabs.map((tab) => (
           <TabsContent key={tab.id} value={tab.id} padding={0}>
-            <YStack paddingBottom="$5" width="100%">
+            <YStack width="100%">
               {tab.content}
             </YStack>
           </TabsContent>

@@ -1,7 +1,6 @@
 'use client';
 
-import { forwardRef, useMemo, ReactNode, useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { forwardRef, useMemo, ReactNode, useEffect } from 'react';
 import { Select as TamaguiSelect, styled } from 'tamagui';
 import type { SelectProps as TamaguiSelectProps } from 'tamagui';
 
@@ -81,10 +80,11 @@ const StyledSelectContent = styled(TamaguiSelect.Content, {
   backgroundColor: '$background',
   padding: '$2',
   boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-  // Very high z-index to appear above modals (Modal container is 1001)
-  // Using a much higher value to ensure it's above any modal stacking context
-  zIndex: 10000,
-  // Absolute positioning - Tamagui handles the positioning relative to trigger
+  // Extremely high z-index to appear above modals (Modal container is 1001)
+  // Using 99999 to ensure it's definitely above any modal stacking context
+  zIndex: 99999,
+  // Absolute positioning - Tamagui handles positioning relative to trigger
+  // The portal container is fixed, so absolute positioning here is relative to that
   position: 'absolute',
 });
 
@@ -109,12 +109,15 @@ const StyledSelectViewport = styled(TamaguiSelect.Viewport, {
 // This creates a stacking context that appears above modals
 const SelectPortalContent = styled('div', {
   name: 'SelectPortalContent',
-  zIndex: 10000,
-  position: 'relative',
+  zIndex: 99999,
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  pointerEvents: 'none',
   // Ensure this creates a new stacking context above everything
   isolation: 'isolate',
-  // Use important to override any inherited styles
-  // Note: Tamagui styled doesn't support !important directly, so we'll use inline styles
 });
 
 // Helper to safely convert children to string
@@ -185,36 +188,82 @@ function convertOptionsToItems(children: ReactNode): ReactNode {
   return children;
 }
 
-// Create a dedicated container for Select dropdowns that renders after all Modals
-function getSelectPortalContainer(): HTMLElement {
-  let container = document.getElementById('select-dropdown-portal-root');
-  if (!container) {
-    container = document.createElement('div');
-    container.id = 'select-dropdown-portal-root';
-    // Use inline styles with !important to ensure z-index is applied
-    container.style.cssText = `
-      z-index: 10000 !important;
-      position: relative !important;
-      isolation: isolate !important;
-    `;
-    // Find PortalProvider's root host and append after it, or append to end of body
-    const portalRootHost = document.querySelector('[data-tamagui-portal-host]') || 
-                          document.querySelector('[data-portal-host]') ||
-                          document.body;
-    portalRootHost.appendChild(container);
-  }
-  return container;
-}
-
 export const Select = forwardRef<any, SelectProps>(function Select(props, _ref) {
   const { size, children, value, defaultValue, onChange, onValueChange, ...rest } = props;
   const sizeProp = size || 'md';
-  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
   
-  // Get or create portal container on mount
+  // Ensure DIALOG and PortalProvider root host have high z-index to allow Select dropdowns above Modals
+  // Also inject CSS to ensure Select Content has highest z-index
   useEffect(() => {
     if (typeof document !== 'undefined') {
-      setPortalContainer(getSelectPortalContainer());
+      // Inject CSS to ensure Select Content appears above Modals
+      const styleId = 'select-dropdown-z-index-fix';
+      if (!document.getElementById(styleId)) {
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = `
+          /* Ensure Select Content appears above Modals */
+          [data-name="SelectContent"],
+          .is_SelectContent,
+          [class*="SelectContent"],
+          [class*="SelectContent"] * {
+            z-index: 99999 !important;
+            position: relative !important;
+          }
+          
+          /* Ensure DIALOG has high z-index */
+          dialog {
+            z-index: 10000 !important;
+          }
+          
+          /* Ensure PortalProvider host appears above Modals */
+          [data-tamagui-portal-host],
+          [data-portal-host] {
+            z-index: 10000 !important;
+            position: relative !important;
+          }
+          
+          /* Force Select dropdown above Modal overlay and container */
+          [data-name="SelectContent"] {
+            z-index: 99999 !important;
+            position: fixed !important;
+          }
+        `;
+        document.head.appendChild(style);
+      }
+      
+      const setZIndexes = () => {
+        // Set DIALOG z-index
+        const dialogs = document.querySelectorAll('dialog');
+        dialogs.forEach((dialog) => {
+          const dialogEl = dialog as HTMLElement;
+          const dialogStyle = window.getComputedStyle(dialogEl);
+          const currentZIndex = dialogStyle.zIndex === 'auto' ? 0 : parseInt(dialogStyle.zIndex) || 0;
+          if (currentZIndex < 10000) {
+            dialogEl.style.setProperty('z-index', '10000', 'important');
+          }
+        });
+        
+        // Set PortalProvider root host z-index (try multiple possible selectors)
+        const portalHost = document.querySelector('[data-tamagui-portal-host]') || 
+                          document.querySelector('[data-portal-host]') ||
+                          document.querySelector('[id*="portal"]') ||
+                          document.querySelector('[class*="portal"]');
+        if (portalHost) {
+          const hostEl = portalHost as HTMLElement;
+          const currentZIndex = parseInt(window.getComputedStyle(hostEl).zIndex) || 0;
+          if (currentZIndex < 10000) {
+            hostEl.style.setProperty('z-index', '10000', 'important');
+          }
+        }
+      };
+      
+      // Set immediately and watch for changes
+      setZIndexes();
+      const observer = new MutationObserver(setZIndexes);
+      observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
+      
+      return () => observer.disconnect();
     }
   }, []);
   
@@ -241,6 +290,25 @@ export const Select = forwardRef<any, SelectProps>(function Select(props, _ref) 
       value={value}
       defaultValue={defaultValue}
       onValueChange={handleValueChange}
+      // Disable FocusScope to prevent conflicts with Modal's FocusScope
+      // This prevents infinite focus loops when Select is inside a Modal
+      disableFocusScope={true}
+      // Prevent scroll when Select opens (fixes page jumping to top)
+      onOpenChange={(open) => {
+        // Prevent default scroll behavior when opening
+        if (open) {
+          // Store current scroll position
+          const scrollY = window.scrollY || document.documentElement.scrollTop;
+          // Use requestAnimationFrame to restore scroll after Tamagui's focus handling
+          requestAnimationFrame(() => {
+            window.scrollTo(0, scrollY);
+          });
+        }
+        // Call any user-provided onOpenChange
+        if (rest.onOpenChange) {
+          rest.onOpenChange(open);
+        }
+      }}
       {...rest}
     >
       <StyledSelectTrigger size={sizeProp}>
@@ -257,58 +325,18 @@ export const Select = forwardRef<any, SelectProps>(function Select(props, _ref) 
           <TamaguiSelect.Sheet.Overlay />
         </TamaguiSelect.Sheet>
       </TamaguiSelect.Adapt>
-      {portalContainer &&
-        createPortal(
-          <SelectPortalContent
-            style={{ zIndex: 10000, position: 'relative', isolation: 'isolate' }}
-            ref={(el) => {
-              // Diagnostic: log z-index and DOM position when dropdown is rendered
-              if (el && process.env.NODE_ENV === 'development') {
-                const computed = window.getComputedStyle(el);
-                // Try multiple selectors to find Modal elements
-                const modalOverlay = document.querySelector('[data-name="ModalOverlay"]') || 
-                                   document.querySelector('[name="ModalOverlay"]');
-                const modalContainer = document.querySelector('[data-name="ModalContainer"]') ||
-                                     document.querySelector('[name="ModalContainer"]');
-                // Find PortalProvider root host
-                const portalHost = document.querySelector('[data-tamagui-portal-host]') || 
-                                 document.querySelector('[data-portal-host]');
-                // Find all elements with z-index to debug stacking contexts
-                const allZIndexElements = Array.from(document.querySelectorAll('*')).filter(el => {
-                  const zIndex = window.getComputedStyle(el).zIndex;
-                  return zIndex !== 'auto' && zIndex !== '0';
-                }).map(el => ({
-                  tag: el.tagName,
-                  id: el.id,
-                  className: el.className,
-                  zIndex: window.getComputedStyle(el).zIndex,
-                  position: window.getComputedStyle(el).position,
-                }));
-                
-                console.log('Select Portal Info:', {
-                  selectZIndex: computed.zIndex,
-                  selectPosition: computed.position,
-                  portalContainerId: portalContainer.id,
-                  portalContainerZIndex: window.getComputedStyle(portalContainer).zIndex,
-                  portalHostExists: !!portalHost,
-                  portalHostZIndex: portalHost ? window.getComputedStyle(portalHost as Element).zIndex : 'N/A',
-                  modalOverlayZIndex: modalOverlay ? window.getComputedStyle(modalOverlay as Element).zIndex : 'not found',
-                  modalContainerZIndex: modalContainer ? window.getComputedStyle(modalContainer as Element).zIndex : 'not found',
-                  allZIndexElements: allZIndexElements.filter(el => parseInt(el.zIndex) >= 1000),
-                });
-              }
-            }}
-          >
-            <TamaguiSelect.ScrollUpButton />
-            <StyledSelectContent zIndex={10000}>
-              <StyledSelectViewport>
-                {items}
-              </StyledSelectViewport>
-            </StyledSelectContent>
-            <TamaguiSelect.ScrollDownButton />
-          </SelectPortalContent>,
-          portalContainer
-        )}
+      <TamaguiSelect.ScrollUpButton />
+      <StyledSelectContent 
+        zIndex={99999}
+        style={{ zIndex: 99999 }}
+        // Ensure Select Content portals correctly and appears above Modal
+        modal={false} // Don't create another modal layer
+      >
+        <StyledSelectViewport>
+          {items}
+        </StyledSelectViewport>
+      </StyledSelectContent>
+      <TamaguiSelect.ScrollDownButton />
     </StyledSelectRoot>
   );
 });

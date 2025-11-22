@@ -166,28 +166,8 @@ export function LiveCards({ eventId }: LiveCardsProps) {
     });
   };
 
-  const connectionTheme = {
-    connected: {
-      background: '$green2',
-      border: '$green4',
-      color: '$green11',
-      label: 'Connected — receiving live updates',
-    },
-    connecting: {
-      background: '$yellow2',
-      border: '$yellow4',
-      color: '$yellow11',
-      label: 'Connecting to live stream…',
-    },
-    disconnected: {
-      background: '$red2',
-      border: '$red4',
-      color: '$red11',
-      label: 'Disconnected from stream',
-    },
-  } as const;
-
-  const connectionVisuals = connectionTheme[connectionStatus] ?? connectionTheme.disconnected;
+  const connectionVariant = connectionStatus === 'connected' ? 'success' : connectionStatus === 'connecting' ? 'warning' : 'error';
+  const connectionColor = connectionStatus === 'connected' ? '$green11' : connectionStatus === 'connecting' ? '$yellow11' : '$red11';
 
   const renderScrollButton = (direction: 'prev' | 'next') => (
     <YStack
@@ -219,27 +199,28 @@ export function LiveCards({ eventId }: LiveCardsProps) {
   );
 
   return (
-    <YStack gap="$6">
-      <Card
-        variant="outlined"
-        padding="$3.5 $4.5"
-        borderRadius="$4"
-        backgroundColor={connectionVisuals.background}
-        borderColor={connectionVisuals.border}
-      >
-        <XStack alignItems="center" justifyContent="space-between">
-          <XStack alignItems="center" gap="$3">
-            <Badge
-              variant={connectionStatus === 'connected' ? 'green' : connectionStatus === 'connecting' ? 'yellow' : 'red'}
-              size="sm"
-            >
+    <YStack padding="$8">
+      {/* Connection Status */}
+      <Alert variant={connectionVariant} marginBottom="$5">
+        <XStack
+          alignItems="center"
+          justifyContent="space-between"
+          width="100%"
+          gap="$3"
+        >
+          <XStack alignItems="center" gap="$2" flexShrink={0}>
+            <Badge variant={connectionStatus === 'connected' ? 'green' : connectionStatus === 'connecting' ? 'yellow' : 'red'} size="sm">
               {connectionStatus.toUpperCase()}
             </Badge>
-            <Body size="md" weight="medium" color={connectionVisuals.color}>
-              {connectionVisuals.label}
+            <Body size="md" weight="medium" color={connectionColor} margin={0}>
+              {connectionStatus === 'connected'
+                ? 'Connected - Receiving live updates'
+                : connectionStatus === 'connecting'
+                ? 'Connecting...'
+                : 'Disconnected'}
             </Body>
           </XStack>
-          <XStack gap="$3" alignItems="center">
+          <XStack gap="$3" alignItems="center" flexShrink={0}>
             {connectionStatus === 'disconnected' && (
               <Button
                 variant="primary"
@@ -250,13 +231,13 @@ export function LiveCards({ eventId }: LiveCardsProps) {
               </Button>
             )}
             {error && (
-              <Body size="sm" tone="danger">
+              <Body size="sm" tone="danger" margin={0}>
                 {error.message}
               </Body>
             )}
           </XStack>
         </XStack>
-      </Card>
+      </Alert>
 
       {isLoading ? (
         <LoadingState
@@ -281,10 +262,9 @@ export function LiveCards({ eventId }: LiveCardsProps) {
               ? 'Cards will appear as soon as they are generated.'
               : 'Click reconnect to try again.'
           }
-          padding="$16 $6"
-          borderRadius="$5"
-          borderStyle="dashed"
-          borderColor="$gray4"
+          padding="$6"
+          titleLevel={5}
+          align="center"
         />
       ) : (
         <YStack position="relative">

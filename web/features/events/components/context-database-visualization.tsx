@@ -415,12 +415,8 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
       {/* Expanded View */}
       {isExpanded && (
         <YStack
-          marginTop="$5"
           maxHeight={600}
           overflow="scroll"
-          borderWidth={1}
-          borderColor="$borderColor"
-          borderRadius="$3"
           backgroundColor="$gray1"
         >
           {isLoading ? (
@@ -458,8 +454,6 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
                   : 'Try refining or clearing your filters.'
               }
               padding="$6"
-              borderWidth={0}
-              backgroundColor="transparent"
               titleLevel={5}
             />
           ) : (
