@@ -14,14 +14,30 @@ export interface PressableProps {
 
 export const resolvePressEvents = ({ onPress, onClick }: PressableProps) => {
   if (isWeb) {
-    if (onClick) {
-      return { onClick };
+    if (onPress || onClick) {
+      return {
+        onClick: (event) => {
+          if (onPress) {
+            onPress(event as unknown as GestureResponderEvent);
+          }
+          onClick?.(event);
+        },
+      };
     }
+
     return {};
   }
 
   if (onPress) {
     return { onPress };
+  }
+
+  if (onClick) {
+    return {
+      onPress: (event) => {
+        onClick(event as unknown as MouseEvent<any>);
+      },
+    };
   }
 
   return {};

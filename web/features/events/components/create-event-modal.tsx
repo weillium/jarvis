@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, FormEvent, useEffect, useMemo } from 'react';
+import { useState, FormEvent, useEffect, useMemo, type ReactNode } from 'react';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
@@ -23,6 +23,8 @@ import {
   FormField,
   ButtonGroup,
   Body,
+  Caption,
+  DateTimePicker,
 } from '@jarvis/ui-core';
 
 // Extend dayjs with plugins
@@ -30,8 +32,7 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 interface CreateEventModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  trigger: ReactNode;
   onSuccess?: () => void;
 }
 
@@ -146,17 +147,17 @@ async function uploadFile(
   }
 }
 
-export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModalProps) {
+export function CreateEventModal({ trigger, onSuccess }: CreateEventModalProps) {
   const [title, setTitle] = useState('');
   const [topic, setTopic] = useState('');
-  const [startDate, setStartDate] = useState<string>('');
-  const [endDate, setEndDate] = useState<string>('');
+  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [endDate, setEndDate] = useState<Date | null>(null);
   const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({});
-
   const createEventMutation = useCreateEventMutation();
+  const [isOpen, setIsOpen] = useState(false);
 
   // Memoize timezone list to avoid recalculating on every render
   const timezones = useMemo(() => Intl.supportedValuesOf('timeZone').sort(), []);
@@ -164,9 +165,8 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
   // Auto-set end date to 1 hour after start date when start date changes
   useEffect(() => {
     if (startDate) {
-      const start = dayjs(startDate);
-      const oneHourLater = start.add(1, 'hour');
-      setEndDate(oneHourLater.format('YYYY-MM-DDTHH:mm'));
+      const oneHourLater = new Date(startDate.getTime() + 60 * 60 * 1000);
+      setEndDate(oneHourLater);
     }
   }, [startDate]);
 
@@ -218,6 +218,7 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
       }
 
       // Convert dates to UTC timestamps
+      // The Date object is in local time, so we need to interpret it in the selected timezone
       const startDateString = start.format('YYYY-MM-DD HH:mm:ss');
       const startDateInTimezone = dayjs.tz(startDateString, timezone);
       eventData.start_time = startDateInTimezone.utc().toISOString();
@@ -274,14 +275,8 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
       }
 
       // Reset form and close modal only after complete success
-      setTitle('');
-      setTopic('');
-      setStartDate('');
-      setEndDate('');
-      setFiles([]);
-      setUploadProgress({});
-      setError(null);
-      onClose();
+      resetForm();
+      setIsOpen(false);
       
       // Trigger success callback if provided
       if (onSuccess) {
@@ -293,16 +288,28 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
     }
   };
 
+  const resetForm = () => {
+    setTitle('');
+    setTopic('');
+    setStartDate(null);
+    setEndDate(null);
+    setFiles([]);
+    setUploadProgress({});
+    setError(null);
+  };
+
   const handleClose = () => {
     if (!createEventMutation.isPending) {
-      setTitle('');
-      setTopic('');
-      setStartDate('');
-      setEndDate('');
-      setFiles([]);
-      setUploadProgress({});
-      setError(null);
-      onClose();
+      resetForm();
+      setIsOpen(false);
+    }
+  };
+
+  const handleOpenChange = (open: boolean) => {
+    if (open) {
+      setIsOpen(true);
+    } else {
+      handleClose();
     }
   };
 
@@ -312,12 +319,12 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
+      onOpenChange={handleOpenChange}
+      trigger={trigger}
       maxWidth={1200}
+      title="Create New Event"
     >
-      <ModalContent
-        title="Create New Event"
-        description="Configure the details below to start a new event and optionally upload supporting documents."
-      >
+      <ModalContent description="Configure the details below to start a new event and optionally upload supporting documents.">
         <form onSubmit={handleSubmit}>
           <YStack gap="$5">
             {error && (
@@ -344,8 +351,8 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
                   id="timezone"
                   value={timezone}
                   onChange={(e) => setTimezone(e.target.value)}
-                  disabled={isLoading}
                   size="md"
+                  {...(isLoading ? { disabled: true } : {})}
                 >
                   {timezones.map((tz) => (
                     <option key={tz} value={tz}>
@@ -356,41 +363,45 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
               </FormField>
             </XStack>
 
-            <XStack gap="$4" $sm={{ flexDirection: 'column' }} $md={{ flexDirection: 'row' }}>
+            <XStack gap="$4" $sm={{ flexDirection: 'column' }} $md={{ flexDirection: 'row' }} alignItems="flex-start">
               <FormField
                 flex={1}
                 label="Start Time"
                 required
-                description="Local time when the event begins."
               >
-                <Input
-                  id="start_time"
-                  type="datetime-local"
-                  value={startDate}
-                  onChange={(e: any) => setStartDate(e.target.value)}
-                  required
-                  disabled={isLoading}
-                  min={dayjs().format('YYYY-MM-DDTHH:mm')}
-                  step={900}
-                />
+                <YStack width="100%">
+                  <Caption marginBottom="$2" fontStyle="italic">
+                    Local time when the event begins.
+                  </Caption>
+                  <DateTimePicker
+                    id="start_time"
+                    value={startDate}
+                    onChange={setStartDate}
+                    required
+                    disabled={isLoading}
+                    minDate={new Date()}
+                  />
+                </YStack>
               </FormField>
 
               <FormField
                 flex={1}
                 label="End Time"
                 required
-                description={startDate && endDate ? 'Auto-set to 1 hour after start.' : undefined}
               >
-                <Input
-                  id="end_time"
-                  type="datetime-local"
-                  value={endDate}
-                  onChange={(e: any) => setEndDate(e.target.value)}
-                  required
-                  disabled={isLoading || !startDate}
-                  min={startDate || dayjs().format('YYYY-MM-DDTHH:mm')}
-                  step={900}
-                />
+                <YStack width="100%">
+                  <Caption marginBottom="$2" fontStyle="italic">
+                    {startDate && endDate ? 'Auto-set to 1 hour after start time by default.' : 'Set to 1 hour after start time by default.'}
+                  </Caption>
+                  <DateTimePicker
+                    id="end_time"
+                    value={endDate}
+                    onChange={setEndDate}
+                    required
+                    disabled={isLoading || !startDate}
+                    minDate={startDate ?? new Date()}
+                  />
+                </YStack>
               </FormField>
             </XStack>
 
@@ -412,10 +423,10 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
             />
 
             <ButtonGroup>
-              <Button type="button" variant="outline" onClick={handleClose} disabled={isLoading}>
+              <Button type="button" variant="outline" size="sm" onClick={handleClose} disabled={isLoading}>
                 Cancel
               </Button>
-              <Button type="submit" variant="primary" disabled={isLoading || !title.trim()}>
+              <Button type="submit" variant="primary" size="sm" disabled={isLoading || !title.trim()}>
                 {isLoading ? 'Creating…' : 'Create Event'}
               </Button>
             </ButtonGroup>

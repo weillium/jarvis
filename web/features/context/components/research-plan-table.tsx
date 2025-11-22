@@ -38,7 +38,7 @@ export function ResearchPlanTable({ researchPlan }: ResearchPlanTableProps) {
     {
       key: 'agent_utility',
       header: 'Serves Agents',
-      flex: 2,
+      flex: 1,
       render: (row: BlueprintResearchPlan['queries'][number]) =>
         formatPurpose(
           Array.isArray(row.agent_utility) ? row.agent_utility : undefined
@@ -48,7 +48,6 @@ export function ResearchPlanTable({ researchPlan }: ResearchPlanTableProps) {
       key: 'provenance_hint',
       header: 'Provenance',
       flex: 2,
-      truncate: true,
       render: (row: BlueprintResearchPlan['queries'][number]) =>
         row.provenance_hint && row.provenance_hint.trim().length > 0
           ? row.provenance_hint
@@ -58,22 +57,12 @@ export function ResearchPlanTable({ researchPlan }: ResearchPlanTableProps) {
 
   return (
     <YStack gap="$3">
-      <Heading level={4}>Research Plan</Heading>
+      <Heading level={4}>Research Plan ({researchPlan.total_searches})</Heading>
       <DataTable
         columns={columns}
         data={researchPlan.queries}
         size="sm"
       />
-      <Body size="sm" tone="muted">
-        <Body size="sm" weight="bold">
-          Total Searches:
-        </Body>{' '}
-        {researchPlan.total_searches} &nbsp;•&nbsp;
-        <Body size="sm" weight="bold">
-          Estimated Total Cost:
-        </Body>{' '}
-        {formatCurrency(researchPlan.estimated_total_cost)}
-      </Body>
     </YStack>
   );
 }

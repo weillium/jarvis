@@ -6,8 +6,6 @@ import {
   YStack,
   Heading,
   Body,
-  StatGroup,
-  StatItem,
   DataTable,
 } from '@jarvis/ui-core';
 
@@ -15,16 +13,12 @@ interface ChunksPlanTableProps {
   chunksPlan: BlueprintChunksPlan;
   chunkPlanStats: {
     total: number;
-    facts: number;
-    cards: number;
   } | null;
-  chunkPlanCoverage: number | null;
 }
 
 export function ChunksPlanTable({
   chunksPlan,
   chunkPlanStats,
-  chunkPlanCoverage,
 }: ChunksPlanTableProps) {
   const columns = [
     {
@@ -32,9 +26,6 @@ export function ChunksPlanTable({
       header: 'Label',
       flex: 1.5,
       minWidth: 200,
-      render: (row: BlueprintChunksPlan['sources'][number]) => (
-        <Body weight="medium">{row.label}</Body>
-      ),
     },
     {
       key: 'upstream_reference',
@@ -74,69 +65,20 @@ export function ChunksPlanTable({
 
   return (
     <YStack gap="$3">
-      <Heading level={4}>Chunks Plan</Heading>
-      {chunkPlanStats && (
-        <StatGroup>
-          <StatItem label="Planned Sources" value={chunksPlan.sources.length} size="sm" />
-          <StatItem
-            label="Estimated Chunks"
-            value={chunkPlanStats.total.toLocaleString()}
-            size="sm"
-          />
-          <StatItem
-            label="Facts Allocation"
-            value={chunkPlanStats.facts.toLocaleString()}
-            size="sm"
-          />
-          <StatItem
-            label="Cards Allocation"
-            value={chunkPlanStats.cards.toLocaleString()}
-            size="sm"
-          />
-          {chunkPlanCoverage !== null && (
-            <StatItem label="Target Coverage" value={`${chunkPlanCoverage}%`} size="sm" />
-          )}
-        </StatGroup>
-      )}
+      <Heading level={4}>
+        Chunks Plan ({chunkPlanStats ? chunkPlanStats.total.toLocaleString() : '0'})
+      </Heading>
+      <Body size="sm" tone="muted">
+        <Body size="sm" weight="bold">
+          Ranking Strategy:
+        </Body>{' '}
+        {chunksPlan.ranking_strategy}
+      </Body>
       <DataTable
         columns={columns}
         data={chunksPlan.sources}
         size="sm"
       />
-      <Body size="sm" tone="muted">
-        <Body size="sm" weight="bold">
-          Target Count (Plan):
-        </Body>{' '}
-        {chunksPlan.target_count}
-        &nbsp;•&nbsp;
-        <Body size="sm" weight="bold">
-          Quality Tier:
-        </Body>{' '}
-        {chunksPlan.quality_tier}
-        &nbsp;•&nbsp;
-        <Body size="sm" weight="bold">
-          Ranking Strategy:
-        </Body>{' '}
-        {chunksPlan.ranking_strategy}
-        {chunkPlanStats && (
-          <>
-            &nbsp;•&nbsp;
-            <Body size="sm" weight="bold">
-              Estimated Total:
-            </Body>{' '}
-            {chunkPlanStats.total.toLocaleString()}
-            {chunkPlanCoverage !== null && (
-              <>
-                &nbsp;•&nbsp;
-                <Body size="sm" weight="bold">
-                  Coverage:
-                </Body>{' '}
-                {chunkPlanCoverage}%
-              </>
-            )}
-          </>
-        )}
-      </Body>
     </YStack>
   );
 }

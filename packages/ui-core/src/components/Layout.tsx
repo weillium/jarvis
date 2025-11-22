@@ -1,6 +1,7 @@
 'use client';
 
-import { styled, YStack, XStack } from 'tamagui';
+import { styled, YStack, XStack, XGroup } from 'tamagui';
+import type { ComponentProps } from 'react';
 
 export const PageContainer = styled(YStack, {
   name: 'PageContainer',
@@ -14,7 +15,7 @@ export const PageContainer = styled(YStack, {
 
 export const PageHeader = styled(YStack, {
   name: 'PageHeader',
-  gap: '$5',
+  gap: '$2',
   width: '100%',
   minWidth: 0,
   // Ensure proper spacing between title and subtitle
@@ -23,17 +24,41 @@ export const PageHeader = styled(YStack, {
   // Container grows to fit content height naturally
 });
 
-export const Toolbar = styled(XStack, {
+const BaseToolbar = styled(XGroup, {
   name: 'Toolbar',
   gap: '$3',
-  flexWrap: 'wrap',
   alignItems: 'center',
   width: '100%',
+  flexWrap: 'nowrap',
+  display: 'flex',
+  minWidth: 0,
 });
 
-export const ToolbarSpacer = styled(XStack, {
+const ToolbarItemFrame = styled(XStack, {
+  display: 'flex',
+  alignItems: 'center',
+  minWidth: 0,
+  flexShrink: 1,
+  flexBasis: 0,
+  flexGrow: 0,
+});
+
+type ToolbarItemProps = React.ComponentProps<typeof ToolbarItemFrame>;
+
+const ToolbarItem = (props: ToolbarItemProps) => (
+  <XGroup.Item asChild>
+    <ToolbarItemFrame {...props} />
+  </XGroup.Item>
+);
+
+type ToolbarComponent = typeof BaseToolbar & { Item: typeof ToolbarItem };
+
+export const Toolbar: ToolbarComponent = Object.assign(BaseToolbar, { Item: ToolbarItem });
+
+export const ToolbarSpacer = styled(XGroup.Item, {
   name: 'ToolbarSpacer',
   flex: 1,
+  minWidth: 0,
 });
 
 export const HorizontalScrollArea = styled(XStack, {

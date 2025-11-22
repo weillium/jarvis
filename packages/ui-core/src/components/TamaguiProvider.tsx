@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { TamaguiProvider as BaseTamaguiProvider } from 'tamagui';
+import { TamaguiProvider as BaseTamaguiProvider, PortalProvider } from 'tamagui';
 import config from '../tamagui.config';
 
 interface TamaguiProviderProps {
@@ -15,7 +15,9 @@ export function TamaguiProvider({ children }: TamaguiProviderProps) {
       defaultTheme="light"
       disableInjectCSS={false}
     >
-      {children}
+      <PortalProvider shouldAddRootHost>
+        {children}
+      </PortalProvider>
     </BaseTamaguiProvider>
   );
 }

@@ -1,9 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { Card } from './Card';
-import { YStack, XStack } from 'tamagui';
-import { Button } from './Button';
+import { SizableText, Tabs as TamaguiTabs, type TabsContentProps, YStack } from 'tamagui';
 import { useTabs } from '../hooks/useTabs';
 
 export interface TabItem {
@@ -18,37 +16,46 @@ export interface TabsProps {
 }
 
 export function Tabs({ tabs, defaultTab }: TabsProps) {
-  const { activeTabId, selectTab, activeTab } = useTabs(tabs, { defaultTabId: defaultTab });
-  const activeTabContent = activeTab?.content;
+  const { activeTabId, selectTab } = useTabs(tabs, { defaultTabId: defaultTab });
 
   return (
-    <Card variant="outlined" padding="$0" overflow="hidden">
-      <XStack
-        borderBottomWidth={1}
-        borderBottomColor="$borderColor"
-        backgroundColor="$gray1"
-        overflow="scroll"
-      >
-        {tabs.map((tab) => {
-          const isActive = activeTabId === tab.id;
-          return (
-            <Button
-              key={tab.id}
-              onClick={() => selectTab(tab.id)}
-              variant="ghost"
-              borderBottomWidth={2}
-              borderBottomColor={isActive ? '$blue6' : 'transparent'}
-              color={isActive ? '$blue11' : '$gray11'}
-              fontWeight={isActive ? '600' : '500'}
-              borderRadius={0}
-            >
-              {tab.label}
-            </Button>
-          );
-        })}
-      </XStack>
-      <YStack padding="$5">{activeTabContent}</YStack>
-    </Card>
+    <TamaguiTabs
+      value={activeTabId}
+      onValueChange={selectTab}
+      orientation="horizontal"
+      flexDirection="column"
+      width="100%"
+      borderTopLeftRadius="$4"
+      borderTopRightRadius="$4"
+      borderBottomLeftRadius={0}
+      borderBottomRightRadius={0}
+      disablePassBorderRadius="bottom"
+      borderWidth={1}
+      overflow="hidden"
+      borderColor="$borderColor"
+    >
+        <TamaguiTabs.List
+          aria-label="Tabs"
+          overflow="scroll"
+          borderBottomWidth={1}
+          borderBottomColor="$borderColor"
+        >
+          {tabs.map((tab) => (
+            <TamaguiTabs.Tab key={tab.id} value={tab.id} flex={1}>
+              <SizableText fontFamily="$body" textAlign="center">
+                {tab.label}
+              </SizableText>
+            </TamaguiTabs.Tab>
+          ))}
+        </TamaguiTabs.List>
+        {tabs.map((tab) => (
+          <TabsContent key={tab.id} value={tab.id} padding={0}>
+            <YStack paddingBottom="$5" width="100%">
+              {tab.content}
+            </YStack>
+          </TabsContent>
+        ))}
+      </TamaguiTabs>
   );
 }
 
@@ -58,31 +65,50 @@ export interface SubTabsProps {
 }
 
 export function SubTabs({ tabs, defaultTab }: SubTabsProps) {
-  const { activeTabId, selectTab, activeTab } = useTabs(tabs, { defaultTabId: defaultTab });
-  const activeTabContent = activeTab?.content;
+  const { activeTabId, selectTab } = useTabs(tabs, { defaultTabId: defaultTab });
 
   return (
-    <YStack>
-      <XStack borderBottomWidth={1} borderBottomColor="$borderColor" overflow="scroll" marginBottom="$4">
-        {tabs.map((tab) => {
-          const isActive = activeTabId === tab.id;
-          return (
-            <Button
-              key={tab.id}
-              variant="ghost"
-              onClick={() => selectTab(tab.id)}
-              borderBottomWidth={2}
-              borderBottomColor={isActive ? '$blue6' : 'transparent'}
-              color={isActive ? '$blue11' : '$gray11'}
-              fontSize="$3"
-              borderRadius={0}
-            >
-              {tab.label}
-            </Button>
-          );
-        })}
-      </XStack>
-      <YStack>{activeTabContent}</YStack>
-    </YStack>
+    <TamaguiTabs
+      value={activeTabId}
+      onValueChange={selectTab}
+      orientation="horizontal"
+      flexDirection="column"
+      width="100%"
+      borderRadius={0}
+    >
+      <TamaguiTabs.List
+        aria-label="Sub tabs"
+        overflow="scroll"
+        borderBottomWidth={1}
+        borderBottomColor="$borderColor"
+        borderRadius={0}
+      >
+        {tabs.map((tab) => (
+          <TamaguiTabs.Tab key={tab.id} value={tab.id} borderRadius={0}>
+            <SizableText fontSize="$3">{tab.label}</SizableText>
+          </TamaguiTabs.Tab>
+        ))}
+      </TamaguiTabs.List>
+      {tabs.map((tab) => (
+        <TabsContent key={tab.id} value={tab.id} padding={0}>
+          <YStack width="100%" padding="$10">{tab.content}</YStack>
+        </TabsContent>
+      ))}
+    </TamaguiTabs>
   );
 }
+
+const TabsContent = (props: TabsContentProps) => {
+  return (
+    <TamaguiTabs.Content
+      backgroundColor="$background"
+      padding="$4"
+      alignItems="flex-start"
+      justifyContent="flex-start"
+      flex={1}
+      {...props}
+    >
+      {props.children}
+    </TamaguiTabs.Content>
+  );
+};

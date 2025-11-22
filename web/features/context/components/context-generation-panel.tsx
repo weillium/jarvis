@@ -5,14 +5,50 @@ import { ContextGenerationProgress } from './context-generation-progress';
 import { BlueprintDisplay } from './blueprint-display';
 import { PromptPreviewModal } from './prompt-preview-modal';
 import { StageRegenerationControls } from './stage-regeneration-controls';
-import { getStatusColor, getStatusLabel } from './context-status-utils';
+import { getStatusLabel } from './context-status-utils';
+
+// Map status/stage to Badge variant
+const getStatusBadgeVariant = (status: string, stage?: string | null, blueprintStatus?: string | null): 'default' | 'blue' | 'yellow' | 'green' | 'red' | 'purple' | 'gray' => {
+  if (status === 'error') return 'red';
+  if (status === 'ended') return 'gray';
+  if (status === 'paused') return 'yellow';
+  if (status === 'active') {
+    return stage === 'testing' ? 'purple' : 'blue';
+  }
+  if (status === 'idle') {
+    switch (stage) {
+      case 'blueprint':
+        if (blueprintStatus === 'generating') return 'blue';
+        if (blueprintStatus === 'ready') return 'yellow';
+        if (blueprintStatus === 'approved') return 'green';
+        if (blueprintStatus === 'error') return 'red';
+        return 'purple';
+      case 'blueprint_generating':
+        return 'blue';
+      case 'researching':
+      case 'building_glossary':
+      case 'building_chunks':
+      case 'regenerating_research':
+      case 'regenerating_glossary':
+      case 'regenerating_chunks':
+        return 'yellow';
+      case 'context_complete':
+        return 'green';
+      case 'testing':
+        return 'purple';
+      default:
+        return 'gray';
+    }
+  }
+  return 'gray';
+};
 import {
   useStartContextGenerationMutation,
   useRegenerateStageMutation,
   useApproveBlueprintMutation,
 } from '@/shared/hooks/use-mutations';
 import { useContextStatusQuery } from '@/shared/hooks/use-context-status-query';
-import { YStack, XStack, Text, Card, Alert, EmptyStateCard, LoadingState, Body } from '@jarvis/ui-core';
+import { YStack, XStack, Text, Card, Alert, EmptyStateCard, LoadingState, Body, Badge } from '@jarvis/ui-core';
 
 interface ContextGenerationPanelProps {
   eventId: string;
@@ -330,21 +366,12 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
           Context Generation
         </Text>
         {statusData?.agent && (
-          <YStack
-            padding="$1.5 $3"
-            borderRadius="$2"
-            backgroundColor={getStatusColor(statusData.agent.status, statusData.agent.stage, statusData?.blueprint?.status)}
+          <Badge
+            variant={getStatusBadgeVariant(statusData.agent.status, statusData.agent.stage, statusData?.blueprint?.status)}
+            size="sm"
           >
-            <Body
-              size="sm"
-              weight="medium"
-              color="#ffffff"
-              transform="uppercase"
-              margin={0}
-            >
-              {getStatusLabel(statusData.agent.status, statusData.agent.stage, statusData?.blueprint?.status)}
-            </Body>
-          </YStack>
+            {getStatusLabel(statusData.agent.status, statusData.agent.stage, statusData?.blueprint?.status).toUpperCase()}
+          </Badge>
         )}
       </XStack>
 

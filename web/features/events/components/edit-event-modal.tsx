@@ -27,6 +27,8 @@ import {
   ModalContent,
   FormField,
   ButtonGroup,
+  DateTimePicker,
+  Caption,
 } from '@jarvis/ui-core';
 
 // Extend dayjs with plugins
@@ -126,11 +128,11 @@ async function uploadFile(file: File, eventId: string): Promise<void> {
 export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventModalProps) {
   const [title, setTitle] = useState(event.title);
   const [topic, setTopic] = useState(event.topic || '');
-  const [startDate, setStartDate] = useState<string>(
-    event.start_time ? dayjs(event.start_time).format('YYYY-MM-DDTHH:mm') : ''
+  const [startDate, setStartDate] = useState<Date | null>(
+    event.start_time ? dayjs(event.start_time).toDate() : null
   );
-  const [endDate, setEndDate] = useState<string>(
-    event.end_time ? dayjs(event.end_time).format('YYYY-MM-DDTHH:mm') : ''
+  const [endDate, setEndDate] = useState<Date | null>(
+    event.end_time ? dayjs(event.end_time).toDate() : null
   );
   const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [error, setError] = useState<string | null>(null);
@@ -155,8 +157,8 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
   useEffect(() => {
     setTitle(event.title);
     setTopic(event.topic || '');
-    setStartDate(event.start_time ? dayjs(event.start_time).format('YYYY-MM-DDTHH:mm') : '');
-    setEndDate(event.end_time ? dayjs(event.end_time).format('YYYY-MM-DDTHH:mm') : '');
+    setStartDate(event.start_time ? dayjs(event.start_time).toDate() : null);
+    setEndDate(event.end_time ? dayjs(event.end_time).toDate() : null);
     setError(null);
     setNewFiles([]);
     setRemovingDocs(new Set());
@@ -345,8 +347,8 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
     if (!loading) {
       setTitle(event.title);
       setTopic(event.topic || '');
-      setStartDate(event.start_time ? dayjs(event.start_time).format('YYYY-MM-DDTHH:mm') : '');
-      setEndDate(event.end_time ? dayjs(event.end_time).format('YYYY-MM-DDTHH:mm') : '');
+      setStartDate(event.start_time ? dayjs(event.start_time).toDate() : null);
+      setEndDate(event.end_time ? dayjs(event.end_time).toDate() : null);
       setError(null);
       setNewFiles([]);
       setPendingDocNameChanges(new Map());
@@ -361,10 +363,7 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
       title="Edit Event"
       maxWidth={1200}
     >
-      <ModalContent
-        title="Edit Event"
-        description="Update event details, adjust scheduling, or manage reference documents."
-      >
+      <ModalContent description="Update event details, adjust scheduling, or manage reference documents.">
         <form onSubmit={handleSubmit}>
           <YStack gap="$5">
             {error && (
@@ -403,28 +402,34 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
               </FormField>
             </XStack>
 
-            <XStack gap="$4" $sm={{ flexDirection: 'column' }} $md={{ flexDirection: 'row' }}>
+            <XStack gap="$4" $sm={{ flexDirection: 'column' }} $md={{ flexDirection: 'row' }} alignItems="flex-start">
               <FormField flex={1} label="Start Time">
-                <Input
-                  id="edit-start_time"
-                  type="datetime-local"
-                  value={startDate}
-                  onChange={(e: any) => setStartDate(e.target.value)}
-                  disabled={loading}
-                  step={900}
-                />
+                <YStack width="100%">
+                  <Caption marginBottom="$2" fontStyle="italic">
+                    Local time when the event begins.
+                  </Caption>
+                  <DateTimePicker
+                    id="edit-start_time"
+                    value={startDate}
+                    onChange={setStartDate}
+                    disabled={loading}
+                  />
+                </YStack>
               </FormField>
 
               <FormField flex={1} label="End Time">
-                <Input
-                  id="edit-end_time"
-                  type="datetime-local"
-                  value={endDate}
-                  onChange={(e: any) => setEndDate(e.target.value)}
-                  disabled={loading || !startDate}
-                  min={startDate || undefined}
-                  step={900}
-                />
+                <YStack width="100%">
+                  <Caption marginBottom="$2" fontStyle="italic">
+                    End time for the event.
+                  </Caption>
+                  <DateTimePicker
+                    id="edit-end_time"
+                    value={endDate}
+                    onChange={setEndDate}
+                    disabled={loading || !startDate}
+                    minDate={startDate ?? undefined}
+                  />
+                </YStack>
               </FormField>
             </XStack>
 

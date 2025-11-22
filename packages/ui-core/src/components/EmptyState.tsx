@@ -21,7 +21,7 @@ export function EmptyStateCard({
   actions,
   align = 'center',
   titleLevel = 4,
-  padding = '$12 $6',
+  padding = '$16 $8',
   ...cardProps
 }: EmptyStateCardProps) {
   const alignment = align === 'center' ? 'center' : 'flex-start';
@@ -29,16 +29,18 @@ export function EmptyStateCard({
 
   return (
     <Card padding={padding} alignItems={alignment} {...cardProps}>
-      <YStack alignItems={alignment} gap="$5">
+      <YStack alignItems={alignment} gap="$6">
         {icon ? <YStack>{icon}</YStack> : null}
-        <Heading level={titleLevel} align={textAlign}>
-          {title}
-        </Heading>
-        {description ? (
-          <Body tone="muted" align={textAlign}>
-            {description}
-          </Body>
-        ) : null}
+        <YStack alignItems={alignment} gap="$2">
+          <Heading level={titleLevel} align={textAlign}>
+            {title}
+          </Heading>
+          {description ? (
+            <Body tone="muted" align={textAlign}>
+              {description}
+            </Body>
+          ) : null}
+        </YStack>
         {actions}
       </YStack>
     </Card>

@@ -179,17 +179,19 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
         <YStack flex={1}>
           <Heading level={4}>Agent Information</Heading>
           <XStack alignItems="center" gap="$3" flexWrap="wrap">
-            <YStack
-              padding="$1.5 $3.5"
-              borderRadius="$5"
-              backgroundColor="$gray2"
-              borderWidth={1}
-              borderColor="$borderColor"
+            <Badge
+              variant={
+                statusColor === '$red11' ? 'red' :
+                statusColor === '$yellow11' ? 'yellow' :
+                statusColor === '$green11' ? 'green' :
+                statusColor === '$blue11' ? 'blue' :
+                statusColor === '$purple11' ? 'purple' :
+                'gray'
+              }
+              size="sm"
             >
-              <Body size="sm" weight="medium" color={statusColor}>
-                {statusLabel}
-              </Body>
-            </YStack>
+              {statusLabel}
+            </Badge>
             <Body tone="muted">
               Model Set: {agent.model_set}
             </Body>

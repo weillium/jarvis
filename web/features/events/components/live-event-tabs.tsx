@@ -88,11 +88,7 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
     {
       id: 'agent',
       label: 'Agent Context',
-      content: (
-        <div>
-          <SubTabs tabs={agentSubtabs} defaultTab="overview" />
-        </div>
-      ),
+      content: <SubTabs tabs={agentSubtabs} defaultTab="overview" />,
     },
     {
       id: 'sessions',

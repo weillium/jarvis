@@ -107,6 +107,7 @@ export function AuthForm({ mode, onToggleMode }: AuthFormProps) {
               disabled={loading}
               minLength={6}
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+              maskToggle
             />
           </FormField>
 

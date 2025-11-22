@@ -1,6 +1,6 @@
 'use client';
 
-import { YStack, XStack, Text, ProgressBar } from '@jarvis/ui-core';
+import { YStack, XStack, Text, ProgressBar, Badge } from '@jarvis/ui-core';
 
 interface ContextGenerationProgressProps {
   status: string;
@@ -107,28 +107,16 @@ export function ContextGenerationProgress({
           const isCompleted = getStageOrder(stage) > getStageOrder(s);
 
           return (
-            <XStack
+            <Badge
               key={s}
-              alignItems="center"
-              gap="$1"
-              padding="$1 $2"
-              backgroundColor={
-                isCompleted ? '$green2' : isActive ? '$blue2' : '$gray2'
+              variant={
+                isCompleted ? 'green' : isActive ? 'blue' : 'gray'
               }
-              borderRadius="$2"
+              size="sm"
             >
-              <Text
-                fontSize="$2"
-                fontWeight={isActive ? '500' : '400'}
-                color={
-                  isCompleted ? '$green11' : isActive ? '$blue11' : '$gray11'
-                }
-                margin={0}
-              >
-                {isCompleted && '✓ '}
-                {getStageLabel(s)}
-              </Text>
-            </XStack>
+              {isCompleted && '✓ '}
+              {getStageLabel(s)}
+            </Badge>
           );
         })}
       </XStack>

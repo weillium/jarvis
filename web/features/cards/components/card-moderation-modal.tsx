@@ -91,10 +91,7 @@ export function CardModerationModal({
       maxWidth={720}
       showCloseButton={!updateCardStatus.isPending}
     >
-      <ModalContent
-        title="Moderate Card"
-        description="Review the card content and optionally provide context before deactivating."
-      >
+      <ModalContent description="Review the card content and optionally provide context before deactivating.">
         <YStack gap="$5">
           <XStack justifyContent="center">
             <CardDisplay card={cardPayload} timestamp={timestamp} />

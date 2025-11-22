@@ -61,10 +61,10 @@ export default function ProfilePage() {
             <YStack gap="$3">
               <Heading level={4}>Security</Heading>
               <FormField label="Current Password">
-                <Input type="password" placeholder="Enter current password" />
+                <Input type="password" placeholder="Enter current password" maskToggle />
               </FormField>
               <FormField label="New Password">
-                <Input type="password" placeholder="Enter new password" />
+                <Input type="password" placeholder="Enter new password" maskToggle />
               </FormField>
               <ButtonGroup align="end">
                 <Button variant="outline">Update Password</Button>

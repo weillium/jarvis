@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { EventWithStatus } from '@/shared/types/event';
 import { getEvents } from '@/server/actions/event-actions';
 import { format, parseISO } from 'date-fns';
@@ -13,6 +13,7 @@ interface EventsListProps {
 }
 
 export function EventsList({ searchQuery = '', statusFilter = 'all' }: EventsListProps) {
+  const router = useRouter();
   const [events, setEvents] = useState<EventWithStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -129,7 +130,6 @@ export function EventsList({ searchQuery = '', statusFilter = 'all' }: EventsLis
       {events.map((event) => (
         <Card
           key={event.id}
-          asChild
           padding="$5"
           hoverStyle={{
             borderColor: '$borderColorHover',
@@ -139,57 +139,57 @@ export function EventsList({ searchQuery = '', statusFilter = 'all' }: EventsLis
             shadowRadius: 3,
             elevation: 1,
           }}
+          onClick={() => router.push(`/events/${event.id}/live`)}
+          cursor="pointer"
         >
-          <Link href={`/events/${event.id}/live`}>
-            <XStack justifyContent="space-between" alignItems="flex-start" gap="$4">
-              <YStack flex={1} minWidth={0} gap="$2">
-                <XStack alignItems="center" gap="$3" marginBottom="$2">
-                  <Text fontSize="$5" fontWeight="600" color="$color" margin={0}>
-                    {event.title}
+          <XStack justifyContent="space-between" alignItems="flex-start" gap="$4">
+            <YStack flex={1} minWidth={0} gap="$2">
+              <XStack alignItems="center" gap="$3" marginBottom="$2">
+                <Text fontSize="$5" fontWeight="600" color="$color" margin={0}>
+                  {event.title}
+                </Text>
+                <YStack
+                  paddingHorizontal="$2.5"
+                  paddingVertical="$1"
+                  borderRadius="$4"
+                  backgroundColor={getStatusBgColor(event.status)}
+                >
+                  <Text
+                    fontSize="$2"
+                    fontWeight="500"
+                    color={getStatusColor(event.status)}
+                  >
+                    {getStatusLabel(event.status)}
                   </Text>
-                  <YStack
-                    paddingHorizontal="$2.5"
-                    paddingVertical="$1"
-                    borderRadius="$4"
-                    backgroundColor={getStatusBgColor(event.status)}
-                  >
-                    <Text
-                      fontSize="$2"
-                      fontWeight="500"
-                      color={getStatusColor(event.status)}
-                    >
-                      {getStatusLabel(event.status)}
-                    </Text>
-                  </YStack>
-                </XStack>
-                
-                {event.topic && (
-                  <ClampText
-                    lines={2}
-                    fontSize="$3"
-                    color="$gray11"
-                    marginBottom="$3"
-                  >
-                    {event.topic.replace(/[#*`]/g, '').substring(0, 150)}
-                    {event.topic.length > 150 ? '...' : ''}
-                  </ClampText>
-                )}
+                </YStack>
+              </XStack>
+              
+              {event.topic && (
+                <ClampText
+                  lines={2}
+                  fontSize="$3"
+                  color="$gray11"
+                  marginBottom="$3"
+                >
+                  {event.topic.replace(/[#*`]/g, '').substring(0, 150)}
+                  {event.topic.length > 150 ? '...' : ''}
+                </ClampText>
+              )}
 
-                <XStack gap="$6">
+              <XStack gap="$6">
+                <Text fontSize="$3" color="$gray11">
+                  <Text fontWeight="600" color="$gray9">Start:</Text>{' '}
+                  {formatDateTime(event.start_time)}
+                </Text>
+                {event.end_time && (
                   <Text fontSize="$3" color="$gray11">
-                    <Text fontWeight="600" color="$gray9">Start:</Text>{' '}
-                    {formatDateTime(event.start_time)}
+                    <Text fontWeight="600" color="$gray9">End:</Text>{' '}
+                    {formatDateTime(event.end_time)}
                   </Text>
-                  {event.end_time && (
-                    <Text fontSize="$3" color="$gray11">
-                      <Text fontWeight="600" color="$gray9">End:</Text>{' '}
-                      {formatDateTime(event.end_time)}
-                    </Text>
-                  )}
-                </XStack>
-              </YStack>
-            </XStack>
-          </Link>
+                )}
+              </XStack>
+            </YStack>
+          </XStack>
         </Card>
       ))}
     </YStack>

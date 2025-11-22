@@ -110,3 +110,40 @@ export const RemoveIcon = (props: IconProps) =>
     </>
   )(props);
 
+export const EyeIcon = (props: IconProps) =>
+  createIcon(
+    <>
+      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  )(props);
+
+export const EyeOffIcon = (props: IconProps) =>
+  createIcon(
+    <>
+      <path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a21.16 21.16 0 0 1 5.08-5.77" />
+      <path d="M1 1l22 22" />
+      <path d="M9.88 9.88a3 3 0 0 0 4.24 4.24" />
+      <path d="M6.22 6.22A10.88 10.88 0 0 1 12 5c7 0 11 7 11 7a21.34 21.34 0 0 1-5.36 5.94" />
+      <path d="M14.12 14.12A3 3 0 0 1 9.88 9.88" />
+    </>
+  )(props);
+
+export const CalendarIcon = (props: IconProps) =>
+  createIcon(
+    <>
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+    </>
+  )(props);
+
+export const ClockIcon = (props: IconProps) =>
+  createIcon(
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </>
+  )(props);
+

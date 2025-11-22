@@ -2,7 +2,6 @@
 
 import {
   YStack,
-  XStack,
   Text,
   Body,
   Button,
@@ -48,38 +47,37 @@ export function PromptPreviewModal({
       maxWidth={900}
       showCloseButton={!isRegenerating}
     >
-      <ModalContent
-        title="Confirm Prompt Before Generation"
-        description="Review the generated prompt to ensure it reflects the latest event details before starting."
-      >
+      <ModalContent description="Review the generated prompt to ensure it reflects the latest event details before starting.">
         <YStack gap="$5" flex={1}>
-          <Card variant="outlined" backgroundColor="$gray1" padding="$4">
-            <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$2" margin={0}>
+          <YStack flex={1} gap="$2">
+            <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>
               Event Information
             </Text>
-            <YStack gap="$1">
-              <Text margin={0}>
-                <Text fontWeight="600" margin={0}>
-                  Title:
-                </Text>{' '}
-                {promptPreview.event.title}
-              </Text>
-              <Text margin={0}>
-                <Text fontWeight="600" margin={0}>
-                  Topic:
-                </Text>{' '}
-                {promptPreview.event.topic}
-              </Text>
-              {promptPreview.event.hasDocuments && (
-                <Text margin={0}>
+            <Card variant="outlined" backgroundColor="$gray1" padding="$4">
+              <YStack gap="$1">
+                <Text fontSize="$3" margin={0}>
                   <Text fontWeight="600" margin={0}>
-                    Documents:
+                    Title:
                   </Text>{' '}
-                  {promptPreview.event.documentCount} document(s) available
+                  {promptPreview.event.title}
                 </Text>
-              )}
-            </YStack>
-          </Card>
+                <Text fontSize="$3" margin={0}>
+                  <Text fontWeight="600" margin={0}>
+                    Topic:
+                  </Text>{' '}
+                  {promptPreview.event.topic}
+                </Text>
+                {promptPreview.event.hasDocuments && (
+                  <Text fontSize="$3" margin={0}>
+                    <Text fontWeight="600" margin={0}>
+                      Documents:
+                    </Text>{' '}
+                    {promptPreview.event.documentCount} document(s) available
+                  </Text>
+                )}
+              </YStack>
+            </Card>
+          </YStack>
 
           <YStack flex={1} gap="$2">
             <Text fontSize="$4" fontWeight="600" color="$color" margin={0}>

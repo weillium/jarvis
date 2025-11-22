@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode } from 'react';
+import { ReactNode, useMemo } from 'react';
 import { XStack, YStack, styled, type StackProps } from 'tamagui';
 import { Label } from './Typography';
 import { ClampText } from './ClampText';
@@ -24,6 +24,7 @@ const HeaderRow = styled(XStack, {
   backgroundColor: '$gray2',
   borderBottomWidth: 1,
   borderBottomColor: '$borderColor',
+  width: '100%',
 });
 
 const DataRow = styled(XStack, {
@@ -31,6 +32,21 @@ const DataRow = styled(XStack, {
   backgroundColor: '$background',
   borderBottomWidth: 1,
   borderBottomColor: '$gray3',
+  width: '100%',
+  variants: {
+    isTotals: {
+      true: {
+        backgroundColor: '$gray2',
+        borderTopWidth: 2,
+        borderTopColor: '$borderColor',
+        borderBottomWidth: 1,
+        borderBottomColor: '$gray3',
+      },
+    },
+  } as const,
+  defaultVariants: {
+    isTotals: false,
+  },
 });
 
 const Cell = styled(YStack, {
@@ -38,7 +54,9 @@ const Cell = styled(YStack, {
   justifyContent: 'center',
   paddingVertical: '$3',
   paddingHorizontal: '$3',
-  flexShrink: 0,
+  flexShrink: 1, // Allow shrinking to maintain column width consistency
+  minWidth: 0, // Critical: allows flex items to shrink below content size, enabling proper wrapping
+  // flexGrow and flexBasis will be set dynamically per column to ensure consistency
   variants: {
     align: {
       left: { alignItems: 'flex-start' },
@@ -67,6 +85,9 @@ const Cell = styled(YStack, {
       true: {
         overflow: 'hidden',
       },
+      false: {
+        overflow: 'visible',
+      },
     },
   } as const,
   defaultVariants: {
@@ -88,12 +109,17 @@ export interface DataTableColumn<T> {
   render?: (row: T, index: number) => ReactNode;
 }
 
+export interface DataTableTotalsRow {
+  [key: string]: ReactNode;
+}
+
 export interface DataTableProps<T> extends Omit<StackProps, 'children'> {
   columns: DataTableColumn<T>[];
   data: T[];
   getRowKey?: (row: T, index: number) => string | number;
   size?: 'sm' | 'md';
   emptyState?: ReactNode;
+  totalsRow?: DataTableTotalsRow;
 }
 
 export function DataTable<T>({
@@ -102,52 +128,89 @@ export function DataTable<T>({
   getRowKey,
   size = 'sm',
   emptyState,
+  totalsRow,
   ...props
 }: DataTableProps<T>) {
   if (!data.length) {
     return emptyState ? <>{emptyState}</> : null;
   }
 
+  // Calculate column flex properties to ensure consistency across all rows
+  // All cells in the same column will use the same flex values, ensuring consistent widths
+  const columnFlexConfigs = useMemo(() => {
+    const totalFlex = columns.reduce((sum, col) => sum + (col.flex ?? 1), 0);
+    const configs: Array<{ 
+      flex: number; 
+      flexBasis: string; 
+      minWidth?: number; 
+      maxWidth?: number;
+    }> = [];
+    
+    columns.forEach((column) => {
+      const flex = column.flex ?? 1;
+      const flexRatio = flex / totalFlex;
+      // Use flexBasis as percentage to ensure consistent starting width
+      // All cells in this column will have the same flexBasis
+      configs.push({
+        flex: flexRatio,
+        flexBasis: `${flexRatio * 100}%`,
+        minWidth: column.minWidth,
+        maxWidth: column.maxWidth,
+      });
+    });
+    
+    return configs;
+  }, [columns]);
+
   return (
     <TableShell {...props}>
       <ScrollArea>
-        <YStack minWidth="100%">
+        <YStack width="100%">
           <HeaderRow>
-            {columns.map((column) => (
-              <Cell
-                key={column.header}
-                align={column.align}
-                size={size}
-                variant="header"
-                flex={column.flex ?? 1}
-                minWidth={column.minWidth}
-                maxWidth={column.maxWidth}
-                truncate={column.truncate}
-              >
-                <Label size="xs" uppercase tone="muted">
-                  {column.header}
-                </Label>
-              </Cell>
-            ))}
+            {columns.map((column, colIndex) => {
+              const flexConfig = columnFlexConfigs[colIndex];
+              return (
+                <Cell
+                  key={column.header}
+                  align={column.align}
+                  size={size}
+                  variant="header"
+                  flex={flexConfig.flex}
+                  flexBasis={flexConfig.flexBasis}
+                  minWidth={flexConfig.minWidth ?? 0}
+                  maxWidth={flexConfig.maxWidth}
+                  truncate={column.truncate}
+                >
+                  <Label size="xs" uppercase tone="muted">
+                    {column.header}
+                  </Label>
+                </Cell>
+              );
+            })}
           </HeaderRow>
           {data.map((row, rowIndex) => {
             const rowKey = getRowKey ? getRowKey(row, rowIndex) : `${rowIndex}`;
+            const isLastRow = rowIndex === data.length - 1 && !totalsRow;
             return (
-              <DataRow key={rowKey}>
-                {columns.map((column) => {
+              <DataRow 
+                key={rowKey}
+                borderBottomWidth={isLastRow ? 0 : 1}
+              >
+                {columns.map((column, colIndex) => {
                   const value = column.render
                     ? column.render(row, rowIndex)
                     : (row[column.key as keyof T] as ReactNode);
-                  const textLines = column.truncate ? 1 : undefined;
+                  const flexConfig = columnFlexConfigs[colIndex];
                   return (
                     <Cell
                       key={`${String(rowKey)}-${String(column.key)}-${rowIndex}`}
                       align={column.align}
                       size={size}
                       variant="body"
-                      flex={column.flex ?? 1}
-                      minWidth={column.minWidth}
-                      maxWidth={column.maxWidth}
+                      flex={flexConfig.flex}
+                      flexBasis={flexConfig.flexBasis}
+                      minWidth={flexConfig.minWidth ?? 0}
+                      maxWidth={flexConfig.maxWidth}
                       truncate={column.truncate}
                     >
                       {typeof value === 'string' || typeof value === 'number' ? (
@@ -166,6 +229,36 @@ export function DataTable<T>({
               </DataRow>
             );
           })}
+          {totalsRow && (
+            <DataRow isTotals={true}>
+              {columns.map((column, colIndex) => {
+                const value = totalsRow[String(column.key)] ?? '—';
+                const flexConfig = columnFlexConfigs[colIndex];
+                return (
+                  <Cell
+                    key={`totals-${String(column.key)}-${colIndex}`}
+                    align={column.align}
+                    size={size}
+                    variant="body"
+                    flex={flexConfig.flex}
+                    flexBasis={flexConfig.flexBasis}
+                    minWidth={flexConfig.minWidth ?? 0}
+                    maxWidth={flexConfig.maxWidth}
+                    truncate={column.truncate}
+                    backgroundColor="$gray2"
+                  >
+                    {typeof value === 'string' || typeof value === 'number' ? (
+                      <Label size={size === 'sm' ? 'xs' : 'sm'}>
+                        {value}
+                      </Label>
+                    ) : (
+                      value
+                    )}
+                  </Cell>
+                );
+              })}
+            </DataRow>
+          )}
         </YStack>
       </ScrollArea>
     </TableShell>

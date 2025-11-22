@@ -45,14 +45,8 @@ export function GlossaryPlanTable({ glossaryPlan }: GlossaryPlanTableProps) {
 
   return (
     <YStack gap="$3">
-      <Heading level={4}>Glossary Plan</Heading>
+      <Heading level={4}>Glossary Plan ({glossaryPlan.terms.length})</Heading>
       <DataTable columns={columns} data={glossaryPlan.terms} size="sm" />
-      <Body size="sm" tone="muted">
-        <Body size="sm" weight="bold">
-          Estimated Count:
-        </Body>{' '}
-        {glossaryPlan.estimated_count}
-      </Body>
     </YStack>
   );
 }

@@ -50,12 +50,19 @@ export function AudienceProfileSection({ audienceProfile }: AudienceProfileSecti
           <BulletList items={audienceProfile.desired_outcomes} />
         </YStack>
 
-        <Body size="sm">
-          <Body size="sm" weight="bold">
-            Tone &amp; Voice:
-          </Body>{' '}
-          {audienceProfile.tone_and_voice}
-        </Body>
+        <YStack gap="$2">
+          <Label size="xs" tone="muted">
+            Tone &amp; Voice
+          </Label>
+          <BulletList
+            items={
+              audienceProfile.tone_and_voice
+                .split('\n')
+                .map((line) => line.trim())
+                .filter((line) => line.length > 0)
+            }
+          />
+        </YStack>
 
         <YStack gap="$2">
           <Label size="xs" tone="muted">

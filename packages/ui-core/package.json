@@ -13,7 +13,11 @@
   "dependencies": {
     "@tamagui/config": "^1.138.0",
     "@tamagui/core": "^1.138.0",
-    "tamagui": "^1.138.0",
-    "@uiw/react-md-editor": "^4.0.8"
+    "@uiw/react-md-editor": "^4.0.8",
+    "react-datepicker": "^8.9.0",
+    "tamagui": "^1.138.0"
+  },
+  "devDependencies": {
+    "@types/react-datepicker": "^7.0.0"
   }
 }

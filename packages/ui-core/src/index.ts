@@ -34,6 +34,7 @@ export { ButtonGroup } from './components/ButtonGroup';
 export { FormField } from './components/FormField';
 export { ModalContent } from './components/ModalContent';
 export { ClampText } from './components/ClampText';
+export { DateTimePickerComponent as DateTimePicker } from './components/DateTimePicker';
 
 // Re-export commonly used Tamagui components for convenience
 export {

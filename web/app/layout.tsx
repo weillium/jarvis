@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import Link from "next/link";
 import { QueryProvider } from '@/shared/providers/query-provider';
 import { TamaguiProvider } from '@jarvis/ui-core';
 import '../styles/globals.css';

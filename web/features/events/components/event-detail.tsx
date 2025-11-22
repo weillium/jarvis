@@ -125,10 +125,9 @@ export function EventDetail({ eventId, event, onEventUpdate }: EventDetailProps)
               variant="gray"
               size="sm"
               backgroundColor={getStatusBgColor(currentEvent.status)}
+              color={getStatusColor(currentEvent.status)}
             >
-              <Body size="sm" weight="medium" color={getStatusColor(currentEvent.status)}>
-                {getStatusLabel(currentEvent.status)}
-              </Body>
+              {getStatusLabel(currentEvent.status)}
             </Badge>
           </XStack>
         </YStack>

@@ -11,7 +11,7 @@ const BulletListContainer = styled(YStack, {
 
 const BulletListItem = styled(XStack, {
   name: 'BulletListItem',
-  gap: '$3',
+  gap: '$2',
   alignItems: 'flex-start',
 });
 
@@ -39,10 +39,10 @@ export function BulletList<T>({
     <BulletListContainer {...props}>
       {items.map((item, index) => (
         <BulletListItem key={index}>
-          <Body size="sm" tone="muted">
+          <Body size="sm" tone="muted" width="auto" flexShrink={0}>
             •
           </Body>
-          <Body size="sm">
+          <Body size="sm" width="auto" flex={1}>
             {renderItem ? renderItem(item, index) : (item as ReactNode)}
           </Body>
         </BulletListItem>

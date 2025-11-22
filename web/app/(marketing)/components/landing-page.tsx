@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   YStack,
   XStack,
@@ -35,6 +35,21 @@ const featureCards = [
 const useCases = ['Conference Keynotes', 'Research Seminars', 'Academic Workshops', 'Department Colloquia'];
 
 export default function LandingPage() {
+  const router = useRouter();
+
+  const handleNavigation = (href: string) => {
+    if (href.startsWith('#')) {
+      // Handle anchor links
+      const element = document.querySelector(href);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth' });
+      }
+    } else {
+      // Handle route navigation
+      router.push(href);
+    }
+  };
+
   return (
     <YStack backgroundColor="$gray1" minHeight="100vh" gap="$0">
       {/* Navigation */}
@@ -48,11 +63,11 @@ export default function LandingPage() {
         >
           <Heading level={3}>Jarvis</Heading>
           <ButtonGroup orientation="horizontal" wrap>
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/auth">Sign In</Link>
+            <Button variant="ghost" size="sm" onClick={() => handleNavigation('/auth')}>
+              Sign In
             </Button>
-            <Button asChild size="sm">
-              <Link href="/auth">Get Started</Link>
+            <Button size="sm" onClick={() => handleNavigation('/auth')}>
+              Get Started
             </Button>
           </ButtonGroup>
         </XStack>
@@ -72,11 +87,11 @@ export default function LandingPage() {
             {heroButtons.map((button) => (
               <Button
                 key={button.label}
-                asChild
                 variant={button.variant === 'outline' ? 'outline' : 'primary'}
                 size="lg"
+                onClick={() => handleNavigation(button.href)}
               >
-                <Link href={button.href}>{button.label}</Link>
+                {button.label}
               </Button>
             ))}
           </XStack>
@@ -137,8 +152,8 @@ export default function LandingPage() {
           <Body size="lg" tone="muted" align="center" color="$gray2">
             Join leading institutions using Jarvis to deliver exceptional event experiences.
           </Body>
-          <Button asChild size="lg" variant="primary">
-            <Link href="/auth">Get Started Today</Link>
+          <Button size="lg" variant="primary" onClick={() => handleNavigation('/auth')}>
+            Get Started Today
           </Button>
         </YStack>
       </YStack>

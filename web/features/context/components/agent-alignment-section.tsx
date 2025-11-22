@@ -9,6 +9,7 @@ import {
   Label,
   BulletList,
   EmptyStateCard,
+  Badge,
 } from '@jarvis/ui-core';
 
 interface AgentAlignmentSectionProps {
@@ -20,13 +21,10 @@ export function AgentAlignmentSection({ agentAlignment }: AgentAlignmentSectionP
     <YStack gap="$3">
       <Heading level={4}>Agent Alignment</Heading>
       <XStack
-        flexWrap="wrap"
         gap="$4"
-        $sm={{ flexDirection: 'column' }}
-        $md={{ flexDirection: 'row' }}
       >
-        <Card variant="outlined" padding="$3" flex={1} minWidth={220} gap="$3">
-          <Heading level={5}>Facts Agent</Heading>
+        <Card variant="outlined" padding="$3" flex={1} width="50%" gap="$3">
+          <Badge variant="blue" size="sm">Facts Agent</Badge>
           <YStack gap="$3">
             <YStack gap="$1">
               <Label size="xs">Highlights</Label>
@@ -62,8 +60,8 @@ export function AgentAlignmentSection({ agentAlignment }: AgentAlignmentSectionP
             </YStack>
           </YStack>
         </Card>
-        <Card variant="outlined" padding="$3" flex={1} minWidth={220} gap="$3">
-          <Heading level={5}>Cards Agent</Heading>
+        <Card variant="outlined" padding="$3" flex={1} width="50%" gap="$3">
+          <Badge variant="purple" size="sm">Cards Agent</Badge>
           <YStack gap="$3">
             <YStack gap="$1">
               <Label size="xs">Assets</Label>

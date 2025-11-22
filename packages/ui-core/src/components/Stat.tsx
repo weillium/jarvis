@@ -2,7 +2,7 @@
 
 import { ReactNode } from 'react';
 import { XStack, YStack, styled, type StackProps } from 'tamagui';
-import { Heading, Label, Caption } from './Typography';
+import { Body, Label, Caption } from './Typography';
 
 export const StatGroup = styled(XStack, {
   name: 'StatGroup',
@@ -13,7 +13,6 @@ export const StatGroup = styled(XStack, {
 
 const StatContainer = styled(YStack, {
   name: 'StatItem',
-  gap: '$2',
   minWidth: 180,
 });
 
@@ -31,15 +30,15 @@ export function StatItem({
   size = 'md',
   ...props
 }: StatItemProps) {
-  const headingLevel = size === 'lg' ? 2 : size === 'sm' ? 4 : 3;
-
   return (
     <StatContainer {...props}>
       <Label size="xs" tone="muted">
         {label}
       </Label>
-      <Heading level={headingLevel}>{value}</Heading>
-      {helperText ? <Caption>{helperText}</Caption> : null}
+      <YStack gap="$0.25" marginTop="$1">
+        <Body size={size}>{value}</Body>
+        {helperText ? <Caption>{helperText}</Caption> : null}
+      </YStack>
     </StatContainer>
   );
 }

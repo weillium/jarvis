@@ -185,6 +185,7 @@ const tamaguiConfig = createTamagui({
     space: {
       ...defaultConfig.tokens.space,
       0: 0,
+      0.25: 1,
       0.5: 2,
       0.75: 3,
       1: 4,

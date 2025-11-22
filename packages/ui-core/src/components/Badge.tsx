@@ -4,7 +4,7 @@ import { YStack, styled } from 'tamagui';
 import type { StackProps } from 'tamagui';
 import { Text } from 'tamagui';
 
-export interface BadgeProps extends Omit<StackProps, 'children'> {
+export interface BadgeProps extends Omit<StackProps, 'children' | 'inset'> {
   children: React.ReactNode;
   variant?: 'default' | 'blue' | 'yellow' | 'green' | 'red' | 'purple' | 'gray' | 'success' | 'warning' | 'danger' | 'info';
   size?: 'sm' | 'md';
@@ -18,7 +18,6 @@ const BadgeContainer = styled(YStack, {
   alignItems: 'center',
   justifyContent: 'center',
   flexDirection: 'row',
-  gap: '$1',
   variants: {
     variant: {
       default: {
@@ -58,14 +57,16 @@ const BadgeContainer = styled(YStack, {
     },
     size: {
       sm: {
-        paddingHorizontal: '$2.5',
-        paddingVertical: '$1.5',
-        minHeight: '$4',
+        paddingHorizontal: '$2',
+        paddingVertical: '$2',
+        // minHeight calculated: fontSize (13px) + paddingVertical ($2 = 8px top + 8px bottom = 16px) = 29px
+        minHeight: 29,
       },
       md: {
         paddingHorizontal: '$3.5',
-        paddingVertical: '$2',
-        minHeight: '$5',
+        paddingVertical: '$3.5',
+        // minHeight calculated: fontSize (14px) + paddingVertical ($3.5 = 14px top + 14px bottom = 28px) = 42px
+        minHeight: 42,
       },
     },
   } as const,
@@ -80,6 +81,7 @@ const BadgeTextBase = styled(Text, {
   name: 'BadgeText',
   fontWeight: '500',
   margin: 0,
+  lineHeight: 1,
   variants: {
     variant: {
       default: {
@@ -117,26 +119,22 @@ const BadgeTextBase = styled(Text, {
         color: '$blue11',
       },
     },
+    size: {
+      sm: {
+        fontSize: '$3',
+      },
+      md: {
+        fontSize: '$4',
+      },
+    },
   } as const,
   defaultVariants: {
     variant: 'default',
+    size: 'md',
   },
 });
 
-// Map public size API to numeric fontSize tokens
-// This prevents getFontSize.mjs warnings by never passing 'sm|md' to Tamagui
-const mapBadgeSizeToFontSize = (size: 'sm' | 'md' | undefined): string => {
-  switch (size) {
-    case 'sm':
-      return '$3'; // 13px
-    case 'md':
-    default:
-      return '$4'; // 14px
-  }
-};
-
 export function Badge({ children, variant = 'default', size = 'md', backgroundColor, color, ...props }: BadgeProps) {
-  const fontSize = mapBadgeSizeToFontSize(size);
   // Explicitly set color based on variant to ensure it's applied
   const textColor = color || (
     variant === 'info' ? '$blue11' :
@@ -153,9 +151,8 @@ export function Badge({ children, variant = 'default', size = 'md', backgroundCo
   );
   
   return (
-    <BadgeContainer variant={variant} size={size} backgroundColor={backgroundColor} {...props}>
-      {/* Never pass size="sm|md" to Tamagui - only pass fontSize="$3|$4" */}
-      <BadgeTextBase variant={variant} fontSize={fontSize} color={textColor}>
+    <BadgeContainer variant={variant} size={size} backgroundColor={backgroundColor} {...(props as any)}>
+      <BadgeTextBase variant={variant} size={size} color={textColor}>
         {children}
       </BadgeTextBase>
     </BadgeContainer>
