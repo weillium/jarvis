@@ -20,6 +20,9 @@ import {
   EmptyStateCard,
   LoadingState,
   Skeleton,
+  Text,
+  Toolbar,
+  ClampText,
 } from '@jarvis/ui-core';
 
 interface ContextItem {
@@ -64,9 +67,22 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
   const [filterByRank, setFilterByRank] = useState<string | null>(null);
   const [filterByResearchSource, setFilterByResearchSource] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
   const handleRefresh = () => {
     refetch();
+  };
+
+  const toggleItem = (itemId: string) => {
+    setExpandedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) {
+        next.delete(itemId);
+      } else {
+        next.add(itemId);
+      }
+      return next;
+    });
   };
 
   // Calculate statistics
@@ -308,32 +324,34 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
 
       {/* Source Breakdown */}
       {stats && stats.byEnrichmentSource && Object.keys(stats.byEnrichmentSource).length > 0 && (
-        <Card variant="outlined" padding="$4" marginBottom="$5">
-          <Label marginBottom="$3">Source Breakdown</Label>
-          <XStack flexWrap="wrap" gap="$2">
-            {Object.entries(stats.byEnrichmentSource).map(([source, count]) => (
-              <XStack
-                key={source}
-                alignItems="center"
-                gap="$1.5"
-                padding="$1.5 $3"
-                backgroundColor="$background"
-                borderWidth={1}
-                borderColor={getSourceColor(source)}
-                borderRadius="$2"
+        <XStack
+          flexWrap="wrap"
+          gap="$3"
+          marginBottom="$5"
+          padding="$4"
+          backgroundColor="$gray1"
+          borderRadius="$3"
+          $sm={{ flexDirection: 'column' }}
+          $md={{ flexDirection: 'row' }}
+        >
+          {Object.entries(stats.byEnrichmentSource).map(([source, count]) => (
+            <YStack key={source} flex={1} minWidth={120}>
+              <Label
+                size="xs"
+                tone="muted"
+                uppercase
+                letterSpacing={0.5}
+                marginBottom="$1"
+                margin={0}
               >
-                <YStack
-                  width={8}
-                  height={8}
-                  borderRadius="$10"
-                  backgroundColor={getSourceColor(source)}
-                />
-                <Body weight="medium">{getSourceLabel(source)}</Body>
-                <Body tone="muted">{count}</Body>
-              </XStack>
-            ))}
-          </XStack>
-        </Card>
+                {getSourceLabel(source)}
+              </Label>
+              <Text fontSize="$5" fontWeight="700" color="$color" margin={0}>
+                {count}
+              </Text>
+            </YStack>
+          ))}
+        </XStack>
       )}
 
       {/* Status Indicator - Only show during active building */}
@@ -357,66 +375,80 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
 
       {/* Search and Filters */}
       {isExpanded && contextItems.length > 0 && (
-        <XStack
-          gap="$3"
-          marginTop="$5"
-          marginBottom="$3"
-          flexWrap="wrap"
-          alignItems="center"
-        >
-          <Input flex={1} minWidth={200} placeholder="Search chunks..." value={searchQuery} onChangeText={setSearchQuery} />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={isFetching}
-          >
-            ↻ {isFetching ? 'Refreshing...' : 'Refresh'}
-          </Button>
-          <Select
-            value={filterByRank || ''}
-            onChange={(e) => setFilterByRank(e.target.value || null)}
-            size="sm"
-          >
-            <option value="">All Ranks</option>
-            <option value="ranked">Ranked Only</option>
-            <option value="unranked">Unranked Only</option>
-          </Select>
-          {researchSources.length > 0 && (
+        <Toolbar marginBottom="$3">
+          <Toolbar.Item flex={1}>
+            <Input
+              placeholder="Search chunks..."
+              value={searchQuery}
+              onChange={(e: any) => setSearchQuery(e.target.value)}
+              width="100%"
+            />
+          </Toolbar.Item>
+          <Toolbar.Item flex={0} minWidth={200}>
             <Select
-              value={filterByResearchSource || ''}
-              onChange={(e) => setFilterByResearchSource(e.target.value || null)}
-              size="sm"
+              value={filterByRank || ''}
+              onChange={(e) => setFilterByRank(e.target.value || null)}
             >
-              <option value="">All Research Sources</option>
-              {researchSources.map((source) => (
-                <option key={source} value={source}>
-                  {source}
-                </option>
-              ))}
+              <option value="">All Ranks</option>
+              <option value="ranked">Ranked Only</option>
+              <option value="unranked">Unranked Only</option>
             </Select>
+          </Toolbar.Item>
+          {researchSources.length > 0 && (
+            <Toolbar.Item flex={0} minWidth={200}>
+              <Select
+                value={filterByResearchSource || ''}
+                onChange={(e) => setFilterByResearchSource(e.target.value || null)}
+              >
+                <option value="">All Research Sources</option>
+                {researchSources.map((source) => (
+                  <option key={source} value={source}>
+                    {source}
+                  </option>
+                ))}
+              </Select>
+            </Toolbar.Item>
           )}
-          {(filterByRank || filterByResearchSource || searchQuery) && (
+          <Toolbar.Item flex={0}>
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
-              onClick={() => {
-                setFilterByRank(null);
-                setFilterByResearchSource(null);
-                setSearchQuery('');
-              }}
+              onClick={handleRefresh}
+              disabled={isFetching}
             >
-              Clear Filters
+              <XStack alignItems="center" gap="$1">
+                <Text margin={0}>↻</Text>
+                <Text margin={0}>{isFetching ? 'Refreshing...' : 'Refresh'}</Text>
+              </XStack>
             </Button>
+          </Toolbar.Item>
+          {(filterByRank || filterByResearchSource || searchQuery) && (
+            <Toolbar.Item flex={0}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setFilterByRank(null);
+                  setFilterByResearchSource(null);
+                  setSearchQuery('');
+                }}
+              >
+                <Text margin={0}>Clear Filters</Text>
+              </Button>
+            </Toolbar.Item>
           )}
-        </XStack>
+        </Toolbar>
       )}
 
       {/* Expanded View */}
       {isExpanded && (
         <YStack
+          marginTop="$5"
           maxHeight={600}
           overflow="scroll"
+          borderWidth={1}
+          borderColor="$borderColor"
+          borderRadius="$3"
           backgroundColor="$gray1"
         >
           {isLoading ? (
@@ -459,94 +491,150 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
           ) : (
             <YStack padding="$2">
               {filteredItems.map((item) => {
+                const isExpandedItem = expandedItems.has(item.id);
                 const qualityScore = item.metadata?.quality_score !== null && item.metadata?.quality_score !== undefined
                   ? (typeof item.metadata.quality_score === 'string' 
                       ? parseFloat(item.metadata.quality_score) 
                       : item.metadata.quality_score)
                   : null;
                 const sourceColor = getSourceColor(item.metadata?.enrichment_source || item.metadata?.source || 'unknown');
+                const sourceColorHex = getSourceColor(item.metadata?.enrichment_source || item.metadata?.source || 'unknown');
                 
                 return (
                   <Card
                     key={item.id}
                     variant="outlined"
-                    padding="$4"
-                    marginBottom="$2"
+                    padding={0}
+                    marginBottom="$3"
                     backgroundColor="$background"
+                    overflow="hidden"
                   >
+                    {/* Item Header */}
                     <XStack
+                      width="100%"
                       justifyContent="space-between"
                       alignItems="flex-start"
-                      marginBottom="$2"
+                      padding="$4"
+                      marginBottom={isExpandedItem ? '$3' : 0}
+                      onPress={() => toggleItem(item.id)}
+                      cursor="pointer"
                     >
-                      <XStack alignItems="center" gap="$2">
-                        {item.rank !== null && (
-                          <Badge variant="blue" size="sm">
-                            Rank: {item.rank}
-                          </Badge>
-                        )}
-                        <YStack
-                          width={8}
-                          height={8}
-                          borderRadius="$10"
-                          backgroundColor={sourceColor}
-                        />
-                        <Body size="sm" weight="medium">
-                          {getSourceLabel(item.metadata?.enrichment_source || item.metadata?.source || 'unknown')}
-                        </Body>
-                        {item.metadata?.research_source && (
-                          <Badge variant="gray" size="sm">
-                            Research: {item.metadata.research_source}
-                          </Badge>
-                        )}
-                     </XStack>
-                     <XStack alignItems="center" gap="$2">
-                       {qualityScore !== null && (
-                          <Badge
-                            variant={
-                              qualityScore >= 0.7
-                                ? 'green'
-                                : qualityScore >= 0.4
-                                ? 'yellow'
-                                : 'red'
-                            }
-                            size="sm"
-                          >
-                            <Label size="xs" color="$color">
-                              Quality: {(qualityScore * 100).toFixed(0)}%
-                            </Label>
-                          </Badge>
-                        )}
-                        {item.metadata?.chunk_size && (
-                          <Caption>
-                            {typeof item.metadata.chunk_size === 'string' 
-                              ? parseInt(item.metadata.chunk_size, 10) 
-                              : item.metadata.chunk_size} chars
-                          </Caption>
-                        )}
+                      <YStack flex={1} gap="$2" minWidth={0} flexShrink={1}>
+                        <XStack alignItems="center" gap="$2" marginBottom="$2">
+                          <YStack
+                            width={8}
+                            height={8}
+                            borderRadius="$10"
+                            backgroundColor={sourceColorHex}
+                            flexShrink={0}
+                          />
+                          <Label size="xs" tone="muted" uppercase margin={0}>
+                            {getSourceLabel(item.metadata?.enrichment_source || item.metadata?.source || 'unknown')}
+                          </Label>
+                          {item.rank !== null && (
+                            <Badge variant="blue" size="sm">
+                              Rank: {item.rank}
+                            </Badge>
+                          )}
+                          {item.metadata?.research_source && (
+                            <Badge variant="gray" size="sm">
+                              {item.metadata.research_source}
+                            </Badge>
+                          )}
+                        </XStack>
+                        <ClampText
+                          fontSize="$4"
+                          fontWeight="600"
+                          color="$color"
+                          marginBottom="$2"
+                          margin={0}
+                          textAlign="left"
+                          numberOfLines={3}
+                        >
+                          {item.chunk}
+                        </ClampText>
+                      </YStack>
+                      <XStack alignItems="center" marginLeft="$4" flexShrink={0}>
+                        <Text fontSize="$5" color="$gray11" margin={0}>
+                          {isExpandedItem ? '▼' : '▶'}
+                        </Text>
                       </XStack>
                     </XStack>
-                    <Body marginBottom="$2" whitespace="preWrap">
-                      {item.chunk}
-                    </Body>
-                    {item.metadata && Object.keys(item.metadata).length > 0 && (
-                      <YStack marginTop="$2" gap="$1">
-                        <Label size="xs">Metadata</Label>
-                        <YStack
-                          padding="$2"
-                          backgroundColor="$gray1"
-                          borderRadius="$1"
+
+                    {/* Expanded Details */}
+                    {isExpandedItem && (
+                      <YStack
+                        paddingTop="$3"
+                        paddingHorizontal="$4"
+                        paddingBottom="$4"
+                        borderTopWidth={1}
+                        borderTopColor="$borderColor"
+                      >
+                        <Body
+                          size="md"
+                          tone="muted"
+                          marginBottom="$3"
+                          whitespace="preWrap"
                         >
-                          <Caption mono whitespace="preWrap">
-                            {JSON.stringify(item.metadata, null, 2)}
-                          </Caption>
-                        </YStack>
+                          {item.chunk}
+                        </Body>
+                        <XStack
+                          gap="$4"
+                          paddingTop="$3"
+                          borderTopWidth={1}
+                          borderTopColor="$borderColor"
+                          flexWrap="wrap"
+                        >
+                          {qualityScore !== null && (
+                            <XStack alignItems="center" gap="$1">
+                              <Text fontSize="$2" color="$gray11" fontWeight="600" margin={0}>
+                                Quality:
+                              </Text>
+                              <Text fontSize="$2" color="$gray11" margin={0}>
+                                {(qualityScore * 100).toFixed(0)}%
+                              </Text>
+                            </XStack>
+                          )}
+                          {item.metadata?.chunk_size && (
+                            <XStack alignItems="center" gap="$1">
+                              <Text fontSize="$2" color="$gray11" fontWeight="600" margin={0}>
+                                Size:
+                              </Text>
+                              <Text fontSize="$2" color="$gray11" margin={0}>
+                                {typeof item.metadata.chunk_size === 'string' 
+                                  ? parseInt(item.metadata.chunk_size, 10) 
+                                  : item.metadata.chunk_size} chars
+                              </Text>
+                            </XStack>
+                          )}
+                          {item.metadata?.enrichment_timestamp && (
+                            <XStack alignItems="center" gap="$1">
+                              <Text fontSize="$2" color="$gray11" fontWeight="600" margin={0}>
+                                Added:
+                              </Text>
+                              <Text fontSize="$2" color="$gray11" margin={0}>
+                                {new Date(item.metadata.enrichment_timestamp).toLocaleString()}
+                              </Text>
+                            </XStack>
+                          )}
+                        </XStack>
+                        {item.metadata && Object.keys(item.metadata).length > 0 && (
+                          <YStack marginTop="$3" gap="$2">
+                            <Label size="xs" tone="muted" uppercase margin={0}>
+                              Metadata
+                            </Label>
+                            <YStack
+                              padding="$2"
+                              backgroundColor="$gray1"
+                              borderRadius="$2"
+                            >
+                              <Caption mono whitespace="preWrap">
+                                {JSON.stringify(item.metadata, null, 2)}
+                              </Caption>
+                            </YStack>
+                          </YStack>
+                        )}
                       </YStack>
-                    )}
-                    {item.metadata?.enrichment_timestamp && (
-                      <Caption marginTop="$1">
-                        Added: {new Date(item.metadata.enrichment_timestamp).toLocaleTimeString()}
-                      </Caption>
                     )}
                   </Card>
                 );

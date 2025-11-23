@@ -52,7 +52,8 @@ export async function GET(
 
     const { data, error } = await query
       .order('rank', { ascending: true, nullsFirst: true })
-      .order('metadata->>enrichment_timestamp', { ascending: false, nullsFirst: true });
+      .order('metadata->>enrichment_timestamp', { ascending: false, nullsFirst: true })
+      .limit(200); // Limit to 200 items for performance
 
     if (error) {
       console.error('[api/context] Query error:', error.message, error);

@@ -46,7 +46,7 @@ export function useContextDatabaseQuery(eventId: string | null) {
       return data.data || [];
     },
     enabled: !!eventId,
-    staleTime: 1000 * 30, // 30 seconds (context items change moderately)
+    staleTime: 1000 * 60 * 2, // 2 minutes - context items change moderately but not constantly
   });
 }
 

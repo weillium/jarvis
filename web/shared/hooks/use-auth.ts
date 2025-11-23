@@ -55,10 +55,15 @@ export function useAuth() {
     queryClient.setQueryData<Session | null>(['auth', 'session'], null);
   };
 
+  // Only show loading if we truly don't have any data yet
+  // If we have cached data (even if null), don't show loading
+  // This prevents the "authenticating" screen on navigation when session is already known
+  const loading = isLoading && session === undefined;
+
   return {
     user: session?.user ?? null,
     session,
-    loading: isLoading,
+    loading,
     signOut,
   };
 }

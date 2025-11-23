@@ -19,6 +19,8 @@ import {
   Caption,
   Label,
   ClampText,
+  Toolbar,
+  ToolbarSpacer,
 } from '@jarvis/ui-core';
 
 interface ResearchResultsVisualizationProps {
@@ -27,12 +29,17 @@ interface ResearchResultsVisualizationProps {
 }
 
 export function ResearchResultsVisualization({ eventId, embedded = false }: ResearchResultsVisualizationProps) {
-  const { data: researchData, isLoading, error, refetch, isFetching } = useResearchQuery(eventId);
   const [isExpanded, setIsExpanded] = useState(embedded); // Auto-expand when embedded
   const [filterByApi, setFilterByApi] = useState<string | null>(null);
   const [expandedResults, setExpandedResults] = useState<Set<string>>(new Set());
   const [expandedMetadata, setExpandedMetadata] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Pass filters to query hook - filtering is now done at database level
+  const { data: researchData, isLoading, error, refetch, isFetching } = useResearchQuery(eventId, {
+    search: searchQuery || undefined,
+    api: filterByApi || undefined,
+  });
 
   const handleRefresh = () => {
     refetch();
@@ -101,19 +108,11 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
     }
   };
 
-  // Filter results
-  const filteredResults = researchData?.results.filter((result) => {
-    if (filterByApi && result.api !== filterByApi) return false;
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      const matchesQuery = result.query.toLowerCase().includes(query) ||
-                           result.content.toLowerCase().includes(query);
-      if (!matchesQuery) return false;
-    }
-    return true;
-  }) || [];
+  // Results are already filtered by database - no client-side filtering needed
+  const filteredResults = researchData?.results || [];
 
-  // Get unique APIs for filter
+  // Get unique APIs for filter (from all results, not just filtered)
+  // Note: This requires a separate query or we accept that filter options are based on current results
   const apis = researchData
     ? Array.from(new Set(researchData.results.map((r) => r.api))).sort()
     : [];
@@ -174,12 +173,17 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
             </Text>
             <XStack alignItems="center" gap="$3">
               <Text fontSize="$2" color="$gray11" margin={0}>
-                {researchData.count} {researchData.count === 1 ? 'result' : 'results'}
+                {`${researchData.count} ${researchData.count === 1 ? 'result' : 'results'}`}
               </Text>
               {researchData.avgQualityScore > 0 && (
-                <Text fontSize="$2" color="$gray11" margin={0}>
-                  Avg Quality: {(researchData.avgQualityScore * 100).toFixed(0)}%
-                </Text>
+                <XStack alignItems="center" gap="$1">
+                  <Text fontSize="$2" color="$gray11" margin={0}>
+                    Avg Quality:
+                  </Text>
+                  <Text fontSize="$2" color="$gray11" margin={0}>
+                    {(researchData.avgQualityScore * 100).toFixed(0)}%
+                  </Text>
+                </XStack>
               )}
             </XStack>
           </YStack>
@@ -189,7 +193,7 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
               size="sm"
               onClick={() => setIsExpanded(!isExpanded)}
             >
-              {isExpanded ? 'Collapse' : 'Expand'}
+              <Text margin={0}>{isExpanded ? 'Collapse' : 'Expand'}</Text>
             </Button>
           )}
         </XStack>
@@ -229,54 +233,80 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
 
       {/* Search and Filters */}
       {isExpanded && researchData.count > 0 && (
-        <XStack
-          gap="$3"
-          marginBottom="$3"
-          flexWrap="wrap"
-          alignItems="center"
-        >
-          <Input
-            flex={1}
-            minWidth={200}
-            placeholder="Search results..."
-            value={searchQuery}
-            onChange={(e: any) => setSearchQuery(e.target.value)}
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={isFetching}
-          >
-            ↻ {isFetching ? 'Refreshing...' : 'Refresh'}
-          </Button>
+        <Toolbar marginBottom="$3">
+          <Toolbar.Item flex={1}>
+            <Input
+              placeholder="Search results..."
+              value={searchQuery}
+              onChange={(e: any) => setSearchQuery(e.target.value)}
+              width="100%"
+            />
+          </Toolbar.Item>
           {apis.length > 0 && (
-            <Select
-              value={filterByApi || ''}
-              onChange={(e) => setFilterByApi(e.target.value || null)}
-              size="sm"
-            >
-              <option value="">All APIs</option>
-              {apis.map((api) => (
-                <option key={api} value={api}>
-                  {getApiLabel(api)}
-                </option>
-              ))}
-            </Select>
+            <Toolbar.Item flex={0} minWidth={200}>
+              <Select
+                value={filterByApi ?? ''}
+                onValueChange={(value) => {
+                  console.log('[ResearchResults] Select onValueChange called:', { value, type: typeof value });
+                  // "All APIs" (empty string) should clear the filter, same as Clear Filters button
+                  if (value === '' || value === null || value === undefined) {
+                    console.log('[ResearchResults] Setting filterByApi to null (All APIs selected)');
+                    setFilterByApi(null);
+                  } else {
+                    console.log('[ResearchResults] Setting filterByApi to:', value);
+                    setFilterByApi(value);
+                  }
+                }}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  console.log('[ResearchResults] Select onChange called:', { value, type: typeof value, event: e });
+                  // "All APIs" (empty string) should clear the filter, same as Clear Filters button
+                  if (value === '' || value === null || value === undefined) {
+                    console.log('[ResearchResults] Setting filterByApi to null (All APIs selected)');
+                    setFilterByApi(null);
+                  } else {
+                    console.log('[ResearchResults] Setting filterByApi to:', value);
+                    setFilterByApi(value);
+                  }
+                }}
+              >
+                <option value="">All APIs</option>
+                {apis.map((api) => (
+                  <option key={api} value={api}>
+                    {getApiLabel(api)}
+                  </option>
+                ))}
+              </Select>
+            </Toolbar.Item>
           )}
-          {(filterByApi || searchQuery) && (
+          <Toolbar.Item flex={0}>
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
-              onClick={() => {
-                setFilterByApi(null);
-                setSearchQuery('');
-              }}
+              onClick={handleRefresh}
+              disabled={isFetching}
             >
-              Clear Filters
+              <XStack alignItems="center" gap="$1">
+                <Text margin={0}>↻</Text>
+                <Text margin={0}>{isFetching ? 'Refreshing...' : 'Refresh'}</Text>
+              </XStack>
             </Button>
+          </Toolbar.Item>
+          {(filterByApi || searchQuery) && (
+            <Toolbar.Item flex={0}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setFilterByApi(null);
+                  setSearchQuery('');
+                }}
+              >
+                <Text margin={0}>Clear Filters</Text>
+              </Button>
+            </Toolbar.Item>
           )}
-        </XStack>
+        </Toolbar>
       )}
 
       {/* Results List */}
@@ -305,55 +335,59 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
                   <Card
                     key={result.id}
                     variant="outlined"
-                    padding="$4"
+                    padding={0}
                     marginBottom="$3"
                     backgroundColor="$background"
+                    overflow="hidden"
                   >
                     {/* Result Header */}
-                    <Button
-                      variant="ghost"
+                    <XStack
                       width="100%"
                       justifyContent="space-between"
                       alignItems="flex-start"
-                      padding={0}
+                      padding="$4"
                       marginBottom={isExpandedResult ? '$3' : 0}
-                      onClick={() => toggleResult(result.id)}
+                      onPress={() => toggleResult(result.id)}
+                      cursor="pointer"
                     >
-                      <YStack flex={1} gap="$2">
+                      <YStack flex={1} gap="$2" minWidth={0} flexShrink={1}>
                         <XStack alignItems="center" gap="$2" marginBottom="$2">
                           <YStack
                             width={8}
                             height={8}
                             borderRadius="$10"
                             backgroundColor={getApiColorHex(result.api)}
+                            flexShrink={0}
                           />
                           <Label size="xs" tone="muted" uppercase margin={0}>
                             {getApiLabel(result.api)}
                           </Label>
                         </XStack>
-                        <Text fontSize="$4" fontWeight="600" color="$color" marginBottom="$2" margin={0} textAlign="left">
+                        <ClampText
+                          fontSize="$4"
+                          fontWeight="600"
+                          color="$color"
+                          marginBottom="$2"
+                          margin={0}
+                          textAlign="left"
+                          numberOfLines={3}
+                        >
                           {result.query}
-                        </Text>
-                        {!isExpandedResult && (
-                          <ClampText
-                            lines={2}
-                            fontSize="$3"
-                            color="$gray9"
-                            margin={0}
-                          >
-                            {result.content}
-                          </ClampText>
-                        )}
+                        </ClampText>
                       </YStack>
-                      <Text fontSize="$5" color="$gray11" marginLeft="$4" margin={0}>
-                        {isExpandedResult ? '▼' : '▶'}
-                      </Text>
-                    </Button>
+                      <XStack alignItems="center" marginLeft="$4" flexShrink={0}>
+                        <Text fontSize="$5" color="$gray11" margin={0}>
+                          {isExpandedResult ? '▼' : '▶'}
+                        </Text>
+                      </XStack>
+                    </XStack>
 
                     {/* Expanded Details */}
                     {isExpandedResult && (
                       <YStack
                         paddingTop="$3"
+                        paddingHorizontal="$4"
+                        paddingBottom="$4"
                         borderTopWidth={1}
                         borderTopColor="$borderColor"
                       >
@@ -373,9 +407,14 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
                           flexWrap="wrap"
                         >
                           {result.quality_score !== null && (
-                            <Text fontSize="$2" color="$gray11" margin={0}>
-                              <Text fontWeight="600" margin={0}>Quality:</Text> {(result.quality_score * 100).toFixed(0)}%
-                            </Text>
+                            <XStack alignItems="center" gap="$1">
+                              <Text fontSize="$2" color="$gray11" fontWeight="600" margin={0}>
+                                Quality:
+                              </Text>
+                              <Text fontSize="$2" color="$gray11" margin={0}>
+                                {(result.quality_score * 100).toFixed(0)}%
+                              </Text>
+                            </XStack>
                           )}
                           {result.source_url && (
                             <Text fontSize="$2" color="$gray11" margin={0}>
@@ -389,9 +428,14 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
                               </Anchor>
                             </Text>
                           )}
-                          <Text fontSize="$2" color="$gray11" margin={0}>
-                            <Text fontWeight="600" margin={0}>Created:</Text> {new Date(result.created_at).toLocaleString()}
-                          </Text>
+                          <XStack alignItems="center" gap="$1">
+                            <Text fontSize="$2" color="$gray11" fontWeight="600" margin={0}>
+                              Created:
+                            </Text>
+                            <Text fontSize="$2" color="$gray11" margin={0}>
+                              {new Date(result.created_at).toLocaleString()}
+                            </Text>
+                          </XStack>
                         </XStack>
                         {result.metadata && Object.keys(result.metadata).length > 0 && (
                           <YStack marginTop="$3" gap="$2">
@@ -401,7 +445,9 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
                               alignSelf="flex-start"
                               onClick={() => toggleMetadata(result.id)}
                             >
-                              {expandedMetadata.has(result.id) ? 'Hide Metadata' : 'Show Metadata'}
+                              <Text margin={0}>
+                                {expandedMetadata.has(result.id) ? 'Hide Metadata' : 'Show Metadata'}
+                              </Text>
                             </Button>
                             {expandedMetadata.has(result.id) && (
                               <YStack

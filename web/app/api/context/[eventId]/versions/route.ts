@@ -40,12 +40,15 @@ export async function GET(
 
     const supabase = getSupabaseClient();
 
-    // Fetch all generation cycles (including completed and failed)
+    // Fetch generation cycles (including completed and failed)
+    // Select only needed fields - metadata is large JSONB, but we need it for cost parsing
+    // Note: cost is not a column - it's stored in metadata JSONB
     const { data: cycles, error } = await (supabase
       .from('generation_cycles') as any)
-      .select('*')
+      .select('id, event_id, cycle_type, component, status, progress_current, progress_total, started_at, completed_at, error_message, metadata')
       .eq('event_id', eventId)
-      .order('started_at', { ascending: false });
+      .order('started_at', { ascending: false })
+      .limit(200); // Limit to 200 cycles for performance
 
     if (error) {
       console.error('[api/context/versions] Error fetching generation cycles:', error);
@@ -54,6 +57,9 @@ export async function GET(
         { status: 500 }
       );
     }
+
+    // Debug logging to help diagnose issues
+    console.log(`[api/context/versions] Found ${cycles?.length ?? 0} generation cycles for event ${eventId}`);
 
     // Parse cost data from metadata (support legacy and blueprint formats)
     const cyclesWithCost = (cycles || []).map((cycle: any) => {

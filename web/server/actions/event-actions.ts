@@ -8,13 +8,27 @@ import { mapDbEventToEventWithStatus } from '../mappers/event-mapper';
 export async function getEvents(filters?: {
   search?: string;
   status?: 'all' | 'scheduled' | 'live' | 'ended';
-}): Promise<{ data: EventWithStatus[] | null; error: string | null }> {
+  page?: number;
+  limit?: number;
+}): Promise<{ 
+  data: EventWithStatus[] | null; 
+  error: string | null;
+  total?: number;
+  page?: number;
+  limit?: number;
+}> {
   try {
     const supabase = await createServerClient();
     const user = await requireAuth(supabase);
+    
+    const page = filters?.page ?? 1;
+    const limit = filters?.limit ?? 20;
+    const offset = (page - 1) * limit;
+
+    // Only select fields we actually need
     let query = supabase
       .from('events')
-      .select('*')
+      .select('id, owner_uid, title, topic, start_time, end_time, created_at', { count: 'exact' })
       .eq('owner_uid', user.id)
       .order('created_at', { ascending: false });
 
@@ -23,14 +37,17 @@ export async function getEvents(filters?: {
       query = query.or(`title.ilike.%${filters.search}%,topic.ilike.%${filters.search}%`);
     }
 
-    const { data, error } = await query;
+    // Apply pagination
+    query = query.range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
 
     if (error) {
       return { data: null, error: error.message };
     }
 
     if (!data) {
-      return { data: [], error: null };
+      return { data: [], error: null, total: 0, page, limit };
     }
 
     // Map to EventWithStatus
@@ -42,7 +59,13 @@ export async function getEvents(filters?: {
       filteredEvents = events.filter(event => event.status === filters.status);
     }
 
-    return { data: filteredEvents, error: null };
+    return { 
+      data: filteredEvents, 
+      error: null,
+      total: count ?? 0,
+      page,
+      limit,
+    };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return { data: null, error: errorMessage };
@@ -57,7 +80,7 @@ export async function getEventById(eventId: string): Promise<{ data: EventWithSt
 
     const { data, error } = await supabase
       .from('events')
-      .select('*')
+      .select('id, owner_uid, title, topic, start_time, end_time, created_at')
       .eq('id', eventId)
       .eq('owner_uid', user.id)
       .single();

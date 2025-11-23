@@ -157,18 +157,21 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
   const pingPongMissed = session.ping_pong?.missedPongs ?? 0;
   const pingPongVariant = pingPongMissed === 0 ? 'success' : pingPongMissed === 1 ? 'warning' : 'error';
 
+  // For closed status, use white text on grey background for better contrast
+  const badgeTextColor = session.status === 'closed' ? '#ffffff' : statusColor;
+
   return (
-    <Card variant="outlined" padding="$5" gap="$4">
+    <Card variant="outlined" padding="$4" gap="$3" width="100%">
       {/* Header */}
       <XStack justifyContent="space-between" alignItems="center">
         <Heading level={4}>{title}</Heading>
-        <Badge backgroundColor={statusColorHex} color={statusColor}>
+        <Badge backgroundColor={statusColorHex} color={badgeTextColor}>
           {statusLabel}
         </Badge>
       </XStack>
 
       {/* Connection Status & Runtime */}
-      <YStack borderBottomWidth={1} borderBottomColor="$borderColor" paddingBottom="$4">
+      <YStack borderBottomWidth={1} borderBottomColor="$borderColor" paddingBottom="$3" marginTop="-$3">
         {isRealtime && (
           <>
             <XStack
@@ -180,15 +183,15 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
                 backgroundColor={connectionColor}
                 opacity={isWebSocketLive ? 1 : 0.4}
               />
-              <Body size="sm" weight="medium" color={connectionColorToken} transform="uppercase">
+              <Caption weight="medium" color={connectionColorToken} transform="uppercase">
                 WebSocket: {connectionStatus}
                 {actualWebSocketState ? (
-                  <Caption>
+                  <>
                     {' '}
                     ({actualWebSocketState})
-                  </Caption>
+                  </>
                 ) : null}
-              </Body>
+              </Caption>
             </XStack>
 
             {actualWebSocketState === 'OPEN' && (
@@ -240,11 +243,12 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
           </>
         )}
 
-        <Body tone="muted" marginBottom="$1">
+        <Body size="xs" tone="muted" marginBottom="$1">
           {runtime ? `${runtimeLabel}: ${runtime}` : `${runtimeLabel}: N/A`}
         </Body>
         {isRealtime && (
           <Body
+            size="xs"
             tone="muted"
             mono
             marginBottom="$1"
@@ -265,7 +269,7 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
               : `Session: ${session.session_id.substring(0, 20)}…`}
           </Body>
         )}
-        <Body tone="muted">
+        <Body size="xs" tone="muted">
           Model: {session.metadata.model || 'N/A'}
         </Body>
         {session.metrics_recorded_at && (
@@ -278,12 +282,12 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
       {/* Token Metrics */}
       {session.token_metrics && (
         <YStack
-          marginBottom="$4"
-          paddingBottom="$4"
+          marginBottom="$3"
+          paddingBottom="$3"
           borderBottomWidth={1}
           borderBottomColor="$borderColor"
         >
-          <Label marginBottom="$3">Token Metrics</Label>
+          <Label size="xs" marginBottom="$2">Token Metrics</Label>
           <XStack
             flexWrap="wrap"
             gap="$3"
@@ -298,7 +302,7 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
             ].map((metric, index) => (
               <YStack key={metric.label} flex={1} minWidth={100}>
                 <Label size="xs">{metric.label}</Label>
-                <Body size="lg" weight="medium">
+                <Body size="md" weight="medium">
                   {metric.value}
                 </Body>
               </YStack>
@@ -318,7 +322,7 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
           )}
           {session.agent_type === 'facts' && session.token_metrics.facts_budget && (
             <Card variant="outlined" backgroundColor="$gray1" padding="$3" marginTop="$3">
-              <Label>Facts Prompt Budget (last run)</Label>
+              <Label size="xs">Facts Prompt Budget (last run)</Label>
               <XStack
                 flexWrap="wrap"
                 gap="$2.5"
@@ -327,25 +331,25 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
               >
                 <YStack flex={1} minWidth={120}>
                   <Label size="xs">Selected Facts</Label>
-                  <Body size="lg" weight="medium">
+                  <Body size="md" weight="medium">
                     {session.token_metrics.facts_budget.selected} / {session.token_metrics.facts_budget.total_facts}
                   </Body>
                 </YStack>
                 <YStack flex={1} minWidth={120}>
                   <Label size="xs">Overflow Facts</Label>
-                  <Body size="lg" weight="medium">
+                  <Body size="md" weight="medium">
                     {session.token_metrics.facts_budget.overflow}
                   </Body>
                 </YStack>
                 <YStack flex={1} minWidth={120}>
                   <Label size="xs">Summaries Added</Label>
-                  <Body size="lg" weight="medium">
+                  <Body size="md" weight="medium">
                     {session.token_metrics.facts_budget.summary}
                   </Body>
                 </YStack>
                 <YStack flex={1} minWidth={120}>
                   <Label size="xs">Tokens Used / Budget</Label>
-                  <Body size="lg" weight="medium">
+                  <Body size="md" weight="medium">
                     {session.token_metrics.facts_budget.used_tokens} / {session.token_metrics.facts_budget.budget_tokens}
                   </Body>
                 </YStack>
@@ -397,10 +401,10 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
               setExpandedLogs((prev) => ({ ...prev, [session.agent_type]: !prev[session.agent_type] }))
             }
           >
-            <Body size="sm" weight="medium">
+            <Body size="xs" weight="medium">
               Recent Logs ({session.recent_logs.length})
             </Body>
-            <Body size="lg">{expandedLogs[session.agent_type] ? '▼' : '▶'}</Body>
+            <Body size="md">{expandedLogs[session.agent_type] ? '▼' : '▶'}</Body>
           </Button>
           {expandedLogs[session.agent_type] && (
             <YStack
@@ -450,8 +454,8 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
 
       {/* Metadata */}
       <YStack
-        marginTop="$4"
-        paddingTop="$4"
+        marginTop="$3"
+        paddingTop="$3"
         borderTopWidth={1}
         borderTopColor="$borderColor"
       >

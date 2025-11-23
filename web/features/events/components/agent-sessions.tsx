@@ -565,7 +565,7 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
             if (realtimeSessions.length === 0) return null;
 
             return (
-              <YStack marginBottom="$8">
+              <YStack marginTop="$6" marginBottom="$8">
                 <Label
                   size="xs"
                   tone="muted"
@@ -579,17 +579,19 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
                 <XStack
                   flexWrap="wrap"
                   gap="$4"
+                  marginTop="$2"
                   $sm={{ flexDirection: 'column' }}
                   $md={{ flexDirection: 'row' }}
                 >
                   {realtimeSessions.map((session) => (
-                    <SessionStatusCard
-                      key={`${session.agent_type}-${session.session_id}-${session.status}`}
-                      title={agentTitles[session.agent_type]}
-                      session={session}
-                      expandedLogs={expandedLogs}
-                      setExpandedLogs={setExpandedLogs}
-                    />
+                    <XStack key={`${session.agent_type}-${session.session_id}-${session.status}`} flexBasis="50%" flexShrink={1} flexGrow={1} minWidth={0} $sm={{ flexBasis: '100%' }}>
+                      <SessionStatusCard
+                        title={agentTitles[session.agent_type]}
+                        session={session}
+                        expandedLogs={expandedLogs}
+                        setExpandedLogs={setExpandedLogs}
+                      />
+                    </XStack>
                   ))}
                 </XStack>
               </YStack>
@@ -604,7 +606,7 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
             if (statelessSessions.length === 0) return null;
 
             return (
-              <YStack>
+              <YStack marginTop="$6">
                 <Label
                   size="xs"
                   tone="muted"
@@ -618,17 +620,19 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
                 <XStack
                   flexWrap="wrap"
                   gap="$4"
+                  marginTop="$2"
                   $sm={{ flexDirection: 'column' }}
                   $md={{ flexDirection: 'row' }}
                 >
                   {statelessSessions.map((session) => (
-                    <SessionStatusCard
-                      key={`${session.agent_type}-${session.session_id}-${session.status}`}
-                      title={agentTitles[session.agent_type]}
-                      session={session}
-                      expandedLogs={expandedLogs}
-                      setExpandedLogs={setExpandedLogs}
-                    />
+                    <XStack key={`${session.agent_type}-${session.session_id}-${session.status}`} flexBasis="50%" flexShrink={1} flexGrow={1} minWidth={0} $sm={{ flexBasis: '100%' }}>
+                      <SessionStatusCard
+                        title={agentTitles[session.agent_type]}
+                        session={session}
+                        expandedLogs={expandedLogs}
+                        setExpandedLogs={setExpandedLogs}
+                      />
+                    </XStack>
                   ))}
                 </XStack>
               </YStack>

@@ -5,11 +5,11 @@ import { createClient } from '@supabase/supabase-js';
  * Transcripts API Route
  * 
  * Fetches recent finalized transcripts for an event (equivalent to what's in ring buffer)
- * Returns transcripts from the last 5 minutes, up to 1000 transcripts, ordered by sequence
+ * Returns transcripts from the last 5 minutes, up to 150 transcripts (default), ordered by sequence
  * 
  * GET /api/transcripts/[eventId]
  * Query params:
- *   - limit: number (default: 1000)
+ *   - limit: number (default: 150)
  *   - max_age_minutes: number (default: 5)
  */
 
@@ -34,7 +34,7 @@ export async function GET(
     const { eventId } = await params;
     const { searchParams } = new URL(req.url);
     
-    const limit = parseInt(searchParams.get('limit') || '1000', 10);
+    const limit = parseInt(searchParams.get('limit') || '150', 10);
     const maxAgeMinutes = parseInt(searchParams.get('max_age_minutes') || '5', 10);
     
     // Validate eventId format
@@ -54,13 +54,14 @@ export async function GET(
     const cutoffMs = nowMs - maxAgeMs;
 
     // Fetch recent finalized transcripts (what would be in ring buffer)
+    // Order by seq ASC directly (oldest first) for display - no need to sort client-side
     const { data: transcripts, error } = await (supabase
       .from('transcripts') as any)
       .select('id, seq, at_ms, speaker, text, final, ts')
       .eq('event_id', eventId)
       .eq('final', true)
       .gte('at_ms', cutoffMs) // Only transcripts from last 5 minutes
-      .order('seq', { ascending: false }) // Newest first
+      .order('seq', { ascending: true }) // Oldest first (for display)
       .limit(limit);
 
     if (error) {
@@ -71,10 +72,8 @@ export async function GET(
       );
     }
 
-    // Sort by sequence ascending (oldest first) for display
-    const sortedTranscripts = (transcripts || []).sort((a: any, b: any) => {
-      return (a.seq || 0) - (b.seq || 0);
-    });
+    // Transcripts are already sorted by seq ASC from the database
+    const sortedTranscripts = transcripts || [];
 
     return NextResponse.json({
       ok: true,

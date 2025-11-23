@@ -67,7 +67,7 @@ export function useGlossaryQuery(
       return data;
     },
     enabled: !!eventId,
-    staleTime: 1000 * 60, // 1 minute (glossary terms change infrequently)
+    staleTime: 1000 * 60 * 5, // 5 minutes - glossary terms change infrequently
   });
 }
 

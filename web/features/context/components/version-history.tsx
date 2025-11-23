@@ -17,6 +17,7 @@ import {
   BulletList,
   EmptyStateCard,
   LoadingState,
+  Toolbar,
 } from '@jarvis/ui-core';
 
 interface VersionHistoryProps {
@@ -211,11 +212,9 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
           items={completions}
           renderItem={(item) => (
             <Caption>
-              {item.model ? `${item.model}` : 'Model unknown'}
-              {item.cost !== undefined ? ` · $${item.cost.toFixed(4)}` : null}
-              {item.usage
+              {`${item.model ? item.model : 'Model unknown'}${item.cost !== undefined ? ` · $${item.cost.toFixed(4)}` : ''}${item.usage
                 ? ` · tokens: ${item.usage.total_tokens ?? '-'} (prompt ${item.usage.prompt_tokens ?? '-'}, completion ${item.usage.completion_tokens ?? '-'})`
-                : null}
+                : ''}`}
             </Caption>
           )}
         />
@@ -241,7 +240,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
           alignSelf="flex-start"
           onClick={() => toggleBreakdown(cycle.id)}
         >
-          {isExpanded ? 'Hide Cost Breakdown' : 'Show Cost Breakdown'}
+          <Text>{isExpanded ? 'Hide Cost Breakdown' : 'Show Cost Breakdown'}</Text>
         </Button>
         {isExpanded && (
           <YStack
@@ -253,33 +252,35 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
             borderColor="$borderColor"
             gap="$2"
           >
-            <Body size="sm">
-              <Body size="sm" weight="bold">
+            <XStack alignItems="center" gap="$1">
+              <Body size="sm" weight="bold" margin={0}>
                 Total:
-              </Body>{' '}
-              {'$' + (breakdown.total?.toFixed(4) ?? '0.0000') + ' ' + (breakdown.currency || 'USD')}
-            </Body>
+              </Body>
+              <Text fontSize="$3" margin={0}>{' $' + (breakdown.total?.toFixed(4) ?? '0.0000') + ' ' + (breakdown.currency || 'USD')}</Text>
+            </XStack>
 
             {openaiBreakdown && (
               <YStack gap="$1.5">
-                <Body size="sm">
-                  <Body size="sm" weight="bold">
+                <XStack alignItems="center" gap="$1" flexWrap="wrap">
+                  <Body size="sm" weight="bold" margin={0}>
                     OpenAI:
-                  </Body>{' '}
-                  {'$' + (typeof openaiBreakdown.total === 'number'
-                    ? openaiBreakdown.total.toFixed(4)
-                    : '0.0000')}
-                  {openaiBreakdown.chat_completions?.length
-                    ? ` (${openaiBreakdown.chat_completions.length} chat completion${
-                        openaiBreakdown.chat_completions.length > 1 ? 's' : ''
-                      })`
-                    : ''}
-                  {openaiBreakdown.embeddings?.length
-                    ? ` (${openaiBreakdown.embeddings.length} embedding${
-                        openaiBreakdown.embeddings.length > 1 ? 's' : ''
-                      })`
-                    : ''}
-                </Body>
+                  </Body>
+                  <Text fontSize="$3" margin={0}>
+                    {' $' + (typeof openaiBreakdown.total === 'number'
+                      ? openaiBreakdown.total.toFixed(4)
+                      : '0.0000')}
+                    {openaiBreakdown.chat_completions?.length
+                      ? ` (${openaiBreakdown.chat_completions.length} chat completion${
+                          openaiBreakdown.chat_completions.length > 1 ? 's' : ''
+                        })`
+                      : ''}
+                    {openaiBreakdown.embeddings?.length
+                      ? ` (${openaiBreakdown.embeddings.length} embedding${
+                          openaiBreakdown.embeddings.length > 1 ? 's' : ''
+                        })`
+                      : ''}
+                  </Text>
+                </XStack>
                 {renderChatCompletions(openaiBreakdown.chat_completions || [])}
                 {openaiBreakdown.embeddings?.length ? (
                   <YStack gap="$1">
@@ -290,11 +291,9 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                         const embedding = item as { model?: string; cost?: number; usage?: { total_tokens?: number } };
                         return (
                           <Caption>
-                            {embedding.model ? `${embedding.model}` : 'Model unknown'}
-                            {embedding.cost !== undefined ? ` · $${embedding.cost.toFixed(4)}` : null}
-                            {embedding.usage?.total_tokens !== undefined
+                            {`${embedding.model ? embedding.model : 'Model unknown'}${embedding.cost !== undefined ? ` · $${embedding.cost.toFixed(4)}` : ''}${embedding.usage?.total_tokens !== undefined
                               ? ` · tokens: ${embedding.usage.total_tokens}`
-                              : null}
+                              : ''}`}
                           </Caption>
                         );
                       }}
@@ -305,29 +304,31 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
             )}
 
             {exaBreakdown && (
-              <Body size="sm">
-                <Body size="sm" weight="bold">
+              <XStack alignItems="center" gap="$1" flexWrap="wrap">
+                <Body size="sm" weight="bold" margin={0}>
                   Exa:
-                </Body>{' '}
-                {'$' + (typeof exaBreakdown.total === 'number'
-                  ? exaBreakdown.total.toFixed(4)
-                  : '0.0000')}
-                {exaBreakdown.search?.queries
-                  ? ` (${exaBreakdown.search.queries} search${
-                      exaBreakdown.search.queries > 1 ? 'es' : ''
-                    })`
-                  : ''}
-                {exaBreakdown.research?.queries
-                  ? ` (${exaBreakdown.research.queries} research task${
-                      exaBreakdown.research.queries > 1 ? 's' : ''
-                    })`
-                  : ''}
-                {exaBreakdown.answer?.queries
-                  ? ` (${exaBreakdown.answer.queries} answer${
-                      exaBreakdown.answer.queries > 1 ? 's' : ''
-                    })`
-                  : ''}
-              </Body>
+                </Body>
+                <Text fontSize="$3" margin={0}>
+                  {' $' + (typeof exaBreakdown.total === 'number'
+                    ? exaBreakdown.total.toFixed(4)
+                    : '0.0000')}
+                  {exaBreakdown.search?.queries
+                    ? ` (${exaBreakdown.search.queries} search${
+                        exaBreakdown.search.queries > 1 ? 'es' : ''
+                      })`
+                    : ''}
+                  {exaBreakdown.research?.queries
+                    ? ` (${exaBreakdown.research.queries} research task${
+                        exaBreakdown.research.queries > 1 ? 's' : ''
+                      })`
+                    : ''}
+                  {exaBreakdown.answer?.queries
+                    ? ` (${exaBreakdown.answer.queries} answer${
+                        exaBreakdown.answer.queries > 1 ? 's' : ''
+                      })`
+                    : ''}
+                </Text>
+              </XStack>
             )}
 
             {breakdown.pricing_version && (
@@ -376,52 +377,56 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
 
       {/* Search and Filters */}
       {isExpanded && uniqueTypes.length > 0 && (
-        <XStack
-          gap="$3"
-          marginBottom="$3"
-          flexWrap="wrap"
-          alignItems="center"
-        >
-          <Input
-            flex={1}
-            minWidth={200}
-            placeholder="Search cycles..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={fetchVersionHistory}
-            disabled={refreshing}
-          >
-            ↻ {refreshing ? 'Refreshing...' : 'Refresh'}
-          </Button>
-          <Select
-            value={filterByType || ''}
-            onChange={(e) => setFilterByType(e.target.value || null)}
-            size="sm"
-          >
-            <option value="">All Types</option>
-            {uniqueTypes.map((type) => (
-              <option key={type} value={type}>
-                {getTypeLabel(type)}
-              </option>
-            ))}
-          </Select>
-          {(filterByType || searchQuery) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setFilterByType(null);
-                setSearchQuery('');
-              }}
+        <Toolbar marginBottom="$3">
+          <Toolbar.Item flex={1}>
+            <Input
+              placeholder="Search cycles..."
+              value={searchQuery}
+              onChange={(e: any) => setSearchQuery(e.target.value)}
+              width="100%"
+            />
+          </Toolbar.Item>
+          <Toolbar.Item flex={0} minWidth={200}>
+            <Select
+              value={filterByType || ''}
+              onChange={(e) => setFilterByType(e.target.value || null)}
             >
-              Clear Filters
+              <option value="">All Types</option>
+              {uniqueTypes.map((type) => (
+                <option key={type} value={type}>
+                  {getTypeLabel(type)}
+                </option>
+              ))}
+            </Select>
+          </Toolbar.Item>
+          <Toolbar.Item flex={0}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchVersionHistory}
+              disabled={refreshing}
+            >
+              <XStack alignItems="center" gap="$1">
+                <Text margin={0}>↻</Text>
+                <Text margin={0}>{refreshing ? 'Refreshing...' : 'Refresh'}</Text>
+              </XStack>
             </Button>
+          </Toolbar.Item>
+          {(filterByType || searchQuery) && (
+            <Toolbar.Item flex={0}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setFilterByType(null);
+                  setSearchQuery('');
+                }}
+              >
+                <Text margin={0}>Clear Filters</Text>
+              </Button>
+            </Toolbar.Item>
           )}
-        </XStack>
+        </Toolbar>
       )}
 
       {/* Cycles List */}
@@ -476,10 +481,11 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                       );
                     })()}
                   </XStack>
-                  <XStack alignItems="center" gap="$2">
+                  <XStack alignItems="center" gap="$2" paddingHorizontal="$0">
                     {cycle.cost !== null && cycle.cost !== undefined && (
                       <YStack
-                        padding="$1 $2"
+                        paddingVertical="$1"
+                        paddingHorizontal="$2"
                         backgroundColor="$green2"
                         borderRadius="$1"
                         borderWidth={1}
@@ -491,7 +497,8 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                       </YStack>
                     )}
                     <YStack
-                      padding="$1 $2"
+                      paddingVertical="$1"
+                      paddingHorizontal="$2"
                       backgroundColor={getStatusColorHex(cycle.status)}
                       borderRadius="$1"
                     >
@@ -549,7 +556,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
             Version History
           </Text>
           <Text fontSize="$2" color="$gray11" margin={0}>
-            {versionData.count} {versionData.count === 1 ? 'generation cycle' : 'generation cycles'}
+            {`${versionData.count} ${versionData.count === 1 ? 'generation cycle' : 'generation cycles'}`}
           </Text>
         </YStack>
         <Button
@@ -557,58 +564,62 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
           size="sm"
           onClick={() => setIsExpanded(!isExpanded)}
         >
-          {isExpanded ? 'Collapse' : 'Expand'}
+          <Text>{isExpanded ? 'Collapse' : 'Expand'}</Text>
         </Button>
       </XStack>
 
       {/* Search and Filters */}
       {isExpanded && uniqueTypes.length > 0 && (
-        <XStack
-          gap="$3"
-          marginBottom="$3"
-          flexWrap="wrap"
-          alignItems="center"
-        >
-          <Input
-            flex={1}
-            minWidth={200}
-            placeholder="Search cycles..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={fetchVersionHistory}
-            disabled={refreshing}
-          >
-            ↻ {refreshing ? 'Refreshing...' : 'Refresh'}
-          </Button>
-          <Select
-            value={filterByType || ''}
-            onChange={(e) => setFilterByType(e.target.value || null)}
-            size="sm"
-          >
-            <option value="">All Types</option>
-            {uniqueTypes.map((type) => (
-              <option key={type} value={type}>
-                {getTypeLabel(type)}
-              </option>
-            ))}
-          </Select>
-          {(filterByType || searchQuery) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setFilterByType(null);
-                setSearchQuery('');
-              }}
+        <Toolbar marginBottom="$3">
+          <Toolbar.Item flex={1}>
+            <Input
+              placeholder="Search cycles..."
+              value={searchQuery}
+              onChange={(e: any) => setSearchQuery(e.target.value)}
+              width="100%"
+            />
+          </Toolbar.Item>
+          <Toolbar.Item flex={0} minWidth={200}>
+            <Select
+              value={filterByType || ''}
+              onChange={(e) => setFilterByType(e.target.value || null)}
             >
-              Clear Filters
+              <option value="">All Types</option>
+              {uniqueTypes.map((type) => (
+                <option key={type} value={type}>
+                  {getTypeLabel(type)}
+                </option>
+              ))}
+            </Select>
+          </Toolbar.Item>
+          <Toolbar.Item flex={0}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchVersionHistory}
+              disabled={refreshing}
+            >
+              <XStack alignItems="center" gap="$1">
+                <Text margin={0}>↻</Text>
+                <Text margin={0}>{refreshing ? 'Refreshing...' : 'Refresh'}</Text>
+              </XStack>
             </Button>
+          </Toolbar.Item>
+          {(filterByType || searchQuery) && (
+            <Toolbar.Item flex={0}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setFilterByType(null);
+                  setSearchQuery('');
+                }}
+              >
+                <Text margin={0}>Clear Filters</Text>
+              </Button>
+            </Toolbar.Item>
           )}
-        </XStack>
+        </Toolbar>
       )}
 
       {/* Cycles List */}
@@ -634,6 +645,7 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                   justifyContent="space-between"
                   alignItems="center"
                   marginBottom="$2"
+                  paddingHorizontal="$0"
                 >
                   <XStack alignItems="center" gap="$2">
                     <Text fontSize="$3" fontWeight="600" color="$color" margin={0}>
@@ -663,10 +675,11 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                       );
                     })()}
                   </XStack>
-                  <XStack alignItems="center" gap="$2">
+                  <XStack alignItems="center" gap="$2" paddingHorizontal="$0">
                     {cycle.cost !== null && cycle.cost !== undefined && (
                       <YStack
-                        padding="$1 $2"
+                        paddingVertical="$1"
+                        paddingHorizontal="$2"
                         backgroundColor="$green2"
                         borderRadius="$1"
                         borderWidth={1}
@@ -678,7 +691,8 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
                       </YStack>
                     )}
                     <YStack
-                      padding="$1 $2"
+                      paddingVertical="$1"
+                      paddingHorizontal="$2"
                       backgroundColor={getStatusColorHex(cycle.status)}
                       borderRadius="$1"
                     >

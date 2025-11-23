@@ -65,6 +65,7 @@ export async function GET(
     const agentId = agents[0].id;
 
     // Fetch blueprint for this agent
+    // Note: We need all fields including large JSONB blueprint column, but limit to 1 row
     const { data: blueprint, error: blueprintError } = await (supabase
       .from('context_blueprints') as any)
       .select('*')

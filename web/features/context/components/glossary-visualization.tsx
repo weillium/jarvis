@@ -19,6 +19,8 @@ import {
   Anchor,
   Label,
   Body,
+  Toolbar,
+  ClampText,
 } from '@jarvis/ui-core';
 import { styled } from 'tamagui';
 
@@ -117,182 +119,233 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
             Glossary
           </Text>
           <Text fontSize="$3" color="$gray11" margin={0}>
-            {glossaryData.count} {glossaryData.count === 1 ? 'term' : 'terms'}
+            {`${glossaryData.count} ${glossaryData.count === 1 ? 'term' : 'terms'}`}
           </Text>
         </XStack>
       )}
 
       {/* Search and Filter */}
-      <XStack
-        gap="$3"
-        marginBottom="$5"
-        flexWrap="wrap"
-        alignItems="center"
-      >
-        <Input
-          flex={1}
-          minWidth={200}
-          placeholder="Search terms..."
-          value={search}
-          onChange={(e: any) => setSearch(e.target.value)}
-        />
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleRefresh}
-          disabled={isFetching}
-        >
-          ↻ {isFetching ? 'Refreshing...' : 'Refresh'}
-        </Button>
+      <Toolbar marginBottom="$5">
+        <Toolbar.Item flex={1}>
+          <Input
+            placeholder="Search terms..."
+            value={search}
+            onChange={(e: any) => setSearch(e.target.value)}
+            width="100%"
+          />
+        </Toolbar.Item>
         {categories.length > 0 && (
-          <Select
-            value={selectedCategory || ''}
-            onChange={(e) => setSelectedCategory(e.target.value || null)}
-            size="sm"
-          >
-            <option value="">All Categories</option>
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </Select>
+          <Toolbar.Item flex={0} minWidth={200}>
+            <Select
+              value={selectedCategory || ''}
+              onChange={(e) => setSelectedCategory(e.target.value || null)}
+            >
+              <option value="">All Categories</option>
+              {categories.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </Select>
+          </Toolbar.Item>
         )}
-      </XStack>
+        <Toolbar.Item flex={0}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={isFetching}
+          >
+            <XStack alignItems="center" gap="$1">
+              <Text margin={0}>↻</Text>
+              <Text margin={0}>{isFetching ? 'Refreshing...' : 'Refresh'}</Text>
+            </XStack>
+          </Button>
+        </Toolbar.Item>
+      </Toolbar>
 
       {/* Terms List */}
-      <YStack gap="$3">
-        {displayTerms.map((term) => {
-          const isExpanded = expandedTerms.has(term.id);
+      <YStack
+        marginTop="$5"
+        maxHeight={600}
+        overflow="scroll"
+        borderWidth={1}
+        borderColor="$borderColor"
+        borderRadius="$3"
+        backgroundColor="$gray1"
+      >
+        {displayTerms.length === 0 ? (
+          <EmptyStateCard
+            title="No terms match"
+            description="Adjust or clear your filters to see glossary terms."
+            padding="$6"
+            titleLevel={5}
+          />
+        ) : (
+          <YStack padding="$2">
+            {displayTerms.map((term) => {
+              const isExpanded = expandedTerms.has(term.id);
 
-          return (
-            <Card
-              key={term.id}
-              variant="outlined"
-              overflow="hidden"
-              padding={0}
-              marginBottom="$3"
-            >
-              {/* Term Header */}
-              <Button
-                variant="ghost"
-                width="100%"
-                padding="$4"
-                backgroundColor={isExpanded ? '$gray1' : '$background'}
-                justifyContent="space-between"
-                onClick={() => toggleTerm(term.id)}
-              >
-                <YStack flex={1} gap="$2">
-                  <XStack alignItems="center" gap="$2" marginBottom="$1">
-                    <Body size="lg" weight="bold" margin={0}>
-                      {term.term}
-                    </Body>
-                    {term.acronym_for && (
-                      <Body size="sm" tone="muted" fontStyle="italic" margin={0}>
-                        ({term.acronym_for})
-                      </Body>
-                    )}
-                    {term.category && (
-                      <Badge variant="blue" size="sm">
-                        {term.category}
-                      </Badge>
-                    )}
-                  </XStack>
-                  <Body tone="muted" margin={0}>
-                    {term.definition}
-                  </Body>
-                </YStack>
-                <Body size="lg" tone="muted" marginLeft="$4" margin={0}>
-                  {isExpanded ? '▼' : '▶'}
-                </Body>
-              </Button>
-
-              {/* Expanded Details */}
-              {isExpanded && (
-                <YStack
-                  padding="$4"
-                  backgroundColor="$gray1"
-                  borderTopWidth={1}
-                  borderTopColor="$borderColor"
-                  gap="$3"
+              return (
+                <Card
+                  key={term.id}
+                  variant="outlined"
+                  overflow="hidden"
+                  padding={0}
+                  marginBottom="$3"
+                  backgroundColor="$background"
                 >
-                  {/* Usage Examples */}
-                  {term.usage_examples && term.usage_examples.length > 0 && (
-                    <YStack marginBottom="$4" gap="$2">
-                      <Label size="xs" tone="muted" uppercase margin={0}>
-                        Usage Examples
-                      </Label>
-                      <BulletList
-                        items={term.usage_examples}
-                        renderItem={(example) => (
-                          <Body tone="muted" fontStyle="italic" margin={0}>
-                            "{example}"
-                          </Body>
-                        )}
-                      />
-                    </YStack>
-                  )}
-
-                  {/* Related Terms */}
-                  {term.related_terms && term.related_terms.length > 0 && (
-                    <YStack marginBottom="$4" gap="$2">
-                      <Label size="xs" tone="muted" uppercase margin={0}>
-                        Related Terms
-                      </Label>
-                      <TagGroup>
-                        {term.related_terms.map((related, i) => (
-                          <Badge key={i} variant="gray" size="sm">
-                            {related}
-                          </Badge>
-                        ))}
-                      </TagGroup>
-                    </YStack>
-                  )}
-
-                  {/* Metadata */}
+                  {/* Term Header */}
                   <XStack
-                    gap="$4"
-                    paddingTop="$3"
-                    borderTopWidth={1}
-                    borderTopColor="$borderColor"
-                    flexWrap="wrap"
+                    width="100%"
+                    padding="$4"
+                    justifyContent="space-between"
+                    alignItems="flex-start"
+                    marginBottom={isExpanded ? '$3' : 0}
+                    onPress={() => toggleTerm(term.id)}
+                    cursor="pointer"
                   >
-                    {term.confidence_score !== null && (
-                      <Text margin={0}>
-                        <Text fontWeight="600" margin={0}>Confidence:</Text> {(term.confidence_score * 100).toFixed(0)}%
-                      </Text>
-                    )}
-                    {term.agent_utility && term.agent_utility.length > 0 && (
-                      <Text margin={0}>
-                        <Text fontWeight="600" margin={0}>Agent Utility:</Text>{' '}
-                        {term.agent_utility
-                          .map((agent) => agent.charAt(0).toUpperCase() + agent.slice(1))
-                          .join(', ')}
-                      </Text>
-                    )}
-                    {term.source && (
-                      <Text margin={0}>
-                        <Text fontWeight="600" margin={0}>Source:</Text> {term.source}
-                      </Text>
-                    )}
-                      {term.source_url && (
-                        <Text margin={0}>
-                          <ExternalLink
-                            href={term.source_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            color="$blue11"
-                          >
-                            View Source →
-                          </ExternalLink>
-                        </Text>
+                    <YStack 
+                      flex={1} 
+                      gap="$2"
+                      minWidth={0}
+                      flexShrink={1}
+                    >
+                      <XStack alignItems="center" gap="$2" marginBottom="$1" flexWrap="wrap">
+                        <Body size="lg" weight="bold" margin={0}>
+                          {term.term}
+                        </Body>
+                        {/* {term.acronym_for && (
+                          <Body size="sm" tone="muted" fontStyle="italic" margin={0}>
+                            ({term.acronym_for})
+                          </Body>
+                        )} */}
+                        {/* {term.category && (
+                          <Badge variant="blue" size="sm">
+                            {term.category}
+                          </Badge>
+                        )} */}
+                      </XStack>
+                      {isExpanded ? (
+                        <Body tone="muted" margin={0}>
+                          {term.definition}
+                        </Body>
+                      ) : (
+                        <ClampText lines={3} tone="muted" margin={0}>
+                          {term.definition}
+                        </ClampText>
                       )}
+                    </YStack>
+                    <XStack alignItems="center" marginLeft="$4" flexShrink={0}>
+                      <Body size="lg" tone="muted" margin={0}>
+                        {isExpanded ? '▼' : '▶'}
+                      </Body>
+                    </XStack>
                   </XStack>
-                </YStack>
-              )}
-            </Card>
-          );
-        })}
+
+                  {/* Expanded Details */}
+                  {isExpanded && (
+                    <YStack
+                      paddingTop="$4"
+                      paddingHorizontal="$4"
+                      paddingBottom="$4"
+                      borderTopWidth={1}
+                      borderTopColor="$borderColor"
+                      gap="$3"
+                    >
+                      {/* Usage Examples */}
+                      {term.usage_examples && term.usage_examples.length > 0 && (
+                        <YStack marginBottom="$4" gap="$2">
+                          <Label size="xs" tone="muted" uppercase margin={0}>
+                            Usage Examples
+                          </Label>
+                          <BulletList
+                            items={term.usage_examples}
+                            renderItem={(example) => (
+                              <Body tone="muted" fontStyle="italic" margin={0}>
+                                "{example}"
+                              </Body>
+                            )}
+                          />
+                        </YStack>
+                      )}
+
+                      {/* Related Terms */}
+                      {term.related_terms && term.related_terms.length > 0 && (
+                        <YStack marginBottom="$4" gap="$2">
+                          <Label size="xs" tone="muted" uppercase margin={0}>
+                            Related Terms
+                          </Label>
+                          <TagGroup>
+                            {term.related_terms.map((related, i) => (
+                              <Badge key={i} variant="gray" size="sm">
+                                {related}
+                              </Badge>
+                            ))}
+                          </TagGroup>
+                        </YStack>
+                      )}
+
+                      {/* Metadata */}
+                      <XStack
+                        gap="$4"
+                        paddingTop="$3"
+                        borderTopWidth={1}
+                        borderTopColor="$borderColor"
+                        flexWrap="wrap"
+                      >
+                        {term.confidence_score !== null && (
+                          <XStack alignItems="center" gap="$1">
+                            <Text fontSize="$2" color="$gray11" fontWeight="600" margin={0}>
+                              Confidence:
+                            </Text>
+                            <Text fontSize="$2" color="$gray11" margin={0}>
+                              {(term.confidence_score * 100).toFixed(0)}%
+                            </Text>
+                          </XStack>
+                        )}
+                        {term.agent_utility && term.agent_utility.length > 0 && (
+                          <XStack alignItems="center" gap="$1">
+                            <Text fontSize="$2" color="$gray11" fontWeight="600" margin={0}>
+                              Agent Utility:
+                            </Text>
+                            <Text fontSize="$2" color="$gray11" margin={0}>
+                              {term.agent_utility
+                                .map((agent) => agent.charAt(0).toUpperCase() + agent.slice(1))
+                                .join(', ')}
+                            </Text>
+                          </XStack>
+                        )}
+                        {term.source && (
+                          <XStack alignItems="center" gap="$1">
+                            <Text fontSize="$2" color="$gray11" fontWeight="600" margin={0}>
+                              Source:
+                            </Text>
+                            <Text fontSize="$2" color="$gray11" margin={0}>
+                              {term.source}
+                            </Text>
+                          </XStack>
+                        )}
+                        {term.source_url && (
+                          <Text fontSize="$2" color="$gray11" margin={0}>
+                            <ExternalLink
+                              href={term.source_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              color="$blue11"
+                            >
+                              View Source →
+                            </ExternalLink>
+                          </Text>
+                        )}
+                      </XStack>
+                    </YStack>
+                  )}
+                </Card>
+              );
+            })}
+          </YStack>
+        )}
       </YStack>
     </YStack>
   );

@@ -1,95 +1,44 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { EventWithStatus } from '@/shared/types/event';
-import { getEvents } from '@/server/actions/event-actions';
-import { format, parseISO } from 'date-fns';
-import { YStack, XStack, Text, Card, Alert, EmptyStateCard, LoadingState, ClampText } from '@jarvis/ui-core';
+import { useState, useMemo } from 'react';
+import { useEventsQuery } from '@/shared/hooks/use-events-query';
+import { EventCard } from './event-card';
+import { YStack, XStack, Alert, EmptyStateCard, LoadingState, Button, Text } from '@jarvis/ui-core';
 
 interface EventsListProps {
   searchQuery?: string;
   statusFilter?: 'all' | 'scheduled' | 'live' | 'ended';
 }
 
+const EVENTS_PER_PAGE = 20;
+
 export function EventsList({ searchQuery = '', statusFilter = 'all' }: EventsListProps) {
-  const router = useRouter();
-  const [events, setEvents] = useState<EventWithStatus[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
-  useEffect(() => {
-    async function fetchEvents() {
-      setLoading(true);
-      setError(null);
-      
-      const { data, error: fetchError } = await getEvents({
-        search: searchQuery || undefined,
-        status: statusFilter,
-      });
-
-      if (fetchError) {
-        setError(fetchError);
-        setEvents([]);
-      } else {
-        setEvents(data || []);
-      }
-      
-      setLoading(false);
-    }
-
-    fetchEvents();
+  // Reset to page 1 when filters change
+  useMemo(() => {
+    setPage(1);
   }, [searchQuery, statusFilter]);
 
-  const formatDateTime = (dateString: string | null): string => {
-    if (!dateString) return 'Not scheduled';
-    try {
-      return format(parseISO(dateString), 'MMM d, yyyy h:mm a');
-    } catch {
-      return 'Invalid date';
-    }
-  };
+  const {
+    events,
+    total,
+    page: currentPage,
+    limit,
+    isLoading,
+    error,
+  } = useEventsQuery({
+    search: searchQuery || undefined,
+    status: statusFilter,
+    page,
+    limit: EVENTS_PER_PAGE,
+  });
 
-  const getStatusColor = (status: EventWithStatus['status']) => {
-    switch (status) {
-      case 'live':
-        return '$green11';
-      case 'scheduled':
-        return '$blue6';
-      case 'ended':
-        return '$gray11';
-      default:
-        return '$gray11';
-    }
-  };
+  const totalPages = Math.ceil(total / limit);
+  const hasNextPage = currentPage < totalPages;
+  const hasPrevPage = currentPage > 1;
 
-  const getStatusBgColor = (status: EventWithStatus['status']) => {
-    switch (status) {
-      case 'live':
-        return '$green2';
-      case 'scheduled':
-        return '$blue2';
-      case 'ended':
-        return '$gray2';
-      default:
-        return '$gray2';
-    }
-  };
-
-  const getStatusLabel = (status: EventWithStatus['status']): string => {
-    switch (status) {
-      case 'live':
-        return 'Live';
-      case 'scheduled':
-        return 'Scheduled';
-      case 'ended':
-        return 'Ended';
-      default:
-        return 'Unknown';
-    }
-  };
-
-  if (loading) {
+  if (isLoading) {
     return (
       <LoadingState
         title="Loading events"
@@ -126,72 +75,46 @@ export function EventsList({ searchQuery = '', statusFilter = 'all' }: EventsLis
   }
 
   return (
-    <YStack gap="$3">
-      {events.map((event) => (
-        <Card
-          key={event.id}
-          padding="$5"
-          hoverStyle={{
-            borderColor: '$borderColorHover',
-            shadowColor: '$color',
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.1,
-            shadowRadius: 3,
-            elevation: 1,
-          }}
-          onClick={() => router.push(`/events/${event.id}/live`)}
-          cursor="pointer"
-        >
-          <XStack justifyContent="space-between" alignItems="flex-start" gap="$4">
-            <YStack flex={1} minWidth={0} gap="$2">
-              <XStack alignItems="center" gap="$3" marginBottom="$2">
-                <Text fontSize="$5" fontWeight="600" color="$color" margin={0}>
-                  {event.title}
-                </Text>
-                <YStack
-                  paddingHorizontal="$2.5"
-                  paddingVertical="$1"
-                  borderRadius="$4"
-                  backgroundColor={getStatusBgColor(event.status)}
-                >
-                  <Text
-                    fontSize="$2"
-                    fontWeight="500"
-                    color={getStatusColor(event.status)}
-                  >
-                    {getStatusLabel(event.status)}
-                  </Text>
-                </YStack>
-              </XStack>
-              
-              {event.topic && (
-                <ClampText
-                  lines={2}
-                  fontSize="$3"
-                  color="$gray11"
-                  marginBottom="$3"
-                >
-                  {event.topic.replace(/[#*`]/g, '').substring(0, 150)}
-                  {event.topic.length > 150 ? '...' : ''}
-                </ClampText>
-              )}
+    <YStack gap="$4">
+      <YStack gap="$3">
+        {events.map((event) => (
+          <EventCard key={event.id} event={event} />
+        ))}
+      </YStack>
 
-              <XStack gap="$6">
-                <Text fontSize="$3" color="$gray11">
-                  <Text fontWeight="600" color="$gray9">Start:</Text>{' '}
-                  {formatDateTime(event.start_time)}
-                </Text>
-                {event.end_time && (
-                  <Text fontSize="$3" color="$gray11">
-                    <Text fontWeight="600" color="$gray9">End:</Text>{' '}
-                    {formatDateTime(event.end_time)}
-                  </Text>
-                )}
-              </XStack>
-            </YStack>
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <XStack
+          justifyContent="space-between"
+          alignItems="center"
+          paddingVertical="$4"
+          paddingHorizontal="$2"
+          gap="$4"
+        >
+          <Text fontSize="$3" color="$gray11">
+            Page {currentPage} of {totalPages} ({total} total)
+          </Text>
+          
+          <XStack gap="$2">
+            <Button
+              size="sm"
+              variant="outline"
+              onPress={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={!hasPrevPage}
+            >
+              Previous
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onPress={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={!hasNextPage}
+            >
+              Next
+            </Button>
           </XStack>
-        </Card>
-      ))}
+        </XStack>
+      )}
     </YStack>
   );
 }

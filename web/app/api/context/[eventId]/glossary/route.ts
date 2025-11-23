@@ -84,14 +84,18 @@ export async function GET(
     query = query.order('confidence_score', { ascending: false, nullsFirst: false })
       .order('term', { ascending: true });
 
-    // Apply filters
+    // Apply filters at database level
     if (category) {
       query = query.eq('category', category);
     }
 
-    // Note: Supabase doesn't have full-text search built-in without extensions
-    // For MVP, we'll filter client-side. In production, consider using pg_trgm or similar
-    const { data: terms, error } = await query;
+    // Apply search filter at database level using ilike (case-insensitive pattern matching)
+    if (search && search.length > 0) {
+      // Use OR condition to search across term, definition, and acronym_for
+      query = query.or(`term.ilike.%${search}%,definition.ilike.%${search}%,acronym_for.ilike.%${search}%`);
+    }
+
+    const { data: terms, error } = await query.limit(200); // Limit to 200 terms for performance
 
     if (error) {
       console.error('[api/context/glossary] Error fetching glossary:', error);
@@ -101,18 +105,8 @@ export async function GET(
       );
     }
 
-    // Apply client-side search if provided
+    // Terms are already filtered by database, no need for client-side filtering
     let filteredTerms = terms || [];
-    if (search && search.length > 0) {
-      const searchLower = search.toLowerCase();
-      filteredTerms = filteredTerms.filter((term: any) => {
-        return (
-          term.term.toLowerCase().includes(searchLower) ||
-          term.definition.toLowerCase().includes(searchLower) ||
-          (term.acronym_for && term.acronym_for.toLowerCase().includes(searchLower))
-        );
-      });
-    }
 
     // Group by category if requested (for frontend convenience)
     const groupedByCategory: Record<string, typeof filteredTerms> = {};

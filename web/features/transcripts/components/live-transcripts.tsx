@@ -1,14 +1,75 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useTranscriptsQuery } from '@/shared/hooks/use-transcripts-query';
 import { useSSEStream } from '@/shared/hooks/use-sse-stream';
 import type { SSEMessage } from '@/shared/types/card';
-import { formatDistanceToNow } from 'date-fns';
-import { YStack, XStack, Button, Card, Alert, Badge, Body, Caption, EmptyStateCard, LoadingState } from '@jarvis/ui-core';
+import { TranscriptCard } from './transcript-card';
+import { YStack, XStack, Button, Alert, Badge, Body, EmptyStateCard, LoadingState } from '@jarvis/ui-core';
+
+import type { Transcript } from '@/shared/hooks/use-transcripts-query';
 
 interface LiveTranscriptsProps {
   eventId: string;
+}
+
+interface TranscriptsVirtualListProps {
+  transcripts: Transcript[];
+}
+
+/**
+ * Virtualized list component for transcripts
+ * Only renders visible items to improve performance with large lists
+ */
+function TranscriptsVirtualList({ transcripts }: TranscriptsVirtualListProps) {
+  const parentRef = useRef<HTMLDivElement>(null);
+
+  const virtualizer = useVirtualizer({
+    count: transcripts.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 120, // Estimated height per transcript card (includes padding/margin)
+    overscan: 5, // Render 5 extra items above/below viewport for smooth scrolling
+  });
+
+  return (
+    <YStack height="calc(100vh - 300px)" position="relative">
+      <div
+        ref={parentRef}
+        style={{
+          height: '100%',
+          overflow: 'auto',
+        }}
+      >
+        <div
+          style={{
+            height: `${virtualizer.getTotalSize()}px`,
+            width: '100%',
+            position: 'relative',
+          }}
+        >
+          {virtualizer.getVirtualItems().map((virtualItem) => {
+            const transcript = transcripts[virtualItem.index];
+            return (
+              <div
+                key={virtualItem.key}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: `${virtualItem.size}px`,
+                  transform: `translateY(${virtualItem.start}px)`,
+                }}
+              >
+                <TranscriptCard transcript={transcript} />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </YStack>
+  );
 }
 
 /**
@@ -121,49 +182,7 @@ export function LiveTranscripts({ eventId }: LiveTranscriptsProps) {
           align="center"
         />
       ) : (
-        <YStack
-          gap="$3"
-          maxHeight="calc(100vh - 300px)"
-          overflow="scroll"
-        >
-          {transcripts.map((transcript) => {
-            const timestamp = new Date(transcript.at_ms);
-            const timeAgo = formatDistanceToNow(timestamp, { addSuffix: true });
-
-            return (
-              <Card key={transcript.id} variant="outlined" padding="$4" marginBottom="$3">
-                <XStack
-                  justifyContent="space-between"
-                  alignItems="flex-start"
-                  gap="$3"
-                >
-                  <YStack flex={1} gap="$2">
-                    {transcript.speaker && (
-                      <Body size="sm" weight="medium" tone="muted">
-                        {transcript.speaker}
-                      </Body>
-                    )}
-                    <Body tone="muted" whitespace="preWrap">
-                      {transcript.text}
-                    </Body>
-                  </YStack>
-                  <YStack
-                    alignItems="flex-end"
-                    gap="$1"
-                    minWidth={120}
-                  >
-                    <Body size="sm" tone="muted" whitespace="nowrap">
-                      {timeAgo}
-                    </Body>
-                    <Caption mono>
-                      Seq: {transcript.seq}
-                    </Caption>
-                  </YStack>
-                </XStack>
-              </Card>
-            );
-          })}
-        </YStack>
+        <TranscriptsVirtualList transcripts={transcripts} />
       )}
     </YStack>
   );

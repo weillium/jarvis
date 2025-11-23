@@ -1,5 +1,14 @@
+import dynamic from 'next/dynamic';
 import { getEventById } from '@/server/actions/event-actions';
-import { LiveEventPageContent } from '@/features/events/components/live-event-page-content';
+import { LoadingState } from '@jarvis/ui-core';
+
+// Lazy load the heavy LiveEventPageContent component
+const LiveEventPageContent = dynamic(
+  () => import('@/features/events/components/live-event-page-content').then((mod) => ({ default: mod.LiveEventPageContent })),
+  {
+    loading: () => <LoadingState title="Loading event" description="Preparing event page..." padding="$10 $6" />,
+  }
+);
 
 type Props = {
   params: Promise<{ eventId: string }>;

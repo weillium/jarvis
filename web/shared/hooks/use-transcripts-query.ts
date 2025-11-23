@@ -34,7 +34,7 @@ export function useTranscriptsQuery(eventId: string | null) {
         throw new Error('Event ID required');
       }
 
-      const res = await fetch(`/api/transcripts/${eventId}?limit=1000&max_age_minutes=5`);
+      const res = await fetch(`/api/transcripts/${eventId}?limit=150&max_age_minutes=5`);
       
       if (!res.ok) {
         const errorText = await res.text();

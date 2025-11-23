@@ -146,39 +146,53 @@ function childrenToString(children: unknown): string {
 function convertOptionsToItems(children: ReactNode): ReactNode {
   if (!children) return null;
   
+  // Helper to check if an element is an option element
+  const isOptionElement = (child: unknown): child is React.ReactElement<HTMLOptionElement> => {
+    if (typeof child !== 'object' || child === null) return false;
+    if (!('type' in child)) return false;
+    const type = (child as { type: unknown }).type;
+    // Check for both string 'option' and React element type
+    return type === 'option' || (typeof type === 'string' && type.toLowerCase() === 'option');
+  };
+  
   if (Array.isArray(children)) {
     const items: ReactNode[] = [];
     children.forEach((child, index) => {
-      if (
-        typeof child === 'object' &&
-        child !== null &&
-        'type' in child &&
-        (child as { type: unknown }).type === 'option'
-      ) {
+      if (isOptionElement(child)) {
         const option = child as React.ReactElement<HTMLOptionElement>;
-        const value = option.props.value || childrenToString(option.props.children) || '';
+        // CRITICAL: Use option.props.value explicitly - it can be empty string, which is valid
+        // If value prop is not provided, it defaults to the text content, but we want to preserve empty string
+        const value = option.props.value !== undefined 
+          ? String(option.props.value) 
+          : (childrenToString(option.props.children) || '');
         const label = childrenToString(option.props.children) || value;
         
         items.push(
-          <StyledSelectItem key={value || index} value={value} index={index}>
+          <StyledSelectItem key={value !== '' ? value : `empty-${index}`} value={value} index={index}>
             <TamaguiSelect.ItemText>{label}</TamaguiSelect.ItemText>
           </StyledSelectItem>
         );
-      } else {
-        items.push(child as ReactNode);
+      } else if (child !== null && child !== undefined) {
+        // Recursively convert nested arrays or option elements
+        const converted = convertOptionsToItems(child);
+        if (converted) {
+          if (Array.isArray(converted)) {
+            items.push(...converted);
+          } else {
+            items.push(converted);
+          }
+        }
       }
     });
-    return items;
+    return items.length > 0 ? items : null;
   }
   
-  if (
-    typeof children === 'object' &&
-    children !== null &&
-    'type' in children &&
-    (children as { type: unknown }).type === 'option'
-  ) {
+  if (isOptionElement(children)) {
     const option = children as React.ReactElement<HTMLOptionElement>;
-    const value = option.props.value || childrenToString(option.props.children) || '';
+    // CRITICAL: Use option.props.value explicitly - it can be empty string, which is valid
+    const value = option.props.value !== undefined 
+      ? String(option.props.value) 
+      : (childrenToString(option.props.children) || '');
     const label = childrenToString(option.props.children) || value;
     
     return (

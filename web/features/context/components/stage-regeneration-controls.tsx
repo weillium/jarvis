@@ -140,11 +140,10 @@ export function StageRegenerationControls({
               disabled={
                 !!regeneratingStage || 
                 isContextGenerationRunning ||
-                !statusData?.hasChunks ||
                 (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks')
               }
               backgroundColor={
-                (regeneratingStage === 'chunks' || isContextGenerationRunning || !statusData?.hasChunks || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks'))
+                (regeneratingStage === 'chunks' || isContextGenerationRunning || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks'))
                   ? '$gray5'
                   : '$blue6'
               }
@@ -267,11 +266,10 @@ export function StageRegenerationControls({
               disabled={
                 !!regeneratingStage || 
                 isContextGenerationRunning ||
-                !statusData?.hasChunks ||
                 (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks')
               }
               backgroundColor={
-                (regeneratingStage === 'chunks' || isContextGenerationRunning || !statusData?.hasChunks || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks'))
+                (regeneratingStage === 'chunks' || isContextGenerationRunning || (statusData?.agent?.status === 'idle' && statusData?.agent?.stage === 'regenerating_chunks'))
                   ? '$gray5'
                   : '$blue6'
               }

@@ -123,11 +123,11 @@ export function useBlueprintFullQuery(eventId: string | null) {
       return (data.blueprint ?? null) as BlueprintFull | null;
     },
     enabled: !!eventId,
-    staleTime: 1000 * 30, // 30 seconds
+    staleTime: 1000 * 60 * 5, // 5 minutes - blueprints change infrequently
     refetchInterval,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
-    gcTime: 1000 * 120, // Allow 2 minutes of cache for blueprint payloads
+    gcTime: 1000 * 60 * 10, // Allow 10 minutes of cache for blueprint payloads
   });
 }
 

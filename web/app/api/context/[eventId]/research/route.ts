@@ -28,6 +28,9 @@ export async function GET(
 ) {
   try {
     const { eventId } = await params;
+    const { searchParams } = new URL(req.url);
+    const search = searchParams.get('search');
+    const apiFilter = searchParams.get('api');
 
     // Validate eventId format
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -62,9 +65,10 @@ export async function GET(
 
     // Fetch research results only from active cycles (or null/legacy items)
     // Handle null generation_cycle_id separately since .in() doesn't match NULL
+    // Only select needed fields - exclude large 'content' field initially (can be fetched on demand)
     let query = (supabase
       .from('research_results') as any)
-      .select('*')
+      .select('id, query, api, content, source_url, quality_score, metadata, created_at, generation_cycle_id')
       .eq('event_id', eventId);
 
     if (activeCycleIds.length > 0) {
@@ -75,7 +79,19 @@ export async function GET(
       query = query.is('generation_cycle_id', null);
     }
 
-    const { data: results, error } = await query.order('created_at', { ascending: false });
+    // Apply filters at database level
+    if (apiFilter && apiFilter.trim() !== '') {
+      query = query.eq('api', apiFilter);
+    }
+
+    if (search && search.trim() !== '') {
+      // Search in query and content fields using ilike
+      query = query.or(`query.ilike.%${search}%,content.ilike.%${search}%`);
+    }
+
+    const { data: results, error } = await query
+      .order('created_at', { ascending: false })
+      .limit(200); // Limit to 200 results for performance
 
     if (error) {
       console.error('[api/context/research] Error fetching research results:', error);
