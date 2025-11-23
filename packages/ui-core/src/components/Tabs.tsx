@@ -29,12 +29,12 @@ export function Tabs({ tabs, defaultTab }: TabsProps) {
       borderTopRightRadius="$4"
       borderBottomLeftRadius={0}
       borderBottomRightRadius={0}
-      disablePassBorderRadius="bottom"
       borderWidth={1}
       overflow="hidden"
       borderColor="$borderColor"
     >
         <TamaguiTabs.List
+          disablePassBorderRadius="bottom"
           aria-label="Tabs"
           overflow="scroll"
           borderBottomWidth={1}

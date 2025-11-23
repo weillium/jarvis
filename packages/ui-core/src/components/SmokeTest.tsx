@@ -68,6 +68,39 @@ export function SmokeTest() {
         </Text>
       </Card>
 
+      {/* Select and DateTimePicker outside Modal - Basic Test */}
+      <Card padding="$4" gap="$4">
+        <Text fontSize="$6" fontWeight="600" color="$color">
+          Select & DateTimePicker (Outside Modal)
+        </Text>
+        <Text fontSize="$4" color="$colorHover" marginBottom="$4">
+          Testing Select and DateTimePicker components without Modal to verify basic functionality.
+        </Text>
+        <YStack gap="$5">
+          <FormField label="Timezone" required>
+            <Select
+              value={timezone}
+              onChange={(e) => setTimezone(e.target.value)}
+              size="md"
+            >
+              {timezones.map((tz) => (
+                <option key={tz} value={tz}>
+                  {tz}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+
+          <FormField label="Date and Time" required>
+            <DateTimePicker
+              value={date}
+              onChange={setDate}
+              minDate={new Date()}
+            />
+          </FormField>
+        </YStack>
+      </Card>
+
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}

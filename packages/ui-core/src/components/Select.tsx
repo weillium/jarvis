@@ -31,11 +31,14 @@ const StyledSelectTrigger = styled(TamaguiSelect.Trigger, {
   backgroundColor: '$background',
   color: '$color',
   paddingHorizontal: '$4',
-  paddingVertical: '$0.5',
+  paddingVertical: '$2',
   fontSize: '$4',
   width: '100%',
-  // minHeight calculated: fontSize 14px * 1.4 lineHeight = 20px + paddingVertical $0.5*2 (4px) = 24px
-  minHeight: 24,
+  alignItems: 'center',
+  // minHeight calculated: fontSize 14px * 1.4 lineHeight = 20px + paddingVertical $2*2 (16px) = 36px
+  // Note: Select.Trigger cannot accept lineHeight prop directly, so it uses font default (~1.5)
+  // The minHeight ensures consistent height with Input component
+  minHeight: 36,
   cursor: 'pointer',
   focusStyle: {
     borderColor: '$blue6',
@@ -53,17 +56,17 @@ const StyledSelectTrigger = styled(TamaguiSelect.Trigger, {
     size: {
       sm: {
         paddingHorizontal: '$3',
-        paddingVertical: '$0.5',
+        paddingVertical: '$2',
         fontSize: '$3',
-        // minHeight calculated: fontSize 13px * 1.4 lineHeight = 19px + paddingVertical $0.5*2 (4px) = 23px
-        minHeight: 23,
+        // minHeight calculated: fontSize 13px * 1.4 lineHeight = 19px + paddingVertical $2*2 (16px) = 35px
+        minHeight: 35,
       },
       md: {
         paddingHorizontal: '$4',
-        paddingVertical: '$0.5',
+        paddingVertical: '$2',
         fontSize: '$4',
-        // minHeight calculated: fontSize 14px * 1.4 lineHeight = 20px + paddingVertical $0.5*2 (4px) = 24px
-        minHeight: 24,
+        // minHeight calculated: fontSize 14px * 1.4 lineHeight = 20px + paddingVertical $2*2 (16px) = 36px
+        minHeight: 36,
       },
     },
   } as const,

@@ -1,9 +1,8 @@
 'use client';
 
-import { useState } from 'react';
 import { EventWithStatus } from '@/shared/types/event';
 import { format, parseISO } from 'date-fns';
-import { EditEventModal } from './edit-event-modal';
+import { useRouter } from 'next/navigation';
 import { useEventDocsQuery } from '@/shared/hooks/use-event-docs-query';
 import { useEventQuery } from '@/shared/hooks/use-event-query';
 import { DocumentListItem } from './document-list-item';
@@ -27,7 +26,7 @@ interface EventDetailProps {
 }
 
 export function EventDetail({ eventId, event, onEventUpdate }: EventDetailProps) {
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const router = useRouter();
   
   // Fetch event data using React Query - this will automatically refetch when invalidated
   const { data: eventData, isLoading: eventLoading } = useEventQuery(eventId);
@@ -134,7 +133,7 @@ export function EventDetail({ eventId, event, onEventUpdate }: EventDetailProps)
         <Button
           variant="outline"
           size="sm"
-          onClick={() => setIsEditModalOpen(true)}
+          onPress={() => router.push(`/events/${eventId}/edit`)}
         >
           Edit
         </Button>
@@ -234,19 +233,6 @@ export function EventDetail({ eventId, event, onEventUpdate }: EventDetailProps)
           </Body>
         </YStack>
       </XStack>
-
-      <EditEventModal
-        isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
-        event={currentEvent}
-        onSuccess={(updatedEvent) => {
-          // The mutation already invalidates the query, so React Query will automatically refetch
-          // We just need to trigger the callback if provided
-          if (onEventUpdate) {
-            onEventUpdate(updatedEvent);
-          }
-        }}
-      />
     </YStack>
   );
 }

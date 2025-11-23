@@ -1,9 +1,10 @@
 'use client';
 
 import { forwardRef, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-import { XStack, YStack, Input, Button, Sheet, useTheme } from 'tamagui';
+import { XStack, YStack, Input, Button, useTheme, styled } from 'tamagui';
 import { CalendarIcon, ClockIcon } from '../icons';
 import { ButtonGroup } from './ButtonGroup';
 
@@ -18,6 +19,22 @@ export interface DateTimePickerProps {
   className?: string;
 }
 
+// Styled popup container for compact date/time picker
+const PopupContainer = styled(YStack, {
+  name: 'DateTimePickerPopup',
+  position: 'fixed',
+  backgroundColor: '$background',
+  borderRadius: '$4',
+  borderWidth: 1,
+  borderColor: '$borderColor',
+  padding: '$4',
+  boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+  zIndex: 10000,
+  width: 'auto',
+  maxWidth: '100vw',
+  overflow: 'visible',
+});
+
 export const DateTimePickerComponent = forwardRef<HTMLDivElement, DateTimePickerProps>(
   function DateTimePickerComponent(props, ref) {
     const { value, onChange, disabled, minDate, maxDate, id, className } = props;
@@ -25,6 +42,7 @@ export const DateTimePickerComponent = forwardRef<HTMLDivElement, DateTimePicker
     const [tempDate, setTempDate] = useState<Date | null>(value || null);
     const [tempTime, setTempTime] = useState<Date | null>(value || null);
     const internalRef = useRef<HTMLDivElement>(null);
+    const popupRef = useRef<HTMLDivElement>(null);
     const theme = useTheme();
     
     // Sync tempDate with value prop
@@ -44,6 +62,233 @@ export const DateTimePickerComponent = forwardRef<HTMLDivElement, DateTimePicker
         }
       }
     }, [ref]);
+    
+    // Position popup near the input field and keep it fixed during scroll
+    // Also measure and match time component height to date component
+    useEffect(() => {
+      if (!show || !internalRef.current || !popupRef.current) return;
+      
+      // Prevent page scrolling when popup is open
+      const preventPageScroll = (e: WheelEvent) => {
+        const target = e.target as HTMLElement;
+        // Allow scrolling within the time list
+        if (target.closest('.react-datepicker__time-list')) {
+          return; // Allow this scroll
+        }
+        // Prevent scrolling everywhere else in the popup
+        if (target.closest('[data-name="DateTimePickerPopup"]')) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      };
+      
+      // Prevent touch scrolling on mobile
+      const preventTouchScroll = (e: TouchEvent) => {
+        const target = e.target as HTMLElement;
+        if (target.closest('.react-datepicker__time-list')) {
+          return; // Allow this scroll
+        }
+        if (target.closest('[data-name="DateTimePickerPopup"]')) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      };
+      
+      document.addEventListener('wheel', preventPageScroll, { passive: false });
+      document.addEventListener('touchmove', preventTouchScroll, { passive: false });
+      
+      const updatePosition = (forceBelow = false) => {
+        if (!internalRef.current || !popupRef.current) return;
+        
+        const inputRect = internalRef.current.getBoundingClientRect();
+        const popup = popupRef.current;
+        // Use actual dimensions from the rendered popup
+        const popupHeight = popup.offsetHeight || 400;
+        const popupWidth = popup.offsetWidth || 320;
+        
+        // If popup height is still 0 or very small, it's not fully rendered yet
+        // Wait a bit and try again
+        if (popupHeight < 100 && !forceBelow) {
+          requestAnimationFrame(() => {
+            setTimeout(() => updatePosition(false), 50);
+          });
+          return;
+        }
+        
+        // Position below the input by default (preferred)
+        // Use getBoundingClientRect which is viewport-relative (scroll-independent)
+        let top = inputRect.bottom + 8;
+        let left = inputRect.left;
+        
+        // Only position above if there's not enough space below AND enough space above
+        const spaceBelow = window.innerHeight - inputRect.bottom;
+        const spaceAbove = inputRect.top;
+        const needsAbove = top + popupHeight > window.innerHeight;
+        const hasEnoughAbove = spaceAbove >= popupHeight + 8;
+        
+        // Prefer below, only go above if necessary and there's enough space
+        if (needsAbove && hasEnoughAbove && spaceAbove > spaceBelow) {
+          top = inputRect.top - popupHeight - 8;
+        }
+        
+        // Ensure popup stays within viewport
+        if (top < 0) {
+          top = 8;
+        }
+        if (left + popupWidth > window.innerWidth) {
+          left = window.innerWidth - popupWidth - 8;
+        }
+        if (left < 0) {
+          left = 8;
+        }
+        
+        popup.style.top = `${top}px`;
+        popup.style.left = `${left}px`;
+      };
+      
+      // Measure date component height and match time component
+      const matchHeights = () => {
+        try {
+          // Find date picker - it has tamagui-datepicker but NOT tamagui-timepicker
+          const datePicker = popupRef.current?.querySelector('.tamagui-datepicker:not(.tamagui-timepicker)') as HTMLElement;
+          
+          // Find time picker - it has both tamagui-datepicker AND tamagui-timepicker classes
+          const timePicker = popupRef.current?.querySelector('.tamagui-timepicker.react-datepicker') as HTMLElement ||
+                            popupRef.current?.querySelector('.react-datepicker--time-only') as HTMLElement;
+          
+          if (!datePicker) {
+            console.log('Date picker not found');
+            return;
+          }
+          
+          if (!timePicker) {
+            console.log('Time picker not found');
+            return;
+          }
+          
+          const dateHeight = datePicker.offsetHeight;
+          const timePickerHeight = timePicker.offsetHeight;
+          
+          // Debug: Check all the components
+          const dateHeader = datePicker.querySelector('.react-datepicker__header') as HTMLElement;
+          const dateMonth = datePicker.querySelector('.react-datepicker__month') as HTMLElement;
+          const timeHeader = timePicker.querySelector('.react-datepicker__header') as HTMLElement;
+          const timeContainer = timePicker.querySelector('.react-datepicker__time-container') as HTMLElement;
+          const timeList = timePicker.querySelector('.react-datepicker__time-list') as HTMLElement;
+          
+          console.log('=== Height Analysis ===');
+          console.log('Date picker total height:', dateHeight, 'px');
+          console.log('Time picker total height:', timePickerHeight, 'px');
+          console.log('Difference:', dateHeight - timePickerHeight, 'px');
+          console.log('Date header height:', dateHeader?.offsetHeight || 0, 'px');
+          console.log('Date month height:', dateMonth?.offsetHeight || 0, 'px');
+          console.log('Time header height:', timeHeader?.offsetHeight || 0, 'px');
+          console.log('Time container height:', timeContainer?.offsetHeight || 0, 'px');
+          console.log('Time list height:', timeList?.offsetHeight || 0, 'px');
+          
+          // Get computed styles to check padding/borders
+          const dateStyle = window.getComputedStyle(datePicker);
+          const timeStyle = window.getComputedStyle(timePicker);
+          console.log('Date picker padding-top:', dateStyle.paddingTop);
+          console.log('Date picker padding-bottom:', dateStyle.paddingBottom);
+          console.log('Time picker padding-top:', timeStyle.paddingTop);
+          console.log('Time picker padding-bottom:', timeStyle.paddingBottom);
+          
+          if (dateHeight > 0) {
+            // Match the entire time picker frame to the date picker height
+            timePicker.style.setProperty('height', `${dateHeight}px`, 'important');
+            timePicker.style.setProperty('min-height', `${dateHeight}px`, 'important');
+            console.log('Time picker height set to:', dateHeight, 'px');
+            
+            // Calculate the available height for the time container (total height minus header)
+            const headerHeight = timeHeader?.offsetHeight || 0;
+            const containerHeight = dateHeight - headerHeight;
+            
+            // Set the time container to fill the remaining space
+            if (timeContainer) {
+              timeContainer.style.height = `${containerHeight}px`;
+              timeContainer.style.overflow = 'hidden';
+            }
+            
+            // Set the time list to fill the container and scroll
+            if (timeList) {
+              timeList.style.height = '100%';
+              timeList.style.overflowY = 'auto';
+              timeList.style.overflowX = 'hidden';
+              timeList.style.maxHeight = `${containerHeight}px`;
+              
+              // Ensure scroll events work on the time list
+              timeList.addEventListener('wheel', (e) => {
+                e.stopPropagation();
+              }, { passive: true });
+            }
+            
+            console.log('Time container height set to:', containerHeight, 'px (header:', headerHeight, 'px)');
+            
+            // Recalculate position after heights are matched (popup size may have changed)
+            updatePosition(true);
+          } else {
+            console.log('Date height is 0, retrying...');
+            setTimeout(matchHeights, 100);
+          }
+        } catch (error) {
+          console.error('Error matching heights:', error);
+        }
+      };
+      
+      // Measure and match heights first, then position
+      // Use requestAnimationFrame to ensure DOM is ready
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          matchHeights();
+          // Also do an initial position update after a short delay to ensure popup is rendered
+          setTimeout(() => updatePosition(true), 100);
+        }, 50);
+      });
+      
+      // Update position on scroll to keep it fixed relative to viewport
+      // Only update if scroll is from window/document, not from inside the popup
+      const handleScroll = (e: Event) => {
+        const target = e.target as HTMLElement;
+        // Don't reposition if scrolling inside the popup (time list, etc.)
+        if (target && popupRef.current && popupRef.current.contains(target)) {
+          return;
+        }
+        updatePosition(true);
+      };
+      
+      window.addEventListener('scroll', handleScroll, true);
+      window.addEventListener('resize', () => {
+        updatePosition(true);
+        matchHeights();
+      });
+      
+      return () => {
+        window.removeEventListener('scroll', handleScroll, true);
+        window.removeEventListener('resize', updatePosition);
+        document.removeEventListener('wheel', preventPageScroll);
+        document.removeEventListener('touchmove', preventTouchScroll);
+      };
+    }, [show]);
+    
+    // Close popup when clicking outside
+    useEffect(() => {
+      if (!show) return;
+      
+      const handleClickOutside = (e: MouseEvent) => {
+        if (
+          popupRef.current &&
+          !popupRef.current.contains(e.target as Node) &&
+          internalRef.current &&
+          !internalRef.current.contains(e.target as Node)
+        ) {
+          setShow(false);
+        }
+      };
+      
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [show]);
     
     const handleOpen = (e?: any) => {
       if (!disabled) {
@@ -174,6 +419,8 @@ export const DateTimePickerComponent = forwardRef<HTMLDivElement, DateTimePicker
           border-radius: 8px;
           background-color: ${backgroundColor};
           font-family: Inter, sans-serif;
+          width: auto !important;
+          box-sizing: border-box !important;
         }
         .react-datepicker__header {
           background-color: ${backgroundColor};
@@ -201,11 +448,47 @@ export const DateTimePickerComponent = forwardRef<HTMLDivElement, DateTimePicker
         .react-datepicker__day--keyboard-selected:hover {
           background-color: ${blue7};
         }
+        .react-datepicker--time-only,
+        .tamagui-timepicker {
+          width: auto !important;
+          display: flex !important;
+          flex-direction: column !important;
+        }
+        .tamagui-timepicker .react-datepicker {
+          width: auto !important;
+          display: flex !important;
+          flex-direction: column !important;
+        }
         .react-datepicker__time-container {
-          border-left: 1px solid ${borderColor};
+          border-left: none !important;
+          width: auto !important;
+          height: 100% !important;
+          overflow: hidden !important;
+        }
+        .react-datepicker__time-container .react-datepicker__time {
+          background-color: ${backgroundColor};
+          width: auto !important;
+          height: 100% !important;
+          overflow: hidden !important;
+        }
+        .react-datepicker__time-container .react-datepicker__time .react-datepicker__time-box {
+          width: auto !important;
+          height: 100% !important;
+          overflow: hidden !important;
+        }
+        .react-datepicker__time-list {
+          width: auto !important;
+          height: 100% !important;
+          overflow-y: auto !important;
+          overflow-x: hidden !important;
+          -webkit-overflow-scrolling: touch !important;
+        }
+        .react-datepicker__time-list:focus {
+          outline: none !important;
         }
         .react-datepicker__time-list-item--selected {
           background-color: ${blue6};
+          color: white;
         }
         .react-datepicker__time-list-item:hover {
           background-color: ${backgroundHover};
@@ -278,88 +561,72 @@ export const DateTimePickerComponent = forwardRef<HTMLDivElement, DateTimePicker
           </XStack>
         </Button>
         
-        <Sheet 
-          modal 
-          open={show} 
-          onOpenChange={(open: boolean) => {
-            setShow(open);
-            if (!open) {
-              handleClose();
-            }
-          }} 
-          snapPoints={[85]} 
-          dismissOnSnapToBottom
-          zIndex={100000}
-        >
-          <Sheet.Overlay 
-            onPress={(e: any) => {
-              // Prevent closing parent modal when clicking overlay
-              // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
+        {show && typeof document !== 'undefined' && createPortal(
+          <PopupContainer
+            ref={popupRef}
+            gap="$4"
+            data-name="DateTimePickerPopup"
+            onClick={(e: any) => {
+              // Prevent closing parent modal
               e?.stopPropagation?.();
             }}
-          />
-          <Sheet.Handle />
-          <Sheet.Frame 
-            padding="$6" 
-            backgroundColor="$background" 
-            zIndex={100001}
-            onPress={(e: any) => {
-              // Prevent closing parent modal when clicking inside sheet
-              // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
+            onMouseDown={(e: any) => {
+              // Prevent closing parent modal
               e?.stopPropagation?.();
             }}
           >
-            <YStack gap="$5">
-              <YStack gap="$3">
-                <XStack gap="$4" $sm={{ flexDirection: 'column' }} $md={{ flexDirection: 'row' }}>
-                  <YStack flex={1} gap="$2">
-                    <XStack alignItems="center" gap="$2">
-                      <CalendarIcon size={20} />
-                      <span style={{ fontWeight: 600, fontSize: '14px' }}>Date</span>
-                    </XStack>
-                    <DatePicker
-                      selected={tempDate}
-                      onChange={handleDateChange}
-                      minDate={minDate}
-                      maxDate={maxDate}
-                      inline
-                      calendarClassName="tamagui-datepicker"
-                    />
-                  </YStack>
-                  
-                  <YStack flex={1} gap="$2">
-                    <XStack alignItems="center" gap="$2">
-                      <ClockIcon size={20} />
-                      <span style={{ fontWeight: 600, fontSize: '14px' }}>Time</span>
-                    </XStack>
-                    <DatePicker
-                      selected={tempTime}
-                      onChange={handleTimeChange}
-                      showTimeSelect
-                      showTimeSelectOnly
-                      timeIntervals={15}
-                      timeCaption="Time"
-                      dateFormat="h:mm aa"
-                      inline
-                      calendarClassName="tamagui-datepicker"
-                    />
-                  </YStack>
+            <XStack gap="$3" alignItems="flex-start" width="auto">
+              <YStack gap="$2" minWidth={0} flexShrink={0}>
+                <XStack alignItems="center" gap="$2">
+                  <CalendarIcon size={18} />
+                  <span style={{ fontWeight: 600, fontSize: '14px' }}>Date</span>
                 </XStack>
+                <div style={{ width: 'auto', overflow: 'visible' }}>
+                  <DatePicker
+                    selected={tempDate}
+                    onChange={handleDateChange}
+                    minDate={minDate}
+                    maxDate={maxDate}
+                    inline
+                    calendarClassName="tamagui-datepicker"
+                  />
+                </div>
               </YStack>
               
-              <ButtonGroup>
-                {/* eslint-disable-next-line @typescript-eslint/no-unsafe-assignment */}
-                <Button variant={"outline" as any} size="sm" onPress={handleClose}>
-                  Cancel
-                </Button>
-                {/* eslint-disable-next-line @typescript-eslint/no-unsafe-assignment */}
-                <Button variant={"primary" as any} size="sm" onPress={handleConfirm}>
-                  Confirm
-                </Button>
-              </ButtonGroup>
-            </YStack>
-          </Sheet.Frame>
-        </Sheet>
+              <YStack gap="$2" minWidth={0} flexShrink={0}>
+                <XStack alignItems="center" gap="$2">
+                  <ClockIcon size={18} />
+                  <span style={{ fontWeight: 600, fontSize: '14px' }}>Time</span>
+                </XStack>
+                <div style={{ width: 'auto', overflow: 'visible' }}>
+                  <DatePicker
+                    selected={tempTime}
+                    onChange={handleTimeChange}
+                    showTimeSelect
+                    showTimeSelectOnly
+                    timeIntervals={15}
+                    timeCaption="Time"
+                    dateFormat="h:mm aa"
+                    inline
+                    calendarClassName="tamagui-datepicker tamagui-timepicker"
+                  />
+                </div>
+              </YStack>
+            </XStack>
+            
+            <ButtonGroup>
+              {/* eslint-disable-next-line @typescript-eslint/no-unsafe-assignment */}
+              <Button variant={"outline" as any} onPress={handleClose}>
+                Cancel
+              </Button>
+              {/* eslint-disable-next-line @typescript-eslint/no-unsafe-assignment */}
+              <Button variant={"primary" as any} onPress={handleConfirm}>
+                Confirm
+              </Button>
+            </ButtonGroup>
+          </PopupContainer>,
+          document.body
+        )}
       </div>
     );
   }

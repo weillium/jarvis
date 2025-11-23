@@ -40,7 +40,7 @@ const StyledInput = styled(TamaguiInput, {
   backgroundColor: '$background',
   color: '$color',
   paddingHorizontal: '$4',
-  paddingVertical: '$0.5', // Reduced from $3 (12px) to $2 (8px)
+  paddingVertical: '$2',
   fontSize: '$4',
   lineHeight: 1.4,
   width: '100%',
@@ -48,8 +48,8 @@ const StyledInput = styled(TamaguiInput, {
   flexBasis: 0,
   flexGrow: 1,
   flexShrink: 1,
-  // minHeight calculated: fontSize 14px * 1.4 lineHeight = 20px + paddingVertical $0.5*2 (4px) = 24px
-  minHeight: 24,
+  // minHeight calculated: fontSize 14px * 1.4 lineHeight = 20px + paddingVertical $2*2 (16px) = 36px
+  minHeight: 36,
   placeholderTextColor: '$placeholderColor',
   focusStyle: {
     borderColor: '$blue6',
@@ -89,9 +89,12 @@ const NativePasswordInput = forwardRef<HTMLInputElement, React.InputHTMLAttribut
       return fallback;
     };
     
-    // Use measured height from actual Tamagui Input: 46px
-    // This accounts for Tamagui's internal height calculation which may include
-    // additional spacing, line-height calculations, or size token-based height
+    // Calculate height to match StyledInput: fontSize 14px * 1.4 lineHeight = 20px + paddingVertical $2*2 (16px) = 36px
+    const fontSize = 14; // $4
+    const lineHeight = 1.4;
+    const paddingVertical = 8; // $2
+    const calculatedHeight = Math.round(fontSize * lineHeight + paddingVertical * 2);
+    
     const baseStyle: React.CSSProperties = {
       fontFamily: (theme.bodyFont?.val as string) || 'inherit',
       borderRadius: '9px', // $3
@@ -105,16 +108,15 @@ const NativePasswordInput = forwardRef<HTMLInputElement, React.InputHTMLAttribut
       // Match Tamagui Input padding exactly
       paddingLeft: '16px', // $4
       paddingRight: '32px', // $8 (extra space for toggle button)
-      paddingTop: '2px', // $0.5
-      paddingBottom: '2px', // $0.5
+      paddingTop: `${paddingVertical}px`, // $2
+      paddingBottom: `${paddingVertical}px`, // $2
       // Match Tamagui Input font size
-      fontSize: '14px', // $4
-      lineHeight: 1.4,
+      fontSize: `${fontSize}px`, // $4
+      lineHeight: lineHeight,
       width: '100%',
       minWidth: 0,
-      // Use measured height from actual Tamagui Input component
-      height: '46px',
-      minHeight: '46px',
+      // Use calculated height to match StyledInput
+      minHeight: `${calculatedHeight}px`,
       boxSizing: 'border-box',
       outline: 'none',
       display: 'block',

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { CreateEventModal } from '@/features/events/components/create-event-modal';
+import { useRouter } from 'next/navigation';
 import { EventsList } from '@/features/events/components/events-list';
 import {
   PageContainer,
@@ -18,6 +18,7 @@ import {
 } from '@jarvis/ui-core';
 
 export default function EventsIndex() {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'scheduled' | 'live' | 'ended'>('all');
 
@@ -54,12 +55,9 @@ export default function EventsIndex() {
                 </Select>
               </Toolbar.Item>
               <Toolbar.Item flex={0}>
-                <CreateEventModal
-                  trigger={<Button size="sm">Create Event</Button>}
-                  onSuccess={() => {
-                    window.location.reload();
-                  }}
-                />
+                <Button size="sm" onPress={() => router.push('/events/new')}>
+                  Create Event
+                </Button>
               </Toolbar.Item>
             </Toolbar>
           </YStack>
