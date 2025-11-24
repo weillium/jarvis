@@ -6,7 +6,7 @@ import { LoadingState } from '@jarvis/ui-core';
 const LiveEventPageContent = dynamic(
   () => import('@/features/events/components/live-event-page-content').then((mod) => ({ default: mod.LiveEventPageContent })),
   {
-    loading: () => <LoadingState title="Loading event" description="Preparing event page..." padding="$10 $6" />,
+    loading: () => <LoadingState title="Loading event" description="Preparing event page..." />,
   }
 );
 

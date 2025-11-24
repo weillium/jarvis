@@ -215,7 +215,6 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
                 key={fact.key}
                 variant="outlined"
                 padding="$4"
-                marginBottom="$3"
               >
                 <XStack
                   justifyContent="space-between"
@@ -242,7 +241,7 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
                     </Body>
                   </YStack>
                   <YStack
-                    padding="$1 $2"
+                    padding="$2 $2"
                     backgroundColor={
                       fact.confidence >= 0.7
                         ? '$green2'
@@ -265,6 +264,9 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
                           ? '$yellow11'
                           : '$red11'
                       }
+                      textAlign="center"
+                      margin={0}
+                      lineHeight={1}
                     >
                       {(fact.confidence * 100).toFixed(0)}% confident
                     </Body>

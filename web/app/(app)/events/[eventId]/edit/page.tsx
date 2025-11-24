@@ -7,7 +7,7 @@ import { LoadingState } from '@jarvis/ui-core';
 const EditEventPageContent = dynamic(
   () => import('./edit-event-page-content'),
   {
-    loading: () => <LoadingState title="Loading editor" description="Preparing event editor..." padding="$10 $6" />,
+    loading: () => <LoadingState title="Loading editor" description="Preparing event editor..." />,
   }
 );
 

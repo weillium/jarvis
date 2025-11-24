@@ -122,9 +122,6 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
       <LoadingState
         title="Loading research results"
         description="Fetching the latest research runs."
-        align={embedded ? 'start' : 'center'}
-        padding={embedded ? '$4' : '$6'}
-        skeletons={[{ height: 32, width: '100%' }, { height: 32, width: '100%' }, { height: 32, width: '100%' }]}
       />
     );
   }

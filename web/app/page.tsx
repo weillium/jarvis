@@ -13,7 +13,7 @@ export default function RootPage() {
   if (loading) {
     return (
       <YStack minHeight="100vh" backgroundColor="$gray1" alignItems="center" justifyContent="center" padding="$6">
-        <LoadingState title="Loading" description="Checking your session..." padding="$4" align="center" />
+        <LoadingState title="Loading" description="Checking your session..." />
       </YStack>
     );
   }

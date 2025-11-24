@@ -21,7 +21,7 @@ export const TranscriptCard = memo(function TranscriptCard({ transcript }: Trans
   }, [transcript.at_ms]);
 
   return (
-    <Card key={transcript.id} variant="outlined" padding="$4" marginBottom="$3">
+    <Card key={transcript.id} variant="outlined" padding="$4">
       <XStack
         justifyContent="space-between"
         alignItems="flex-start"

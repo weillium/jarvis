@@ -58,9 +58,6 @@ export function BlueprintDisplay({
       <LoadingState
         title="Loading blueprint"
         description="Fetching the latest context blueprint."
-        padding="$6"
-        align="start"
-        skeletons={[{ height: 32 }, { height: 16 }, { height: 16 }]}
       />
     );
   }

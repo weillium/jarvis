@@ -193,10 +193,19 @@ export const createWorkerServer = ({
             res.end(JSON.stringify({ ok: true }));
             return;
           } catch (err: unknown) {
-            console.error('[worker] error:', String(err));
+            const errorText = String(err);
+            console.error('[worker] error:', errorText);
+            const status = errorText.includes('not found') || errorText.includes('Not found') || errorText.includes('disabled') || errorText.includes('unavailable') ? 404 : 500;
+            res.writeHead(status);
+            res.end(JSON.stringify({ ok: false, error: errorText }));
+            return;
           }
         } catch (err: unknown) {
-          console.error('[worker] error:', String(err));
+          const errorText = String(err);
+          console.error('[worker] error:', errorText);
+          res.writeHead(400);
+          res.end(JSON.stringify({ ok: false, error: errorText }));
+          return;
         }
       }
 

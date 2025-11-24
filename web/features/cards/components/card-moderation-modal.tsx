@@ -92,9 +92,9 @@ export function CardModerationModal({
       showCloseButton={!updateCardStatus.isPending}
     >
       <ModalContent description="Review the card content and optionally provide context before deactivating.">
-        <YStack gap="$5">
-          <XStack justifyContent="center">
-            <CardDisplay card={cardPayload} timestamp={timestamp} />
+        <YStack gap="$5" width="100%" minWidth={0}>
+          <XStack justifyContent="center" width="100%" minWidth={0} maxWidth="100%">
+            <CardDisplay card={cardPayload} timestamp={timestamp} allowShrink={true} />
           </XStack>
 
           {mutationError && (
@@ -134,7 +134,7 @@ export function CardModerationModal({
           </XStack>
 
           {showHistory && (
-            <YStack borderTopWidth={1} borderTopColor="$borderColor" paddingTop="$4">
+            <YStack borderTopWidth={1} borderTopColor="$borderColor" paddingTop="$4" width="100%" minWidth={0}>
               <Label size="sm">Moderation history</Label>
               <CardAuditHistory entries={auditEntries} isLoading={auditLoading} error={auditErrorMessage} />
             </YStack>

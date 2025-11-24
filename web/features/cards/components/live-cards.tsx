@@ -15,7 +15,6 @@ import type { CardPayload } from '@/shared/types/card';
 import { useCardsQuery } from '@/shared/hooks/use-cards-query';
 import { useQueryClient } from '@tanstack/react-query';
 import { CardModerationModal } from './card-moderation-modal';
-import { useTranscriptsQuery, type Transcript } from '@/shared/hooks/use-transcripts-query';
 import { CardDisplay } from './card-display';
 import {
   YStack,
@@ -44,19 +43,11 @@ export function LiveCards({ eventId }: LiveCardsProps) {
   const [moderationCardId, setModerationCardId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const scrollerRef = useRef<TamaguiElement | null>(null);
+  const scrollAreaRef = useRef<HTMLElement | null>(null);
 
   const { data: cardsData, isLoading } = useCardsQuery(eventId);
 
-  const { data: transcriptsData } = useTranscriptsQuery(eventId);
   const cards = useMemo(() => cardsData ?? [], [cardsData]);
-  const transcriptBySeq = useMemo(() => {
-    const map = new Map<number, Transcript>();
-    const transcripts = transcriptsData?.transcripts ?? [];
-    for (const transcript of transcripts) {
-      map.set(transcript.seq, transcript);
-    }
-    return map;
-  }, [transcriptsData?.transcripts]);
   const canScroll = cards.length > 1;
   const moderationTarget = useMemo(() => {
     if (!moderationCardId) {
@@ -151,6 +142,21 @@ export function LiveCards({ eventId }: LiveCardsProps) {
     }
   }, [isConnected, isConnecting]);
 
+  // Remove gradient background from scroll area
+  useEffect(() => {
+    const element = scrollerRef.current as HTMLElement | null;
+    if (element) {
+      element.style.background = 'transparent';
+      element.style.backgroundColor = 'transparent';
+      element.style.backgroundImage = 'none';
+      // Also check for any CSS variables or computed styles
+      const computedStyle = window.getComputedStyle(element);
+      if (computedStyle.backgroundImage && computedStyle.backgroundImage !== 'none') {
+        element.style.setProperty('background-image', 'none', 'important');
+      }
+    }
+  }, [cards]);
+
   const handleScroll = (direction: 'prev' | 'next') => {
     const container = scrollerRef.current as HTMLElement | null;
     if (!container) {
@@ -181,17 +187,29 @@ export function LiveCards({ eventId }: LiveCardsProps) {
       pointerEvents="none"
     >
       <Button
-        variant="outline"
+        variant="ghost"
         onClick={() => handleScroll(direction)}
         width={44}
         height={44}
         borderRadius="$10"
         pointerEvents="auto"
-        backgroundColor="$background"
-        shadowColor="$shadowColor"
-        shadowOffset={{ width: 0, height: 10 }}
-        shadowRadius={30}
-        shadowOpacity={0.18}
+        backgroundColor="transparent"
+        borderWidth={0}
+        borderColor="transparent"
+        shadowColor="transparent"
+        shadowOffset={{ width: 0, height: 0 }}
+        shadowRadius={0}
+        shadowOpacity={0}
+        outlineWidth={0}
+        outlineColor="transparent"
+        hoverStyle={{
+          backgroundColor: 'transparent',
+        }}
+        pressStyle={{
+          backgroundColor: 'transparent',
+          scale: 1,
+          opacity: 1,
+        }}
       >
         {direction === 'prev' ? '‹' : '›'}
       </Button>
@@ -199,7 +217,7 @@ export function LiveCards({ eventId }: LiveCardsProps) {
   );
 
   return (
-    <YStack padding="$8">
+    <YStack padding="$8" backgroundColor="transparent">
       {/* Connection Status */}
       <Alert variant={connectionVariant} marginBottom="$5">
         <XStack
@@ -243,8 +261,6 @@ export function LiveCards({ eventId }: LiveCardsProps) {
         <LoadingState
           title="Loading cards…"
           description="Fetching the latest context cards."
-          padding="$16 $6"
-          skeletons={[{ height: 320 }, { height: 320 }]}
         />
       ) : cards.length === 0 ? (
         <EmptyStateCard
@@ -267,21 +283,38 @@ export function LiveCards({ eventId }: LiveCardsProps) {
           align="center"
         />
       ) : (
-        <YStack position="relative">
+        <YStack position="relative" maxWidth="97.5%" marginHorizontal="auto">
           {canScroll && renderScrollButton('prev')}
 
           {canScroll && renderScrollButton('next')}
 
-          <HorizontalScrollArea ref={scrollerRef}>
+          <YStack
+            borderRadius="$4"
+            borderWidth={1}
+            borderColor="$gray4"
+            overflow="hidden"
+          >
+            <HorizontalScrollArea
+              ref={scrollerRef}
+              shadowColor="transparent"
+              shadowOffset={{ width: 0, height: 0 }}
+              shadowRadius={0}
+              shadowOpacity={0}
+              backgroundColor="transparent"
+              background="transparent"
+              backgroundImage="none"
+              paddingLeft="$4"
+              style={{
+                background: 'transparent !important',
+                backgroundImage: 'none !important',
+                backgroundColor: 'transparent !important',
+              }}
+            >
             {cards.map((card) => {
               const payload = card.payload as CardPayload | null;
               if (!payload) {
                 return null;
               }
-              const transcript =
-                typeof payload.source_seq === 'number'
-                  ? transcriptBySeq.get(payload.source_seq) ?? null
-                  : null;
 
               return (
                 <CardDisplay
@@ -289,11 +322,11 @@ export function LiveCards({ eventId }: LiveCardsProps) {
                   card={payload}
                   timestamp={card.emitted_at}
                   onModerate={() => setModerationCardId(card.id)}
-                  transcript={transcript}
                 />
               );
             })}
-          </HorizontalScrollArea>
+            </HorizontalScrollArea>
+          </YStack>
         </YStack>
       )}
 

@@ -254,10 +254,6 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
       <LoadingState
         title="Loading context generation status"
         description="Fetching the current agent and blueprint state."
-        padding={embedded ? '$4' : '$6'}
-        align={embedded ? 'start' : 'center'}
-        skeletons={[{ height: 40 }, { height: 40 }]}
-        marginBottom={embedded ? '$4' : '$6'}
       />
     );
   }

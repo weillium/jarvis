@@ -98,13 +98,6 @@ export function EventDetail({ eventId, event, onEventUpdate }: EventDetailProps)
       <LoadingState
         title="Loading event details"
         description="Fetching the latest event information."
-        padding="$6"
-        align="start"
-        skeletons={[
-          { height: 32, width: 200 },
-          { height: 24, width: 300 },
-          { height: 16, width: '100%' },
-        ]}
       />
     );
   }
@@ -165,9 +158,6 @@ export function EventDetail({ eventId, event, onEventUpdate }: EventDetailProps)
           <LoadingState
             title="Loading documents"
             description="Fetching any files attached to this event."
-            padding="$4"
-            align="start"
-            skeletons={[{ height: 48 }, { height: 48 }, { height: 48 }]}
           />
         ) : !docs || docs.length === 0 ? (
           <EmptyStateCard

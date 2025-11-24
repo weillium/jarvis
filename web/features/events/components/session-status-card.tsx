@@ -157,8 +157,8 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
   const pingPongMissed = session.ping_pong?.missedPongs ?? 0;
   const pingPongVariant = pingPongMissed === 0 ? 'success' : pingPongMissed === 1 ? 'warning' : 'error';
 
-  // For closed status, use white text on grey background for better contrast
-  const badgeTextColor = session.status === 'closed' ? '#ffffff' : statusColor;
+  // Use white text for statuses with colored backgrounds for better contrast
+  const badgeTextColor = session.status === 'closed' || session.status === 'active' ? '#ffffff' : statusColor;
 
   return (
     <Card variant="outlined" padding="$4" gap="$3" width="100%">
@@ -197,7 +197,9 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
             {actualWebSocketState === 'OPEN' && (
               <Alert
                 variant={pingPongVariant}
+                marginTop="$2"
                 marginBottom="$2"
+                paddingBottom="$2"
               >
                 <XStack
                   alignItems="center"
@@ -243,14 +245,12 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
           </>
         )}
 
-        <Body size="xs" tone="muted" marginBottom="$1">
+        <Caption tone="muted" marginBottom="$1">
           {runtime ? `${runtimeLabel}: ${runtime}` : `${runtimeLabel}: N/A`}
-        </Body>
+        </Caption>
         {isRealtime && (
-          <Body
-            size="xs"
+          <Caption
             tone="muted"
-            mono
             marginBottom="$1"
             fontStyle={
               session.session_id === 'pending' ||
@@ -267,11 +267,11 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
               new Date().getTime() - new Date(session.metadata.created_at).getTime() < 60000)
               ? 'Pending activation'
               : `Session: ${session.session_id.substring(0, 20)}…`}
-          </Body>
+          </Caption>
         )}
-        <Body size="xs" tone="muted">
+        <Caption tone="muted">
           Model: {session.metadata.model || 'N/A'}
-        </Body>
+        </Caption>
         {session.metrics_recorded_at && (
           <Caption fontStyle="italic">
             Metrics recorded at: {new Date(session.metrics_recorded_at).toLocaleString()}
@@ -395,16 +395,18 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
           <Button
             variant="ghost"
             width="100%"
-            justifyContent="space-between"
             padding="$2 $3"
             onClick={() =>
               setExpandedLogs((prev) => ({ ...prev, [session.agent_type]: !prev[session.agent_type] }))
             }
+            asChild
           >
-            <Body size="xs" weight="medium">
-              Recent Logs ({session.recent_logs.length})
-            </Body>
-            <Body size="md">{expandedLogs[session.agent_type] ? '▼' : '▶'}</Body>
+            <XStack width="100%" justifyContent="space-between" alignItems="center">
+              <Body size="xs" weight="medium">
+                Recent Logs ({session.recent_logs.length})
+              </Body>
+              <Body size="md">{expandedLogs[session.agent_type] ? '▼' : '▶'}</Body>
+            </XStack>
           </Button>
           {expandedLogs[session.agent_type] && (
             <YStack

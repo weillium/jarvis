@@ -43,11 +43,6 @@ export function EventsList({ searchQuery = '', statusFilter = 'all' }: EventsLis
       <LoadingState
         title="Loading events"
         description="Fetching your latest events."
-        padding="$10 $6"
-        skeletons={[
-          { height: 80, width: '100%' },
-          { height: 80, width: '100%' },
-        ]}
       />
     );
   }

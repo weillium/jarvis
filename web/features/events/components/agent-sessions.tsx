@@ -454,7 +454,7 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
                 key={label}
                 variant="outlined"
                 backgroundColor="$gray1"
-                padding="$3 $3.5"
+                padding="$4"
                 borderRadius="$2.5"
                 flex={1}
                 minWidth={160}

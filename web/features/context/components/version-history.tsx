@@ -359,10 +359,6 @@ export function VersionHistory({ eventId, embedded = false }: VersionHistoryProp
       <LoadingState
         title="Loading version history"
         description="Fetching the latest generation cycles."
-        align={embedded ? 'start' : 'center'}
-        padding="$6"
-        skeletons={[{ height: 48 }, { height: 48 }, { height: 48 }]}
-        marginBottom={embedded ? '$3' : '$6'}
       />
     );
   }

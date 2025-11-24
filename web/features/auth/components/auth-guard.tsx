@@ -33,7 +33,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
   if (loading) {
     return (
       <YStack minHeight="100vh" alignItems="center" justifyContent="center" backgroundColor="$background" padding="$4">
-        <LoadingState title="Authenticating" description="Checking your access…" padding="$4" />
+        <LoadingState title="Authenticating" description="Checking your access…" />
       </YStack>
     );
   }

@@ -15,9 +15,6 @@ export function CardAuditHistory({ entries, isLoading, error }: CardAuditHistory
       <LoadingState
         title="Loading history"
         description="Fetching moderation events for this card."
-        align="start"
-        padding="$3"
-        skeletons={[{ height: 12 }, { height: 12 }, { height: 12 }]}
       />
     );
   }

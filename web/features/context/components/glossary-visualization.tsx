@@ -72,9 +72,6 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
       <LoadingState
         title="Loading glossary"
         description="Fetching glossary terms for this event."
-        padding="$6"
-        align="start"
-        skeletons={[{ height: 24 }, { height: 24 }, { height: 24 }]}
       />
     );
   }

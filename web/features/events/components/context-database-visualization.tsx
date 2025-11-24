@@ -455,13 +455,6 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
             <LoadingState
               title="Loading context items"
               description="Fetching the most recent context chunks."
-              padding="$6"
-              align="start"
-              skeletons={[
-                { height: 64, width: '100%' },
-                { height: 64, width: '100%' },
-                { height: 64, width: '100%' },
-              ]}
             />
           ) : error ? (
             <YStack padding="$6" alignItems="center">

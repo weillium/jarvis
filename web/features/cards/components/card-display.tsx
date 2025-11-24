@@ -1,20 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { formatDistanceToNow } from 'date-fns';
-import type { Transcript } from '@/shared/hooks/use-transcripts-query';
 import type { CardPayload } from '@/shared/types/card';
 import { CardShell } from './card-shell';
 import {
   YStack,
   XStack,
   Button,
-  Card,
   Badge,
   Heading,
   Body,
-  Label,
-  Caption,
   BulletList,
 } from '@jarvis/ui-core';
 import { Image, styled } from 'tamagui';
@@ -23,7 +18,7 @@ interface CardDisplayProps {
   card: CardPayload;
   timestamp?: string;
   onModerate?: () => void;
-  transcript?: Transcript | null;
+  allowShrink?: boolean;
 }
 
 const stripBullet = (line: string): string =>
@@ -53,7 +48,14 @@ const extractSummaryBullets = (body?: string | null): string[] => {
     .split(/\n+/)
     .map((line) => stripBullet(line))
     .map((line) => line.replace(/^summary:\s*/i, '').trim())
-    .filter(Boolean);
+    .filter((line) => {
+      const lower = line.toLowerCase();
+      return (
+        Boolean(line) &&
+        !lower.startsWith('why now:') &&
+        !lower.startsWith('visual prompt:')
+      );
+    });
 };
 
 const normalizeTemplateName = (card: CardPayload): string => {
@@ -71,7 +73,7 @@ export function CardDisplay({
   card,
   timestamp,
   onModerate,
-  transcript,
+  allowShrink,
 }: CardDisplayProps) {
   const [imageFailed, setImageFailed] = useState(false);
   const cardType = card.card_type ?? 'text';
@@ -79,12 +81,6 @@ export function CardDisplay({
   const isDefinition = templateName.includes('definition');
   const isSummary = templateName.includes('summary');
   const badgeLabel = card.template_label ?? null;
-  const transcriptTimestamp =
-    typeof transcript?.at_ms === 'number' ? new Date(transcript.at_ms) : null;
-  const transcriptTimeAgo =
-    transcriptTimestamp && Number.isFinite(transcriptTimestamp.getTime())
-      ? formatDistanceToNow(transcriptTimestamp, { addSuffix: true })
-      : null;
 
   useEffect(() => {
     setImageFailed(false);
@@ -123,22 +119,9 @@ export function CardDisplay({
         return null;
       }
       return (
-        <Card
-          variant="outlined"
-          padding="$4"
-          borderRadius="$4"
-          backgroundColor="$blue2"
-          borderColor="$blue4"
-        >
-          <YStack gap="$2">
-            <Label size="xs" tone="info" uppercase>
-              Definition
-            </Label>
-            <Body tone="muted">
-              {definition}
-            </Body>
-          </YStack>
-        </Card>
+        <Body tone="muted" whitespace="preLine">
+          {definition}
+        </Body>
       );
     }
 
@@ -171,92 +154,68 @@ export function CardDisplay({
   };
 
   return (
-    <CardShell>
-      <XStack
-        justifyContent="space-between"
-        alignItems="flex-start"
-        gap="$3"
-      >
-        <YStack flex={1} minWidth={0}>
-          <Heading level={4} margin={0}>
-            {card.title}
-          </Heading>
+    <CardShell allowShrink={allowShrink}>
+      <YStack flex={1} minHeight={0}>
+        <XStack
+          justifyContent="space-between"
+          alignItems="flex-start"
+          gap="$3"
+        >
+          <YStack flex={1} minWidth={0}>
+            <Heading level={4} margin={0}>
+              {card.title}
+            </Heading>
 
-          {badgeLabel && (
-            <Badge variant="purple" size="sm" marginTop="$2">
-              {badgeLabel}
-            </Badge>
-          )}
-        </YStack>
-
-        {onModerate && (
-          <Button variant="outline" size="sm" onClick={onModerate}>
-            Moderate
-          </Button>
-        )}
-      </XStack>
-
-      {cardType === 'visual' && renderImage()}
-
-      {renderContent()}
-
-      {cardType === 'text_visual' && renderImage()}
-
-      {cardType === 'visual' && card.label && (
-        <Heading level={5} align="center">
-          {card.label}
-        </Heading>
-      )}
-
-      {transcript && (
-        <Card variant="outlined" padding="$3.5 $4" borderRadius="$4" backgroundColor="$gray1">
-          <YStack gap="$1.5">
-            <Label size="xs" uppercase>
-              Source transcript
-            </Label>
-            {transcript.speaker && (
-              <Body size="sm" weight="medium">
-                {transcript.speaker}
-              </Body>
+            {badgeLabel && (
+              <Badge variant="purple" size="sm" marginTop="$2" marginBottom="$3">
+                {badgeLabel}
+              </Badge>
             )}
-            <Body tone="muted" whitespace="preWrap">
-              {transcript.text}
-            </Body>
-            <XStack justifyContent="space-between">
-              <Caption mono>
-                Seq {transcript.seq}
-              </Caption>
-              {transcriptTimeAgo && (
-                <Caption mono>
-                  {transcriptTimeAgo}
-                </Caption>
-              )}
-            </XStack>
           </YStack>
-        </Card>
-      )}
+        </XStack>
 
-      {(card.source_seq || timestamp) && (
+        {cardType === 'visual' && renderImage()}
+
+        {renderContent()}
+
+        {cardType === 'text_visual' && renderImage()}
+
+        {cardType === 'visual' && card.label && (
+          <Heading level={5} align="center">
+            {card.label}
+          </Heading>
+        )}
+
         <XStack
           marginTop="auto"
           justifyContent="space-between"
           alignItems="center"
+          gap="$3"
           borderTopWidth={1}
           borderTopColor="$gray4"
           paddingTop="$2.5"
         >
-          {card.source_seq && (
-            <Body size="sm" tone="muted">
-              Source #{card.source_seq}
-            </Body>
+          <XStack flex={1}>
+            {card.source_seq && (
+              <Body size="sm" tone="muted">
+                Source #{card.source_seq}
+              </Body>
+            )}
+          </XStack>
+          {onModerate && (
+            <Button variant="outline" size="sm" onClick={onModerate}>
+              Moderate
+            </Button>
           )}
-          {timestamp && (
-            <Body size="sm" tone="muted">
-              {new Date(timestamp).toLocaleTimeString()}
-            </Body>
-          )}
+          <XStack flex={1} justifyContent="flex-end">
+            {timestamp && (
+              <Body size="sm" tone="muted" textAlign="right">
+                {new Date(timestamp).toLocaleTimeString()}
+              </Body>
+            )}
+          </XStack>
         </XStack>
-      )}
+      </YStack>
     </CardShell>
   );
 }

@@ -28,7 +28,7 @@ function TranscriptsVirtualList({ transcripts }: TranscriptsVirtualListProps) {
   const virtualizer = useVirtualizer({
     count: transcripts.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 120, // Estimated height per transcript card (includes padding/margin)
+    estimateSize: () => 80, // Estimated height per transcript card (reduced for tighter spacing)
     overscan: 5, // Render 5 extra items above/below viewport for smooth scrolling
   });
 
@@ -113,8 +113,6 @@ export function LiveTranscripts({ eventId }: LiveTranscriptsProps) {
         <LoadingState
           title="Loading transcripts"
           description="Fetching the latest transcript buffer."
-          padding="$12 $6"
-          skeletons={[{ height: 48 }, { height: 48 }, { height: 48 }]}
         />
       </YStack>
     );

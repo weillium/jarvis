@@ -136,13 +136,6 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
       <LoadingState
         title="Loading agent information"
         description="Fetching the latest agent status and context metrics."
-        align="start"
-        padding="$6"
-        skeletons={[
-          { height: 24, width: 200 },
-          { height: 24, width: 150 },
-          { height: 80, width: '100%' },
-        ]}
       />
     );
   }

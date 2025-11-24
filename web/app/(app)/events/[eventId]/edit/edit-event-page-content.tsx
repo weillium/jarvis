@@ -339,7 +339,7 @@ export default function EditEventPageContent() {
   if (eventLoading) {
     return (
       <PageContainer>
-        <LoadingState message="Loading event..." />
+        <LoadingState title="Loading event..." />
       </PageContainer>
     );
   }

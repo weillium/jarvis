@@ -1,6 +1,6 @@
 'use client';
 
-import { YStack, XStack, Button, Modal, Body, Label, ModalContent, ButtonGroup } from '@jarvis/ui-core';
+import { YStack, XStack, Button, Modal, Body, Label, ModalContent, ButtonGroup, Card, Text } from '@jarvis/ui-core';
 
 interface StartSessionsModalProps {
   isOpen: boolean;
@@ -46,7 +46,7 @@ export function StartSessionsModal({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Start Agent Sessions" maxWidth={600} showCloseButton={!isSubmitting}>
       <ModalContent description="Select which agent sessions you want to start. You can mix and match multiple agents." spacing="$5">
-        <YStack gap="$3">
+        <YStack gap="$3" marginBottom="$5">
           {options.map((option) => {
             const isSelected = selection[option.key];
             const handleToggle = () => {
@@ -57,49 +57,27 @@ export function StartSessionsModal({
               });
             };
             return (
-              <XStack
+              <Card
                 key={option.key}
-                alignItems="flex-start"
-                gap="$3"
-                padding="$4"
+                variant="outlined"
+                onClick={handleToggle}
+                cursor={isSubmitting ? 'not-allowed' : 'pointer'}
+                opacity={isSubmitting ? 0.6 : 1}
                 borderWidth={2}
                 borderColor={isSelected ? '$blue6' : '$borderColor'}
-                borderRadius="$3"
                 backgroundColor={isSelected ? '$blue2' : '$background'}
-                opacity={isSubmitting ? 0.6 : 1}
-                pointerEvents={isSubmitting ? 'none' : 'auto'}
-                hoverStyle={
-                  !isSubmitting
-                    ? {
-                        borderColor: isSelected ? '$blue7' : '$borderColorHover',
-                        backgroundColor: isSelected ? '$blue3' : '$gray1',
-                      }
-                    : undefined
-                }
-                pressStyle={
-                  !isSubmitting
-                    ? {
-                        borderColor: isSelected ? '$blue7' : '$borderColorHover',
-                        backgroundColor: isSelected ? '$blue3' : '$gray1',
-                      }
-                    : undefined
-                }
+                padding="$4"
               >
-                <Button
-                  variant={isSelected ? 'primary' : 'outline'}
-                  size="sm"
-                  disabled={isSubmitting}
-                  onClick={handleToggle}
-                  width="100%"
-                  justifyContent="flex-start"
-                >
-                  {isSelected ? 'Selected' : 'Select'}
-                </Button>
-                <YStack flex={1} gap="$1">
-                  <Label size="md">{option.label}</Label>
-                  <Body tone="muted">{option.description}</Body>
-                </YStack>
-              </XStack>
+                <XStack alignItems="center" gap="$3">
+                  <Text fontSize="$6" color={isSelected ? '$blue11' : '$gray8'}>
+                    {isSelected ? '✓' : '○'}
+                  </Text>
+                  <YStack flex={1} gap="$1">
+                    <Label size="md">{option.label}</Label>
+                    <Body tone="muted">{option.description}</Body>
+                  </YStack>
+                </XStack>
+              </Card>
             );
           })}
         </YStack>

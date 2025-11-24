@@ -22,7 +22,7 @@ export default function AuthPage() {
   if (loading) {
     return (
       <YStack minHeight="100vh" backgroundColor="$gray1" alignItems="center" justifyContent="center" padding="$6">
-        <LoadingState title="Checking your session" description="Verifying authentication status..." padding="$4" align="center" />
+        <LoadingState title="Checking your session" description="Verifying authentication status..." />
       </YStack>
     );
   }
