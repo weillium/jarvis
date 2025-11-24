@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSSEStream } from '@/shared/hooks/use-sse-stream';
+import { useFactsQuery } from '@/shared/hooks/use-facts-query';
+import { useQueryClient } from '@tanstack/react-query';
 import type { SSEMessage, SSEFactMessage } from '@/shared/types/card';
 import {
   YStack,
@@ -13,6 +15,7 @@ import {
   Badge,
   Body,
   EmptyStateCard,
+  LoadingState,
 } from '@jarvis/ui-core';
 
 interface LiveFactsProps {
@@ -27,75 +30,40 @@ interface Fact {
   updated_at: string;
 }
 
-interface ApiFact {
-  fact_key: string;
-  fact_value: any;
-  confidence: number;
-  last_seen_seq: number;
-  updated_at: string;
-}
-
 /**
  * Live Facts Component
  * Displays facts as they are updated via SSE stream
  */
 export function LiveFacts({ eventId }: LiveFactsProps) {
-  const [facts, setFacts] = useState<Map<string, Fact>>(new Map());
+  const { data: initialFacts, isLoading, error } = useFactsQuery(eventId);
+  const queryClient = useQueryClient();
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
-  const [initialLoadError, setInitialLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let isCancelled = false;
-
-    const loadInitialFacts = async () => {
-      try {
-        setInitialLoadError(null);
-
-        const response = await fetch(`/api/context/${eventId}/facts`, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
+  // Convert initial facts to Map format
+  const factsMap = useMemo(() => {
+    const map = new Map<string, Fact>();
+    if (initialFacts) {
+      for (const fact of initialFacts) {
+        map.set(fact.fact_key, {
+          key: fact.fact_key,
+          value: fact.fact_value,
+          confidence: fact.confidence,
+          last_seen_seq: fact.last_seen_seq,
+          updated_at: fact.updated_at,
         });
-
-        if (!response.ok) {
-          throw new Error(`Failed to load facts (status ${response.status})`);
-        }
-
-        const data: { ok: boolean; facts?: ApiFact[]; error?: string } = await response.json();
-        if (!data.ok) {
-          throw new Error(data.error || 'Failed to load facts');
-        }
-
-        if (isCancelled) {
-          return;
-        }
-
-        const nextFacts = new Map<string, Fact>();
-        for (const fact of data.facts ?? []) {
-          nextFacts.set(fact.fact_key, {
-            key: fact.fact_key,
-            value: fact.fact_value,
-            confidence: fact.confidence,
-            last_seen_seq: fact.last_seen_seq,
-            updated_at: fact.updated_at,
-          });
-        }
-
-        setFacts(nextFacts);
-      } catch (error) {
-        if (isCancelled) {
-          return;
-        }
-        console.error('[LiveFacts] Failed to load initial facts:', error);
-        setInitialLoadError(error instanceof Error ? error.message : 'Failed to load facts');
       }
-    };
+    }
+    return map;
+  }, [initialFacts]);
 
-    void loadInitialFacts();
+  const [facts, setFacts] = useState<Map<string, Fact>>(factsMap);
 
-    return () => {
-      isCancelled = true;
-    };
-  }, [eventId]);
+  // Update facts when initial data loads
+  useEffect(() => {
+    if (initialFacts) {
+      setFacts(factsMap);
+    }
+  }, [initialFacts, factsMap]);
 
   const { isConnected, isConnecting, reconnect } = useSSEStream({
     eventId,
@@ -111,18 +79,50 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
             next.delete(fact.fact_key);
             return next;
           });
+          // Update React Query cache
+          queryClient.setQueryData<typeof initialFacts>(['facts', eventId], (prev = []) =>
+            prev.filter((f) => f.fact_key !== fact.fact_key)
+          );
         } else {
           // Insert or update fact
+          const updatedFact: Fact = {
+            key: fact.fact_key,
+            value: fact.fact_value,
+            confidence: fact.confidence,
+            last_seen_seq: fact.last_seen_seq,
+            updated_at: fact.updated_at,
+          };
           setFacts((prev) => {
             const next = new Map(prev);
-            next.set(fact.fact_key, {
-              key: fact.fact_key,
-              value: fact.fact_value,
-              confidence: fact.confidence,
-              last_seen_seq: fact.last_seen_seq,
-              updated_at: fact.updated_at,
-            });
+            next.set(fact.fact_key, updatedFact);
             return next;
+          });
+          // Update React Query cache
+          queryClient.setQueryData<typeof initialFacts>(['facts', eventId], (prev = []) => {
+            const existing = prev.find((f) => f.fact_key === fact.fact_key);
+            if (existing) {
+              return prev.map((f) =>
+                f.fact_key === fact.fact_key
+                  ? {
+                      fact_key: fact.fact_key,
+                      fact_value: fact.fact_value,
+                      confidence: fact.confidence,
+                      last_seen_seq: fact.last_seen_seq,
+                      updated_at: fact.updated_at,
+                    }
+                  : f
+              );
+            }
+            return [
+              ...prev,
+              {
+                fact_key: fact.fact_key,
+                fact_value: fact.fact_value,
+                confidence: fact.confidence,
+                last_seen_seq: fact.last_seen_seq,
+                updated_at: fact.updated_at,
+              },
+            ];
           });
         }
       }
@@ -149,13 +149,15 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
     }
   }, [isConnected, isConnecting]);
 
-  const factsArray = Array.from(facts.values()).sort((a, b) => {
-    // Sort by confidence (high first), then by key
-    if (b.confidence !== a.confidence) {
-      return b.confidence - a.confidence;
-    }
-    return a.key.localeCompare(b.key);
-  });
+  const factsArray = useMemo(() => {
+    return Array.from(facts.values()).sort((a, b) => {
+      // Sort by confidence (high first), then by key
+      if (b.confidence !== a.confidence) {
+        return b.confidence - a.confidence;
+      }
+      return a.key.localeCompare(b.key);
+    });
+  }, [facts]);
 
   const connectionVariant = connectionStatus === 'connected' ? 'success' : connectionStatus === 'connecting' ? 'warning' : 'error';
   const connectionColor = connectionStatus === 'connected' ? '$green11' : connectionStatus === 'connecting' ? '$yellow11' : '$red11';
@@ -196,14 +198,23 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
         </XStack>
       </Alert>
 
-      {factsArray.length === 0 ? (
+      {isLoading ? (
+        <LoadingState
+          title="Loading facts"
+          description="Fetching the latest extracted facts."
+        />
+      ) : error ? (
         <EmptyStateCard
-          title={initialLoadError ? 'Unable to load facts' : 'No facts yet'}
-          description={
-            initialLoadError
-              ? `Failed to load facts: ${initialLoadError}`
-              : 'Facts will appear as they are extracted during the event.'
-          }
+          title="Unable to load facts"
+          description={`Failed to load facts: ${error instanceof Error ? error.message : 'Unknown error'}`}
+          padding="$6"
+          titleLevel={5}
+          align="center"
+        />
+      ) : factsArray.length === 0 ? (
+        <EmptyStateCard
+          title="No facts yet"
+          description="Facts will appear as they are extracted during the event."
           padding="$6"
           titleLevel={5}
           align="center"

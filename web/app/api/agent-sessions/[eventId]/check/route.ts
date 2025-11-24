@@ -31,6 +31,8 @@ export async function GET(
 
     // Fetch all sessions (any status) for display purposes
     // SSE connection will only be established when sessions are starting/active
+    // Note: token_metrics and runtime_stats are large JSONB fields - only fetch if needed
+    // For initial load, we can skip them and let SSE provide real-time updates
     console.log(`[api/agent-sessions/check] Fetching sessions for event_id: ${eventId}`);
     const { data: sessions, error: sessionsError } = await supabase
       .from('agent_sessions')

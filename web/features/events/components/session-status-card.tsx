@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import {
   YStack,
   XStack,
@@ -30,7 +30,7 @@ const ConnectionDot = styled(YStack, {
   borderRadius: '$10',
 });
 
-export function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: SessionStatusCardProps) {
+export const SessionStatusCard = memo(function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: SessionStatusCardProps) {
   const [currentTime, setCurrentTime] = useState(() => Date.now());
 
   const actualWebSocketState = session.websocket_state;
@@ -476,4 +476,25 @@ export function SessionStatusCard({ title, session, expandedLogs, setExpandedLog
 
     </Card>
   );
-}
+}, (prevProps, nextProps) => {
+  // Only re-render if session data actually changed
+  if (prevProps.title !== nextProps.title) return false;
+  if (prevProps.session.session_id !== nextProps.session.session_id) return false;
+  if (prevProps.session.status !== nextProps.session.status) return false;
+  if (prevProps.session.websocket_state !== nextProps.session.websocket_state) return false;
+  if (prevProps.expandedLogs[prevProps.session.agent_type] !== nextProps.expandedLogs[nextProps.session.agent_type]) return false;
+  
+  // Deep compare token_metrics and runtime_stats (these are large objects)
+  const prevMetrics = prevProps.session.token_metrics;
+  const nextMetrics = nextProps.session.token_metrics;
+  if (prevMetrics?.total_tokens !== nextMetrics?.total_tokens) return false;
+  if (prevMetrics?.request_count !== nextMetrics?.request_count) return false;
+  
+  const prevStats = prevProps.session.runtime_stats;
+  const nextStats = nextProps.session.runtime_stats;
+  if (prevStats?.uptime_ms !== nextStats?.uptime_ms) return false;
+  if (prevStats?.cards_last_seq !== nextStats?.cards_last_seq) return false;
+  
+  // If all key fields are the same, skip re-render
+  return true;
+});

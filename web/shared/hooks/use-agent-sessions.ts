@@ -350,7 +350,7 @@ export function useAgentSessionEnrichment(
   }
 ): UseAgentSessionEnrichmentReturn {
   const [enrichment, setEnrichment] = useState<Map<'transcript' | 'cards' | 'facts', AgentSessionSSEEnrichment>>(new Map());
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false); // Start as false - don't block initial render
   const [error, setError] = useState<Error | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -373,6 +373,7 @@ export function useAgentSessionEnrichment(
       eventSourceRef.current = null;
     }
 
+    // Only set loading when actively connecting (not blocking initial render)
     setIsLoading(true);
     setError(null);
 
@@ -551,10 +552,10 @@ export function useAgentSessionEnrichment(
 
   useEffect(() => {
     setEnrichment(new Map());
+    // Don't set loading to true on eventId change - let sessions render immediately
+    // Loading will be set when connect() is called
     if (!shouldConnect) {
       setIsLoading(false);
-    } else {
-      setIsLoading(true);
     }
     setError(null);
   }, [eventId, shouldConnect]);

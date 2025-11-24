@@ -44,7 +44,7 @@ export interface AgentData {
  * @returns Agent data, loading state, error, and refetch function
  */
 export function useAgentQuery(eventId: string | null) {
-  const refetchInterval = useVisibilityRefetchInterval(3000);
+  const refetchInterval = useVisibilityRefetchInterval(10000); // Increase to 10 seconds
 
   return useQuery<AgentData>({
     queryKey: ['agent', eventId],
@@ -67,10 +67,11 @@ export function useAgentQuery(eventId: string | null) {
       };
     },
     enabled: !!eventId,
+    staleTime: 1000 * 30, // 30 seconds - agent status doesn't change that frequently
     refetchInterval,
     refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
-    gcTime: 1000 * 60, // 1 minute to allow faster cleanup once inactive
+    refetchOnWindowFocus: false, // Don't refetch on focus
+    gcTime: 1000 * 60 * 5, // Keep in cache for 5 minutes
   });
 }
 

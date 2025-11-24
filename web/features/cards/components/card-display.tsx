@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { CardPayload } from '@/shared/types/card';
 import { CardShell } from './card-shell';
 import {
@@ -69,7 +69,7 @@ const CardMedia = styled(Image, {
   objectFit: 'cover',
 });
 
-export function CardDisplay({
+export const CardDisplay = React.memo(function CardDisplay({
   card,
   timestamp,
   onModerate,
@@ -218,4 +218,15 @@ export function CardDisplay({
       </YStack>
     </CardShell>
   );
-}
+}, (prevProps, nextProps) => {
+  // Only re-render if card data actually changed
+  // Compare card ID and key fields to avoid unnecessary re-renders
+  if (prevProps.card.title !== nextProps.card.title) return false;
+  if (prevProps.card.body !== nextProps.card.body) return false;
+  if (prevProps.card.image_url !== nextProps.card.image_url) return false;
+  if (prevProps.card.template_label !== nextProps.card.template_label) return false;
+  if (prevProps.timestamp !== nextProps.timestamp) return false;
+  if (prevProps.allowShrink !== nextProps.allowShrink) return false;
+  // If all key fields are the same, skip re-render
+  return true;
+});

@@ -529,7 +529,7 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
         </Alert>
       )}
 
-      {(enrichmentLoading || checkingSessions) && displaySessions.length === 0 && (
+      {checkingSessions && displaySessions.length === 0 && (
         <EmptyStateCard
           title="Loading session status"
           description="Checking for active agent sessions."
@@ -539,7 +539,7 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
         />
       )}
 
-      {!enrichmentLoading && !checkingSessions && displaySessions.length === 0 && !enrichmentError && (
+      {!checkingSessions && displaySessions.length === 0 && !enrichmentError && (
         <EmptyStateCard
           title="No active agent sessions"
           description={

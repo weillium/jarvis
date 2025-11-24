@@ -92,7 +92,7 @@ export interface AgentSessionsResponse {
  * @returns Session status data, loading state, error, and refetch function
  */
 export function useAgentSessionsQuery(eventId: string | null) {
-  const refetchInterval = useVisibilityRefetchInterval(5000);
+  const refetchInterval = useVisibilityRefetchInterval(10000); // Increase to 10 seconds - SSE provides real-time enrichment
 
   return useQuery<AgentSessionsResponse>({
     queryKey: ['agent-sessions', eventId],
@@ -138,11 +138,11 @@ export function useAgentSessionsQuery(eventId: string | null) {
       return data;
     },
     enabled: !!eventId,
-    staleTime: 1000 * 10, // 10 seconds
+    staleTime: 1000 * 30, // 30 seconds - SSE provides real-time enrichment, so less frequent refetching is needed
     refetchInterval,
     refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
-    gcTime: 1000 * 60,
+    refetchOnWindowFocus: false, // Don't refetch on focus - SSE handles real-time updates
+    gcTime: 1000 * 60 * 5, // Keep in cache for 5 minutes
     retry: 1, // Only retry once on failure (don't retry indefinitely)
     retryDelay: 1000, // Wait 1 second before retry
   });

@@ -442,21 +442,25 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
 
       {/* Expanded View */}
       {isExpanded && (
-        <YStack
-          marginTop="$5"
-          maxHeight={600}
-          overflow="scroll"
-          borderWidth={1}
-          borderColor="$borderColor"
-          borderRadius="$3"
-          backgroundColor="$gray1"
-        >
+        <>
           {isLoading ? (
-            <LoadingState
-              title="Loading context items"
-              description="Fetching the most recent context chunks."
-            />
-          ) : error ? (
+            <YStack marginTop="$5">
+              <LoadingState
+                title="Loading context items"
+                description="Fetching the most recent context chunks."
+              />
+            </YStack>
+          ) : (
+            <YStack
+              marginTop="$5"
+              maxHeight={600}
+              overflow="scroll"
+              borderWidth={1}
+              borderColor="$borderColor"
+              borderRadius="$3"
+              backgroundColor="$gray1"
+            >
+              {error ? (
             <YStack padding="$6" alignItems="center">
               <Alert variant="error">
                 Error loading context items: {error instanceof Error ? error.message : 'Unknown error'}
@@ -634,7 +638,9 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
               })}
             </YStack>
           )}
-        </YStack>
+            </YStack>
+        )}
+        </>
       )}
     </YStack>
   );

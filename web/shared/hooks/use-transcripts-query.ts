@@ -22,10 +22,10 @@ export interface TranscriptsResponse {
 
 /**
  * React Query hook for fetching recent transcripts (ring buffer equivalent)
- * Polls every 3 seconds to get real-time updates
+ * Polls every 5 seconds to get real-time updates (SSE also provides updates)
  */
 export function useTranscriptsQuery(eventId: string | null) {
-  const refetchInterval = useVisibilityRefetchInterval(3000);
+  const refetchInterval = useVisibilityRefetchInterval(5000); // Increase to 5 seconds - SSE handles real-time updates
 
   return useQuery<TranscriptsResponse>({
     queryKey: ['transcripts', eventId],
@@ -50,11 +50,11 @@ export function useTranscriptsQuery(eventId: string | null) {
       return data;
     },
     enabled: !!eventId,
-    staleTime: 1000, // Consider data stale after 1 second
+    staleTime: 1000 * 10, // 10 seconds - transcripts are updated via SSE, so less frequent refetching is needed
     refetchInterval,
     refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
-    gcTime: 1000 * 60, // Drop cached transcripts quickly once inactive
+    refetchOnWindowFocus: false, // Don't refetch on focus - SSE handles real-time updates
+    gcTime: 1000 * 60 * 5, // Keep in cache for 5 minutes
     retry: 1,
     retryDelay: 1000,
   });

@@ -42,9 +42,10 @@ export async function GET(
   }
 
   const supabase = getServiceClient();
+  // Only select columns we need - avoid fetching unnecessary metadata
   const { data, error } = await supabase
     .from('facts')
-    .select('*')
+    .select('fact_key, fact_value, confidence, last_seen_seq, updated_at')
     .eq('event_id', eventId)
     .eq('is_active', true)
     .order('last_seen_seq', { ascending: false });

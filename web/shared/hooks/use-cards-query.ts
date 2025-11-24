@@ -25,7 +25,10 @@ export function useCardsQuery(eventId: string | null) {
       return data.cards ?? [];
     },
     enabled: !!eventId,
-    staleTime: 1000 * 5,
+    staleTime: 1000 * 30, // 30 seconds - cards are updated via SSE, so less frequent refetching is needed
+    gcTime: 1000 * 60 * 5, // Keep in cache for 5 minutes
+    refetchOnWindowFocus: false, // Don't refetch on focus - SSE handles real-time updates
+    refetchOnMount: false, // Don't refetch on mount if data is fresh
   });
 }
 

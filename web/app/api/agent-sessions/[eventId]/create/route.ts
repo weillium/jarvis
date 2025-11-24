@@ -19,7 +19,7 @@ export async function POST(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ event_id: eventId }),
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(15000), // Increase to 15 seconds for worker operations
     });
 
     let workerData: any = null;
