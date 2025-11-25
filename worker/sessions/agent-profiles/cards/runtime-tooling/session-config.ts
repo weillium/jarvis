@@ -78,7 +78,7 @@ const produceCardTool: FunctionToolDefinition = {
       body: {
         type: 'string',
         description:
-          '1-3 bullet points or sentences with precise supporting detail (required for text/text_visual types, null for visual type).',
+          'Natural prose content with precise supporting detail (required for text/text_visual types, null for visual type).',
       },
       label: {
         type: 'string',

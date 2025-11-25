@@ -25,7 +25,23 @@ Add `SSE_ENDPOINT` to your `worker/.env` so it matches the origin that serves th
 SSE_ENDPOINT="https://your-web-app.example.com"
 ```
 
-Restart the worker after updating the variable so the configuration is picked up.
+### 0b. Image Generation & Fetching (Optional)
+
+For card visual support, add image fetching API keys to `worker/.env`:
+
+```bash
+# Image fetching - at minimum, set Pexels (free API key from https://www.pexels.com/api/)
+PEXELS_API_KEY="your-pexels-api-key"
+
+# Optional: Google Image Search fallback (requires Google Custom Search API)
+GOOGLE_API_KEY="your-google-api-key"
+GOOGLE_SEARCH_ENGINE_ID="your-search-engine-id"
+
+# Optional: Exa API key (used as final fallback for image search)
+EXA_API_KEY="your-exa-api-key"
+```
+
+Restart the worker after updating variables so the configuration is picked up.
 
 ### 1. Verify Setup (Optional but Recommended)
 

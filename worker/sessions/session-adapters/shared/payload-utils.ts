@@ -1,11 +1,36 @@
 import type { RealtimeCardDTO, RealtimeFactDTO, RealtimeToolCallDTO } from '../../../types';
 import type { ResponseDoneEvent } from 'openai/resources/realtime/realtime';
+import type { CardVisualRequest } from '../../agent-profiles/cards/runtime-tooling/card-image-service';
 
 const CARD_TYPES: ReadonlySet<RealtimeCardDTO['card_type']> = new Set([
   'text',
   'text_visual',
   'visual',
 ]);
+
+const isCardVisualRequest = (value: unknown): value is CardVisualRequest => {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  const strategy = record.strategy;
+  const instructions = record.instructions;
+  const sourceUrl = record.source_url;
+
+  if (strategy !== 'fetch' && strategy !== 'generate') {
+    return false;
+  }
+
+  if (typeof instructions !== 'string' || instructions.trim().length === 0) {
+    return false;
+  }
+
+  if (sourceUrl !== undefined && sourceUrl !== null && typeof sourceUrl !== 'string') {
+    return false;
+  }
+
+  return true;
+};
 
 export const safeJsonParse = <T>(raw: string): T | null => {
   try {
@@ -74,12 +99,22 @@ export const mapCardFromRecord = (
       ? record.template_label
       : undefined;
 
+  const visualRequest = record.visual_request;
+  const mappedVisualRequest = visualRequest && isCardVisualRequest(visualRequest)
+    ? {
+        strategy: visualRequest.strategy,
+        instructions: visualRequest.instructions,
+        source_url: visualRequest.source_url ?? null,
+      }
+    : null;
+
   return {
     card_type: cardType,
     title: record.title,
     body: typeof record.body === 'string' ? record.body : null,
     label: typeof record.label === 'string' ? record.label : null,
     image_url: typeof record.image_url === 'string' ? record.image_url : null,
+    visual_request: mappedVisualRequest,
     source_seq: sourceSeq,
     template_id: templateId,
     template_label: templateLabel,

@@ -4,3 +4,5 @@ export * from '../pipeline/orchestrator';
 export * from '../templates/registry';
 export * from '../templates/types';
 export * from './card-image-service';
+export * from './image-generator';
+export * from './image-fetcher';

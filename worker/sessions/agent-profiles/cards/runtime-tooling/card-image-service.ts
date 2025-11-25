@@ -1,6 +1,10 @@
 import { Buffer } from 'node:buffer';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type OpenAI from 'openai';
+import type { Exa } from 'exa-js';
 import type { Logger } from '../../../../services/observability/logger';
+import { ImageGenerator } from './image-generator';
+import { ImageFetcher, type ImageFetchProvider } from './image-fetcher';
 
 const HTTP_URL_REGEX = /^https?:\/\//i;
 
@@ -32,11 +36,49 @@ const isAlreadyCached = (imageUrl: string, bucket: string): boolean =>
   imageUrl.includes(`/storage/v1/object/public/${bucket}/`);
 
 export class CardImageService {
+  private readonly imageGenerator?: ImageGenerator;
+  private readonly imageFetcher?: ImageFetcher;
+
   constructor(
     private readonly supabase: SupabaseClient,
     private readonly bucket: string,
-    private readonly logger: Logger
-  ) {}
+    private readonly logger: Logger,
+    openaiClient?: OpenAI,
+    imageGenModel?: string,
+    imageFetchProvider?: ImageFetchProvider,
+    pexelsApiKey?: string,
+    googleApiKey?: string,
+    googleSearchEngineId?: string,
+    exaClient?: Exa
+  ) {
+    if (openaiClient && imageGenModel) {
+      this.imageGenerator = new ImageGenerator(openaiClient, imageGenModel, logger);
+    }
+
+    if (imageFetchProvider) {
+      this.imageFetcher = new ImageFetcher(
+        imageFetchProvider,
+        pexelsApiKey,
+        googleApiKey,
+        googleSearchEngineId,
+        exaClient,
+        logger
+      );
+    }
+  }
+
+  private determineStrategy(instructions: string): 'fetch' | 'generate' {
+    const conceptualKeywords = ['diagram', 'chart', 'graph', 'flowchart', 'schematic', 'conceptual', 'abstract'];
+    const isConceptual = conceptualKeywords.some((kw) => instructions.toLowerCase().includes(kw));
+    return isConceptual ? 'generate' : 'fetch';
+  }
+
+  private extractSearchQuery(instructions: string): string {
+    return instructions
+      .replace(/^(show|display|find|get|an image of|a picture of)\s+/i, '')
+      .replace(/\s+(image|picture|photo|photograph)$/i, '')
+      .trim() || instructions;
+  }
 
   async cacheRemoteImage(imageUrl: string, eventId: string, cardId: string): Promise<string | null> {
     if (!HTTP_URL_REGEX.test(imageUrl)) {
@@ -103,21 +145,77 @@ export class CardImageService {
       return null;
     }
 
-    if (request.strategy === 'fetch') {
-      if (typeof request.source_url === 'string' && request.source_url.trim().length > 0) {
-        return this.cacheRemoteImage(request.source_url.trim(), eventId, cardId);
+    const startTime = Date.now();
+    let strategy: 'fetch' | 'generate' = request.strategy || this.determineStrategy(request.instructions);
+
+    // If explicit source_url provided, cache it directly
+    if (request.strategy === 'fetch' && typeof request.source_url === 'string' && request.source_url.trim().length > 0) {
+      const cachedUrl = await this.cacheRemoteImage(request.source_url.trim(), eventId, cardId);
+      if (cachedUrl) {
+        const { calculateImageFetchCost } = await import('../../../../lib/pricing');
+        const cost = calculateImageFetchCost('exa'); // Approximate cost
+        this.logger.log(eventId, 'cards', 'log', '[image] Cached provided URL', {
+          strategy: 'fetch',
+          cost,
+          latency: Date.now() - startTime,
+        });
       }
-      this.logger.log(eventId, 'cards', 'warn', '[image] fetch strategy missing source_url', {
-        request,
-      });
-      return null;
+      return cachedUrl;
     }
 
-    if (request.strategy === 'generate') {
-      this.logger.log(eventId, 'cards', 'warn', '[image] generate strategy not yet implemented', {
-        instructions: request.instructions,
-      });
-      return null;
+    // Handle fetch strategy
+    if (strategy === 'fetch') {
+      if (!this.imageFetcher) {
+        this.logger.log(eventId, 'cards', 'warn', '[image] Fetch requested but ImageFetcher not available');
+        return null;
+      }
+
+      const searchQuery = this.extractSearchQuery(request.instructions);
+      const fetchResult = await this.imageFetcher.search(searchQuery, eventId);
+      
+      if (!fetchResult.url) {
+        this.logger.log(eventId, 'cards', 'warn', '[image] All fetch providers failed', {
+          query: searchQuery,
+        });
+        return null;
+      }
+
+      const cachedUrl = await this.cacheRemoteImage(fetchResult.url, eventId, cardId);
+      if (cachedUrl) {
+        this.logger.log(eventId, 'cards', 'log', '[image] Fetched and cached image', {
+          provider: fetchResult.provider,
+          cost: fetchResult.cost,
+          latency: Date.now() - startTime,
+        });
+      }
+      return cachedUrl;
+    }
+
+    // Handle generate strategy
+    if (strategy === 'generate') {
+      if (!this.imageGenerator) {
+        this.logger.log(eventId, 'cards', 'warn', '[image] Generate requested but ImageGenerator not available');
+        return null;
+      }
+
+      const genResult = await this.imageGenerator.generate(request.instructions, eventId);
+      
+      if (!genResult.url) {
+        this.logger.log(eventId, 'cards', 'warn', '[image] Generation failed', {
+          model: genResult.model,
+        });
+        return null;
+      }
+
+      const cachedUrl = await this.cacheRemoteImage(genResult.url, eventId, cardId);
+      if (cachedUrl) {
+        this.logger.log(eventId, 'cards', 'log', '[image] Generated and cached image', {
+          model: genResult.model,
+          cost: genResult.cost,
+          latency: Date.now() - startTime,
+        });
+      }
+      return cachedUrl;
     }
 
     return null;

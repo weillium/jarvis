@@ -19,6 +19,9 @@ export interface WorkerEnvConfig {
   sseEndpoint: string;
   workerPort: number;
   cardsImageBucket: string;
+  pexelsApiKey?: string;
+  googleApiKey?: string;
+  googleSearchEngineId?: string;
 }
 
 const requireEnv = (name: string): string => {
@@ -109,5 +112,8 @@ export const loadWorkerEnv = (): WorkerEnvConfig => {
     sseEndpoint,
     workerPort,
     cardsImageBucket: process.env.CARDS_IMAGE_BUCKET || 'card-assets',
+    pexelsApiKey: process.env.PEXELS_API_KEY,
+    googleApiKey: process.env.GOOGLE_API_KEY,
+    googleSearchEngineId: process.env.GOOGLE_SEARCH_ENGINE_ID,
   };
 };

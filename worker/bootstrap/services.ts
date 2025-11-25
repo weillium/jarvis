@@ -22,6 +22,8 @@ import {
 } from '../services/supabase';
 import { CardImageService } from '../sessions/agent-profiles/cards/runtime-tooling/card-image-service';
 import type { WorkerEnvConfig } from './env';
+import { Exa } from 'exa-js';
+import type { ImageFetchProvider } from '../sessions/agent-profiles/cards/runtime-tooling/image-fetcher';
 
 export interface WorkerRepositories {
   agents: AgentsRepository;
@@ -90,10 +92,24 @@ export const createWorkerInfrastructure = (
     metricsCollector,
     env.cardsModel
   );
+  const exaClient = env.exaApiKey ? new Exa(env.exaApiKey) : undefined;
+  // Image fetch provider - default to 'pexels', change in code if needed
+  const imageFetchProvider: ImageFetchProvider = 'pexels';
+  
+  // Image generation model - default to 'gpt-image-1-mini', bypasses env var resolution
+  const imageGenModel = 'gpt-image-1-mini';
+
   const cardImageService = new CardImageService(
     supabaseClient,
     env.cardsImageBucket,
-    logger
+    logger,
+    openai,
+    imageGenModel,
+    imageFetchProvider,
+    env.pexelsApiKey,
+    env.googleApiKey,
+    env.googleSearchEngineId,
+    exaClient
   );
 
   return {

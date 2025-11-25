@@ -30,9 +30,29 @@ export interface ExaPricing {
   };
 }
 
+export interface ImagePricing {
+  generation: {
+    [model: string]: {
+      pricePerImage: number;
+    };
+  };
+  fetch: {
+    pexels: {
+      pricePerQuery: number;
+    };
+    google: {
+      pricePerQuery: number;
+    };
+    exa: {
+      pricePerQuery: number;
+    };
+  };
+}
+
 export interface PricingConfig {
   openai: OpenAIPricing;
   exa: ExaPricing;
+  image: ImagePricing;
   lastUpdated: string;
   version: string;
 }
@@ -173,6 +193,22 @@ const openaiPricing: OpenAIPricing = {
     outputPricePer1k: 0.0001,
     embeddingPricePer1k: 0.0001,
   },
+  'gpt-image-1-mini': {
+    inputPricePer1k: 0.002,
+    outputPricePer1k: 0.015, // Medium Quality, 1536x1024
+  },
+  'gpt-image-1': {
+    inputPricePer1k: 0.005,
+    outputPricePer1k: 0.063, // Medium Quality, 1536x1024
+  },
+  'dall-e-3': {
+    inputPricePer1k: 0.0,
+    outputPricePer1k: 0.04,
+  },
+  'dall-e-2': {
+    inputPricePer1k: 0.0,
+    outputPricePer1k: 0.02,
+  },
 };
 
 const exaPricing: ExaPricing = {
@@ -189,9 +225,24 @@ const exaPricing: ExaPricing = {
   },
 };
 
+const imagePricing: ImagePricing = {
+  generation: {
+    'gpt-image-1-mini': { pricePerImage: 0.015 }, // Medium Quality, 1536x1024
+    'gpt-image-1': { pricePerImage: 0.063 }, // Medium Quality, 1536x1024
+    'dall-e-3': { pricePerImage: 0.04 },
+    'dall-e-2': { pricePerImage: 0.02 },
+  },
+  fetch: {
+    pexels: { pricePerQuery: 0.0 },
+    google: { pricePerQuery: 0.005 },
+    exa: { pricePerQuery: 0.03 },
+  },
+};
+
 export const pricingConfig: PricingConfig = {
   openai: openaiPricing,
   exa: exaPricing,
+  image: imagePricing,
   lastUpdated: '2025-11-09T00:00:00Z',
   version: '2025-11-09',
 };
@@ -273,6 +324,19 @@ export function calculateExaAnswerCost(queryCount: number): number {
   return queryCount * pricingConfig.exa.answer.pricePerQuery;
 }
 
+export function calculateImageGenerationCost(model: string): number {
+  const modelPricing = pricingConfig.image.generation[model];
+  if (!modelPricing) {
+    console.warn(`[pricing] No pricing found for image generation model "${model}", using default`);
+    return 0.02;
+  }
+  return modelPricing.pricePerImage;
+}
+
+export function calculateImageFetchCost(provider: 'pexels' | 'google' | 'exa'): number {
+  return pricingConfig.image.fetch[provider].pricePerQuery;
+}
+
 export function getPricingVersion(): string {
   return pricingConfig.version;
 }
@@ -306,11 +370,28 @@ type CostRequest =
       provider: 'exa';
       kind: 'answer';
       queryCount: number;
+    }
+  | {
+      provider: 'image';
+      kind: 'generation';
+      model: string;
+    }
+  | {
+      provider: 'image';
+      kind: 'fetch';
+      service: 'pexels' | 'google' | 'exa';
     };
 
 export function calculateCost(request: CostRequest): number {
   if (request.provider === 'openai') {
     return calculateOpenAICost(request.usage, request.model, request.isEmbedding);
+  }
+
+  if (request.provider === 'image') {
+    if (request.kind === 'generation') {
+      return calculateImageGenerationCost(request.model);
+    }
+    return calculateImageFetchCost(request.service);
   }
 
   if (request.kind === 'search') {

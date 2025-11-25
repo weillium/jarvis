@@ -36,6 +36,7 @@ export type ModelKey =
   | 'runtime.transcript_realtime'
   | 'runtime.cards_generation'
   | 'runtime.facts_generation'
+  | 'runtime.image_generation'
   | 'runtime.api_key';
 
 const createDescriptor = (descriptor: ModelDescriptor): ModelDescriptor => descriptor;
@@ -194,6 +195,21 @@ export const MODEL_DESCRIPTORS: Record<ModelKey, ModelDescriptor> = {
       open_ai: {
         envVar: 'OPENAI_FACTS_MODEL',
         fallbackValue: 'gpt-5-mini',
+      },
+    },
+  }),
+  'runtime.image_generation': createDescriptor({
+    key: 'runtime.image_generation',
+    stage: 'event_runtime',
+    description: 'Image generation model for card visuals (DALL-E, etc.).',
+    bindings: {
+      default: {
+        envVar: 'DEFAULT_IMAGE_GENERATION_MODEL',
+        fallbackValue: 'gpt-image-1-mini',
+      },
+      open_ai: {
+        envVar: 'OPENAI_IMAGE_GENERATION_MODEL',
+        fallbackValue: 'gpt-image-1-mini',
       },
     },
   }),

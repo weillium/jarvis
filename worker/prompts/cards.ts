@@ -27,7 +27,12 @@ const formatTemplatePlan = (plan?: TemplatePlan): string => {
       const strategy = slot.strategy.toUpperCase();
       const max = slot.maxLength ? `${slot.maxLength} chars` : 'free length';
       const markdown = slot.allowMarkdown ? 'markdown allowed' : 'plain text';
-      return `- ${slot.id} (${requirement}; ${strategy}; ${max}; ${markdown}): ${slot.description}`;
+      const bodyNote = slot.id === 'definition' || slot.id === 'bullets' 
+        ? ' → write as natural prose in body'
+        : slot.id === 'why_now' || slot.id === 'visual_prompt'
+        ? ' → separate from body (internal/metadata only)'
+        : '';
+      return `- ${slot.id} (${requirement}; ${strategy}; ${max}; ${markdown})${bodyNote}: ${slot.description}`;
     })
     .join('\n');
 
@@ -119,17 +124,21 @@ ${recentCards}
 ${conceptFocus ? `CONCEPT FOCUS\n${conceptFocus}\n\n` : ''}INSTRUCTIONS
 - Emit a card ONLY if it delivers genuinely new, audience-relevant insight that clarifies the live discussion.
 - Reject duplicated or stale angles. Build on recent cards only when you add fresh interpretation or consequences.
-- Map your content to the template slots: express each required slot explicitly in the card body as separate bullet points (e.g., "• Definition: ...", "• Why now: ...").
+- Write the body as natural, conversational prose—not labeled bullets or structured sections. Use template slots as content guidelines, not formatting requirements.
+- For definition cards: write a natural explanation that flows smoothly, incorporating the definition seamlessly.
+- For summary cards: present key points as natural sentences or a cohesive paragraph, not as disconnected labeled bullets.
+- Keep the body focused on the main readable content. Why-now context and visual prompts are handled separately (not in the body).
 - Validate retrieved chunks before using them; ignore low-similarity or off-topic excerpts.
-- Quote metrics, dates, and named entities precisely. Keep titles ≤ 8 words and body ≤ 3 tight bullets/sentences.
+- Quote metrics, dates, and named entities precisely. Keep titles ≤ 8 words and body as natural, flowing text (typically 1-3 sentences or a short paragraph).
 - Respect card_type semantics:
-  * text: body required. label, image_url, visual_request must be null.
-  * text_visual: body required and visual_request required; label null; image_url must remain null until the worker resolves the request.
+  * text: body required (natural prose). label, image_url, visual_request must be null.
+  * text_visual: body required (natural prose) and visual_request required; label null; image_url must remain null until the worker resolves the request.
   * visual: label required and visual_request required; body must be null; image_url must remain null until the worker resolves the request.
 - Populate visual_request whenever a helpful visual exists:
-  * Use {"strategy":"fetch","instructions":"...","source_url":"https://..."} for real-world photos or existing assets to retrieve.
-  * Use {"strategy":"generate","instructions":"...","source_url":null} for conceptual diagrams or illustrations that must be generated later.
-  * Provide concrete instructions (audience, style, framing). Omit visual_request when no visual is needed.
+  * For realistic/photographic content (photos, people, places, objects): Use {"strategy":"fetch","instructions":"descriptive search terms like 'Tokyo skyline at night' or 'Albert Einstein portrait'","source_url":null}. Be explicit about realistic content.
+  * For conceptual/abstract content (diagrams, charts, illustrations): Use {"strategy":"generate","instructions":"detailed description like 'flowchart showing process steps' or 'diagram of system architecture'","source_url":null}. Be explicit about conceptual content.
+  * If a specific source_url is known, include it in fetch strategy; otherwise leave null and let the system search.
+  * Provide concrete, descriptive instructions (audience, style, framing). Omit visual_request when no visual is needed.
 - If no useful card exists, respond with { "cards": [] } and do nothing else.
 
 OUTPUT FORMAT (STRICT)
@@ -138,7 +147,7 @@ OUTPUT FORMAT (STRICT)
     {
       "card_type": "text | text_visual | visual",
       "title": "concise title",
-      "body": "slot-aligned bullets or null",
+      "body": "natural prose or null",
       "label": "visual label or null",
       "template_id": "definition.v1 | summary.v1 | ...",
       "template_label": "Definition Card | Summary Card | ...",
@@ -152,6 +161,7 @@ OUTPUT FORMAT (STRICT)
     }
   ]
 }
-- Respond with exactly one JSON object. No leading text, commentary, or extra fields.`;
+- Respond with exactly one JSON object. No leading text, commentary, or extra fields.
+- The body field should contain natural, conversational prose—not labeled bullets or structured sections.`;
 }
 
