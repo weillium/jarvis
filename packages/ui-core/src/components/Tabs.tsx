@@ -25,20 +25,17 @@ export function Tabs({ tabs, defaultTab }: TabsProps) {
       orientation="horizontal"
       flexDirection="column"
       width="100%"
-      borderTopLeftRadius="$4"
-      borderTopRightRadius="$4"
-      borderBottomLeftRadius={0}
-      borderBottomRightRadius={0}
+      borderRadius="$4"
       borderWidth={1}
       overflow="hidden"
       borderColor="$borderColor"
     >
         <TamaguiTabs.List
-          disablePassBorderRadius="bottom"
           aria-label="Tabs"
           overflow="scroll"
           borderBottomWidth={1}
           borderBottomColor="$borderColor"
+          disablePassBorderRadius="bottom"
         >
           {tabs.map((tab) => (
             <TamaguiTabs.Tab key={tab.id} value={tab.id} flex={1}>

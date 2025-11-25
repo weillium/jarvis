@@ -4,7 +4,6 @@ import React, { useState, useEffect, memo } from 'react';
 import {
   YStack,
   XStack,
-  Button,
   Card,
   Alert,
   Heading,
@@ -13,15 +12,14 @@ import {
   Caption,
   Badge,
 } from '@jarvis/ui-core';
-import type { AgentSessionDisplay, AgentType } from './agent-sessions-utils';
+import type { AgentSessionDisplay } from './agent-sessions-utils';
 import { getSessionStatusColor, getSessionStatusColorHex, getSessionStatusLabel, formatDate, formatDuration } from './agent-sessions-utils';
 import { styled } from 'tamagui';
+import { ClientDateFormatter } from '@/shared/components/client-date-formatter';
 
 interface SessionStatusCardProps {
   title: string;
   session: AgentSessionDisplay;
-  expandedLogs: Record<AgentType, boolean>;
-  setExpandedLogs: React.Dispatch<React.SetStateAction<Record<AgentType, boolean>>>;
 }
 
 const ConnectionDot = styled(YStack, {
@@ -30,16 +28,26 @@ const ConnectionDot = styled(YStack, {
   borderRadius: '$10',
 });
 
-export const SessionStatusCard = memo(function SessionStatusCard({ title, session, expandedLogs, setExpandedLogs }: SessionStatusCardProps) {
-  const [currentTime, setCurrentTime] = useState(() => Date.now());
+export const SessionStatusCard = memo(function SessionStatusCard({ title, session }: SessionStatusCardProps) {
+  // Initialize with null to avoid hydration mismatch, set in useEffect
+  const [currentTime, setCurrentTime] = useState<number | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
+  const logsContainerRef = React.useRef<any>(null);
+  const prevLogCountRef = React.useRef<number>(0);
 
   const actualWebSocketState = session.websocket_state;
   const isWebSocketLive = actualWebSocketState === 'OPEN';
 
   const shouldTick = isWebSocketLive && !session.runtime_stats?.uptime_ms;
 
+  // Set initial time on mount (client-only)
   useEffect(() => {
-    if (!shouldTick || !session.metadata.created_at) {
+    setIsMounted(true);
+    setCurrentTime(Date.now());
+  }, []);
+
+  useEffect(() => {
+    if (!shouldTick || !session.metadata.created_at || !isMounted) {
       return;
     }
 
@@ -48,13 +56,25 @@ export const SessionStatusCard = memo(function SessionStatusCard({ title, sessio
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [shouldTick, session.metadata.created_at]);
+  }, [shouldTick, session.metadata.created_at, isMounted]);
+
+  // Auto-scroll to top when new logs arrive (newest logs are at the top)
+  useEffect(() => {
+    const currentLogCount = session.recent_logs?.length ?? 0;
+    if (
+      logsContainerRef.current &&
+      currentLogCount > 0 &&
+      currentLogCount > prevLogCountRef.current
+    ) {
+      logsContainerRef.current.scrollTop = 0;
+    }
+    prevLogCountRef.current = currentLogCount;
+  }, [session.recent_logs?.length]);
 
   const statusColor = getSessionStatusColor(session.status);
   const statusColorHex = getSessionStatusColorHex(session.status);
   const statusLabel = getSessionStatusLabel(session.status);
   const agentType = session.agent_type;
-  const isExpanded = expandedLogs[agentType];
   const isRealtime = session.transport === 'realtime';
   const runtimeLabel = 'Runtime';
   
@@ -90,8 +110,10 @@ export const SessionStatusCard = memo(function SessionStatusCard({ title, sessio
         connectionColorToken = session.status === 'paused' ? '$purple11' : '$gray11';
     }
   } else {
-    const isNewClosed = session.status === 'closed' && session.metadata?.created_at && 
-      (new Date().getTime() - new Date(session.metadata.created_at).getTime()) < 60000;
+    // Use currentTime if available (client-side), otherwise fallback to false to avoid hydration mismatch
+    const nowMs = isMounted && currentTime !== null ? currentTime : null;
+    const isNewClosed = session.status === 'closed' && session.metadata?.created_at && nowMs !== null &&
+      (nowMs - new Date(session.metadata.created_at).getTime()) < 60000;
     if (session.status === 'active') {
       connectionStatus = 'Awaiting SSE';
       connectionColor = '#f59e0b';
@@ -118,7 +140,9 @@ export const SessionStatusCard = memo(function SessionStatusCard({ title, sessio
       if (!metricsRecordedAtMs || !isWebSocketLive || session.status !== 'active') {
         return baseUptimeMs;
       }
-      const elapsedSinceMetrics = Date.now() - metricsRecordedAtMs;
+      // Use currentTime if available, otherwise use metrics timestamp to avoid hydration mismatch
+      const nowMs = isMounted && currentTime !== null ? currentTime : metricsRecordedAtMs;
+      const elapsedSinceMetrics = nowMs - metricsRecordedAtMs;
       return baseUptimeMs + Math.max(elapsedSinceMetrics, 0);
     }
     const startTimestampMs = (() => {
@@ -137,7 +161,8 @@ export const SessionStatusCard = memo(function SessionStatusCard({ title, sessio
 
     const endTimestampMs = (() => {
       if (session.status === 'active') {
-        return currentTime;
+        // Only use currentTime if mounted and available, otherwise use updated_at
+        return (isMounted && currentTime !== null) ? currentTime : (session.metadata.updated_at ? new Date(session.metadata.updated_at).getTime() : null);
       }
       if (session.metadata.closed_at) {
         return new Date(session.metadata.closed_at).getTime();
@@ -145,7 +170,8 @@ export const SessionStatusCard = memo(function SessionStatusCard({ title, sessio
       if (session.metadata.updated_at) {
         return new Date(session.metadata.updated_at).getTime();
       }
-      return currentTime;
+      // Fallback to updated_at if currentTime not available
+      return session.metadata.updated_at ? new Date(session.metadata.updated_at).getTime() : null;
     })();
 
     const diffMs = endTimestampMs - startTimestampMs;
@@ -158,12 +184,12 @@ export const SessionStatusCard = memo(function SessionStatusCard({ title, sessio
   const pingPongVariant = pingPongMissed === 0 ? 'success' : pingPongMissed === 1 ? 'warning' : 'error';
 
   // Use white text for statuses with colored backgrounds for better contrast
-  const badgeTextColor = session.status === 'closed' || session.status === 'active' ? '#ffffff' : statusColor;
+  const badgeTextColor = session.status === 'closed' || session.status === 'active' || session.status === 'error' ? '#ffffff' : statusColor;
 
   return (
-    <Card variant="outlined" padding="$4" gap="$3" width="100%">
+    <Card variant="outlined" padding="$4" gap={0} width="100%">
       {/* Header */}
-      <XStack justifyContent="space-between" alignItems="center">
+      <XStack justifyContent="space-between" alignItems="center" marginBottom="$1">
         <Heading level={4}>{title}</Heading>
         <Badge backgroundColor={statusColorHex} color={badgeTextColor}>
           {statusLabel}
@@ -171,7 +197,7 @@ export const SessionStatusCard = memo(function SessionStatusCard({ title, sessio
       </XStack>
 
       {/* Connection Status & Runtime */}
-      <YStack borderBottomWidth={1} borderBottomColor="$borderColor" paddingBottom="$3" marginTop="-$3">
+      <YStack borderBottomWidth={1} borderBottomColor="$borderColor" paddingBottom="$3" marginTop={0}>
         {isRealtime && (
           <>
             <XStack
@@ -227,7 +253,7 @@ export const SessionStatusCard = memo(function SessionStatusCard({ title, sessio
                   <XStack gap="$3" flexWrap="wrap">
                     {session.ping_pong.lastPongReceived && (
                       <Caption>
-                        Last pong: {new Date(session.ping_pong.lastPongReceived).toLocaleTimeString()}
+                        Last pong: <ClientDateFormatter date={session.ping_pong.lastPongReceived} format="localeTimeString" />
                       </Caption>
                     )}
                     <Caption>
@@ -256,7 +282,9 @@ export const SessionStatusCard = memo(function SessionStatusCard({ title, sessio
               session.session_id === 'pending' ||
               (session.status === 'closed' &&
                 session.metadata?.created_at &&
-                new Date().getTime() - new Date(session.metadata.created_at).getTime() < 60000)
+                isMounted &&
+                currentTime !== null &&
+                currentTime - new Date(session.metadata.created_at).getTime() < 60000)
                 ? 'italic'
                 : undefined
             }
@@ -264,7 +292,9 @@ export const SessionStatusCard = memo(function SessionStatusCard({ title, sessio
             {session.session_id === 'pending' ||
             (session.status === 'closed' &&
               session.metadata?.created_at &&
-              new Date().getTime() - new Date(session.metadata.created_at).getTime() < 60000)
+              isMounted &&
+              currentTime !== null &&
+              currentTime - new Date(session.metadata.created_at).getTime() < 60000)
               ? 'Pending activation'
               : `Session: ${session.session_id.substring(0, 20)}…`}
           </Caption>
@@ -274,7 +304,7 @@ export const SessionStatusCard = memo(function SessionStatusCard({ title, sessio
         </Caption>
         {session.metrics_recorded_at && (
           <Caption fontStyle="italic">
-            Metrics recorded at: {new Date(session.metrics_recorded_at).toLocaleString()}
+            Metrics recorded at: <ClientDateFormatter date={session.metrics_recorded_at} format="localeString" />
           </Caption>
         )}
       </YStack>
@@ -282,6 +312,7 @@ export const SessionStatusCard = memo(function SessionStatusCard({ title, sessio
       {/* Token Metrics */}
       {session.token_metrics && (
         <YStack
+          marginTop="$3"
           marginBottom="$3"
           paddingBottom="$3"
           borderBottomWidth={1}
@@ -391,66 +422,51 @@ export const SessionStatusCard = memo(function SessionStatusCard({ title, sessio
 
       {/* Recent Logs */}
       {session.recent_logs && session.recent_logs.length > 0 && (
-        <YStack>
-          <Button
-            variant="ghost"
-            width="100%"
-            padding="$2 $3"
-            onClick={() =>
-              setExpandedLogs((prev) => ({ ...prev, [session.agent_type]: !prev[session.agent_type] }))
-            }
-            asChild
+        <YStack marginTop="$3">
+          <Label size="xs" marginBottom="$2">
+            Recent Logs ({session.recent_logs.length})
+          </Label>
+          <YStack
+            ref={logsContainerRef}
+            maxHeight={300}
+            overflowY="auto"
+            padding="$3"
+            backgroundColor="$gray1"
+            borderRadius="$3"
+            borderWidth={1}
+            borderColor="$borderColor"
+            gap="$2"
           >
-            <XStack width="100%" justifyContent="space-between" alignItems="center">
-              <Body size="xs" weight="medium">
-                Recent Logs ({session.recent_logs.length})
-              </Body>
-              <Body size="md">{expandedLogs[session.agent_type] ? '▼' : '▶'}</Body>
-            </XStack>
-          </Button>
-          {expandedLogs[session.agent_type] && (
-            <YStack
-              marginTop="$3"
-              maxHeight={300}
-              overflow="scroll"
-              padding="$3"
-              backgroundColor="$gray1"
-              borderRadius="$3"
-              borderWidth={1}
-              borderColor="$borderColor"
-            >
-              {session.recent_logs.slice(-20).reverse().map((log, idx) => (
-                <YStack
-                  key={idx}
-                  padding="$2"
-                  marginBottom="$2"
-                  backgroundColor="$background"
-                  borderRadius="$1"
-                  borderLeftWidth={3}
-                  borderLeftColor={
-                    log.level === 'error'
-                      ? '$red11'
-                      : log.level === 'warn'
-                      ? '$yellow11'
-                      : '$blue11'
-                  }
-                >
-                  <Caption marginBottom="$1">
-                    {new Date(log.timestamp).toLocaleTimeString()}
-                    {(() => {
-                      const seqEntry = log.context?.find(
-                        (entry) => entry.key === 'seq' && typeof entry.value === 'number'
-                      );
-                      return seqEntry ? ` • Seq ${seqEntry.value}` : null;
-                    })()}
-                  </Caption>
-                  <Body size="sm" mono whitespace="preWrap">
-                    {log.message}
-                  </Body>
-                </YStack>
-              ))}
-            </YStack>
-          )}
+            {session.recent_logs.slice(-20).reverse().map((log, idx) => (
+              <YStack
+                key={idx}
+                padding="$2"
+                backgroundColor="$background"
+                borderRadius="$1"
+                borderLeftWidth={3}
+                borderLeftColor={
+                  log.level === 'error'
+                    ? '$red11'
+                    : log.level === 'warn'
+                    ? '$yellow11'
+                    : '$blue11'
+                }
+              >
+                <Caption marginBottom="$1">
+                  <ClientDateFormatter date={log.timestamp} format="localeTimeString" />
+                  {(() => {
+                    const seqEntry = log.context?.find(
+                      (entry) => entry.key === 'seq' && typeof entry.value === 'number'
+                    );
+                    return seqEntry ? ` • Seq ${seqEntry.value}` : null;
+                  })()}
+                </Caption>
+                <Body size="sm" mono whitespace="preWrap">
+                  {log.message}
+                </Body>
+              </YStack>
+            ))}
+          </YStack>
         </YStack>
       )}
 
@@ -482,7 +498,6 @@ export const SessionStatusCard = memo(function SessionStatusCard({ title, sessio
   if (prevProps.session.session_id !== nextProps.session.session_id) return false;
   if (prevProps.session.status !== nextProps.session.status) return false;
   if (prevProps.session.websocket_state !== nextProps.session.websocket_state) return false;
-  if (prevProps.expandedLogs[prevProps.session.agent_type] !== nextProps.expandedLogs[nextProps.session.agent_type]) return false;
   
   // Deep compare token_metrics and runtime_stats (these are large objects)
   const prevMetrics = prevProps.session.token_metrics;

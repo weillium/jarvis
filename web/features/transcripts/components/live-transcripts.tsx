@@ -107,34 +107,10 @@ export function LiveTranscripts({ eventId }: LiveTranscriptsProps) {
     }
   }, [isConnected, isConnecting]);
 
-  if (isLoading) {
-    return (
-      <YStack padding="$8">
-        <LoadingState
-          title="Loading transcripts"
-          description="Fetching the latest transcript buffer."
-        />
-      </YStack>
-    );
-  }
-
-  if (error) {
-    return (
-      <YStack padding="$8">
-        <Alert variant="error">
-          <Body>
-            Error loading transcripts: {error instanceof Error ? error.message : 'Unknown error'}
-          </Body>
-        </Alert>
-      </YStack>
-    );
-  }
-
   const transcripts = data?.transcripts || [];
 
   const connectionVariant = connectionStatus === 'connected' ? 'success' : connectionStatus === 'connecting' ? 'warning' : 'error';
   const connectionColor = connectionStatus === 'connected' ? '$green11' : connectionStatus === 'connecting' ? '$yellow11' : '$red11';
-  const connectionColorHex = connectionStatus === 'connected' ? '#22c55e' : connectionStatus === 'connecting' ? '#eab308' : '#ef4444';
 
   return (
     <YStack padding="$8">
@@ -171,13 +147,20 @@ export function LiveTranscripts({ eventId }: LiveTranscriptsProps) {
         </XStack>
       </Alert>
 
-      {transcripts.length === 0 ? (
+      {isLoading ? (
+        <LoadingState
+          title="Loading transcripts"
+          description="Fetching the latest transcript buffer."
+        />
+      ) : error ? (
+        <EmptyStateCard
+          title="Unable to load transcripts"
+          description={`Failed to load transcripts: ${error instanceof Error ? error.message : 'Unknown error'}`}
+        />
+      ) : transcripts.length === 0 ? (
         <EmptyStateCard
           title="No transcripts yet"
           description="Transcripts will appear as they are processed during the event."
-          padding="$6"
-          titleLevel={5}
-          align="center"
         />
       ) : (
         <TranscriptsVirtualList transcripts={transcripts} />

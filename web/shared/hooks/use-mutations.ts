@@ -348,25 +348,6 @@ export function useConfirmReadyMutation(eventId: string) {
   });
 }
 
-/**
- * Send test transcript mutation
- */
-export function useSendTestTranscriptMutation(eventId: string) {
-  return useMutation({
-    mutationFn: async ({ text, speaker }: { text: string; speaker: string }) => {
-      const res = await fetch(`/api/agent-sessions/${eventId}/test-transcript`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, speaker }),
-      });
-      const data = await res.json();
-      if (!data.ok) {
-        throw new Error(data.error || 'Failed to send test transcript');
-      }
-      return data;
-    },
-  });
-}
 
 // ============================================================================
 // Event Mutations

@@ -134,7 +134,13 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
   const [endDate, setEndDate] = useState<Date | null>(
     event.end_time ? dayjs(event.end_time).toDate() : null
   );
-  const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  // Initialize with a default timezone to avoid hydration mismatch, set actual timezone in useEffect
+  const [timezone, setTimezone] = useState<string>('UTC');
+  
+  useEffect(() => {
+    // Set timezone on client side only
+    setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  }, []);
   const [error, setError] = useState<string | null>(null);
   const [newFiles, setNewFiles] = useState<File[]>([]);
   const [removingDocs, setRemovingDocs] = useState<Set<string>>(new Set());

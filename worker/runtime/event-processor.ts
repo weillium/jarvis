@@ -634,6 +634,17 @@ export class EventProcessor {
       card.card_type = cardType;
       let visualRequest: CardVisualRequest | null = originalVisualRequest;
 
+      // Override unnecessary "generate" strategy to "fetch" when appropriate
+      if (visualRequest?.strategy === 'generate') {
+        const shouldPreferFetch = this.shouldPreferFetchForImage(visualRequest.instructions);
+        if (shouldPreferFetch) {
+          visualRequest.strategy = 'fetch';
+          console.log(
+            `[cards] Overrode generate→fetch for card "${card.title}": ${visualRequest.instructions.substring(0, 50)}...`
+          );
+        }
+      }
+
       const downgradeToText = (reason: string) => {
         if (cardType === 'text') {
           return;
@@ -730,6 +741,28 @@ export class EventProcessor {
           : null;
 
       card.image_url = card.image_url ?? null;
+
+      // Check for duplicate card: same source_seq, template_id, and concept_id
+      if (cardSourceSeq !== null && cardSourceSeq !== undefined) {
+        const existingCard = await this.cardsRepository.getCardBySourceAndTemplate(
+          runtime.eventId,
+          cardSourceSeq,
+          templateIdValue,
+          card.concept_id
+        );
+
+        if (existingCard) {
+          console.log(
+            `[cards] Duplicate card skipped: source_seq=${cardSourceSeq}, template=${templateIdValue}, concept=${card.concept_id}, title="${card.title}"`
+          );
+          // Clean up pending state even though we're skipping the card
+          if (cardSourceSeq !== undefined) {
+            runtime.pendingCardConcepts.delete(cardSourceSeq);
+            runtime.pendingTemplatePlans.delete(cardSourceSeq);
+          }
+          return;
+        }
+      }
 
       await this.agentOutputs.insertAgentOutput({
         id: cardId,
@@ -1129,6 +1162,59 @@ export class EventProcessor {
     } catch (err: unknown) {
       console.error("[event-processor] error:", String(err));
     }
+  }
+
+  /**
+   * Determine if an image request should prefer "fetch" over "generate" strategy.
+   * This helps reduce costs by preferring image retrieval over generation when appropriate.
+   */
+  private shouldPreferFetchForImage(instructions: string): boolean {
+    if (!instructions || typeof instructions !== 'string') {
+      return false;
+    }
+
+    const lower = instructions.toLowerCase();
+
+    // Keywords that strongly suggest fetch is appropriate (real-world, photographic content)
+    const fetchKeywords = [
+      'photo',
+      'photograph',
+      'picture',
+      'image',
+      'portrait',
+      'building',
+      'place',
+      'location',
+      'person',
+      'people',
+      'object',
+      'real',
+      'actual',
+      'historical',
+      'event',
+      'landmark',
+      'skyline',
+      'trading',
+      'office',
+      'headquarters',
+      'bank',
+      'vault',
+      'floor',
+      'headquarters',
+      'screenshot',
+      'device',
+      'equipment',
+    ];
+
+    // Keywords that strongly suggest generate is needed (abstract, conceptual)
+    const generateKeywords = ['flowchart', 'diagram', 'schematic', 'abstract', 'conceptual', 'architecture diagram', 'process flow'];
+
+    const hasFetchKeywords = fetchKeywords.some((kw) => lower.includes(kw));
+    const hasGenerateKeywords = generateKeywords.some((kw) => lower.includes(kw));
+
+    // Prefer fetch if it contains fetch keywords OR doesn't explicitly need generation
+    // Default to preferring fetch (more cost-effective)
+    return hasFetchKeywords || !hasGenerateKeywords;
   }
 }
 

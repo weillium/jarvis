@@ -117,8 +117,9 @@ export function useAuth() {
     // Don't refetch on window focus or reconnect
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    // If we have cached data that's still fresh, don't refetch immediately
-    // The listener will update it if it changes
+    // Don't refetch on mount if data is fresh - prevents unnecessary auth checks on navigation
+    // The listener will update it if auth state actually changes
+    refetchOnMount: false,
   });
 
   const signOut = async () => {

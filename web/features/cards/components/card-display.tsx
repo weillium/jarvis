@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import type { CardPayload } from '@/shared/types/card';
 import { CardShell } from './card-shell';
+import { ClientDateFormatter } from '@/shared/components/client-date-formatter';
 import {
   YStack,
   XStack,
@@ -210,7 +211,7 @@ export const CardDisplay = React.memo(function CardDisplay({
           <XStack flex={1} justifyContent="flex-end">
             {timestamp && (
               <Body size="sm" tone="muted" textAlign="right">
-                {new Date(timestamp).toLocaleTimeString()}
+                <ClientDateFormatter date={timestamp} format="localeTimeString" />
               </Body>
             )}
           </XStack>

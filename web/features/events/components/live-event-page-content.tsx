@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import type { EventWithStatus } from '@/shared/types/event';
 import { LiveEventTabs } from './live-event-tabs';
@@ -21,6 +22,13 @@ interface LiveEventPageContentProps {
 
 export function LiveEventPageContent({ event, eventId, error }: LiveEventPageContentProps) {
   const router = useRouter();
+
+  // Prefetch likely next routes to reduce navigation latency
+  useEffect(() => {
+    // Prefetch edit page and events list as common navigation targets
+    router.prefetch(`/events/${eventId}/edit`);
+    router.prefetch('/events');
+  }, [router, eventId]);
 
   if (!event) {
     return (

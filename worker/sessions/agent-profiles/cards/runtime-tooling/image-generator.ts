@@ -3,7 +3,7 @@ import type { Logger } from '../../../../services/observability/logger';
 
 export interface ImageGenerationOptions {
   size?: '1024x1024' | '1792x1024' | '1024x1792';
-  quality?: 'standard' | 'hd';
+  quality?: 'low' | 'medium' | 'high' | 'auto';
 }
 
 export interface ImageGenerationResult {
@@ -31,7 +31,7 @@ export class ImageGenerator {
         model: this.model,
         prompt,
         size: options?.size ?? '1024x1024',
-        quality: options?.quality ?? 'standard',
+        quality: options?.quality ?? 'auto',
         n: 1,
       });
 

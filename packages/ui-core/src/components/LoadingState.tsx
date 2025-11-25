@@ -1,16 +1,18 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { YStack, type StackProps } from 'tamagui';
+import { YStack } from 'tamagui';
+import { Card, type CardProps } from './Card';
 import { Body, Heading } from './Typography';
 import { Skeleton } from './Skeleton';
 
-export interface LoadingStateProps extends StackProps {
+export interface LoadingStateProps extends CardProps {
   title?: string;
   description?: string;
   skeletons?: { width?: number | string; height?: number | string; shape?: 'default' | 'circle' }[];
   icon?: ReactNode;
   align?: 'start' | 'center';
+  titleLevel?: 3 | 4 | 5;
 }
 
 export function LoadingState({
@@ -19,26 +21,37 @@ export function LoadingState({
   skeletons,
   icon,
   align = 'center',
-  ...stackProps
+  titleLevel = 5,
+  padding = '$16 $8',
+  ...cardProps
 }: LoadingStateProps) {
   const alignment = align === 'center' ? 'center' : 'flex-start';
+  const textAlign = align === 'center' ? 'center' : 'left';
 
   return (
-    <YStack alignItems={alignment} gap="$3" {...stackProps}>
-      {icon}
-      <Heading level={4} align={align === 'center' ? 'center' : 'left'}>{title}</Heading>
-      {description ? (
-        <Body tone="muted" align={align === 'center' ? 'center' : 'left'}>
-          {description}
-        </Body>
-      ) : null}
-      {skeletons ? (
-        <YStack width="100%" gap="$2">
-          {skeletons.map((skeleton, index) => (
-            <Skeleton key={index} width={skeleton.width ?? '100%'} height={skeleton.height ?? '$3'} shape={skeleton.shape} />
-          ))}
+    <YStack>
+      <Card padding={padding} alignItems={alignment} {...cardProps}>
+        <YStack alignItems={alignment} gap="$6" padding="$6">
+          {icon ? <YStack>{icon}</YStack> : null}
+          <YStack alignItems={alignment} gap="$2">
+            <Heading level={titleLevel} align={textAlign}>
+              {title}
+            </Heading>
+            {description ? (
+              <Body size="sm" tone="muted" align={textAlign}>
+                {description}
+              </Body>
+            ) : null}
+          </YStack>
+          {skeletons ? (
+            <YStack width="100%" gap="$2">
+              {skeletons.map((skeleton, index) => (
+                <Skeleton key={index} width={skeleton.width ?? '100%'} height={skeleton.height ?? '$3'} shape={skeleton.shape} />
+              ))}
+            </YStack>
+          ) : null}
         </YStack>
-      ) : null}
+      </Card>
     </YStack>
   );
 }

@@ -152,7 +152,13 @@ export function CreateEventModal({ trigger, onSuccess }: CreateEventModalProps) 
   const [topic, setTopic] = useState('');
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
-  const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  // Initialize with a default timezone to avoid hydration mismatch, set actual timezone in useEffect
+  const [timezone, setTimezone] = useState<string>('UTC');
+  
+  useEffect(() => {
+    // Set timezone on client side only
+    setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  }, []);
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({});

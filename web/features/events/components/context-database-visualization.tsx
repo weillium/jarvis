@@ -444,12 +444,10 @@ export function ContextDatabaseVisualization({ eventId, agentStatus, agentStage,
       {isExpanded && (
         <>
           {isLoading ? (
-            <YStack marginTop="$5">
-              <LoadingState
-                title="Loading context items"
-                description="Fetching the most recent context chunks."
-              />
-            </YStack>
+            <LoadingState
+              title="Loading context items"
+              description="Fetching the most recent context chunks."
+            />
           ) : (
             <YStack
               marginTop="$5"

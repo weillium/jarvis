@@ -15,7 +15,6 @@ import {
   Textarea,
   Body,
   Label,
-  Badge,
   ModalContent,
   FormField,
   ButtonGroup,
@@ -39,7 +38,6 @@ export function CardModerationModal({
   onClose,
 }: CardModerationModalProps) {
   const [reason, setReason] = useState('');
-  const [showHistory, setShowHistory] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
 
   const updateCardStatus = useUpdateCardActiveStatusMutation(eventId);
@@ -47,7 +45,7 @@ export function CardModerationModal({
     data: auditEntries = [],
     isLoading: auditLoading,
     error: auditError,
-  } = useCardAuditLog(eventId, cardId, isOpen && showHistory);
+  } = useCardAuditLog(eventId, cardId, isOpen);
   const auditErrorMessage =
     auditError instanceof Error ? auditError.message : typeof auditError === 'string' ? auditError : null;
 
@@ -60,7 +58,6 @@ export function CardModerationModal({
       return;
     }
     setReason('');
-    setShowHistory(false);
     setMutationError(null);
     onClose();
   };
@@ -74,7 +71,6 @@ export function CardModerationModal({
         reason: reason.trim() || undefined,
       });
       setReason('');
-      setShowHistory(false);
       handleClose();
     } catch (error) {
       console.error('[CardModerationModal] Failed to deactivate card:', error);
@@ -88,40 +84,32 @@ export function CardModerationModal({
       onClose={handleClose}
       title="Moderate Card"
       description="Review the content and provide context if you decide to deactivate the card."
-      maxWidth={720}
+      maxWidth={1200}
       showCloseButton={!updateCardStatus.isPending}
     >
-      <ModalContent description="Review the card content and optionally provide context before deactivating.">
-        <YStack gap="$5" width="100%" minWidth={0}>
-          <XStack justifyContent="center" width="100%" minWidth={0} maxWidth="100%">
-            <CardDisplay card={cardPayload} timestamp={timestamp} allowShrink={true} />
-          </XStack>
+      <ModalContent>
+        <XStack gap="$6" width="100%" minWidth={0} alignItems="flex-start">
+          <YStack width={360} minWidth={360} flexShrink={0}>
+            <CardDisplay card={cardPayload} timestamp={timestamp} allowShrink={false} />
+          </YStack>
 
-          {mutationError && (
-            <Alert variant="error">
-              <Body size="sm">{mutationError}</Body>
-            </Alert>
-          )}
+          <YStack flex={1} minWidth={0} gap="$4" maxWidth={400}>
+            {mutationError && (
+              <Alert variant="error">
+                <Body size="sm">{mutationError}</Body>
+              </Alert>
+            )}
 
-          <FormField label="Moderation reason (optional)">
-            <Textarea
-              id="moderation-reason"
-              value={reason}
-              onChange={(e: any) => setReason(e.target.value)}
-              rows={4}
-              placeholder="Add context for deactivating this card..."
-              minHeight={120}
-            />
-          </FormField>
-
-          <XStack gap="$3" alignItems="center" justifyContent="space-between" flexWrap="wrap">
-            <Button
-              variant={showHistory ? 'secondary' : 'outline'}
-              size="sm"
-              onClick={() => setShowHistory((previous) => !previous)}
-            >
-              {showHistory ? 'Hide moderation history' : 'View moderation history'}
-            </Button>
+            <FormField label="Moderation reason (optional)">
+              <Textarea
+                id="moderation-reason"
+                value={reason}
+                onChange={(e: any) => setReason(e.target.value)}
+                rows={4}
+                placeholder="Add context for deactivating this card..."
+                minHeight={120}
+              />
+            </FormField>
 
             <ButtonGroup wrap={false}>
               <Button variant="outline" onClick={handleClose} disabled={updateCardStatus.isPending}>
@@ -131,15 +119,13 @@ export function CardModerationModal({
                 {updateCardStatus.isPending ? 'Deactivating…' : 'Deactivate card'}
               </Button>
             </ButtonGroup>
-          </XStack>
+          </YStack>
 
-          {showHistory && (
-            <YStack borderTopWidth={1} borderTopColor="$borderColor" paddingTop="$4" width="100%" minWidth={0}>
-              <Label size="sm">Moderation history</Label>
-              <CardAuditHistory entries={auditEntries} isLoading={auditLoading} error={auditErrorMessage} />
-            </YStack>
-          )}
-        </YStack>
+          <YStack width={300} minWidth={300} flexShrink={0} gap="$3" maxHeight="calc(90vh - 200px)" overflow="scroll">
+            <Label size="sm">Moderation history</Label>
+            <CardAuditHistory entries={auditEntries} isLoading={auditLoading} error={auditErrorMessage} />
+          </YStack>
+        </XStack>
       </ModalContent>
     </Modal>
   );

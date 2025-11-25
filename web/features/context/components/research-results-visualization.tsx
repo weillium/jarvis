@@ -141,9 +141,6 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
       <EmptyStateCard
         title="No research results yet"
         description="Results will appear here after the research phase completes."
-        align="center"
-        padding="$6"
-        titleLevel={5}
       />
     );
   }
@@ -321,8 +318,6 @@ export function ResearchResultsVisualization({ eventId, embedded = false }: Rese
             <EmptyStateCard
               title="No results match"
               description="Adjust or clear your filters to see research output."
-              padding="$6"
-              titleLevel={5}
             />
           ) : (
             <YStack padding="$2">

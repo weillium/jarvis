@@ -10,6 +10,13 @@ import { useCreateEventMutation } from '@/shared/hooks/use-mutations';
 import { withTimeout } from '@/shared/utils/promise-timeout';
 import { validateFiles, MAX_FILE_SIZE } from '@/shared/utils/file-validation';
 import { getFileExtension, getFileType } from '@/shared/utils/file-utils';
+
+// Extend dayjs with plugins
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+// Import all components directly - webpack will code-split automatically
+// This ensures they're available immediately when the page loads
 import {
   YStack,
   XStack,
@@ -17,21 +24,18 @@ import {
   Input,
   Alert,
   Select,
-  FileUpload,
-  MarkdownEditor,
   FormField,
   ButtonGroup,
   Body,
   Caption,
-  DateTimePicker,
   PageContainer,
   PageHeader,
   Heading,
+  LoadingState,
+  DateTimePicker,
+  MarkdownEditor,
+  FileUpload,
 } from '@jarvis/ui-core';
-
-// Extend dayjs with plugins
-dayjs.extend(utc);
-dayjs.extend(timezone);
 
 interface EventData {
   owner_uid: string;
@@ -150,7 +154,15 @@ export default function CreateEventPage() {
   const [topic, setTopic] = useState('');
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
-  const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  // Initialize with a default timezone to avoid hydration mismatch, set actual timezone in useEffect
+  const [timezone, setTimezone] = useState<string>('UTC');
+  
+  useEffect(() => {
+    // Set timezone on client side only
+    setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    // Prefetch events list page since users often navigate back after creating
+    router.prefetch('/events');
+  }, [router]);
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({});

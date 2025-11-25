@@ -135,8 +135,18 @@ ${conceptFocus ? `CONCEPT FOCUS\n${conceptFocus}\n\n` : ''}INSTRUCTIONS
   * text_visual: body required (natural prose) and visual_request required; label null; image_url must remain null until the worker resolves the request.
   * visual: label required and visual_request required; body must be null; image_url must remain null until the worker resolves the request.
 - Populate visual_request whenever a helpful visual exists:
-  * For realistic/photographic content (photos, people, places, objects): Use {"strategy":"fetch","instructions":"descriptive search terms like 'Tokyo skyline at night' or 'Albert Einstein portrait'","source_url":null}. Be explicit about realistic content.
-  * For conceptual/abstract content (diagrams, charts, illustrations): Use {"strategy":"generate","instructions":"detailed description like 'flowchart showing process steps' or 'diagram of system architecture'","source_url":null}. Be explicit about conceptual content.
+  * DEFAULT STRATEGY: Use {"strategy":"fetch",...} unless the visual is inherently abstract/conceptual with no real-world representation. Fetch is faster and cheaper; only use generate when fetch cannot provide the needed visual.
+  * Use {"strategy":"fetch","instructions":"descriptive search terms like 'Tokyo skyline at night' or 'Albert Einstein portrait'","source_url":null} for:
+    - Photographic content (people, places, objects, buildings, landscapes, real-world scenes)
+    - Real-world representations of concepts (e.g., "Federal Reserve building", "trading floor", "bank vault", "central bank headquarters")
+    - Historical events, figures, locations
+    - Products, tools, technology (screenshots, physical objects, devices)
+    - Nature, science (photos of experiments, natural phenomena, scientific equipment)
+    - Most financial/economic concepts that have real-world visual representations
+  * ONLY use {"strategy":"generate","instructions":"detailed description like 'flowchart showing process steps'","source_url":null} for:
+    - Pure abstract diagrams (flowcharts, system architectures, process flows) that cannot be photographed
+    - Mathematical visualizations (graphs, charts of abstract data) without real-world representation
+    - Conceptual illustrations that have no real-world photographic equivalent
   * If a specific source_url is known, include it in fetch strategy; otherwise leave null and let the system search.
   * Provide concrete, descriptive instructions (audience, style, framing). Omit visual_request when no visual is needed.
 - If no useful card exists, respond with { "cards": [] } and do nothing else.

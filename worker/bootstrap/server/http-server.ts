@@ -187,14 +187,16 @@ export const createWorkerServer = ({
           } as const;
 
           try {
+            console.log(`[worker][transcript-audio] Received audio chunk for event ${eventId}, seq: ${chunkMetadata.seq ?? 'N/A'}, size: ${chunkMetadata.audioBase64.length} bytes, isFinal: ${chunkMetadata.isFinal ?? false}`);
             await orchestrator.appendTranscriptAudio(eventId, chunkMetadata);
+            console.log(`[worker][transcript-audio] Successfully appended audio chunk for event ${eventId}, seq: ${chunkMetadata.seq ?? 'N/A'}`);
 
             res.writeHead(202);
             res.end(JSON.stringify({ ok: true }));
             return;
           } catch (err: unknown) {
             const errorText = String(err);
-            console.error('[worker] error:', errorText);
+            console.error(`[worker][transcript-audio] Error processing audio chunk for event ${eventId}, seq: ${chunkMetadata.seq ?? 'N/A'}:`, errorText);
             const status = errorText.includes('not found') || errorText.includes('Not found') || errorText.includes('disabled') || errorText.includes('unavailable') ? 404 : 500;
             res.writeHead(status);
             res.end(JSON.stringify({ ok: false, error: errorText }));

@@ -8,6 +8,13 @@ export interface UseEventsQueryOptions {
   page?: number;
   limit?: number;
   enabled?: boolean;
+  initialData?: {
+    data: EventWithStatus[] | null;
+    error: string | null;
+    total?: number;
+    page?: number;
+    limit?: number;
+  };
 }
 
 export interface UseEventsQueryResult {
@@ -33,6 +40,7 @@ export function useEventsQuery(options: UseEventsQueryOptions = {}): UseEventsQu
     page = 1,
     limit = 20,
     enabled = true,
+    initialData,
   } = options;
 
   const {
@@ -57,6 +65,10 @@ export function useEventsQuery(options: UseEventsQueryOptions = {}): UseEventsQu
       return result;
     },
     enabled,
+    // Use initialData if provided and query key matches initial fetch (no search/filter, page 1)
+    initialData: initialData && !search && status === 'all' && page === 1 && limit === (initialData.limit ?? 20)
+      ? initialData
+      : undefined,
     staleTime: 1000 * 60 * 5, // 5 minutes - events don't change frequently
     gcTime: 1000 * 60 * 10, // 10 minutes cache
   });

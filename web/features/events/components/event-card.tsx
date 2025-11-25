@@ -77,6 +77,13 @@ export const EventCard = memo(function EventCard({ event }: EventCardProps) {
     router.push(`/events/${event.id}/live`);
   }, [router, event.id]);
 
+  // Prefetch event detail page on hover to reduce navigation latency
+  const handleMouseEnter = useCallback(() => {
+    router.prefetch(`/events/${event.id}/live`);
+    // Also prefetch edit page as it's commonly accessed
+    router.prefetch(`/events/${event.id}/edit`);
+  }, [router, event.id]);
+
   return (
     <Card
       padding="$5"
@@ -89,6 +96,7 @@ export const EventCard = memo(function EventCard({ event }: EventCardProps) {
         elevation: 1,
       }}
       onClick={handleClick}
+      onMouseEnter={handleMouseEnter}
       cursor="pointer"
     >
       <XStack justifyContent="space-between" alignItems="flex-start" gap="$4">

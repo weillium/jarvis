@@ -9,10 +9,9 @@ import {
   useStartSessionsMutation,
   usePauseSessionsMutation,
   useConfirmReadyMutation,
-  useSendTestTranscriptMutation,
   useResetSessionsMutation,
 } from '@/shared/hooks/use-mutations';
-import { TestTranscriptModal } from './test-transcript-modal';
+import { useMicrophoneAudio } from '@/shared/hooks/use-microphone-audio';
 import { SessionStatusCard } from './session-status-card';
 import { StartSessionsModal } from './start-sessions-modal';
 import { calculateOpenAICost } from '@/shared/utils/pricing';
@@ -66,12 +65,6 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
     });
   })();
   
-  const [expandedLogs, setExpandedLogs] = useState<Record<AgentType, boolean>>({
-    transcript: false,
-    cards: false,
-    facts: false,
-  });
-  const [isTestTranscriptModalOpen, setIsTestTranscriptModalOpen] = useState(false);
   const [isStartSessionsModalOpen, setIsStartSessionsModalOpen] = useState(false);
   const [startSessionsSelection, setStartSessionsSelection] = useState({
     transcript: true,
@@ -83,8 +76,21 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
   const startSessionsMutation = useStartSessionsMutation(eventId);
   const pauseSessionsMutation = usePauseSessionsMutation(eventId);
   const confirmReadyMutation = useConfirmReadyMutation(eventId);
-  const sendTestTranscriptMutation = useSendTestTranscriptMutation(eventId);
   const resetSessionsMutation = useResetSessionsMutation(eventId);
+
+  const transcriptSession = displaySessions.find(s => s.agent_type === 'transcript');
+  const isTranscriptActive = transcriptSession?.status === 'active';
+  
+  const {
+    isRecording: isMicrophoneEnabled,
+    startRecording: enableMicrophone,
+    stopRecording: disableMicrophone,
+    error: microphoneError,
+  } = useMicrophoneAudio(eventId, {
+    onError: (error) => {
+      console.error('[agent-sessions] Microphone error:', error);
+    },
+  });
 
   const handleCreateSessions = () => {
     createSessionsMutation.mutate(undefined, {
@@ -116,19 +122,6 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
       onSuccess: () => {
         // Handled by mutation
       },
-    });
-  };
-
-  const handleSendTestTranscript = (text: string, speaker: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      sendTestTranscriptMutation.mutate({ text, speaker }, {
-        onSuccess: () => {
-          resolve();
-        },
-        onError: (err) => {
-          reject(err);
-        },
-      });
     });
   };
 
@@ -370,6 +363,24 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
           >
             {isResettingSessions ? 'Resetting...' : 'Reset Sessions'}
           </Button>
+
+          {/* Microphone button - only show when transcript agent is active */}
+          {isTranscriptActive && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (isMicrophoneEnabled) {
+                  disableMicrophone();
+                } else {
+                  void enableMicrophone();
+                }
+              }}
+              disabled={!!microphoneError}
+            >
+              {isMicrophoneEnabled ? 'Disable Microphone' : 'Enable Microphone'}
+            </Button>
+          )}
           
           {/* Pause Sessions button */}
           {(() => {
@@ -393,24 +404,14 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
           
           {/* Testing state buttons */}
           {agent?.status === 'active' && agent?.stage === 'testing' && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsTestTranscriptModalOpen(true)}
-              >
-                Test Transcript
-              </Button>
-              
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleConfirmReady}
-                disabled={isResuming}
-              >
-                {isResuming ? 'Processing...' : 'Confirm Ready'}
-              </Button>
-            </>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleConfirmReady}
+              disabled={isResuming}
+            >
+              {isResuming ? 'Processing...' : 'Confirm Ready'}
+            </Button>
           )}
           
           {/* Refresh button */}
@@ -430,6 +431,12 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
       {(pauseResumeError || startSessionsError) && (
         <Alert variant="error" marginBottom="$4">
           {pauseResumeError || startSessionsError}
+        </Alert>
+      )}
+
+      {microphoneError && (
+        <Alert variant="error" marginBottom="$4">
+          Microphone error: {microphoneError.message}
         </Alert>
       )}
       
@@ -475,18 +482,18 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
             ))}
           </XStack>
           {runtimeCostSummary?.breakdown.length ? (
-            <YStack marginTop="$4">
+            <YStack marginTop="$4" gap={0}>
               <Label
                 size="xs"
                 tone="muted"
                 uppercase
                 letterSpacing={0.4}
-                marginBottom="$2"
+                marginBottom="$8"
                 margin={0}
               >
                 Cost Breakdown
               </Label>
-              <YStack gap="$1">
+              <YStack gap="$2" marginTop={0}>
                 {runtimeCostSummary.breakdown.map(({ agent, cost, model }) => (
                   <XStack
                     key={agent}
@@ -533,9 +540,6 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
         <EmptyStateCard
           title="Loading session status"
           description="Checking for active agent sessions."
-          padding="$6"
-          titleLevel={5}
-          align="center"
         />
       )}
 
@@ -549,9 +553,6 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
               ? 'Waiting for sessions to be created...'
               : 'Agent sessions are available only when the event is running.'
           }
-          padding="$6"
-          titleLevel={5}
-          align="center"
         />
       )}
 
@@ -588,8 +589,6 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
                       <SessionStatusCard
                         title={agentTitles[session.agent_type]}
                         session={session}
-                        expandedLogs={expandedLogs}
-                        setExpandedLogs={setExpandedLogs}
                       />
                     </XStack>
                   ))}
@@ -629,8 +628,6 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
                       <SessionStatusCard
                         title={agentTitles[session.agent_type]}
                         session={session}
-                        expandedLogs={expandedLogs}
-                        setExpandedLogs={setExpandedLogs}
                       />
                     </XStack>
                   ))}
@@ -649,15 +646,6 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
           onConfirm={() => handleConfirmStartSessions(startSessionsSelection)}
           onClose={() => setIsStartSessionsModalOpen(false)}
           isSubmitting={startSessionsMutation.isPending}
-        />
-      )}
-
-      {isTestTranscriptModalOpen && (
-        <TestTranscriptModal
-          eventId={eventId}
-          isOpen={isTestTranscriptModalOpen}
-          onClose={() => setIsTestTranscriptModalOpen(false)}
-          onSend={handleSendTestTranscript}
         />
       )}
     </YStack>

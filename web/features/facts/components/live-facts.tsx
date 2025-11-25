@@ -5,6 +5,7 @@ import { useSSEStream } from '@/shared/hooks/use-sse-stream';
 import { useFactsQuery } from '@/shared/hooks/use-facts-query';
 import { useQueryClient } from '@tanstack/react-query';
 import type { SSEMessage, SSEFactMessage } from '@/shared/types/card';
+import { ClientDateFormatter } from '@/shared/components/client-date-formatter';
 import {
   YStack,
   XStack,
@@ -207,17 +208,11 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
         <EmptyStateCard
           title="Unable to load facts"
           description={`Failed to load facts: ${error instanceof Error ? error.message : 'Unknown error'}`}
-          padding="$6"
-          titleLevel={5}
-          align="center"
         />
       ) : factsArray.length === 0 ? (
         <EmptyStateCard
           title="No facts yet"
           description="Facts will appear as they are extracted during the event."
-          padding="$6"
-          titleLevel={5}
-          align="center"
         />
       ) : (
         <YStack gap="$3">
@@ -248,7 +243,7 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
                         : JSON.stringify(fact.value, null, 2)}
                     </Body>
                     <Body size="sm" tone="muted">
-                      Updated {new Date(fact.updated_at).toLocaleTimeString()}
+                      Updated <ClientDateFormatter date={fact.updated_at} format="localeTimeString" />
                     </Body>
                   </YStack>
                   <YStack

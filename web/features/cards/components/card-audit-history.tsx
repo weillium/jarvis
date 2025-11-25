@@ -32,13 +32,6 @@ export function CardAuditHistory({ entries, isLoading, error }: CardAuditHistory
       <EmptyStateCard
         title="No moderation history"
         description="Actions will appear here once the card has been reviewed."
-        padding="$3"
-        borderRadius="$2"
-        borderWidth={1}
-        borderColor="$borderColor"
-        backgroundColor="$gray1"
-        align="start"
-        titleLevel={5}
       />
     );
   }

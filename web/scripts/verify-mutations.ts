@@ -41,7 +41,6 @@ const EXPECTED_MUTATIONS = [
   'useStartSessionsMutation',
   'usePauseSessionsMutation',
   'useConfirmReadyMutation',
-  'useSendTestTranscriptMutation',
   'useUpdateEventMutation',
 ];
 

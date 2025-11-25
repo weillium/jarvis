@@ -3,16 +3,24 @@
 import { useState, useMemo } from 'react';
 import { useEventsQuery } from '@/shared/hooks/use-events-query';
 import { EventCard } from './event-card';
+import { EventWithStatus } from '@/shared/types/event';
 import { YStack, XStack, Alert, EmptyStateCard, LoadingState, Button, Text } from '@jarvis/ui-core';
 
 interface EventsListProps {
   searchQuery?: string;
   statusFilter?: 'all' | 'scheduled' | 'live' | 'ended';
+  initialData?: {
+    data: EventWithStatus[] | null;
+    error: string | null;
+    total?: number;
+    page?: number;
+    limit?: number;
+  };
 }
 
 const EVENTS_PER_PAGE = 20;
 
-export function EventsList({ searchQuery = '', statusFilter = 'all' }: EventsListProps) {
+export function EventsList({ searchQuery = '', statusFilter = 'all', initialData }: EventsListProps) {
   const [page, setPage] = useState(1);
 
   // Reset to page 1 when filters change
@@ -32,6 +40,8 @@ export function EventsList({ searchQuery = '', statusFilter = 'all' }: EventsLis
     status: statusFilter,
     page,
     limit: EVENTS_PER_PAGE,
+    // Pass initialData only for the first render with default filters
+    initialData: page === 1 && !searchQuery && statusFilter === 'all' ? initialData : undefined,
   });
 
   const totalPages = Math.ceil(total / limit);
@@ -64,7 +74,6 @@ export function EventsList({ searchQuery = '', statusFilter = 'all' }: EventsLis
             ? 'Try adjusting your search or filter criteria.'
             : 'Create your first event to get started.'
         }
-        padding="$10 $6"
       />
     );
   }

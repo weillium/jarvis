@@ -19,6 +19,7 @@ export async function getCardsByEventId(eventId: string): Promise<{ data: Card[]
       .order('last_seen_seq', { ascending: false });
 
     if (error) {
+      console.error('[card-actions] Error fetching cards:', error);
       return { data: null, error: error.message };
     }
 
@@ -57,9 +58,11 @@ export async function getCardsByEventId(eventId: string): Promise<{ data: Card[]
       };
     });
 
+    console.log(`[card-actions] Fetched ${cards.length} cards for event ${eventId}`);
     return { data: cards, error: null };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[card-actions] Exception fetching cards:', errorMessage, error);
     return { data: null, error: errorMessage };
   }
 }

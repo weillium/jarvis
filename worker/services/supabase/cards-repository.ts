@@ -61,6 +61,52 @@ export class CardsRepository {
 
     if (error) throw error;
   }
+
+  /**
+   * Check if a card already exists for the same source_seq, template_id, and concept_id combination.
+   * This prevents duplicate cards from being created for the same source sequence.
+   */
+  async getCardBySourceAndTemplate(
+    eventId: string,
+    sourceSeq: number | null,
+    templateId: string | null,
+    conceptId: string | undefined
+  ): Promise<CardStateRecord | null> {
+    if (sourceSeq === null || sourceSeq === undefined) {
+      return null;
+    }
+
+    let query = this.client
+      .from('cards')
+      .select('*')
+      .eq('event_id', eventId)
+      .eq('source_seq', sourceSeq)
+      .eq('is_active', true);
+
+    // Filter by template_id if provided
+    if (templateId) {
+      query = query.eq('payload->>template_id', templateId);
+    }
+
+    // Filter by concept_id if provided
+    if (conceptId) {
+      query = query.eq('payload->>concept_id', conceptId);
+    }
+
+    const { data, error } = await query.maybeSingle();
+
+    // PGRST116 is "not found" error, which is expected when no duplicate exists
+    if (error && error.code !== 'PGRST116') {
+      throw error;
+    }
+
+    if (!data) {
+      return null;
+    }
+
+    const mapped = mapCardStateRecords([data]);
+    return mapped.length > 0 ? mapped[0] : null;
+  }
 }
 
 

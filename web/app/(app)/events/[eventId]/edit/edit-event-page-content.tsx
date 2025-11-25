@@ -6,6 +6,10 @@ import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import { EventWithStatus } from '@/shared/types/event';
+
+// Extend dayjs with plugins
+dayjs.extend(utc);
+dayjs.extend(timezone);
 import { useUpdateEventMutation, useDeleteEventDocMutation, useUpdateEventDocNameMutation } from '@/shared/hooks/use-mutations';
 import { useEventDocsQuery } from '@/shared/hooks/use-event-docs-query';
 import { useEventQuery } from '@/shared/hooks/use-event-query';
@@ -14,6 +18,8 @@ import { supabase } from '@/shared/lib/supabase/client';
 import { withTimeout } from '@/shared/utils/promise-timeout';
 import { validateFiles, MAX_FILE_SIZE } from '@/shared/utils/file-validation';
 import { getFilenameFromPath, getFileExtension, getFileType } from '@/shared/utils/file-utils';
+// Import all components directly - webpack will code-split automatically
+// This ensures they're available immediately when the page loads
 import {
   YStack,
   XStack,
@@ -23,21 +29,17 @@ import {
   Select,
   Label,
   Body,
-  FileUpload,
-  MarkdownEditor,
   FormField,
   ButtonGroup,
-  DateTimePicker,
   Caption,
   PageContainer,
   PageHeader,
   Heading,
   LoadingState,
+  DateTimePicker,
+  MarkdownEditor,
+  FileUpload,
 } from '@jarvis/ui-core';
-
-// Extend dayjs with plugins
-dayjs.extend(utc);
-dayjs.extend(timezone);
 
 // Helper to upload a single file (reused from create-event-modal)
 async function uploadFile(file: File, eventId: string): Promise<void> {
@@ -134,7 +136,16 @@ export default function EditEventPageContent() {
   const [topic, setTopic] = useState('');
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
-  const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  // Initialize with a default timezone to avoid hydration mismatch, set actual timezone in useEffect
+  const [timezone, setTimezone] = useState<string>('UTC');
+  
+  useEffect(() => {
+    // Set timezone on client side only
+    setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    // Prefetch likely next routes
+    router.prefetch(`/events/${eventId}/live`);
+    router.prefetch('/events');
+  }, [router, eventId]);
   const [error, setError] = useState<string | null>(null);
   const [newFiles, setNewFiles] = useState<File[]>([]);
   const [removingDocs, setRemovingDocs] = useState<Set<string>>(new Set());
