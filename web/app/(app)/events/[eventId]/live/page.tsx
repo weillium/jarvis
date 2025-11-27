@@ -2,6 +2,7 @@ import { QueryClient, dehydrate, HydrationBoundary } from '@tanstack/react-query
 import dynamic from 'next/dynamic';
 import { getEventById } from '@/server/actions/event-actions';
 import { LoadingState } from '@jarvis/ui-core';
+import { getBlueprintForEvent, getResearchForEvent, getGlossaryForEvent } from '@/server/data/context';
 
 // Lazy load the heavy LiveEventPageContent component
 const LiveEventPageContent = dynamic(
@@ -16,19 +17,12 @@ type Props = {
 };
 
 async function prefetchContextData(queryClient: QueryClient, eventId: string) {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-  
   // Prefetch blueprint data
   await queryClient.prefetchQuery({
     queryKey: ['blueprint-full', eventId],
     queryFn: async () => {
-      const res = await fetch(`${baseUrl}/api/context/${eventId}/blueprint`, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      const data = await res.json();
-      return data.ok ? data.blueprint : null;
+      const { data } = await getBlueprintForEvent(eventId);
+      return data;
     },
     staleTime: 1000 * 60 * 5,
   });
@@ -37,12 +31,8 @@ async function prefetchContextData(queryClient: QueryClient, eventId: string) {
   await queryClient.prefetchQuery({
     queryKey: ['research', eventId],
     queryFn: async () => {
-      const res = await fetch(`${baseUrl}/api/context/${eventId}/research`, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      return await res.json();
+      const { data } = await getResearchForEvent(eventId);
+      return data;
     },
     staleTime: 1000 * 60 * 5,
   });
@@ -51,12 +41,8 @@ async function prefetchContextData(queryClient: QueryClient, eventId: string) {
   await queryClient.prefetchQuery({
     queryKey: ['glossary', eventId],
     queryFn: async () => {
-      const res = await fetch(`${baseUrl}/api/context/${eventId}/glossary`, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      return await res.json();
+      const { data } = await getGlossaryForEvent(eventId);
+      return data;
     },
     staleTime: 1000 * 60 * 5,
   });

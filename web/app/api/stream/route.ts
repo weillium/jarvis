@@ -1,17 +1,17 @@
-import { NextRequest } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { createServerClient } from '@/shared/lib/supabase/server';
-import { requireAuth, requireEventOwnership } from '@/shared/lib/auth';
-import { connectionManager } from './connection-manager';
+import { NextRequest } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@/shared/lib/supabase/server";
+import { requireAuth, requireEventOwnership } from "@/shared/lib/auth";
+import { connectionManager } from "./connection-manager";
 
 /**
  * Server-Sent Events (SSE) Stream API Route
- * 
+ *
  * Streams live cards and facts updates to the frontend.
  * Subscribes to agent_outputs and facts tables via Supabase Realtime.
- * 
+ *
  * GET /api/stream?event_id=<uuid>
- * 
+ *
  * Returns SSE stream with events:
  * - {"type": "connected", "timestamp": "..."}
  * - {"type": "card", "payload": {...}, "timestamp": "..."}
@@ -25,7 +25,7 @@ function getSupabaseClient() {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error('Missing Supabase configuration');
+    throw new Error("Missing Supabase configuration");
   }
 
   return createClient(supabaseUrl, serviceRoleKey, {
@@ -39,27 +39,31 @@ function formatSSE(data: any): string {
 }
 
 export async function GET(req: NextRequest) {
-  const eventId = req.nextUrl.searchParams.get('event_id');
+  const eventId = req.nextUrl.searchParams.get("event_id");
 
   if (!eventId) {
     return new Response(
-      JSON.stringify({ ok: false, error: 'Missing event_id query parameter' }),
+      JSON.stringify({ ok: false, error: "Missing event_id query parameter" }),
       {
         status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      }
+        headers: { "Content-Type": "application/json" },
+      },
     );
   }
 
   // Validate UUID format
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const uuidRegex =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!uuidRegex.test(eventId)) {
     return new Response(
-      JSON.stringify({ ok: false, error: 'Invalid event_id format (must be UUID)' }),
+      JSON.stringify({
+        ok: false,
+        error: "Invalid event_id format (must be UUID)",
+      }),
       {
         status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      }
+        headers: { "Content-Type": "application/json" },
+      },
     );
   }
 
@@ -70,14 +74,14 @@ export async function GET(req: NextRequest) {
     await requireEventOwnership(supabase, user.id, eventId);
   } catch (error) {
     return new Response(
-      JSON.stringify({ 
-        ok: false, 
-        error: error instanceof Error ? error.message : 'Not authenticated' 
+      JSON.stringify({
+        ok: false,
+        error: error instanceof Error ? error.message : "Not authenticated",
       }),
       {
         status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      }
+        headers: { "Content-Type": "application/json" },
+      },
     );
   }
 
@@ -90,30 +94,33 @@ export async function GET(req: NextRequest) {
       // Register this connection with the connection manager
       connectionManager.register(eventId, controller);
 
-      // Send initial connection message
+      // Send initial connection message immediately
+      // This ensures the UI shows "Connected" state without waiting for Supabase subscriptions
       controller.enqueue(
         encoder.encode(
           formatSSE({
-            type: 'connected',
+            type: "connected",
             event_id: eventId,
             timestamp: new Date().toISOString(),
-          })
-        )
+          }),
+        ),
       );
 
       // Initial session data is provided by React Query, not SSE
       // SSE only streams real-time enrichment data (connection health, logs, metrics)
-      console.log(`[api/stream] SSE connection established for event ${eventId} - waiting for enrichment data from worker`);
+      console.log(
+        `[api/stream] SSE connection established for event ${eventId} - waiting for enrichment data from worker`,
+      );
 
       // Subscribe to cards table for canonical state changes
       const cardsChannel = supabase
         .channel(`cards_${eventId}`)
         .on(
-          'postgres_changes',
+          "postgres_changes",
           {
-            event: '*',
-            schema: 'public',
-            table: 'cards',
+            event: "*",
+            schema: "public",
+            table: "cards",
             filter: `event_id=eq.${eventId}`,
           },
           (payload: any) => {
@@ -122,56 +129,63 @@ export async function GET(req: NextRequest) {
             const oldRow = payload.old;
 
             const toSnapshot = (row: any) => {
-              if (!row || typeof row !== 'object' || typeof row.payload !== 'object') {
+              if (
+                !row || typeof row !== "object" ||
+                typeof row.payload !== "object"
+              ) {
                 return null;
               }
 
-              const templateLabel =
-                row.payload &&
-                typeof row.payload === 'object' &&
-                typeof row.payload.template_label === 'string' &&
-                row.payload.template_label.trim().length > 0
-                  ? row.payload.template_label
-                  : null;
+              const templateLabel = row.payload &&
+                  typeof row.payload === "object" &&
+                  typeof row.payload.template_label === "string" &&
+                  row.payload.template_label.trim().length > 0
+                ? row.payload.template_label
+                : null;
 
               return {
                 id: row.card_id,
                 event_id: row.event_id,
                 payload: row.payload,
                 card_kind:
-                  typeof row.card_kind === 'string' && row.card_kind.length > 0
+                  typeof row.card_kind === "string" && row.card_kind.length > 0
                     ? row.card_kind
                     : templateLabel,
                 card_type:
-                  typeof row.card_type === 'string' && row.card_type.length > 0
+                  typeof row.card_type === "string" && row.card_type.length > 0
                     ? row.card_type
                     : row.payload?.card_type ?? null,
-                created_at: typeof row.created_at === 'string' ? row.created_at : new Date().toISOString(),
-                updated_at: typeof row.updated_at === 'string' ? row.updated_at : null,
+                created_at: typeof row.created_at === "string"
+                  ? row.created_at
+                  : new Date().toISOString(),
+                updated_at: typeof row.updated_at === "string"
+                  ? row.updated_at
+                  : null,
                 last_seen_seq:
-                  typeof row.last_seen_seq === 'number' && Number.isFinite(row.last_seen_seq)
+                  typeof row.last_seen_seq === "number" &&
+                    Number.isFinite(row.last_seen_seq)
                     ? row.last_seen_seq
                     : null,
                 is_active: row.is_active !== false,
               };
             };
 
-            if (eventType === 'INSERT') {
+            if (eventType === "INSERT") {
               const snapshot = toSnapshot(newRow);
               if (!snapshot) return;
               controller.enqueue(
                 encoder.encode(
                   formatSSE({
-                    type: 'card_created',
+                    type: "card_created",
                     timestamp: new Date().toISOString(),
                     card: snapshot,
-                  })
-                )
+                  }),
+                ),
               );
               return;
             }
 
-            if (eventType === 'UPDATE') {
+            if (eventType === "UPDATE") {
               const snapshot = toSnapshot(newRow);
               if (!snapshot) return;
 
@@ -182,11 +196,11 @@ export async function GET(req: NextRequest) {
                 controller.enqueue(
                   encoder.encode(
                     formatSSE({
-                      type: 'card_deactivated',
+                      type: "card_deactivated",
                       timestamp: new Date().toISOString(),
                       card_id: snapshot.id,
-                    })
-                  )
+                    }),
+                  ),
                 );
                 return;
               }
@@ -194,27 +208,27 @@ export async function GET(req: NextRequest) {
               controller.enqueue(
                 encoder.encode(
                   formatSSE({
-                    type: 'card_updated',
+                    type: "card_updated",
                     timestamp: new Date().toISOString(),
                     card: snapshot,
-                  })
-                )
+                  }),
+                ),
               );
               return;
             }
 
-            if (eventType === 'DELETE' && oldRow) {
+            if (eventType === "DELETE" && oldRow) {
               controller.enqueue(
                 encoder.encode(
                   formatSSE({
-                    type: 'card_deleted',
+                    type: "card_deleted",
                     timestamp: new Date().toISOString(),
                     card_id: oldRow.card_id,
-                  })
-                )
+                  }),
+                ),
               );
             }
-          }
+          },
         )
         .subscribe();
 
@@ -222,25 +236,52 @@ export async function GET(req: NextRequest) {
       const factsChannel = supabase
         .channel(`facts_${eventId}`)
         .on(
-          'postgres_changes',
+          "postgres_changes",
           {
-            event: '*', // INSERT, UPDATE, DELETE
-            schema: 'public',
-            table: 'facts',
+            event: "*", // INSERT, UPDATE, DELETE
+            schema: "public",
+            table: "facts",
             filter: `event_id=eq.${eventId}`,
           },
           (payload: any) => {
-            controller.enqueue(
-              encoder.encode(
-                formatSSE({
-                  type: 'fact_update',
-                  event: payload.eventType, // INSERT, UPDATE, DELETE
-                  payload: payload.new || payload.old,
-                  timestamp: new Date().toISOString(),
-                })
-              )
-            );
-          }
+            const factRow = payload.new || payload.old;
+            const isActive = factRow?.is_active !== false;
+            
+            // For UPDATE events, check if fact was deactivated
+            if (payload.eventType === "UPDATE") {
+              const wasActive = payload.old?.is_active !== false;
+              const nowInactive = factRow?.is_active === false;
+              
+              if (wasActive && nowInactive) {
+                // Send DELETE event for deactivated facts
+                controller.enqueue(
+                  encoder.encode(
+                    formatSSE({
+                      type: "fact_update",
+                      event: "DELETE",
+                      payload: factRow,
+                      timestamp: new Date().toISOString(),
+                    }),
+                  ),
+                );
+                return;
+              }
+            }
+            
+            // Only send updates for active facts
+            if (isActive) {
+              controller.enqueue(
+                encoder.encode(
+                  formatSSE({
+                    type: "fact_update",
+                    event: payload.eventType, // INSERT, UPDATE, DELETE
+                    payload: factRow,
+                    timestamp: new Date().toISOString(),
+                  }),
+                ),
+              );
+            }
+          },
         )
         .subscribe();
 
@@ -253,10 +294,10 @@ export async function GET(req: NextRequest) {
           controller.enqueue(
             encoder.encode(
               formatSSE({
-                type: 'heartbeat',
+                type: "heartbeat",
                 timestamp: new Date().toISOString(),
-              })
-            )
+              }),
+            ),
           );
         } catch (error) {
           // Client disconnected - cleanup will be handled by abort handler
@@ -265,19 +306,19 @@ export async function GET(req: NextRequest) {
       }, 30000); // Every 30 seconds
 
       // Handle client disconnect - single consolidated cleanup handler
-      req.signal.addEventListener('abort', () => {
+      req.signal.addEventListener("abort", () => {
         console.log(`[api/stream] Client disconnected for event ${eventId}`);
-        
+
         // Clear heartbeat interval first
         clearInterval(heartbeatInterval);
-        
+
         // Unregister from connection manager
         connectionManager.unregister(eventId, controller);
-        
+
         // Clean up Supabase channels
         supabase.removeChannel(cardsChannel);
         supabase.removeChannel(factsChannel);
-        
+
         // Close controller
         controller.close();
       });
@@ -286,10 +327,10 @@ export async function GET(req: NextRequest) {
 
   return new Response(stream, {
     headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no', // Disable buffering for nginx
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      "Connection": "keep-alive",
+      "X-Accel-Buffering": "no", // Disable buffering for nginx
     },
   });
 }
@@ -299,10 +340,9 @@ export async function OPTIONS() {
   return new Response(null, {
     status: 200,
     headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
     },
   });
 }
-

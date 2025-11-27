@@ -181,7 +181,7 @@ function convertOptionsToItems(children: ReactNode): ReactNode {
         if (converted) {
           if (Array.isArray(converted)) {
             // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-            items.push(...(converted as React.ReactNode[]));
+            items.push(...(converted as any));
           } else {
             items.push(converted);
           }

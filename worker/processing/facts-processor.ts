@@ -38,8 +38,11 @@ const FACT_PRUNE_IDLE_MS = 60 * 60 * 1000;
 const FACT_DORMANT_CONFIDENCE_DROP = 0.05;
 const FACT_REVIVE_HYSTERESIS_DELTA = 0.05;
 const FACT_PROMPT_LIMIT = 50;
+const SYNC_DEBOUNCE_MS = 5000; // Sync at most once every 5 seconds
 
 export class FactsProcessor {
+  private lastSyncTimes = new Map<string, number>();
+
   constructor(
     private contextBuilder: ContextBuilder,
     private logger: Logger,
@@ -47,6 +50,47 @@ export class FactsProcessor {
     private checkpointManager: CheckpointManager,
     private factsRepository: FactsRepository
   ) {}
+
+  /**
+   * Sync deactivated facts from database - removes facts that were deactivated via UI moderation
+   * Uses debouncing to avoid excessive database queries
+   */
+  private async syncDeactivatedFacts(runtime: EventRuntime): Promise<void> {
+    try {
+      const now = Date.now();
+      const lastSyncTime = this.lastSyncTimes.get(runtime.eventId);
+
+      // Debounce: skip if synced recently
+      if (lastSyncTime !== undefined && now - lastSyncTime < SYNC_DEBOUNCE_MS) {
+        return;
+      }
+
+      const deactivatedKeys = await this.factsRepository.getDeactivatedFactKeys(runtime.eventId);
+      if (deactivatedKeys.length === 0) {
+        this.lastSyncTimes.set(runtime.eventId, now);
+        return;
+      }
+
+      const factsStore = runtime.factsStore;
+      let removedCount = 0;
+      for (const key of deactivatedKeys) {
+        if (factsStore.get(key)) {
+          factsStore.delete(key);
+          removedCount++;
+        }
+      }
+
+      this.lastSyncTimes.set(runtime.eventId, now);
+
+      if (removedCount > 0) {
+        console.log(
+          `[facts-processor] Removed ${removedCount} deactivated fact(s) from FactsStore for event ${runtime.eventId}`
+        );
+      }
+    } catch (error: unknown) {
+      console.error('[facts-processor] Error syncing deactivated facts:', String(error));
+    }
+  }
 
   async process(
     runtime: EventRuntime,
@@ -63,6 +107,9 @@ export class FactsProcessor {
       const previousConfidence = new Map<string, number>(
         previousSnapshot.map((fact) => [fact.key, fact.confidence] as const)
       );
+
+      // Sync deactivated facts before using them
+      await this.syncDeactivatedFacts(runtime);
 
       const allFacts = runtime.factsStore.getAll();
       const eligibleFacts = allFacts.filter((fact) => !fact.excludeFromPrompt);

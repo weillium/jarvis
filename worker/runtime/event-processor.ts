@@ -223,6 +223,8 @@ export class EventProcessor {
             triggeredAt: Date.now(),
           });
         }
+        // Sync deactivated facts before processing cards
+        await this.syncDeactivatedFacts(runtime);
         await this.cardsProcessor.process(
           runtime,
           chunk,
@@ -292,6 +294,9 @@ export class EventProcessor {
     if (recentChunks.length < this.CARD_MIN_CHUNKS) {
       return null;
     }
+
+    // Sync deactivated facts before using them
+    await this.syncDeactivatedFacts(runtime);
 
     const existingConceptIds = runtime.cardsStore.getConceptCache().map((entry) => entry.conceptId);
     const contextBullets = runtime.ringBuffer.getContextBullets(this.CARD_CONTEXT_LIMIT);
@@ -1222,11 +1227,23 @@ export class EventProcessor {
   /**
    * Sync deactivated facts from database - removes facts that were deactivated via UI moderation
    * This ensures FactsStore stays in sync with database moderation state
+   * Uses debouncing to avoid excessive database queries (syncs at most once per 5 seconds)
    */
   private async syncDeactivatedFacts(runtime: EventRuntime): Promise<void> {
     try {
+      const now = Date.now();
+      const lastSyncKey = `factsSync_${runtime.eventId}`;
+      const lastSyncTime = (runtime as any)[lastSyncKey] as number | undefined;
+      const SYNC_DEBOUNCE_MS = 5000; // Sync at most once every 5 seconds
+
+      // Debounce: skip if synced recently
+      if (lastSyncTime !== undefined && now - lastSyncTime < SYNC_DEBOUNCE_MS) {
+        return;
+      }
+
       const deactivatedKeys = await this.factsRepository.getDeactivatedFactKeys(runtime.eventId);
       if (deactivatedKeys.length === 0) {
+        (runtime as any)[lastSyncKey] = now;
         return;
       }
 
@@ -1239,6 +1256,8 @@ export class EventProcessor {
         }
       }
 
+      (runtime as any)[lastSyncKey] = now;
+
       if (removedCount > 0) {
         console.log(
           `[event-processor] Removed ${removedCount} deactivated fact(s) from FactsStore for event ${runtime.eventId}`
@@ -1247,6 +1266,13 @@ export class EventProcessor {
     } catch (error: unknown) {
       console.error('[event-processor] Error syncing deactivated facts:', String(error));
     }
+  }
+
+  /**
+   * Public method to sync deactivated facts - can be called from processors
+   */
+  async syncDeactivatedFactsForRuntime(runtime: EventRuntime): Promise<void> {
+    await this.syncDeactivatedFacts(runtime);
   }
 }
 

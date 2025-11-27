@@ -94,7 +94,7 @@ export function FactModerationModal({
     >
       <ModalContent>
         <XStack gap="$6" width="100%" minWidth={0} alignItems="flex-start">
-          <YStack width={360} minWidth={360} flexShrink={0}>
+          <YStack flex={0.7} minWidth={0} gap="$4">
             <Card variant="outlined" padding="$4">
               <YStack gap="$3">
                 <XStack justifyContent="space-between" alignItems="flex-start" gap="$2">
@@ -115,9 +115,7 @@ export function FactModerationModal({
                 </Body>
               </YStack>
             </Card>
-          </YStack>
 
-          <YStack flex={1} minWidth={0} gap="$4" maxWidth={400}>
             {mutationError && (
               <Alert variant="error">
                 <Body size="sm">{mutationError}</Body>
@@ -145,7 +143,7 @@ export function FactModerationModal({
             </ButtonGroup>
           </YStack>
 
-          <YStack width={300} minWidth={300} flexShrink={0} gap="$3" maxHeight="calc(90vh - 200px)" overflow="scroll">
+          <YStack flex={0.3} minWidth={0} flexShrink={0} gap="$3" maxHeight="calc(90vh - 200px)" overflow="scroll">
             <Label size="sm">Moderation history</Label>
             <FactAuditHistory entries={auditEntries} isLoading={auditLoading} error={auditErrorMessage} />
           </YStack>

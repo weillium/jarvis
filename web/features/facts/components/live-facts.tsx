@@ -87,7 +87,8 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
             prev.filter((f) => f.fact_key !== fact.fact_key)
           );
         } else {
-          // Insert or update fact
+          // Insert or update fact - only if it's active
+          // Note: SSE stream should only send active facts, but we double-check here
           const updatedFact: Fact = {
             key: fact.fact_key,
             value: fact.fact_value,
@@ -100,7 +101,7 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
             next.set(fact.fact_key, updatedFact);
             return next;
           });
-          // Update React Query cache
+          // Update React Query cache - filter out inactive facts
           queryClient.setQueryData<typeof initialFacts>(['facts', eventId], (prev = []) => {
             const existing = prev.find((f) => f.fact_key === fact.fact_key);
             if (existing) {
@@ -247,45 +248,49 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
                           ? fact.value
                           : JSON.stringify(fact.value, null, 2)}
                       </Body>
-                      <XStack justifyContent="space-between" alignItems="center" gap="$2" marginTop="$2">
-                        <Body size="sm" tone="muted">
-                          Updated <ClientDateFormatter date={fact.updated_at} format="localeTimeString" />
-                        </Body>
-                        <Button variant="outline" size="sm" onClick={() => setModerationFactKey(fact.key)}>
-                          Moderate
-                        </Button>
-                      </XStack>
+                      <Body size="sm" tone="muted">
+                        Updated <ClientDateFormatter date={fact.updated_at} format="localeTimeString" />
+                      </Body>
                     </YStack>
                     <YStack
-                      padding="$2 $2"
-                      backgroundColor={
-                        fact.confidence >= 0.7
-                          ? '$green2'
-                          : fact.confidence >= 0.5
-                          ? '$yellow2'
-                          : '$red2'
-                      }
-                      borderRadius="$2"
                       alignItems="center"
-                      justifyContent="center"
+                      gap="$2"
                       minWidth={100}
                     >
-                      <Body
-                        size="sm"
-                        weight="medium"
-                        color={
+                      <YStack
+                        padding="$2 $2"
+                        backgroundColor={
                           fact.confidence >= 0.7
-                            ? '$green11'
+                            ? '$green2'
                             : fact.confidence >= 0.5
-                            ? '$yellow11'
-                            : '$red11'
+                            ? '$yellow2'
+                            : '$red2'
                         }
-                        textAlign="center"
-                        margin={0}
-                        lineHeight={1}
+                        borderRadius="$2"
+                        alignItems="center"
+                        justifyContent="center"
+                        minWidth={100}
                       >
-                        {(fact.confidence * 100).toFixed(0)}% confident
-                      </Body>
+                        <Body
+                          size="sm"
+                          weight="medium"
+                          color={
+                            fact.confidence >= 0.7
+                              ? '$green11'
+                              : fact.confidence >= 0.5
+                              ? '$yellow11'
+                              : '$red11'
+                          }
+                          textAlign="center"
+                          margin={0}
+                          lineHeight={1}
+                        >
+                          {(fact.confidence * 100).toFixed(0)}% confident
+                        </Body>
+                      </YStack>
+                      <Button variant="outline" size="sm" onClick={() => setModerationFactKey(fact.key)}>
+                        Moderate
+                      </Button>
                     </YStack>
                   </XStack>
                 </Card>
