@@ -4,7 +4,8 @@ import { forwardRef, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-import { XStack, YStack, Input, Button, useTheme, styled } from 'tamagui';
+import { XStack, YStack, Input, useTheme, styled } from 'tamagui';
+import { Button } from './Button';
 import { CalendarIcon, ClockIcon } from '../icons';
 import { ButtonGroup } from './ButtonGroup';
 
@@ -20,9 +21,10 @@ export interface DateTimePickerProps {
 }
 
 // Styled popup container for compact date/time picker
+// Using absolute positioning within a fixed portal container
 const PopupContainer = styled(YStack, {
   name: 'DateTimePickerPopup',
-  position: 'fixed',
+  position: 'absolute',
   backgroundColor: '$background',
   borderRadius: '$4',
   borderWidth: 1,
@@ -57,8 +59,8 @@ export const DateTimePickerComponent = forwardRef<HTMLDivElement, DateTimePicker
         if (typeof ref === 'function') {
           ref(internalRef.current);
         } else if (ref && typeof ref === 'object' && 'current' in ref) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-          (ref as any).current = internalRef.current;
+          // TypeScript doesn't know ref is mutable, but we've checked it's a ref object
+          (ref).current = internalRef.current;
         }
       }
     }, [ref]);
@@ -258,14 +260,15 @@ export const DateTimePickerComponent = forwardRef<HTMLDivElement, DateTimePicker
       };
       
       window.addEventListener('scroll', handleScroll, true);
-      window.addEventListener('resize', () => {
+      const handleResize = () => {
         updatePosition(true);
         matchHeights();
-      });
+      };
+      window.addEventListener('resize', handleResize);
       
       return () => {
         window.removeEventListener('scroll', handleScroll, true);
-        window.removeEventListener('resize', updatePosition);
+        window.removeEventListener('resize', handleResize);
         document.removeEventListener('wheel', preventPageScroll);
         document.removeEventListener('touchmove', preventTouchScroll);
       };
@@ -391,26 +394,21 @@ export const DateTimePickerComponent = forwardRef<HTMLDivElement, DateTimePicker
       
       const getThemeValue = (key: string, fallback: string): string => {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-          const val = (theme as any)[key];
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-          return val?.get?.() || fallback;
+          // Theme object has dynamic keys, so we need to access it dynamically
+           
+          const val = (theme as Record<string, unknown>)[key];
+           
+          return (val as { get?: () => string })?.get?.() || fallback;
         } catch {
           return fallback;
         }
       };
       
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const borderColor: string = getThemeValue('borderColor', '#e2e8f0');
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const backgroundColor: string = getThemeValue('background', '#ffffff');
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const textColor: string = getThemeValue('color', '#0f172a');
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const blue6: string = getThemeValue('blue6', '#3b82f6');
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const blue7: string = getThemeValue('blue7', '#2563eb');
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const backgroundHover: string = getThemeValue('backgroundHover', '#f8fafc');
       
       style.textContent = `
@@ -520,14 +518,16 @@ export const DateTimePickerComponent = forwardRef<HTMLDivElement, DateTimePicker
         }}
       >
         <Button
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
-          variant={"ghost" as any}
-          onPress={(e: any) => {
+          variant="ghost"
+          onPress={(e: unknown) => {
             // Stop event propagation to prevent closing parent modal
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
-            e?.stopPropagation?.();
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
-            e?.preventDefault?.();
+            const event = e as { stopPropagation?: () => void; preventDefault?: () => void };
+            if (event.stopPropagation) {
+              event.stopPropagation();
+            }
+            if (event.preventDefault) {
+              event.preventDefault();
+            }
             handleOpen(e);
           }}
           disabled={disabled}
@@ -562,18 +562,21 @@ export const DateTimePickerComponent = forwardRef<HTMLDivElement, DateTimePicker
         </Button>
         
         {show && typeof document !== 'undefined' && createPortal(
+          <div
+            onClick={(e: React.MouseEvent<HTMLDivElement>) => {
+              // Prevent closing parent modal
+              e.stopPropagation();
+            }}
+            onMouseDown={(e: React.MouseEvent<HTMLDivElement>) => {
+              // Prevent closing parent modal
+              e.stopPropagation();
+            }}
+            style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 9999 }}
+          >
           <PopupContainer
             ref={popupRef}
             gap="$4"
             data-name="DateTimePickerPopup"
-            onClick={(e: any) => {
-              // Prevent closing parent modal
-              e?.stopPropagation?.();
-            }}
-            onMouseDown={(e: any) => {
-              // Prevent closing parent modal
-              e?.stopPropagation?.();
-            }}
           >
             <XStack gap="$3" alignItems="flex-start" width="auto">
               <YStack gap="$2" minWidth={0} flexShrink={0}>
@@ -624,7 +627,8 @@ export const DateTimePickerComponent = forwardRef<HTMLDivElement, DateTimePicker
                 Confirm
               </Button>
             </ButtonGroup>
-          </PopupContainer>,
+          </PopupContainer>
+          </div>,
           document.body
         )}
       </div>

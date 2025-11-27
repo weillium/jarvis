@@ -139,7 +139,7 @@ Once the worker is running:
 3. Worker should detect it within 3 seconds
 4. Watch logs for: `[prep] preparing agent...`
 5. Context chunks should appear in the database
-6. Agent status should change to `'ready'`
+6. Agent status should change to `'context_complete'`
 7. Check the context database visualization on the live event page
 
 ## 🔗 Related Documentation

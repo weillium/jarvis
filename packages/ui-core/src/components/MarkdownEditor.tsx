@@ -3,7 +3,7 @@
 import '@uiw/react-md-editor/markdown-editor.css';
 import MDEditor from '@uiw/react-md-editor';
 import { YStack } from 'tamagui';
-import { Label, Body, Caption } from './Typography';
+import { Label, Caption } from './Typography';
 import { Card } from './Card';
 
 export interface MarkdownEditorProps {

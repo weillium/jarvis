@@ -174,6 +174,9 @@ export const SessionStatusCard = memo(function SessionStatusCard({ title, sessio
       return session.metadata.updated_at ? new Date(session.metadata.updated_at).getTime() : null;
     })();
 
+    if (endTimestampMs === null) {
+      return null;
+    }
     const diffMs = endTimestampMs - startTimestampMs;
     return diffMs >= 0 ? diffMs : null;
   })();
@@ -209,7 +212,7 @@ export const SessionStatusCard = memo(function SessionStatusCard({ title, sessio
                 backgroundColor={connectionColor}
                 opacity={isWebSocketLive ? 1 : 0.4}
               />
-              <Caption weight="medium" color={connectionColorToken} transform="uppercase">
+              <Caption fontWeight="500" color={connectionColorToken} transform="uppercase">
                 WebSocket: {connectionStatus}
                 {actualWebSocketState ? (
                   <>
@@ -250,7 +253,7 @@ export const SessionStatusCard = memo(function SessionStatusCard({ title, sessio
                   </XStack>
                 </XStack>
                 {session.ping_pong?.enabled && (
-                  <XStack gap="$3" flexWrap="wrap">
+                  <XStack gap="$1" flexWrap="wrap">
                     {session.ping_pong.lastPongReceived && (
                       <Caption>
                         Last pong: <ClientDateFormatter date={session.ping_pong.lastPongReceived} format="localeTimeString" />
@@ -429,7 +432,7 @@ export const SessionStatusCard = memo(function SessionStatusCard({ title, sessio
           <YStack
             ref={logsContainerRef}
             maxHeight={300}
-            overflowY="auto"
+            overflow="scroll"
             padding="$3"
             backgroundColor="$gray1"
             borderRadius="$3"

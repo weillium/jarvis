@@ -3,9 +3,9 @@ import { getCardsByEventId } from '@/server/actions/card-actions';
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { eventId: string } }
+  { params }: { params: Promise<{ eventId: string }> }
 ) {
-  const { eventId } = params;
+  const { eventId } = await params;
 
   if (!eventId) {
     return new Response(

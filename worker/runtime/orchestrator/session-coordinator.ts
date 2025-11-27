@@ -207,9 +207,23 @@ export class SessionCoordinator {
       (s) => s.status === 'active' && this.isAgentEnabled(enabledAgents, s.agent_type)
     );
 
-    if (activeSessions.length > 0 && this.hasRequiredSessions(runtime)) {
+    // Check if sessions are both created AND connected
+    // hasRequiredSessions() only checks if session objects exist, not if they're connected
+    const sessionsConnected = (() => {
+      const enabled = runtime.enabledAgents;
+      const transcriptConnected =
+        !enabled.transcript || (!!runtime.transcriptSession && !!runtime.transcriptSessionId);
+      const cardsConnected =
+        !enabled.cards || (!!runtime.cardsSession && !!runtime.cardsSessionId);
+      const factsConnected =
+        !enabled.facts || (!!runtime.factsSession && !!runtime.factsSessionId);
+      return transcriptConnected && cardsConnected && factsConnected;
+    })();
+
+    // Only skip connection if sessions exist, are required, AND are actually connected
+    if (activeSessions.length > 0 && this.hasRequiredSessions(runtime) && sessionsConnected) {
       this.log(
-        `[orchestrator] Event ${eventId} already has ${activeSessions.length} active session(s)`
+        `[orchestrator] Event ${eventId} already has ${activeSessions.length} active session(s) and they are connected`
       );
 
       runtime.status = 'running';
@@ -219,6 +233,13 @@ export class SessionCoordinator {
       }
       this.startPeriodicSummary(runtime);
       return;
+    }
+
+    // If DB shows active but sessions aren't connected, log and proceed to create/connect
+    if (activeSessions.length > 0 && this.hasRequiredSessions(runtime) && !sessionsConnected) {
+      this.log(
+        `[orchestrator] Event ${eventId} has ${activeSessions.length} active session(s) in DB but sessions are not connected, reconnecting...`
+      );
     }
 
     await this.sessionLifecycle.createRealtimeSessions({
@@ -306,7 +327,7 @@ export class SessionCoordinator {
     let runtime = this.runtimeManager.getRuntime(eventId);
     if (!runtime) {
       runtime = await this.runtimeManager.createRuntime(eventId, agentId);
-      runtime.status = 'ready';
+      runtime.status = 'context_complete';
     }
 
     if (this.sessionsReady(runtime)) {

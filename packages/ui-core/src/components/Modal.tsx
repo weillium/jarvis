@@ -45,7 +45,8 @@ const DialogOverlay = styled(Dialog.Overlay, {
   exitStyle: { opacity: 0 },
   zIndex: 1000,
   // Ensure overlay creates proper stacking context
-  position: 'fixed',
+  // Using absolute as Tamagui doesn't accept 'fixed' in type, but portal handles positioning
+  position: 'absolute',
   inset: 0,
 });
 
@@ -53,7 +54,8 @@ const DialogContainer = styled(YStack, {
   name: 'ModalContainer',
   alignItems: 'center',
   justifyContent: 'center',
-  position: 'fixed',
+  // Using absolute as Tamagui doesn't accept 'fixed' in type, but portal handles positioning
+  position: 'absolute',
   inset: 0,
   padding: '$4',
   pointerEvents: 'none',
@@ -84,9 +86,6 @@ export function Modal({
           onClose();
         }
       }}
-      // Disable FocusScope to prevent conflicts with Select's FocusScope
-      // This prevents infinite focus loops when Select is inside Modal
-      disableFocusScope={true}
       {...dialogProps}
     >
       {trigger ? (

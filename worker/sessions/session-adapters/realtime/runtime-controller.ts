@@ -366,13 +366,18 @@ export const createBufferedTranscriptAudioHooks: RuntimeControllerHooksFactory =
 
     if (!chunk.isFinal) {
       if (!audioReady) {
-        // context.log('log', '[transcript][debug] Transcript audio buffered while session not ready');
+        // Audio not ready yet - buffer the chunk
+        // This is expected during session initialization
+        // The buffer will be flushed when markReady() is called
         return;
       }
+      // Audio is ready - flush buffer if we have enough data
+      // Use a smaller threshold to ensure more frequent flushing
+      const aggressiveFlushThreshold = Math.max(1, Math.floor(flushThresholdBytes * 0.5)); // 50% of target
       flushTranscriptBuffer({
         session,
         flushAll: false,
-        minFlushBytes: flushThresholdBytes,
+        minFlushBytes: aggressiveFlushThreshold,
         logPrefix: 'Buffered flush',
       });
       return;
@@ -427,23 +432,24 @@ export const createBufferedTranscriptAudioHooks: RuntimeControllerHooksFactory =
       }
 
       audioReady = true;
-      // context.log('log', '[transcript][debug] Transcript session marked ready for audio');
+      context.log('log', `[transcript] Session marked ready for audio, buffered: ${transcriptPcmBuffer.length} bytes`);
 
       const session = context.getSession();
       if (!session || !context.isActive()) {
+        context.log('warn', '[transcript] Session not available when marking ready');
         return;
       }
 
-      if (transcriptPcmBuffer.length === 0) {
-        return;
+      // Flush any buffered audio immediately when ready
+      if (transcriptPcmBuffer.length > 0) {
+        flushTranscriptBuffer({
+          session,
+          flushAll: true,
+          minFlushBytes: 1, // Flush all buffered data immediately
+          logPrefix: 'Ready flush',
+        });
+        context.log('log', `[transcript] Flushed ${transcriptPcmBuffer.length} buffered bytes on ready`);
       }
-
-      flushTranscriptBuffer({
-        session,
-        flushAll: true,
-        minFlushBytes: flushThresholdBytes,
-        logPrefix: 'Ready flush',
-      });
     },
   };
 };

@@ -35,7 +35,7 @@ export class ImageGenerator {
         n: 1,
       });
 
-      const imageUrl = response.data[0]?.url ?? null;
+      const imageUrl = response.data?.[0]?.url ?? null;
       
       if (!imageUrl) {
         this.logger.log(eventId, 'cards', 'warn', '[image] Generation returned no URL', {

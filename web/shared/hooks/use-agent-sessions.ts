@@ -139,6 +139,11 @@ export function useAgentSessions(
         console.log('[useAgentSessions] SSE connection opened');
         setIsLoading(false);
         setError(null);
+        // Clear any pending reconnect timeout
+        if (reconnectTimeoutRef.current) {
+          clearTimeout(reconnectTimeoutRef.current);
+          reconnectTimeoutRef.current = null;
+        }
         void triggerRefetch('onopen');
       };
 
@@ -219,13 +224,20 @@ export function useAgentSessions(
         // Check if connection is closed
         if (eventSource.readyState === EventSource.CLOSED) {
           setIsLoading(false);
-          setError(new Error('SSE connection closed'));
+          // Only set error if we don't have a pending reconnect
+          // This prevents error spam during reconnection attempts
+          if (!reconnectTimeoutRef.current) {
+            setError(new Error('SSE connection closed'));
+          }
           
           // Attempt to reconnect after 3 seconds
-          reconnectTimeoutRef.current = setTimeout(() => {
-            console.log('[useAgentSessions] Attempting to reconnect...');
-          connect();
-          }, 3000);
+          if (!reconnectTimeoutRef.current) {
+            reconnectTimeoutRef.current = setTimeout(() => {
+              console.log('[useAgentSessions] Attempting to reconnect...');
+              reconnectTimeoutRef.current = null;
+              connect();
+            }, 3000);
+          }
         } else if (eventSource.readyState === EventSource.CONNECTING) {
           // Still connecting, don't set error yet
           console.log('[useAgentSessions] Still connecting...');
@@ -399,6 +411,11 @@ export function useAgentSessionEnrichment(
         console.log('[useAgentSessionEnrichment] SSE connection opened');
         setIsLoading(false);
         setError(null);
+        // Clear any pending reconnect timeout
+        if (reconnectTimeoutRef.current) {
+          clearTimeout(reconnectTimeoutRef.current);
+          reconnectTimeoutRef.current = null;
+        }
         void triggerRefetch('onopen');
       };
 
@@ -424,7 +441,12 @@ export function useAgentSessionEnrichment(
             const enrichmentData = message.payload as AgentSessionSSEEnrichment;
             console.log('[useAgentSessionEnrichment] Received enrichment update:', enrichmentData.agent_type);
             
+            // Track previous state to detect connection transitions
+            let wasConnected = false;
             setEnrichment(prev => {
+              const previous = prev.get(enrichmentData.agent_type);
+              wasConnected = previous?.websocket_state === 'OPEN';
+              
               const updated = new Map(prev);
               updated.set(enrichmentData.agent_type, enrichmentData);
               return updated;
@@ -432,9 +454,19 @@ export function useAgentSessionEnrichment(
             
             setIsLoading(false);
             setError(null);
-            if (!sessionAgentTypes.includes(enrichmentData.agent_type) && !discoveredAgentsRef.current.has(enrichmentData.agent_type)) {
+            
+            // Trigger refetch if:
+            // 1. New agent type discovered, OR
+            // 2. Session just connected (websocket_state became 'OPEN')
+            const isNewAgent = !sessionAgentTypes.includes(enrichmentData.agent_type) && !discoveredAgentsRef.current.has(enrichmentData.agent_type);
+            const justConnected = enrichmentData.websocket_state === 'OPEN' && !wasConnected;
+            
+            if (isNewAgent) {
               discoveredAgentsRef.current.add(enrichmentData.agent_type);
               void triggerRefetch(`enrichment-message-${enrichmentData.agent_type}`);
+            } else if (justConnected) {
+              console.log(`[useAgentSessionEnrichment] Session ${enrichmentData.agent_type} just connected, triggering refetch`);
+              void triggerRefetch(`connection-established-${enrichmentData.agent_type}`);
             }
             return;
           }
@@ -457,7 +489,12 @@ export function useAgentSessionEnrichment(
 
             console.log('[useAgentSessionEnrichment] Extracted enrichment from legacy message:', enrichmentData.agent_type);
             
+            // Track previous state to detect connection transitions
+            let wasConnected = false;
             setEnrichment(prev => {
+              const previous = prev.get(enrichmentData.agent_type);
+              wasConnected = previous?.websocket_state === 'OPEN';
+              
               const updated = new Map(prev);
               updated.set(enrichmentData.agent_type, enrichmentData);
               return updated;
@@ -465,9 +502,21 @@ export function useAgentSessionEnrichment(
             
             setIsLoading(false);
             setError(null);
-            if (!sessionAgentTypes.includes(enrichmentData.agent_type) && !discoveredAgentsRef.current.has(enrichmentData.agent_type)) {
+            
+            // Trigger refetch if:
+            // 1. New agent type discovered, OR
+            // 2. Session just connected (websocket_state became 'OPEN'), OR
+            // 3. Status is 'active' (legacy message - indicates session is active in DB)
+            const isNewAgent = !sessionAgentTypes.includes(enrichmentData.agent_type) && !discoveredAgentsRef.current.has(enrichmentData.agent_type);
+            const justConnected = enrichmentData.websocket_state === 'OPEN' && !wasConnected;
+            const statusIsActive = status.status === 'active';
+            
+            if (isNewAgent) {
               discoveredAgentsRef.current.add(enrichmentData.agent_type);
               void triggerRefetch(`legacy-status-message-${enrichmentData.agent_type}`);
+            } else if (justConnected || (statusIsActive && !wasConnected)) {
+              console.log(`[useAgentSessionEnrichment] Session ${enrichmentData.agent_type} just connected or became active, triggering refetch`);
+              void triggerRefetch(`legacy-connection-established-${enrichmentData.agent_type}`);
             }
           }
         } catch (err) {
@@ -480,12 +529,20 @@ export function useAgentSessionEnrichment(
         
         if (eventSource.readyState === EventSource.CLOSED) {
           setIsLoading(false);
-          setError(new Error('SSE connection closed'));
+          // Only set error if we don't have a pending reconnect
+          // This prevents error spam during reconnection attempts
+          if (!reconnectTimeoutRef.current) {
+            setError(new Error('SSE connection closed'));
+          }
           
-          reconnectTimeoutRef.current = setTimeout(() => {
-            console.log('[useAgentSessionEnrichment] Attempting to reconnect...');
-            connect();
-          }, 3000);
+          // Attempt to reconnect after 3 seconds
+          if (!reconnectTimeoutRef.current) {
+            reconnectTimeoutRef.current = setTimeout(() => {
+              console.log('[useAgentSessionEnrichment] Attempting to reconnect...');
+              reconnectTimeoutRef.current = null;
+              connect();
+            }, 3000);
+          }
         } else if (eventSource.readyState === EventSource.CONNECTING) {
           console.log('[useAgentSessionEnrichment] Still connecting...');
         }

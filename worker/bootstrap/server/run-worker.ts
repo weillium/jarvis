@@ -9,6 +9,7 @@ import { ContextPoller } from '../../polling/context-poller';
 import { RegenerationPoller } from '../../polling/regeneration-poller';
 import { PauseResumePoller } from '../../polling/pause-resume-poller';
 import { SessionStartupPoller } from '../../polling/session-startup-poller';
+import { ConnectionHealthPoller } from '../../polling/connection-health-poller';
 import { createWorkerInfrastructure } from '../services';
 import { createWorkerProcessingPipeline, determineCardType } from '../pipeline';
 import { createWorkerServer } from './http-server';
@@ -148,6 +149,12 @@ export const startWorker = async (env: WorkerEnvConfig): Promise<WorkerRuntime> 
     log
   );
 
+  const connectionHealthPoller = new ConnectionHealthPoller(
+    infrastructure.supabaseClient,
+    orchestrator,
+    log
+  );
+
   await orchestrator.initialize();
 
   const httpServer = createWorkerServer({
@@ -173,6 +180,7 @@ export const startWorker = async (env: WorkerEnvConfig): Promise<WorkerRuntime> 
   registerInterval(() => regenerationPoller.tick(), regenerationPoller.getInterval(), 'regeneration');
   registerInterval(() => pauseResumePoller.tick(), pauseResumePoller.getInterval(), 'pause-resume');
   registerInterval(() => sessionStartupPoller.tick(), sessionStartupPoller.getInterval(), 'session-start');
+  registerInterval(() => connectionHealthPoller.tick(), connectionHealthPoller.getInterval(), 'connection-health');
 
   log('Worker/Orchestrator running...');
 

@@ -7,7 +7,6 @@ import type { TemplatePlan } from '../sessions/agent-profiles/cards/templates/ty
 export type EventRuntimeStatus =
   | 'prepping'
   | 'context_complete'
-  | 'ready'
   | 'running'
   | 'ended'
   | 'error';

@@ -141,7 +141,7 @@ export function DataTable<T>({
     const totalFlex = columns.reduce((sum, col) => sum + (col.flex ?? 1), 0);
     const configs: Array<{ 
       flex: number; 
-      flexBasis: string; 
+      flexBasis: string | number | undefined; 
       minWidth?: number; 
       maxWidth?: number;
     }> = [];
@@ -167,26 +167,28 @@ export function DataTable<T>({
       <ScrollArea>
         <YStack width="100%">
           <HeaderRow>
-            {columns.map((column, colIndex) => {
-              const flexConfig = columnFlexConfigs[colIndex];
-              return (
-                <Cell
-                  key={column.header}
-                  align={column.align}
-                  size={size}
-                  variant="header"
-                  flex={flexConfig.flex}
-                  flexBasis={flexConfig.flexBasis}
-                  minWidth={flexConfig.minWidth ?? 0}
-                  maxWidth={flexConfig.maxWidth}
-                  truncate={column.truncate}
-                >
-                  <Label size="xs" uppercase tone="muted">
-                    {column.header}
-                  </Label>
-                </Cell>
-              );
-            })}
+                {columns.map((column, colIndex) => {
+                  const flexConfig = columnFlexConfigs[colIndex];
+                  return (
+                    <Cell
+                      key={column.header}
+                      align={column.align}
+                      size={size}
+                      variant="header"
+                      flex={flexConfig.flex}
+                      // flexBasis is a percentage string which is valid CSS but TypeScript doesn't recognize it
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment
+                      flexBasis={flexConfig.flexBasis as any}
+                      minWidth={flexConfig.minWidth ?? 0}
+                      maxWidth={flexConfig.maxWidth}
+                      truncate={column.truncate}
+                    >
+                      <Label size="xs" uppercase tone="muted">
+                        {String(column.header)}
+                      </Label>
+                    </Cell>
+                  );
+                })}
           </HeaderRow>
           {data.map((row, rowIndex) => {
             const rowKey = getRowKey ? getRowKey(row, rowIndex) : `${rowIndex}`;
@@ -208,7 +210,9 @@ export function DataTable<T>({
                       size={size}
                       variant="body"
                       flex={flexConfig.flex}
-                      flexBasis={flexConfig.flexBasis}
+                      // flexBasis is a percentage string which is valid CSS but TypeScript doesn't recognize it
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment
+                  flexBasis={flexConfig.flexBasis as any}
                       minWidth={flexConfig.minWidth ?? 0}
                       maxWidth={flexConfig.maxWidth}
                       truncate={column.truncate}
@@ -241,7 +245,9 @@ export function DataTable<T>({
                     size={size}
                     variant="body"
                     flex={flexConfig.flex}
-                    flexBasis={flexConfig.flexBasis}
+                    // flexBasis is a percentage string which is valid CSS but TypeScript doesn't recognize it
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment
+                    flexBasis={flexConfig.flexBasis as any}
                     minWidth={flexConfig.minWidth ?? 0}
                     maxWidth={flexConfig.maxWidth}
                     truncate={column.truncate}

@@ -1,7 +1,7 @@
 'use client';
 
 import { forwardRef, useMemo, ReactNode, useEffect } from 'react';
-import { Select as TamaguiSelect, styled } from 'tamagui';
+import { Select as TamaguiSelect, styled, YStack } from 'tamagui';
 import type { SelectProps as TamaguiSelectProps } from 'tamagui';
 
 export interface SelectProps extends Omit<TamaguiSelectProps, 'size' | 'children'> {
@@ -11,6 +11,7 @@ export interface SelectProps extends Omit<TamaguiSelectProps, 'size' | 'children
   defaultValue?: string;
   onChange?: (event: React.ChangeEvent<HTMLSelectElement>) => void;
   onValueChange?: (value: string) => void;
+  disabled?: boolean;
 }
 
 const StyledSelectRoot = styled(TamaguiSelect, {
@@ -110,10 +111,12 @@ const StyledSelectViewport = styled(TamaguiSelect.Viewport, {
 
 // Wrapper to ensure proper z-index stacking when portaled
 // This creates a stacking context that appears above modals
-const SelectPortalContent = styled('div', {
+// Using YStack as base since styled() requires a component, not a string
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const SelectPortalContent = styled(YStack, {
   name: 'SelectPortalContent',
   zIndex: 99999,
-  position: 'fixed',
+  position: 'absolute',
   top: 0,
   left: 0,
   right: 0,
@@ -159,7 +162,7 @@ function convertOptionsToItems(children: ReactNode): ReactNode {
     const items: ReactNode[] = [];
     children.forEach((child, index) => {
       if (isOptionElement(child)) {
-        const option = child as React.ReactElement<HTMLOptionElement>;
+        const option = child;
         // CRITICAL: Use option.props.value explicitly - it can be empty string, which is valid
         // If value prop is not provided, it defaults to the text content, but we want to preserve empty string
         const value = option.props.value !== undefined 
@@ -169,7 +172,7 @@ function convertOptionsToItems(children: ReactNode): ReactNode {
         
         items.push(
           <StyledSelectItem key={value !== '' ? value : `empty-${index}`} value={value} index={index}>
-            <TamaguiSelect.ItemText>{label}</TamaguiSelect.ItemText>
+            <TamaguiSelect.ItemText>{String(label)}</TamaguiSelect.ItemText>
           </StyledSelectItem>
         );
       } else if (child !== null && child !== undefined) {
@@ -177,7 +180,8 @@ function convertOptionsToItems(children: ReactNode): ReactNode {
         const converted = convertOptionsToItems(child);
         if (converted) {
           if (Array.isArray(converted)) {
-            items.push(...converted);
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+            items.push(...(converted as React.ReactNode[]));
           } else {
             items.push(converted);
           }
@@ -188,7 +192,7 @@ function convertOptionsToItems(children: ReactNode): ReactNode {
   }
   
   if (isOptionElement(children)) {
-    const option = children as React.ReactElement<HTMLOptionElement>;
+    const option = children;
     // CRITICAL: Use option.props.value explicitly - it can be empty string, which is valid
     const value = option.props.value !== undefined 
       ? String(option.props.value) 
@@ -206,7 +210,7 @@ function convertOptionsToItems(children: ReactNode): ReactNode {
 }
 
 export const Select = forwardRef<any, SelectProps>(function Select(props, _ref) {
-  const { size, children, value, defaultValue, onChange, onValueChange, ...rest } = props;
+  const { size, children, value, defaultValue, onChange, onValueChange, disabled, ...rest } = props;
   const sizeProp = size || 'md';
   
   // Ensure DIALOG and PortalProvider root host have high z-index to allow Select dropdowns above Modals
@@ -307,9 +311,6 @@ export const Select = forwardRef<any, SelectProps>(function Select(props, _ref) 
       value={value}
       defaultValue={defaultValue}
       onValueChange={handleValueChange}
-      // Disable FocusScope to prevent conflicts with Modal's FocusScope
-      // This prevents infinite focus loops when Select is inside a Modal
-      disableFocusScope={true}
       // Prevent scroll when Select opens (fixes page jumping to top)
       onOpenChange={(open) => {
         // Prevent default scroll behavior when opening
@@ -328,7 +329,7 @@ export const Select = forwardRef<any, SelectProps>(function Select(props, _ref) 
       }}
       {...rest}
     >
-      <StyledSelectTrigger size={sizeProp}>
+      <StyledSelectTrigger size={sizeProp} disabled={disabled}>
         <TamaguiSelect.Value placeholder="Select..." />
         <TamaguiSelect.Icon />
       </StyledSelectTrigger>
@@ -345,9 +346,6 @@ export const Select = forwardRef<any, SelectProps>(function Select(props, _ref) 
       <TamaguiSelect.ScrollUpButton />
       <StyledSelectContent 
         zIndex={99999}
-        style={{ zIndex: 99999 }}
-        // Ensure Select Content portals correctly and appears above Modal
-        modal={false} // Don't create another modal layer
       >
         <StyledSelectViewport>
           {items}

@@ -19,6 +19,11 @@ export function ContextGenerationProgress({
   progress,
   blueprintStatus,
 }: ContextGenerationProgressProps) {
+  // When status is 'active' and stage is 'running', show full progress bar (not half-filled)
+  const isRunning = status === 'active' && stage === 'running';
+  const effectiveProgress = isRunning 
+    ? { current: 100, total: 100, percentage: 100 }
+    : progress;
   const getStageLabel = (stage: string, blueprintStatus?: string | null): string => {
     switch (stage) {
       case 'idle':
@@ -51,6 +56,8 @@ export function ContextGenerationProgress({
         return 'Regenerating Chunks';
       case 'context_complete':
         return 'Context Complete';
+      case 'running':
+        return 'Running';
       default:
         // Capitalize first letter of unknown stages
         return stage.charAt(0).toUpperCase() + stage.slice(1).replace(/_/g, ' ');
@@ -80,15 +87,15 @@ export function ContextGenerationProgress({
         <Text fontSize="$3" fontWeight="500" color="$color" margin={0}>
           {getStageLabel(stage, blueprintStatus)}
         </Text>
-        {progress && (
+        {effectiveProgress && !isRunning && (
           <Text fontSize="$3" color="$gray11" margin={0}>
-            {getProgressLabel()} ({progress.percentage}%)
+            {getProgressLabel()} ({effectiveProgress.percentage}%)
           </Text>
         )}
       </XStack>
 
       {/* Progress bar */}
-      <ProgressBar value={progress?.percentage ?? null} />
+      <ProgressBar value={effectiveProgress?.percentage ?? null} />
 
       {/* Stage indicators */}
       <XStack
@@ -96,15 +103,16 @@ export function ContextGenerationProgress({
         marginTop="$4"
         flexWrap="wrap"
       >
-        {['blueprint_generating', 'researching', 'building_glossary', 'building_chunks', 'context_complete'].map((s) => {
+        {['blueprint_generating', 'researching', 'building_glossary', 'building_chunks', 'context_complete', 'running'].map((s) => {
           // Handle both 'blueprint' and 'blueprint_generating' as the same stage
           // Handle regeneration stages as the same as their non-regeneration counterparts
+          // Handle 'running' stage
           const isActive = stage === s || 
             (stage === 'blueprint' && s === 'blueprint_generating') ||
             (stage === 'regenerating_research' && s === 'researching') ||
             (stage === 'regenerating_glossary' && s === 'building_glossary') ||
             (stage === 'regenerating_chunks' && s === 'building_chunks');
-          const isCompleted = getStageOrder(stage) > getStageOrder(s);
+          const isCompleted = getStageOrder(stage) > getStageOrder(s) || (isRunning && s !== 'running');
 
           return (
             <Badge
@@ -135,6 +143,7 @@ function getStageOrder(stage: string): number {
     'building_chunks': 4,
     'regenerating_chunks': 4,
     'context_complete': 5,
+    'running': 6, // Running comes after context_complete
   };
   return order[stage] || 0;
 }

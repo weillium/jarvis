@@ -146,7 +146,7 @@ export class CardImageService {
     }
 
     const startTime = Date.now();
-    let strategy: 'fetch' | 'generate' = request.strategy || this.determineStrategy(request.instructions);
+    const strategy: 'fetch' | 'generate' = request.strategy || this.determineStrategy(request.instructions);
 
     // If explicit source_url provided, cache it directly
     if (request.strategy === 'fetch' && typeof request.source_url === 'string' && request.source_url.trim().length > 0) {

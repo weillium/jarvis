@@ -228,7 +228,7 @@ export function GlossaryVisualization({ eventId, embedded = false }: GlossaryVis
                           {term.definition}
                         </Body>
                       ) : (
-                        <ClampText lines={3} tone="muted" margin={0}>
+                        <ClampText lines={3} color="$gray11" margin={0}>
                           {term.definition}
                         </ClampText>
                       )}

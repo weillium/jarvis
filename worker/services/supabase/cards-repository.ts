@@ -93,7 +93,9 @@ export class CardsRepository {
       query = query.eq('payload->>concept_id', conceptId);
     }
 
-    const { data, error } = await query.maybeSingle();
+    const result = await query.maybeSingle();
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const { data, error } = result;
 
     // PGRST116 is "not found" error, which is expected when no duplicate exists
     if (error && error.code !== 'PGRST116') {

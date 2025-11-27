@@ -21,6 +21,7 @@ type UpdateDatabaseStatusFn = (
 ) => Promise<void>;
 
 type EmitErrorFn = (error: Error) => void;
+type ScheduleReconnectFn = () => void;
 
 interface HeartbeatManagerOptions {
   agentType: AgentType;
@@ -32,6 +33,7 @@ interface HeartbeatManagerOptions {
   notifyStatus?: NotifyStatusFn;
   updateDatabaseStatus?: UpdateDatabaseStatusFn;
   emitError: EmitErrorFn;
+  scheduleReconnect?: ScheduleReconnectFn;
 }
 
 interface HeartbeatTimings {
@@ -133,6 +135,12 @@ export class HeartbeatManager {
       this.options.emitError(
         new Error(`Connection dead - ${this.missedPongs} missed pongs`)
       );
+
+      // Trigger reconnection attempt if callback is provided
+      if (this.options.scheduleReconnect) {
+        this.options.log?.('warn', 'Triggering reconnection due to connection dead (missed pongs)');
+        this.options.scheduleReconnect();
+      }
     }
   }
 

@@ -111,6 +111,7 @@ export class RealtimeAgentSession implements AgentRealtimeSession {
         notifyStatus: (status, sessionId) => this.onStatusChange?.(status, sessionId),
         updateDatabaseStatus: (status, sessionId) => this.updateDatabaseStatus(status, sessionId),
         emitError: (error) => this.emitEvent('error', error),
+        scheduleReconnect: () => this.scheduleReconnect(),
       },
       heartbeatConfig
     );
@@ -394,6 +395,32 @@ export class RealtimeAgentSession implements AgentRealtimeSession {
       underlyingSocket.on('pong', () => {
         this.eventRouter.handlePong();
       });
+
+      // Also listen to underlying socket close events
+      underlyingSocket.on('close', ((...args: unknown[]) => {
+        const code = typeof args[0] === 'number' ? args[0] : undefined;
+        const reason = typeof args[1] === 'string' ? args[1] : undefined;
+        // Only handle unexpected closes when session should be active
+        if (this.isActive && this.session) {
+          // Check if this was an intentional close
+          const socketReadyState = underlyingSocket.readyState;
+          
+          // If socket is already closed and we're still marked active, this is unexpected
+          if (socketReadyState === 3) { // CLOSED = 3
+            const closeReason = typeof reason === 'string' ? reason : `Code: ${code ?? 'unknown'}`;
+            
+            // Don't reconnect for normal closures (code 1000) unless it's clearly unexpected
+            if (code !== 1000 || !reason?.includes('Paused')) {
+              this.onLog?.('warn', `Underlying socket closed unexpectedly (code: ${code}, reason: ${closeReason}), attempting reconnect`);
+              
+              // Mark as inactive and trigger reconnection
+              this.isActive = false;
+              this.runtimeController.handleSessionClosed(`Socket closed: ${closeReason}`);
+              this.scheduleReconnect();
+            }
+          }
+        }
+      }) as (...args: unknown[]) => void);
     } else {
       this.onLog?.('warn', 'Ping/pong not available on socket - SDK may handle it internally');
       this.heartbeat.stop();
@@ -425,6 +452,36 @@ export class RealtimeAgentSession implements AgentRealtimeSession {
 
       this.eventRouter.handleError(error);
     });
+
+    // Handle unexpected session close events
+    const sessionWithEvents = this.session as unknown as { on?: (event: string, handler: (event: { code?: number; reason?: string }) => void) => void };
+    if (typeof sessionWithEvents.on === 'function') {
+      // Check if session has a 'close' event
+      try {
+        sessionWithEvents.on('close', (event: { code?: number; reason?: string }) => {
+          // Only handle unexpected closes (not intentional pauses/closes)
+          if (this.isActive) {
+            const reason = event.reason || 'Unexpected close';
+            const code = event.code;
+            
+            // Don't reconnect for normal closures (code 1000) or intentional pauses
+            if (code === 1000 && reason.includes('Paused')) {
+              this.onLog?.('log', `Session closed intentionally (pause): ${reason}`);
+              return;
+            }
+
+            this.onLog?.('warn', `Unexpected session close detected (code: ${code}, reason: ${reason}), attempting reconnect`);
+            
+            // Mark as inactive and trigger reconnection
+            this.isActive = false;
+            this.runtimeController.handleSessionClosed(`Unexpected close: ${reason}`);
+            this.scheduleReconnect();
+          }
+        });
+      } catch {
+        // Session may not support 'close' event directly, try underlying socket
+      }
+    }
 
     this.session.on('event', (event: RealtimeServerEvent) => {
       this.eventRouter.handleGenericEvent(event);

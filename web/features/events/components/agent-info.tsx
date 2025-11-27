@@ -55,7 +55,6 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
         case 'regenerating_chunks': return '$yellow11';
         case 'context_complete': return '$green11';
         case 'testing': return '$purple11';
-        case 'ready': return '$green11';
         case 'prepping': return '$yellow11';
         default: return '$gray11';
       }
@@ -83,7 +82,6 @@ export function AgentInfo({ eventId }: AgentInfoProps) {
         case 'regenerating_chunks': return 'Regenerating Chunks';
         case 'context_complete': return 'Context Complete';
         case 'testing': return 'Testing';
-        case 'ready': return 'Ready';
         case 'prepping': return 'Prepping';
         default: return 'Idle';
       }

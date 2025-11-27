@@ -529,10 +529,15 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
       )}
 
       {enrichmentError && (
-        <Alert variant="error" marginBottom="$4">
-          <Text fontSize="$2" margin={0}>
-            Error connecting to enrichment stream: {enrichmentError.message}
-          </Text>
+        <Alert variant="warning" marginBottom="$4">
+          <YStack gap="$1">
+            <Text fontSize="$2" fontWeight="600" margin={0}>
+              Enrichment stream disconnected
+            </Text>
+            <Text fontSize="$2" margin={0}>
+              {enrichmentError.message}. Reconnecting automatically... Session creation and management are unaffected.
+            </Text>
+          </YStack>
         </Alert>
       )}
 
@@ -547,7 +552,7 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
         <EmptyStateCard
           title="No active agent sessions"
           description={
-            agent?.status === 'idle' && (agent?.stage === 'ready' || agent?.stage === 'context_complete')
+            agent?.status === 'idle' && agent?.stage === 'context_complete'
               ? 'Use the "Create Sessions" button above to begin.'
               : agent?.status === 'active' && agent?.stage === 'running'
               ? 'Waiting for sessions to be created...'

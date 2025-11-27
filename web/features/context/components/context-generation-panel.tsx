@@ -311,7 +311,7 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
           <YStack marginBottom="$5">
             <ContextGenerationProgress
               status={statusData.agent.status}
-              stage={statusData.stage}
+              stage={statusData.agent.stage || statusData.stage}
               progress={statusData.progress}
               blueprintStatus={statusData?.blueprint?.status}
             />
@@ -422,7 +422,7 @@ export function ContextGenerationPanel({ eventId, embedded = false, onClearConte
         <YStack marginBottom="$5">
           <ContextGenerationProgress
             status={statusData.agent.status}
-            stage={statusData.stage}
+            stage={statusData.agent.stage || statusData.stage}
             progress={statusData.progress}
             blueprintStatus={statusData?.blueprint?.status}
           />

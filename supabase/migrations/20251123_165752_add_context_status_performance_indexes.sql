@@ -44,3 +44,5 @@ comment on index idx_research_results_event_count is 'Optimizes count queries on
 comment on index idx_context_items_event_count is 'Optimizes count queries on context_items by event_id (counts all rows, not just active)';
 comment on index idx_generation_cycles_event_agent_type_status_started is 'Optimizes generation cycles queries that filter by event_id, agent_id, cycle_type, status and order by started_at';
 
+
+

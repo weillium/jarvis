@@ -23,9 +23,9 @@ export class StatusUpdater {
     const cardsEnrichment = this.extractEnrichment(statuses.cards);
     const factsEnrichment = this.extractEnrichment(statuses.facts);
 
-    await this.sse.pushSessionStatus(runtime.eventId, transcriptEnrichment);
-    await this.sse.pushSessionStatus(runtime.eventId, cardsEnrichment);
-    await this.sse.pushSessionStatus(runtime.eventId, factsEnrichment);
+    this.sse.pushSessionStatus(runtime.eventId, transcriptEnrichment);
+    this.sse.pushSessionStatus(runtime.eventId, cardsEnrichment);
+    this.sse.pushSessionStatus(runtime.eventId, factsEnrichment);
   }
 
   /**

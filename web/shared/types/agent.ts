@@ -18,7 +18,6 @@ export type AgentStage =
   | 'regenerating_chunks'    // Regenerating chunks
   | 'context_complete'       // Context ready
   | 'testing'               // Testing sessions
-  | 'ready'                 // Legacy: ready to start
   | 'running'                // Processing transcripts
   | null;                    // No stage
 

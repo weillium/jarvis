@@ -114,25 +114,26 @@ export class ImageFetcher {
     if (!this.exaClient) return null;
 
     try {
-      const results = await this.exaClient.search({
-        query,
+      const results = await this.exaClient.search(query, {
         type: 'neural',
-        contents: ['image'],
-        numResults: 1,
+        numResults: 5,
       });
 
       if (results.results && results.results.length > 0) {
-        const firstResult = results.results[0];
-        // Exa returns images in results
-        if (firstResult.images && firstResult.images.length > 0) {
-          return firstResult.images[0] ?? null;
+        // Look for image URLs in results
+        for (const result of results.results) {
+          // Check if URL is an image
+          if (result.url && /\.(jpg|jpeg|png|gif|webp)$/i.test(result.url)) {
+            return result.url;
+          }
         }
-        // Or check if URL is an image
-        if (firstResult.url && /\.(jpg|jpeg|png|gif|webp)$/i.test(firstResult.url)) {
+        // If no direct image URL found, return first result URL (might be an image page)
+        const firstResult = results.results[0];
+        if (firstResult.url) {
           return firstResult.url;
         }
       }
-    } catch (error) {
+    } catch {
       // Logged in tryProvider
       return null;
     }

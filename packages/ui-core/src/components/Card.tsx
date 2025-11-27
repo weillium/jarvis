@@ -75,7 +75,7 @@ export const Card = forwardRef<any, CardProps>(function Card(props, ref) {
   
   // Ensure onPress is never passed to the DOM, especially when asChild is used
   // Tamagui's Card might internally accept onPress, but we don't want it in the DOM
-  const cleanProps: Record<string, any> = {};
+  const cleanProps: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(cardProps)) {
     // Explicitly exclude onPress from being passed, especially when asChild is used
     if (key !== 'onPress') {

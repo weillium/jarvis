@@ -12,7 +12,7 @@ const isCardVisualRequest = (value: unknown): value is CardVisualRequest => {
   if (!isRecord(value)) {
     return false;
   }
-  const record = value as Record<string, unknown>;
+  const record: Record<string, unknown> = value;
   const strategy = record.strategy;
   const instructions = record.instructions;
   const sourceUrl = record.source_url;
@@ -85,8 +85,9 @@ export const mapCardFromRecord = (
     return null;
   }
 
-  const cardType = CARD_TYPES.has(record.card_type as RealtimeCardDTO['card_type'])
-    ? (record.card_type as RealtimeCardDTO['card_type'])
+  const cardTypeValue = record.card_type;
+  const cardType: RealtimeCardDTO['card_type'] = CARD_TYPES.has(cardTypeValue as RealtimeCardDTO['card_type'])
+    ? cardTypeValue as RealtimeCardDTO['card_type']
     : 'text';
 
   const sourceSeq = typeof record.source_seq === 'number' ? record.source_seq : 0;

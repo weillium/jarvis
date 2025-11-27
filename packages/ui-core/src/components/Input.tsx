@@ -127,13 +127,13 @@ const NativePasswordInput = forwardRef<HTMLInputElement, React.InputHTMLAttribut
       <>
         <style>{`
           input[data-password-input]::placeholder {
-            color: ${(theme.placeholderColor?.val as string) || '#94a3b8'};
+            color: ${theme.placeholderColor?.val || '#94a3b8'};
           }
           input[data-password-input]:focus {
-            border-color: ${error ? (theme.red7?.val as string) : (theme.blue6?.val as string)} !important;
+            border-color: ${error ? theme.red7?.val : theme.blue6?.val} !important;
           }
           input[data-password-input]:disabled {
-            background-color: ${theme.backgroundHover?.val as string};
+            background-color: ${theme.backgroundHover?.val};
             opacity: 0.6;
             cursor: not-allowed;
           }
@@ -145,17 +145,15 @@ const NativePasswordInput = forwardRef<HTMLInputElement, React.InputHTMLAttribut
           className={className}
           style={{ ...baseStyle, ...(style || {}) }}
           onFocus={(e) => {
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
             e.currentTarget.style.borderColor = error
-              ? (theme.red7?.val as string)
-              : (theme.blue6?.val as string);
+              ? String(theme.red7?.val || '')
+              : String(theme.blue6?.val || '');
             onFocus?.(e);
           }}
           onBlur={(e) => {
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
             e.currentTarget.style.borderColor = error
-              ? (theme.red6?.val as string)
-              : (theme.borderColor?.val as string);
+              ? String(theme.red6?.val || '')
+              : String(theme.borderColor?.val || '');
             onBlur?.(e);
           }}
         />
@@ -194,7 +192,6 @@ export const Input = forwardRef<any, InputProps>(function Input(props, ref) {
   // For password fields with maskToggle, use native input for full control
   if (shouldEnableMask) {
     // Extract only valid HTML input props from rest
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const {
       value,
       onChange,
@@ -204,7 +201,16 @@ export const Input = forwardRef<any, InputProps>(function Input(props, ref) {
       name,
       className,
       style,
-    } = rest as any;
+    } = rest as {
+      value?: string;
+      onChange?: (event: React.ChangeEvent<HTMLInputElement>) => void;
+      placeholder?: string;
+      disabled?: boolean;
+      id?: string;
+      name?: string;
+      className?: string;
+      style?: React.CSSProperties;
+    };
     
     return (
       <XStack width="100%" alignItems="center" position="relative">

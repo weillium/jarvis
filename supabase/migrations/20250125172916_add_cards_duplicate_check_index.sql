@@ -13,3 +13,5 @@ create index if not exists idx_cards_event_source_active
 
 comment on index idx_cards_event_source_active is 'Optimizes duplicate card prevention queries that check for existing cards with the same source_seq, template_id, and concept_id.';
 
+
+

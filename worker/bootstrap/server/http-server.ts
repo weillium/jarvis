@@ -3,6 +3,7 @@ import { URL } from 'url';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Orchestrator } from '../../runtime/orchestrator';
 import { getBlueprintPromptPreview } from '../../context/pipeline/blueprint-generator';
+import { createAudioStreamWebSocketServer } from './audio-stream-websocket';
 
 interface WorkerServerDeps {
   orchestrator: Orchestrator;
@@ -339,6 +340,9 @@ export const createWorkerServer = ({
     });
   });
 
+  // Create WebSocket server for audio streaming
+  createAudioStreamWebSocketServer(server, orchestrator, log);
+
   server.listen(workerPort, () => {
     log(`[worker-server] HTTP server listening on port ${workerPort}`);
     log('[worker-server] Endpoints:');
@@ -348,6 +352,7 @@ export const createWorkerServer = ({
     log('[worker-server]   POST /sessions/create - Create agent sessions for an event');
     log('[worker-server]   POST /sessions/reset - Reset runtime state for an event');
     log('[worker-server]   POST /sessions/transcript/audio - Append transcript audio for an event');
+    log('[worker-server]   WS /audio/stream - WebSocket endpoint for real-time audio streaming');
   });
 
   return server;

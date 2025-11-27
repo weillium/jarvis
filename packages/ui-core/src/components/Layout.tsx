@@ -1,7 +1,6 @@
 'use client';
 
 import { styled, YStack, XStack, XGroup } from 'tamagui';
-import type { ComponentProps } from 'react';
 
 export const PageContainer = styled(YStack, {
   name: 'PageContainer',
@@ -46,7 +45,7 @@ const ToolbarItemFrame = styled(XStack, {
 type ToolbarItemProps = React.ComponentProps<typeof ToolbarItemFrame>;
 
 const ToolbarItem = (props: ToolbarItemProps) => (
-  <XGroup.Item asChild>
+  <XGroup.Item>
     <ToolbarItemFrame {...props} />
   </XGroup.Item>
 );

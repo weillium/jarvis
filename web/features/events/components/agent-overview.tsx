@@ -88,7 +88,6 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
         case 'regenerating_chunks': return '#f59e0b'; // amber
         case 'context_complete': return '#10b981'; // green
         case 'testing': return '#8b5cf6'; // purple
-        case 'ready': return '#10b981'; // green
         case 'prepping': return '#f59e0b'; // amber
         default: return '#64748b'; // gray
       }
@@ -123,7 +122,6 @@ export function AgentOverview({ eventId }: AgentOverviewProps) {
         case 'regenerating_chunks': return 'Regenerating Chunks';
         case 'context_complete': return 'Context Complete';
         case 'testing': return 'Testing';
-        case 'ready': return 'Ready';
         case 'prepping': return 'Prepping';
         default: return 'Idle';
       }

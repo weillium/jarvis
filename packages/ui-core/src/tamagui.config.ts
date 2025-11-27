@@ -218,6 +218,7 @@ const tamaguiConfig = createTamagui({
       0: 0,
       1: 3,
       2: 6,
+      2.5: 8,
       3: 9,
       4: 12,
       5: 16,
