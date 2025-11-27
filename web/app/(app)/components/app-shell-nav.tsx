@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '@/shared/lib/supabase/client';
 import {
@@ -19,6 +20,7 @@ interface AppShellNavProps {
 
 const NavAnchor = styled(Anchor, {
   textDecorationLine: 'none',
+  cursor: 'pointer',
 });
 
 export function AppShellNav({ user }: AppShellNavProps) {
@@ -63,45 +65,51 @@ export function AppShellNav({ user }: AppShellNavProps) {
           justifyContent="space-between"
           alignItems="center"
         >
-          <NavAnchor href="/">
-            <Heading level={3} color="$blue11" margin={0}>
-              Jarvis
-            </Heading>
-          </NavAnchor>
+          <Link href="/" passHref legacyBehavior>
+            <NavAnchor>
+              <Heading level={3} color="$blue11" margin={0}>
+                Jarvis
+              </Heading>
+            </NavAnchor>
+          </Link>
           <nav>
             <XStack gap="$6" alignItems="center">
-          {[
-            { href: '/', label: 'Dashboard' },
-            { href: '/events', label: 'Events' },
-            { href: '/agents', label: 'Agents' },
-          ].map((item) => (
-            <NavAnchor key={item.href} href={item.href}>
-              <Body color="$gray7" size="lg" weight="medium" margin={0}>
-                {item.label}
-              </Body>
-            </NavAnchor>
-          ))}
-          <XStack
-            alignItems="center"
-            gap="$4"
-            marginLeft="$4"
-            paddingLeft="$4"
-            borderLeftWidth={1}
-            borderLeftColor="$borderColor"
-          >
-            <NavAnchor href="/profile">
-              <Body size="sm" tone="muted" margin={0}>
-                {user.email}
-              </Body>
-            </NavAnchor>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSignOut}
-            >
-              Sign Out
-            </Button>
-          </XStack>
+              {[
+                { href: '/', label: 'Dashboard' },
+                { href: '/events', label: 'Events' },
+                { href: '/agents', label: 'Agents' },
+              ].map((item) => (
+                <Link key={item.href} href={item.href} passHref legacyBehavior>
+                  <NavAnchor>
+                    <Body color="$gray7" size="lg" weight="medium" margin={0}>
+                      {item.label}
+                    </Body>
+                  </NavAnchor>
+                </Link>
+              ))}
+              <XStack
+                alignItems="center"
+                gap="$4"
+                marginLeft="$4"
+                paddingLeft="$4"
+                borderLeftWidth={1}
+                borderLeftColor="$borderColor"
+              >
+                <Link href="/profile" passHref legacyBehavior>
+                  <NavAnchor>
+                    <Body size="sm" tone="muted" margin={0}>
+                      {user.email}
+                    </Body>
+                  </NavAnchor>
+                </Link>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSignOut}
+                >
+                  Sign Out
+                </Button>
+              </XStack>
             </XStack>
           </nav>
         </XStack>

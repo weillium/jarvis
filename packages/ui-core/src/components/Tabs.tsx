@@ -38,7 +38,7 @@ export function Tabs({ tabs, defaultTab }: TabsProps) {
           disablePassBorderRadius="bottom"
         >
           {tabs.map((tab) => (
-            <TamaguiTabs.Tab key={tab.id} value={tab.id} flex={1}>
+            <TamaguiTabs.Tab key={tab.id} value={tab.id} flex={1} borderBottomLeftRadius={0} borderBottomRightRadius={0}>
               <SizableText fontFamily="$body" textAlign="center">
                 {tab.label}
               </SizableText>
