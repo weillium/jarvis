@@ -13,6 +13,7 @@ import { LiveCards } from '@/features/cards/components/live-cards';
 import { LiveFacts } from '@/features/facts/components/live-facts';
 import { LiveTranscripts } from '@/features/transcripts/components/live-transcripts';
 import { AgentSessions } from './agent-sessions';
+import { UsageStats } from './usage-stats';
 import { useAgentQuery } from '@/shared/hooks/use-agent-query';
 
 interface LiveEventTabsProps {
@@ -109,6 +110,11 @@ export function LiveEventTabs({ event, eventId }: LiveEventTabsProps) {
       id: 'cards',
       label: 'Context Cards',
       content: <LiveCards eventId={eventId} />,
+    },
+    {
+      id: 'usage-stats',
+      label: 'Usage Stats',
+      content: <UsageStats eventId={eventId} embedded={true} />,
     },
   ];
 

@@ -27,4 +27,6 @@ export interface ProcessingMetrics {
   warnings: number;
   criticals: number;
   lastBudget?: FactsBudgetSnapshot;
+  imageGenerationCost: number;
+  imageGenerationCount: number;
 }

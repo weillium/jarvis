@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type OpenAI from 'openai';
 import type { Exa } from 'exa-js';
 import type { Logger } from '../../../../services/observability/logger';
+import type { MetricsCollector } from '../../../../services/observability/metrics-collector';
 import { ImageGenerator } from './image-generator';
 import { ImageFetcher, type ImageFetchProvider } from './image-fetcher';
 
@@ -43,6 +44,7 @@ export class CardImageService {
     private readonly supabase: SupabaseClient,
     private readonly bucket: string,
     private readonly logger: Logger,
+    private readonly metrics?: MetricsCollector,
     openaiClient?: OpenAI,
     imageGenModel?: string,
     imageFetchProvider?: ImageFetchProvider,
@@ -208,7 +210,9 @@ export class CardImageService {
       }
 
       const cachedUrl = await this.cacheRemoteImage(genResult.url, eventId, cardId);
-      if (cachedUrl) {
+      if (cachedUrl && genResult.cost > 0) {
+        // Record image generation cost in metrics
+        this.metrics?.recordImageCost(eventId, 'cards', genResult.cost);
         this.logger.log(eventId, 'cards', 'log', '[image] Generated and cached image', {
           model: genResult.model,
           cost: genResult.cost,

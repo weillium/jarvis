@@ -169,8 +169,10 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
     let totalCost = 0;
     let totalTokens = 0;
     let totalRequests = 0;
+    let totalImageCost = 0;
+    let totalImageCount = 0;
 
-    const breakdownMap = new Map<AgentType, { cost: number; model: string }>();
+    const breakdownMap = new Map<AgentType, { cost: number; imageCost: number; model: string }>();
 
     for (const session of displaySessions) {
       const metrics = session.token_metrics;
@@ -179,48 +181,65 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
       }
 
       const totalTokensForSession = Number(metrics.total_tokens ?? 0);
-      if (!Number.isFinite(totalTokensForSession) || totalTokensForSession <= 0) {
-        continue;
+      const imageCost = Number(metrics.image_generation_cost ?? 0);
+      const imageCount = Number(metrics.image_generation_count ?? 0);
+
+      // Calculate token-based cost
+      let tokenCost = 0;
+      if (Number.isFinite(totalTokensForSession) && totalTokensForSession > 0) {
+        const modelKey =
+          session.metadata.model && session.metadata.model.length > 0
+            ? session.metadata.model
+            : defaultAgentModels[session.agent_type];
+
+        const promptShare = inferPromptShareFromMetrics(metrics);
+        const promptTokens = Math.round(totalTokensForSession * promptShare);
+        const completionTokens = Math.max(totalTokensForSession - promptTokens, 0);
+
+        tokenCost = calculateOpenAICost(
+          {
+            total_tokens: totalTokensForSession,
+            prompt_tokens: promptTokens,
+            completion_tokens: completionTokens,
+          },
+          modelKey,
+          false
+        );
+
+        totalTokens += totalTokensForSession;
+        totalRequests += metrics.request_count ?? 0;
       }
 
-      const modelKey =
-        session.metadata.model && session.metadata.model.length > 0
-          ? session.metadata.model
-          : defaultAgentModels[session.agent_type];
+      // Add image generation costs
+      if (Number.isFinite(imageCost) && imageCost > 0) {
+        totalImageCost += imageCost;
+        totalImageCount += imageCount;
+      }
 
-      const promptShare = inferPromptShareFromMetrics(metrics);
-      const promptTokens = Math.round(totalTokensForSession * promptShare);
-      const completionTokens = Math.max(totalTokensForSession - promptTokens, 0);
-
-      const cost = calculateOpenAICost(
-        {
-          total_tokens: totalTokensForSession,
-          prompt_tokens: promptTokens,
-          completion_tokens: completionTokens,
-        },
-        modelKey,
-        false
-      );
-
-      totalCost += cost;
-      totalTokens += totalTokensForSession;
-      totalRequests += metrics.request_count ?? 0;
+      const sessionTotalCost = tokenCost + imageCost;
+      totalCost += sessionTotalCost;
 
       const existing = breakdownMap.get(session.agent_type);
       if (existing) {
-        existing.cost += cost;
+        existing.cost += tokenCost;
+        existing.imageCost += imageCost;
       } else {
-        breakdownMap.set(session.agent_type, { cost, model: modelKey });
+        const modelKey =
+          session.metadata.model && session.metadata.model.length > 0
+            ? session.metadata.model
+            : defaultAgentModels[session.agent_type];
+        breakdownMap.set(session.agent_type, { cost: tokenCost, imageCost, model: modelKey });
       }
     }
 
-    if (totalTokens === 0) {
+    if (totalTokens === 0 && totalImageCost === 0) {
       return null;
     }
 
     const breakdown = Array.from(breakdownMap.entries()).map(([agent, data]) => ({
       agent,
       cost: data.cost,
+      imageCost: data.imageCost,
       model: data.model,
     }));
 
@@ -228,6 +247,8 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
       totalCost,
       totalTokens,
       totalRequests,
+      totalImageCost,
+      totalImageCount,
       breakdown,
     };
   }, [displaySessions]);
@@ -236,9 +257,17 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
     const entries: Array<{ label: string; value: string }> = [];
 
     if (runtimeCostSummary) {
+      const costParts = [`$${runtimeCostSummary.totalCost.toFixed(4)}`];
+      if (runtimeCostSummary.totalTokens > 0) {
+        costParts.push(`${runtimeCostSummary.totalTokens.toLocaleString()} tokens`);
+        costParts.push(`${runtimeCostSummary.totalRequests.toLocaleString()} req`);
+      }
+      if (runtimeCostSummary.totalImageCost > 0) {
+        costParts.push(`${runtimeCostSummary.totalImageCount} images ($${runtimeCostSummary.totalImageCost.toFixed(4)})`);
+      }
       entries.push({
         label: 'Runtime Cost',
-        value: `$${runtimeCostSummary.totalCost.toFixed(4)} (${runtimeCostSummary.totalTokens.toLocaleString()} tokens · ${runtimeCostSummary.totalRequests.toLocaleString()} req)`,
+        value: costParts.join(' · '),
       });
     }
 
@@ -494,21 +523,30 @@ export function AgentSessions({ eventId }: AgentSessionsProps) {
                 Cost Breakdown
               </Label>
               <YStack gap="$2" marginTop={0}>
-                {runtimeCostSummary.breakdown.map(({ agent, cost, model }) => (
-                  <XStack
-                    key={agent}
-                    justifyContent="space-between"
-                    alignItems="center"
-                  >
-                    <Text fontSize="$2" color="$gray9" margin={0}>
-                      {agentTitles[agent]}
-                    </Text>
-                    <Text fontSize="$2" color="$gray9" fontFamily="$mono" margin={0}>
-                      ${cost.toFixed(4)}
-                      {model ? ` · ${model}` : ''}
-                    </Text>
-                  </XStack>
-                ))}
+                {runtimeCostSummary.breakdown.map(({ agent, cost, imageCost, model }) => {
+                  const totalAgentCost = cost + imageCost;
+                  const costParts = [`$${totalAgentCost.toFixed(4)}`];
+                  if (cost > 0 && imageCost > 0) {
+                    costParts.push(`($${cost.toFixed(4)} tokens + $${imageCost.toFixed(4)} images)`);
+                  } else if (imageCost > 0) {
+                    costParts.push(`($${imageCost.toFixed(4)} images)`);
+                  }
+                  return (
+                    <XStack
+                      key={agent}
+                      justifyContent="space-between"
+                      alignItems="center"
+                    >
+                      <Text fontSize="$2" color="$gray9" margin={0}>
+                        {agentTitles[agent]}
+                      </Text>
+                      <Text fontSize="$2" color="$gray9" fontFamily="$mono" margin={0}>
+                        {costParts.join(' ')}
+                        {model ? ` · ${model}` : ''}
+                      </Text>
+                    </XStack>
+                  );
+                })}
               </YStack>
             </YStack>
           ) : null}

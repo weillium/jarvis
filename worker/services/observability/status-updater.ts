@@ -97,6 +97,8 @@ export class StatusUpdater {
       criticals: metrics.criticals,
       last_request: this.extractLastRequest(logs),
       facts_budget: factsBudget,
+      image_generation_cost: metrics.imageGenerationCost > 0 ? metrics.imageGenerationCost : undefined,
+      image_generation_count: metrics.imageGenerationCount > 0 ? metrics.imageGenerationCount : undefined,
     };
 
     const runtimeStats = {
@@ -302,6 +304,8 @@ export class StatusUpdater {
         criticals: metrics.criticals,
         last_request: this.extractLastRequest(logs),
         facts_budget: factsBudget,
+        image_generation_cost: metrics.imageGenerationCost > 0 ? metrics.imageGenerationCost : undefined,
+        image_generation_count: metrics.imageGenerationCount > 0 ? metrics.imageGenerationCount : undefined,
       },
       recent_logs: logs.slice(-50),
       metadata: {

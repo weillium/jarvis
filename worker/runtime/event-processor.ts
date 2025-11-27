@@ -462,6 +462,8 @@ export class EventProcessor {
     contextBullets: string[],
     conceptWindow: CardConceptWindowEntry[]
   ): Promise<CardTriggerContext['supportingContext']> {
+    // Sync deactivated facts from database (remove from FactsStore if deactivated via UI moderation)
+    await this.syncDeactivatedFacts(runtime);
     const facts = this.getRelevantFacts(runtime.factsStore.getAll(), concept);
     const recentCards = runtime.cardsStore.getRecent(this.CARD_RECENT_LIMIT);
     const glossaryEntries = this.getRelevantGlossaryEntries(runtime.glossaryCache, concept);
@@ -1215,6 +1217,36 @@ export class EventProcessor {
     // Prefer fetch if it contains fetch keywords OR doesn't explicitly need generation
     // Default to preferring fetch (more cost-effective)
     return hasFetchKeywords || !hasGenerateKeywords;
+  }
+
+  /**
+   * Sync deactivated facts from database - removes facts that were deactivated via UI moderation
+   * This ensures FactsStore stays in sync with database moderation state
+   */
+  private async syncDeactivatedFacts(runtime: EventRuntime): Promise<void> {
+    try {
+      const deactivatedKeys = await this.factsRepository.getDeactivatedFactKeys(runtime.eventId);
+      if (deactivatedKeys.length === 0) {
+        return;
+      }
+
+      const factsStore = runtime.factsStore;
+      let removedCount = 0;
+      for (const key of deactivatedKeys) {
+        if (factsStore.get(key)) {
+          factsStore.delete(key);
+          removedCount++;
+        }
+      }
+
+      if (removedCount > 0) {
+        console.log(
+          `[event-processor] Removed ${removedCount} deactivated fact(s) from FactsStore for event ${runtime.eventId}`
+        );
+      }
+    } catch (error: unknown) {
+      console.error('[event-processor] Error syncing deactivated facts:', String(error));
+    }
   }
 }
 

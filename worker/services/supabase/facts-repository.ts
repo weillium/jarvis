@@ -139,4 +139,23 @@ export class FactsRepository {
 
     if (error) throw error;
   }
+
+  /**
+   * Get fact keys that have been deactivated (is_active = false) for an event
+   * Used to sync FactsStore with database moderation state
+   */
+  async getDeactivatedFactKeys(eventId: string): Promise<string[]> {
+    const { data, error } = await this.client
+      .from('facts')
+      .select('fact_key')
+      .eq('event_id', eventId)
+      .eq('is_active', false);
+
+    if (error) {
+      console.error('[facts-repository] Error fetching deactivated facts:', error);
+      return [];
+    }
+
+    return (data ?? []).map((row) => row.fact_key).filter((key): key is string => typeof key === 'string');
+  }
 }

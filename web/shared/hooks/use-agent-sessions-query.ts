@@ -39,6 +39,8 @@ export interface TokenMetrics {
       members: string[];
     }>;
   };
+  image_generation_cost?: number;
+  image_generation_count?: number;
 }
 
 export interface RuntimeStats {

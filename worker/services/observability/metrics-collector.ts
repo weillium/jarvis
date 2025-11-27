@@ -19,9 +19,9 @@ export class MetricsCollector {
   ): void {
     if (!this.metrics.has(eventId)) {
       this.metrics.set(eventId, {
-        transcript: { total: 0, count: 0, max: 0, warnings: 0, criticals: 0, lastBudget: undefined },
-        cards: { total: 0, count: 0, max: 0, warnings: 0, criticals: 0, lastBudget: undefined },
-        facts: { total: 0, count: 0, max: 0, warnings: 0, criticals: 0, lastBudget: undefined },
+        transcript: { total: 0, count: 0, max: 0, warnings: 0, criticals: 0, lastBudget: undefined, imageGenerationCost: 0, imageGenerationCount: 0 },
+        cards: { total: 0, count: 0, max: 0, warnings: 0, criticals: 0, lastBudget: undefined, imageGenerationCost: 0, imageGenerationCount: 0 },
+        facts: { total: 0, count: 0, max: 0, warnings: 0, criticals: 0, lastBudget: undefined, imageGenerationCost: 0, imageGenerationCount: 0 },
       });
     }
 
@@ -39,10 +39,30 @@ export class MetricsCollector {
     }
   }
 
+  recordImageCost(
+    eventId: string,
+    agentType: 'transcript' | 'cards' | 'facts',
+    cost: number
+  ): void {
+    if (!this.metrics.has(eventId)) {
+      this.metrics.set(eventId, {
+        transcript: { total: 0, count: 0, max: 0, warnings: 0, criticals: 0, lastBudget: undefined, imageGenerationCost: 0, imageGenerationCount: 0 },
+        cards: { total: 0, count: 0, max: 0, warnings: 0, criticals: 0, lastBudget: undefined, imageGenerationCost: 0, imageGenerationCount: 0 },
+        facts: { total: 0, count: 0, max: 0, warnings: 0, criticals: 0, lastBudget: undefined, imageGenerationCost: 0, imageGenerationCount: 0 },
+      });
+    }
+
+    const eventMetrics = this.metrics.get(eventId)!;
+    const agentMetrics = eventMetrics[agentType];
+
+    agentMetrics.imageGenerationCost += cost;
+    agentMetrics.imageGenerationCount += 1;
+  }
+
   getMetrics(eventId: string, agentType: 'transcript' | 'cards' | 'facts'): ProcessingMetrics {
     const metrics = this.metrics.get(eventId);
     if (!metrics) {
-      return { total: 0, count: 0, max: 0, warnings: 0, criticals: 0, lastBudget: undefined };
+      return { total: 0, count: 0, max: 0, warnings: 0, criticals: 0, lastBudget: undefined, imageGenerationCost: 0, imageGenerationCount: 0 };
     }
     return metrics[agentType];
   }

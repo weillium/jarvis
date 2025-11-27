@@ -6,6 +6,7 @@ import { useFactsQuery } from '@/shared/hooks/use-facts-query';
 import { useQueryClient } from '@tanstack/react-query';
 import type { SSEMessage, SSEFactMessage } from '@/shared/types/card';
 import { ClientDateFormatter } from '@/shared/components/client-date-formatter';
+import { FactModerationModal } from './fact-moderation-modal';
 import {
   YStack,
   XStack,
@@ -39,6 +40,7 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
   const { data: initialFacts, isLoading, error } = useFactsQuery(eventId);
   const queryClient = useQueryClient();
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
+  const [moderationFactKey, setModerationFactKey] = useState<string | null>(null);
 
   // Convert initial facts to Map format
   const factsMap = useMemo(() => {
@@ -215,72 +217,97 @@ export function LiveFacts({ eventId }: LiveFactsProps) {
           description="Facts will appear as they are extracted during the event."
         />
       ) : (
-        <YStack gap="$3">
-          {factsArray.map((fact) => (
-              <Card
-                key={fact.key}
-                variant="outlined"
-                padding="$4"
-              >
-                <XStack
-                  justifyContent="space-between"
-                  alignItems="flex-start"
-                  gap="$4"
+        <>
+          <YStack gap="$3">
+            {factsArray.map((fact) => {
+              const moderationTarget = moderationFactKey === fact.key;
+              return (
+                <Card
+                  key={fact.key}
+                  variant="outlined"
+                  padding="$4"
                 >
-                  <YStack flex={1} gap="$2">
-                    <Body
-                      size="md"
-                      weight="bold"
-                      color="$color"
-                      transform="capitalize"
-                      margin={0}
-                    >
-                      {fact.key.replace(/_/g, ' ')}
-                    </Body>
-                    <Body tone="muted" whitespace="preWrap" mono={typeof fact.value !== 'string'}>
-                      {typeof fact.value === 'string'
-                        ? fact.value
-                        : JSON.stringify(fact.value, null, 2)}
-                    </Body>
-                    <Body size="sm" tone="muted">
-                      Updated <ClientDateFormatter date={fact.updated_at} format="localeTimeString" />
-                    </Body>
-                  </YStack>
-                  <YStack
-                    padding="$2 $2"
-                    backgroundColor={
-                      fact.confidence >= 0.7
-                        ? '$green2'
-                        : fact.confidence >= 0.5
-                        ? '$yellow2'
-                        : '$red2'
-                    }
-                    borderRadius="$2"
-                    alignItems="center"
-                    justifyContent="center"
-                    minWidth={100}
+                  <XStack
+                    justifyContent="space-between"
+                    alignItems="flex-start"
+                    gap="$4"
                   >
-                    <Body
-                      size="sm"
-                      weight="medium"
-                      color={
+                    <YStack flex={1} gap="$2">
+                      <Body
+                        size="md"
+                        weight="bold"
+                        color="$color"
+                        transform="capitalize"
+                        margin={0}
+                      >
+                        {fact.key.replace(/_/g, ' ')}
+                      </Body>
+                      <Body tone="muted" whitespace="preWrap" mono={typeof fact.value !== 'string'}>
+                        {typeof fact.value === 'string'
+                          ? fact.value
+                          : JSON.stringify(fact.value, null, 2)}
+                      </Body>
+                      <XStack justifyContent="space-between" alignItems="center" gap="$2" marginTop="$2">
+                        <Body size="sm" tone="muted">
+                          Updated <ClientDateFormatter date={fact.updated_at} format="localeTimeString" />
+                        </Body>
+                        <Button variant="outline" size="sm" onClick={() => setModerationFactKey(fact.key)}>
+                          Moderate
+                        </Button>
+                      </XStack>
+                    </YStack>
+                    <YStack
+                      padding="$2 $2"
+                      backgroundColor={
                         fact.confidence >= 0.7
-                          ? '$green11'
+                          ? '$green2'
                           : fact.confidence >= 0.5
-                          ? '$yellow11'
-                          : '$red11'
+                          ? '$yellow2'
+                          : '$red2'
                       }
-                      textAlign="center"
-                      margin={0}
-                      lineHeight={1}
+                      borderRadius="$2"
+                      alignItems="center"
+                      justifyContent="center"
+                      minWidth={100}
                     >
-                      {(fact.confidence * 100).toFixed(0)}% confident
-                    </Body>
-                  </YStack>
-                </XStack>
-              </Card>
-            ))}
-        </YStack>
+                      <Body
+                        size="sm"
+                        weight="medium"
+                        color={
+                          fact.confidence >= 0.7
+                            ? '$green11'
+                            : fact.confidence >= 0.5
+                            ? '$yellow11'
+                            : '$red11'
+                        }
+                        textAlign="center"
+                        margin={0}
+                        lineHeight={1}
+                      >
+                        {(fact.confidence * 100).toFixed(0)}% confident
+                      </Body>
+                    </YStack>
+                  </XStack>
+                </Card>
+              );
+            })}
+          </YStack>
+
+          {moderationFactKey && (() => {
+            const fact = factsArray.find((f) => f.key === moderationFactKey);
+            return fact ? (
+              <FactModerationModal
+                eventId={eventId}
+                factKey={fact.key}
+                factValue={fact.value}
+                confidence={fact.confidence}
+                updatedAt={fact.updated_at}
+                isOpen={Boolean(fact)}
+                onClose={() => setModerationFactKey(null)}
+              />
+            ) : null;
+          })()}
+        </>
       )}
     </YStack>
   );

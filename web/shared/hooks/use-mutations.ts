@@ -163,6 +163,36 @@ export function useUpdateCardActiveStatusMutation(eventId: string) {
   });
 }
 
+export function useUpdateFactActiveStatusMutation(eventId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ factKey, isActive, reason }: { factKey: string; isActive: boolean; reason?: string }) => {
+      const res = await fetch(`/api/facts/${eventId}/moderate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ factKey, isActive, reason }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        throw new Error(data.error || 'Failed to update fact status');
+      }
+      return { factKey, isActive };
+    },
+    onSuccess: (_, { factKey, isActive }) => {
+      queryClient.setQueryData<import('./use-facts-query').ApiFact[]>(['facts', eventId], (previous = []) => {
+        if (!Array.isArray(previous)) return previous;
+        if (!isActive) {
+          return previous.filter((fact) => fact.fact_key !== factKey);
+        }
+        return previous;
+      });
+    },
+  });
+}
+
 /**
  * Start or regenerate mutation (consolidated endpoint)
  * Used by regenerate-button component

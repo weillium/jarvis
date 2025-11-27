@@ -68,6 +68,8 @@ export interface AgentSessionStatus {
       used_tokens: number;
       selection_ratio: number;
     };
+    image_generation_cost?: number;
+    image_generation_count?: number;
   };
   recent_logs: LogEntry[];
   metadata: {

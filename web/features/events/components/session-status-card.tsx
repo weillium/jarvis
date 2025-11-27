@@ -333,6 +333,10 @@ export const SessionStatusCard = memo(function SessionStatusCard({ title, sessio
               { label: 'Avg', value: session.token_metrics.avg_tokens.toLocaleString() },
               { label: 'Max', value: session.token_metrics.max_tokens.toLocaleString() },
               { label: 'Requests', value: session.token_metrics.request_count.toLocaleString() },
+              ...(session.token_metrics.image_generation_cost && session.token_metrics.image_generation_cost > 0 ? [
+                { label: 'Image Gen Cost', value: `$${session.token_metrics.image_generation_cost.toFixed(4)}` },
+                { label: 'Image Gen Count', value: (session.token_metrics.image_generation_count || 0).toLocaleString() },
+              ] : []),
             ].map((metric, index) => (
               <YStack key={metric.label} flex={1} minWidth={100}>
                 <Label size="xs">{metric.label}</Label>

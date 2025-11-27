@@ -103,6 +103,7 @@ export const createWorkerInfrastructure = (
     supabaseClient,
     env.cardsImageBucket,
     logger,
+    metricsCollector,
     openai,
     imageGenModel,
     imageFetchProvider,
