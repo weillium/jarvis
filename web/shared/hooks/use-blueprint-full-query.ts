@@ -1,11 +1,10 @@
-'use client';
+"use client";
 
-import { useQuery } from '@tanstack/react-query';
-import { useVisibilityRefetchInterval } from '@/shared/hooks/use-visibility-refetch-interval';
+import { useQuery } from "@tanstack/react-query";
 
-export type BlueprintResearchAPI = 'exa' | 'wikipedia';
-export type BlueprintPurpose = 'facts' | 'cards' | 'glossary';
-export type BlueprintAgentType = 'facts' | 'cards';
+export type BlueprintResearchAPI = "exa" | "wikipedia";
+export type BlueprintPurpose = "facts" | "cards" | "glossary";
+export type BlueprintAgentType = "facts" | "cards";
 
 export interface BlueprintResearchQuery {
   query: string;
@@ -48,7 +47,7 @@ export interface BlueprintChunkSourcePlan {
 export interface BlueprintChunksPlan {
   sources: BlueprintChunkSourcePlan[];
   target_count: number;
-  quality_tier: 'basic' | 'comprehensive';
+  quality_tier: "basic" | "comprehensive";
   ranking_strategy: string;
 }
 
@@ -99,35 +98,30 @@ export interface BlueprintFullResponse {
 /**
  * React Query hook for full blueprint data (including blueprint JSON)
  * Used by BlueprintDisplay component
- * 
+ *
  * @param eventId - The event ID to fetch blueprint for
  * @returns Full blueprint data, loading state, error, and refetch function
  */
 export function useBlueprintFullQuery(eventId: string | null) {
-  const refetchInterval = useVisibilityRefetchInterval(3000);
-
   return useQuery<BlueprintFull | null>({
-    queryKey: ['blueprint-full', eventId],
+    queryKey: ["blueprint-full", eventId],
     queryFn: async () => {
       if (!eventId) {
-        throw new Error('Event ID required');
+        throw new Error("Event ID required");
       }
-      
+
       const res = await fetch(`/api/context/${eventId}/blueprint`);
       const data: BlueprintFullResponse = await res.json();
-      
+
       if (!data.ok) {
-        throw new Error(data.error || 'Failed to fetch blueprint');
+        throw new Error(data.error || "Failed to fetch blueprint");
       }
-      
+
       return (data.blueprint ?? null) as BlueprintFull | null;
     },
     enabled: !!eventId,
     staleTime: 1000 * 60 * 5, // 5 minutes - blueprints change infrequently
-    refetchInterval,
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false, // SSE will trigger updates automatically
     gcTime: 1000 * 60 * 10, // Allow 10 minutes of cache for blueprint payloads
   });
 }
-

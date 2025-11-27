@@ -1,4 +1,4 @@
-export type CardType = 'text' | 'text_visual' | 'visual';
+export type CardType = "text" | "text_visual" | "visual";
 
 export interface Card {
   id: string;
@@ -13,7 +13,7 @@ export interface Card {
 }
 
 export interface CardVisualRequest {
-  strategy: 'fetch' | 'generate';
+  strategy: "fetch" | "generate";
   instructions: string;
   source_url?: string | null;
 }
@@ -44,8 +44,8 @@ export interface CardSnapshot {
 }
 
 export interface SSEFactMessage {
-  type: 'fact_update';
-  event: 'INSERT' | 'UPDATE' | 'DELETE';
+  type: "fact_update";
+  event: "INSERT" | "UPDATE" | "DELETE";
   payload: {
     event_id: string;
     fact_key: string;
@@ -59,38 +59,68 @@ export interface SSEFactMessage {
 }
 
 export interface SSEConnectedMessage {
-  type: 'connected';
+  type: "connected";
   event_id: string;
   timestamp: string;
 }
 
 export interface SSEHeartbeatMessage {
-  type: 'heartbeat';
+  type: "heartbeat";
   timestamp: string;
 }
 
 export interface SSECardCreatedMessage {
-  type: 'card_created';
+  type: "card_created";
   timestamp: string;
   card: CardSnapshot;
 }
 
 export interface SSECardUpdatedMessage {
-  type: 'card_updated';
+  type: "card_updated";
   timestamp: string;
   card: CardSnapshot;
 }
 
 export interface SSECardDeactivatedMessage {
-  type: 'card_deactivated';
+  type: "card_deactivated";
   timestamp: string;
   card_id: string;
 }
 
 export interface SSECardDeletedMessage {
-  type: 'card_deleted';
+  type: "card_deleted";
   timestamp: string;
   card_id: string;
+}
+
+export interface SSEBlueprintMessage {
+  type: "blueprint_updated" | "blueprint_approved" | "blueprint_ready";
+  timestamp: string;
+  event_id?: string;
+}
+
+export interface SSEResearchMessage {
+  type: "research_updated" | "research_complete";
+  timestamp: string;
+  event_id?: string;
+}
+
+export interface SSEGlossaryMessage {
+  type: "glossary_updated" | "glossary_complete";
+  timestamp: string;
+  event_id?: string;
+}
+
+export interface SSEChunksMessage {
+  type: "chunks_updated" | "chunks_complete";
+  timestamp: string;
+  event_id?: string;
+}
+
+export interface SSEAgentMessage {
+  type: "agent_status_changed" | "agent_stage_changed";
+  timestamp: string;
+  event_id?: string;
 }
 
 export type SSEMessage =
@@ -100,9 +130,14 @@ export type SSEMessage =
   | SSECardDeletedMessage
   | SSEFactMessage
   | SSEConnectedMessage
-  | SSEHeartbeatMessage;
+  | SSEHeartbeatMessage
+  | SSEBlueprintMessage
+  | SSEResearchMessage
+  | SSEGlossaryMessage
+  | SSEChunksMessage
+  | SSEAgentMessage;
 
-export type CardAuditAction = 'deactivated' | 'reactivated' | 'updated';
+export type CardAuditAction = "deactivated" | "reactivated" | "updated";
 
 export interface CardAuditLogEntry {
   id: string;
@@ -115,4 +150,3 @@ export interface CardAuditLogEntry {
   payload_after: Record<string, any> | null;
   created_at: string;
 }
-

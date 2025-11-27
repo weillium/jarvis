@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import type { EventWithStatus } from '@/shared/types/event';
 import { LiveEventTabs } from './live-event-tabs';
+import { useContextSSE } from '@/shared/hooks/use-context-sse';
 import {
   PageContainer,
   PageHeader,
@@ -22,6 +23,9 @@ interface LiveEventPageContentProps {
 
 export function LiveEventPageContent({ event, eventId, error }: LiveEventPageContentProps) {
   const router = useRouter();
+
+  // Connect to SSE stream and automatically invalidate queries when data updates
+  useContextSSE({ eventId, enabled: !!event });
 
   // Prefetch likely next routes to reduce navigation latency
   useEffect(() => {
