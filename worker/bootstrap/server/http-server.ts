@@ -188,9 +188,9 @@ export const createWorkerServer = ({
           } as const;
 
           try {
-            console.log(`[worker][transcript-audio] Received audio chunk for event ${eventId}, seq: ${chunkMetadata.seq ?? 'N/A'}, size: ${chunkMetadata.audioBase64.length} bytes, isFinal: ${chunkMetadata.isFinal ?? false}`);
+            // console.debug(`[worker][transcript-audio] Received audio chunk for event ${eventId}, seq: ${chunkMetadata.seq ?? 'N/A'}, size: ${chunkMetadata.audioBase64.length} bytes, isFinal: ${chunkMetadata.isFinal ?? false}`);
             await orchestrator.appendTranscriptAudio(eventId, chunkMetadata);
-            console.log(`[worker][transcript-audio] Successfully appended audio chunk for event ${eventId}, seq: ${chunkMetadata.seq ?? 'N/A'}`);
+            // console.debug(`[worker][transcript-audio] Successfully appended audio chunk for event ${eventId}, seq: ${chunkMetadata.seq ?? 'N/A'}`);
 
             res.writeHead(202);
             res.end(JSON.stringify({ ok: true }));

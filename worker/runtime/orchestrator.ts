@@ -124,10 +124,17 @@ export class Orchestrator {
   }
 
   async appendTranscriptAudio(eventId: string, chunk: TranscriptAudioChunk): Promise<void> {
-    if (!chunk?.audioBase64) {
-      throw new Error('Audio payload is required');
+    // Allow empty audioBase64 only for final chunks (not needed for transcript agent)
+    if (!chunk?.audioBase64 && !chunk?.isFinal) {
+      throw new Error('Audio payload is required for non-final chunks');
     }
 
+    // Skip final chunks with no audio payload (not needed)
+    if (chunk?.isFinal && !chunk?.audioBase64) {
+      return;
+    }
+
+    // console.log(`[orchestrator] appendTranscriptAudio called for event=${eventId}, seq=${chunk?.seq}, size=${chunk?.audioBase64 ? Math.round((chunk.audioBase64.length * 3) / 4) : 0} bytes, isFinal=${chunk?.isFinal}`);
     await this.transcriptCoordinator.appendTranscriptAudio(eventId, chunk);
   }
 

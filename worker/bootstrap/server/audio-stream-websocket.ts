@@ -172,22 +172,10 @@ export const createAudioStreamWebSocketServer = (
               if (isStopMessage(message)) {
                 const session = sessions.get(ws);
                 if (session) {
-                  try {
-                    // Send final chunk with proper metadata
-                    await orchestrator.appendTranscriptAudio(session.eventId, {
-                      audioBase64: '', // Empty for final chunk
-                      seq: session.seq,
-                      isFinal: true,
-                      sampleRate: session.sampleRate || 24000,
-                      bytesPerSample: session.bytesPerSample || 2,
-                      encoding: session.codec || 'pcm_s16le',
-                      durationMs: 0, // Final chunk has no duration
-                      speaker: session.speaker, // Include speaker in final chunk
-                    });
-                    log(`[audio-stream-ws] Final chunk sent for event ${session.eventId} from ${clientInfo}`);
-                  } catch (err) {
-                    log(`[audio-stream-ws] Error sending final chunk: ${String(err)}`);
-                  }
+                  // Note: Final chunk with empty audioBase64 is not needed for transcript agent
+                  // The buffered audio hooks will flush remaining audio on final chunk with isFinal=true
+                  // Skip sending empty final chunk to avoid validation errors
+                  log(`[audio-stream-ws] Stop message received for event ${session.eventId} from ${clientInfo}`);
                   
                   // Cleanup decoder
                   if (session.decoder) {
@@ -242,6 +230,22 @@ export const createAudioStreamWebSocketServer = (
               return;
             }
 
+            // Validate PCM buffer contains actual audio (not all zeros)
+            const isAllZeros = pcmBuffer.every((byte) => byte === 0);
+            if (isAllZeros) {
+              log(`[audio-stream-ws] WARNING: PCM chunk seq=${session.seq} is all zeros (blank audio), skipping`);
+              return;
+            }
+
+            // Calculate RMS (Root Mean Square) to detect silence
+            let sumSquares = 0;
+            for (let i = 0; i < pcmBuffer.length; i += 2) {
+              const sample = pcmBuffer.readInt16LE(i);
+              sumSquares += sample * sample;
+            }
+            const rms = Math.sqrt(sumSquares / (pcmBuffer.length / 2));
+            const isLikelySilent = rms < 100; // Threshold for silence detection
+
             // Send decoded PCM to orchestrator
             const audioBase64 = pcmBuffer.toString('base64');
             const seq = session.seq++;
@@ -250,6 +254,10 @@ export const createAudioStreamWebSocketServer = (
             
             // Calculate duration in milliseconds: (bytes / (sampleRate * bytesPerSample)) * 1000
             const durationMs = Math.max(1, Math.round((pcmBuffer.length / (sampleRate * bytesPerSample)) * 1000));
+
+            // if (seq % 10 === 0 || isLikelySilent) {
+            //   log(`[audio-stream-ws] PCM chunk seq=${seq}: size=${pcmBuffer.length} bytes, RMS=${rms.toFixed(1)} ${isLikelySilent ? '(likely silent)' : ''}`);
+            // }
 
             const chunk: TranscriptAudioChunk = {
               audioBase64,

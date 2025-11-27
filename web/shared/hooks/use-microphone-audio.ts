@@ -98,58 +98,58 @@ export function useMicrophoneAudio(
     eventIdRef.current = eventId;
   }, [eventId]);
 
-  // Check if recording is actually still active on mount (handles remounts and tab switches)
-  useEffect(() => {
-    // Sync state from MediaRecorder and WebSocket refs
-    const syncStateFromRefs = () => {
-      const recorderState = mediaRecorderRef.current?.state;
-      const wsState = wsRef.current?.readyState;
-      
-      // If MediaRecorder is recording/paused, we should be recording
-      if (recorderState === 'recording' || recorderState === 'paused') {
-        if (!isRecording) {
-          setIsRecording(true);
-          setIsPaused(recorderState === 'paused');
-          isRecordingRef.current = true;
-          isPausedRef.current = recorderState === 'paused';
-          console.log('[use-microphone-audio] Restored recording state from MediaRecorder:', { recording: true, paused: recorderState === 'paused' });
-        }
-      } else if (recorderState === 'inactive' && isRecording) {
-        // MediaRecorder stopped but state says recording - sync down
-        setIsRecording(false);
-        setIsPaused(false);
-        isRecordingRef.current = false;
-        isPausedRef.current = false;
-        console.log('[use-microphone-audio] Synced state: MediaRecorder inactive');
-      }
-      
-      // If WebSocket is closed but we think we're recording, check MediaRecorder
-      if (wsState === WebSocket.CLOSED && isRecording && recorderState === 'inactive') {
-        setIsRecording(false);
-        setIsPaused(false);
-        isRecordingRef.current = false;
-        isPausedRef.current = false;
-        console.log('[use-microphone-audio] Synced state: WebSocket closed and MediaRecorder inactive');
-      }
-    };
+  // Sync state from MediaRecorder - shared function used by multiple effects
+  const syncStateFromRefs = useCallback(() => {
+    const recorderState = mediaRecorderRef.current?.state;
+    const wsState = wsRef.current?.readyState;
     
-    // Sync immediately on mount
+    // If MediaRecorder is recording/paused, sync state up
+    if (recorderState === 'recording' || recorderState === 'paused') {
+      if (!isRecordingRef.current) {
+        setIsRecording(true);
+        setIsPaused(recorderState === 'paused');
+        isRecordingRef.current = true;
+        isPausedRef.current = recorderState === 'paused';
+      } else if (isPausedRef.current !== (recorderState === 'paused')) {
+        setIsPaused(recorderState === 'paused');
+        isPausedRef.current = recorderState === 'paused';
+      }
+    } else if (recorderState === 'inactive' && isRecordingRef.current) {
+      // MediaRecorder stopped - sync state down
+      setIsRecording(false);
+      setIsPaused(false);
+      isRecordingRef.current = false;
+      isPausedRef.current = false;
+    }
+    
+    // If WebSocket is closed and MediaRecorder is inactive, ensure we're not recording
+    if (wsState === WebSocket.CLOSED && recorderState === 'inactive' && isRecordingRef.current) {
+      setIsRecording(false);
+      setIsPaused(false);
+      isRecordingRef.current = false;
+      isPausedRef.current = false;
+    }
+  }, []);
+
+  // Check if recording is actually still active - sync on mount, eventId change, and periodically
+  useEffect(() => {
+    // Sync immediately on mount and when eventId changes (component may have re-rendered)
     syncStateFromRefs();
     
-    // Also sync periodically to catch state changes (e.g., from tab switches)
-    const syncInterval = setInterval(syncStateFromRefs, 1000);
+    // Sync periodically to catch state changes (e.g., from tab switches or re-renders)
+    const syncInterval = setInterval(syncStateFromRefs, 300);
     
     return () => {
       clearInterval(syncInterval);
     };
-  }, [isRecording]); // Re-run when isRecording changes
+  }, [syncStateFromRefs, eventId]); // Re-run when eventId changes to catch re-renders
 
   // Handle page visibility changes - don't stop recording when tabbing out
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) {
         // Tab is hidden - keep recording but don't change state
-        console.log('[use-microphone-audio] Page hidden, recording continues');
+        // console.log('[use-microphone-audio] Page hidden, recording continues');
       } else {
         // Tab is visible again - sync state from MediaRecorder
         // This ensures the button shows the correct state after tab switch
@@ -158,36 +158,36 @@ export function useMicrophoneAudio(
         
         if (recorderState === 'recording' || recorderState === 'paused') {
           // Recording is still active, ensure state is synced
-          if (!isRecording) {
+          if (!isRecordingRef.current) {
             setIsRecording(true);
             setIsPaused(recorderState === 'paused');
             isRecordingRef.current = true;
             isPausedRef.current = recorderState === 'paused';
-            console.log('[use-microphone-audio] Page visible, restored recording state:', recorderState);
-          } else if (isPaused !== (recorderState === 'paused')) {
+            // console.log('[use-microphone-audio] Page visible, restored recording state:', recorderState);
+          } else if (isPausedRef.current !== (recorderState === 'paused')) {
             // State mismatch - sync paused state
             setIsPaused(recorderState === 'paused');
             isPausedRef.current = recorderState === 'paused';
-            console.log('[use-microphone-audio] Page visible, synced paused state:', recorderState === 'paused');
+            // console.log('[use-microphone-audio] Page visible, synced paused state:', recorderState === 'paused');
           }
         } else if (recorderState === 'inactive') {
           // Recording stopped while tab was hidden
-          if (isRecording) {
+          if (isRecordingRef.current) {
             setIsRecording(false);
             setIsPaused(false);
             isRecordingRef.current = false;
             isPausedRef.current = false;
-            console.log('[use-microphone-audio] Page visible, recording was stopped');
+            // console.log('[use-microphone-audio] Page visible, recording was stopped');
           }
         }
         
         // Also check WebSocket state
-        if (wsState === WebSocket.CLOSED && recorderState === 'inactive' && isRecording) {
+        if (wsState === WebSocket.CLOSED && recorderState === 'inactive' && isRecordingRef.current) {
           setIsRecording(false);
           setIsPaused(false);
           isRecordingRef.current = false;
           isPausedRef.current = false;
-          console.log('[use-microphone-audio] Page visible, WebSocket closed and recording inactive');
+          // console.log('[use-microphone-audio] Page visible, WebSocket closed and recording inactive');
         }
       }
     };
@@ -196,7 +196,7 @@ export function useMicrophoneAudio(
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [isRecording, isPaused]); // Include dependencies to ensure handler has latest state
+  }, []); // Run once - use refs to access current state
 
   const handleError = useCallback(
     (err: Error) => {
@@ -208,7 +208,8 @@ export function useMicrophoneAudio(
   );
 
   const startRecording = useCallback(async () => {
-    if (isRecording) {
+    // Use ref to check state - more reliable than relying on closure state
+    if (isRecordingRef.current) {
       return;
     }
 
@@ -571,15 +572,22 @@ export function useMicrophoneAudio(
         mediaStreamRef.current = null;
       }
     }
-  }, [isRecording, chunkDurationMs, speaker, handleError, pathname]);
+  }, [chunkDurationMs, speaker, handleError, pathname]); // Remove isRecording from deps - use ref instead
 
   const stopRecording = useCallback(() => {
-    if (!isRecording) {
+    // Use ref to check state - more reliable than relying on closure state
+    if (!isRecordingRef.current) {
       return;
     }
 
     const ws = wsRef.current;
     const mediaRecorder = mediaRecorderRef.current;
+
+    // Update state immediately before cleanup
+    setIsRecording(false);
+    setIsPaused(false);
+    isRecordingRef.current = false;
+    isPausedRef.current = false;
 
     // Stop MediaRecorder
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
@@ -590,7 +598,7 @@ export function useMicrophoneAudio(
     if (ws && ws.readyState === WebSocket.OPEN) {
       const stopMessage = { type: 'stop' as const };
       ws.send(JSON.stringify(stopMessage));
-      console.log('[use-microphone-audio] Sent stop message');
+      // console.log('[use-microphone-audio] Sent stop message');
       
       // Close WebSocket after a brief delay to allow stop message to be processed
       setTimeout(() => {
@@ -608,34 +616,29 @@ export function useMicrophoneAudio(
 
     mediaRecorderRef.current = null;
     wsRef.current = null;
-
-    setIsRecording(false);
-    setIsPaused(false);
-    isRecordingRef.current = false;
-    isPausedRef.current = false;
-  }, [isRecording]);
+  }, []);
 
   const pauseRecording = useCallback(() => {
-    if (isRecording && !isPaused && mediaRecorderRef.current) {
+    if (isRecordingRef.current && !isPausedRef.current && mediaRecorderRef.current) {
       if (mediaRecorderRef.current.state === 'recording') {
         mediaRecorderRef.current.pause();
         setIsPaused(true);
         isPausedRef.current = true;
-        console.log('[use-microphone-audio] Recording paused');
+        // console.log('[use-microphone-audio] Recording paused');
       }
     }
-  }, [isRecording, isPaused]);
+  }, []);
 
   const resumeRecording = useCallback(() => {
-    if (isRecording && isPaused && mediaRecorderRef.current) {
+    if (isRecordingRef.current && isPausedRef.current && mediaRecorderRef.current) {
       if (mediaRecorderRef.current.state === 'paused') {
         mediaRecorderRef.current.resume();
         setIsPaused(false);
         isPausedRef.current = false;
-        console.log('[use-microphone-audio] Recording resumed');
+        // console.log('[use-microphone-audio] Recording resumed');
       }
     }
-  }, [isRecording, isPaused]);
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {

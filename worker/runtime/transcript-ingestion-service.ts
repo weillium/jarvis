@@ -40,7 +40,10 @@ export class TranscriptIngestionService {
       throw new Error(`Transcript agent disabled for event ${eventId}`);
     }
 
-    if (!runtime.transcriptSession) {
+    const sessionWasJustCreated = !runtime.transcriptSession;
+    
+    if (sessionWasJustCreated) {
+      this.logger.log(eventId, 'transcript', 'log', `Creating transcript session on-demand for audio ingestion, seq=${chunk.seq}`);
       await this.sessionLifecycle.createRealtimeSessions({
         runtime,
         eventId,
@@ -53,15 +56,44 @@ export class TranscriptIngestionService {
       throw new Error(`Transcript session unavailable for event ${eventId}`);
     }
 
-    await this.sessionLifecycle.appendTranscriptAudio(runtime, {
-      audioBase64: chunk.audioBase64,
-      isFinal: chunk.isFinal,
-      sampleRate: chunk.sampleRate,
-      bytesPerSample: chunk.bytesPerSample,
-      encoding: chunk.encoding,
-      durationMs: chunk.durationMs,
-      speaker: chunk.speaker,
-    });
+    // Ensure session is connected if it exists but isn't connected yet
+    // Audio chunks will be buffered until connection is ready
+    if (!runtime.transcriptSessionId) {
+      try {
+        this.logger.log(eventId, 'transcript', 'log', `Connecting existing transcript session for audio ingestion, seq=${chunk.seq}`);
+        const { transcriptSessionId } = await this.sessionLifecycle.connectSessions(
+          runtime,
+          eventId,
+          enabledAgents
+        );
+        if (transcriptSessionId) {
+          runtime.transcriptSessionId = transcriptSessionId;
+          this.logger.log(eventId, 'transcript', 'log', `Transcript session connected for audio ingestion, sessionId=${transcriptSessionId}`);
+        }
+      } catch (err: unknown) {
+        // Log but don't throw - audio will be buffered until connection succeeds
+        this.logger.log(eventId, 'transcript', 'warn', `Failed to connect transcript session: ${String(err)}. Audio will be buffered.`);
+      }
+    }
+
+    const audioSize = chunk.audioBase64 ? Math.round((chunk.audioBase64.length * 3) / 4) : 0;
+    // this.logger.log(eventId, 'transcript', 'log', `Appending audio chunk seq=${chunk.seq}, size=${audioSize} bytes, sessionId=${runtime.transcriptSessionId || 'none'}`);
+    
+    try {
+      await this.sessionLifecycle.appendTranscriptAudio(runtime, {
+        audioBase64: chunk.audioBase64,
+        isFinal: chunk.isFinal,
+        sampleRate: chunk.sampleRate,
+        bytesPerSample: chunk.bytesPerSample,
+        encoding: chunk.encoding,
+        durationMs: chunk.durationMs,
+        speaker: chunk.speaker,
+      });
+      // this.logger.log(eventId, 'transcript', 'log', `Audio chunk seq=${chunk.seq} successfully appended to session lifecycle`);
+    } catch (err: unknown) {
+      this.logger.log(eventId, 'transcript', 'error', `Failed to append audio chunk seq=${chunk.seq}: ${String(err)}`);
+      throw err;
+    }
 
     runtime.pendingTranscriptChunk = {
       speaker: chunk.speaker ?? null,

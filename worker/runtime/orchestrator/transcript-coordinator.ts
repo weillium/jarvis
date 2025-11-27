@@ -12,8 +12,14 @@ export class TranscriptCoordinator {
   ) {}
 
   async appendTranscriptAudio(eventId: string, chunk: TranscriptAudioChunk): Promise<void> {
-    const runtime = await this.transcriptIngestion.appendAudio(eventId, chunk);
-    this.attachTranscriptHandler(runtime, eventId, runtime.agentId);
+    try {
+      // console.log(`[transcript-coordinator] appendTranscriptAudio called for event=${eventId}, seq=${chunk.seq}`);
+      const runtime = await this.transcriptIngestion.appendAudio(eventId, chunk);
+      this.attachTranscriptHandler(runtime, eventId, runtime.agentId);
+    } catch (err: unknown) {
+      console.error(`[transcript-coordinator] Error in appendTranscriptAudio for event=${eventId}, seq=${chunk.seq}:`, String(err));
+      throw err;
+    }
   }
 
   attachTranscriptHandler(runtime: EventRuntime, eventId: string, agentId: string): void {

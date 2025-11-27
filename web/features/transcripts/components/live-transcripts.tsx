@@ -24,6 +24,7 @@ interface TranscriptsVirtualListProps {
  */
 function TranscriptsVirtualList({ transcripts }: TranscriptsVirtualListProps) {
   const parentRef = useRef<HTMLDivElement>(null);
+  const prevTranscriptCountRef = useRef(transcripts.length);
 
   const virtualizer = useVirtualizer({
     count: transcripts.length,
@@ -31,6 +32,18 @@ function TranscriptsVirtualList({ transcripts }: TranscriptsVirtualListProps) {
     estimateSize: () => 80, // Estimated height per transcript card (reduced for tighter spacing)
     overscan: 5, // Render 5 extra items above/below viewport for smooth scrolling
   });
+
+  // Auto-scroll to top when new transcripts are added (since newest are at top)
+  useEffect(() => {
+    if (transcripts.length > prevTranscriptCountRef.current) {
+      // New transcripts added - scroll to top to show newest
+      const scrollElement = parentRef.current;
+      if (scrollElement) {
+        scrollElement.scrollTop = 0;
+      }
+    }
+    prevTranscriptCountRef.current = transcripts.length;
+  }, [transcripts.length]);
 
   return (
     <YStack height="calc(100vh - 300px)" position="relative">
@@ -107,7 +120,8 @@ export function LiveTranscripts({ eventId }: LiveTranscriptsProps) {
     }
   }, [isConnected, isConnecting]);
 
-  const transcripts = data?.transcripts || [];
+  // Reverse order so newest transcripts appear at the top
+  const transcripts = [...(data?.transcripts || [])].reverse();
 
   const connectionVariant = connectionStatus === 'connected' ? 'success' : connectionStatus === 'connecting' ? 'warning' : 'error';
   const connectionColor = connectionStatus === 'connected' ? '$green11' : connectionStatus === 'connecting' ? '$yellow11' : '$red11';

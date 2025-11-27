@@ -337,18 +337,18 @@ export class EventRouter {
     this.deltaLogCount += 1;
     if (this.deltaLogCount <= TRANSCRIPTION_STATUS_LOG_LIMIT) {
       // try {
-      //   this.log('log', `[transcript][debug] Transcription delta payload: ${JSON.stringify(normalized)}`);
+      //   this.log('log', `[transcript] Transcription delta received: ${JSON.stringify(normalized)}`);
       // } catch {
-      //   this.log('log', '[transcript][debug] Transcription delta payload (failed to stringify)');
+      //   this.log('log', '[transcript] Transcription delta received (failed to stringify)');
       // }
-      //
+      
       // const snippet =
       //   typeof normalized.delta === 'string' && normalized.delta.length > 0
       //     ? normalized.delta.slice(0, 80)
       //     : '<empty>';
       // this.log(
       //   'log',
-      //   `[transcript][debug] Transcription delta (item=${normalized.item_id}, idx=${normalized.content_index ?? 0}): ${snippet}`
+      //   `[transcript] Transcription delta (item=${normalized.item_id}, idx=${normalized.content_index ?? 0}): ${snippet}`
       // );
     }
 
@@ -365,18 +365,18 @@ export class EventRouter {
     this.completedLogCount += 1;
     if (this.completedLogCount <= TRANSCRIPTION_STATUS_LOG_LIMIT) {
       // try {
-      //   this.log('log', `[transcript][debug] Transcription completed payload: ${JSON.stringify(normalized)}`);
+      //   this.log('log', `[transcript] Transcription completed: ${JSON.stringify(normalized)}`);
       // } catch {
-      //   this.log('log', '[transcript][debug] Transcription completed payload (failed to stringify)');
+      //   this.log('log', '[transcript] Transcription completed (failed to stringify)');
       // }
-      //
+      
       // const snippet =
       //   typeof normalized.transcript === 'string' && normalized.transcript.length > 0
       //     ? normalized.transcript.slice(0, 80)
       //     : '<empty>';
       // this.log(
       //   'log',
-      //   `[transcript][debug] Transcription completed (item=${normalized.item_id}, idx=${normalized.content_index ?? 0}): ${snippet}`
+      //   `[transcript] Transcription completed (item=${normalized.item_id}, idx=${normalized.content_index ?? 0}): ${snippet}`
       // );
     }
 

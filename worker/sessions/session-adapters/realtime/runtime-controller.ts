@@ -95,6 +95,8 @@ export class RuntimeController {
     if (!chunk.audioBase64) {
       throw new Error('audioBase64 is required');
     }
+    // const audioSize = Math.round((chunk.audioBase64.length * 3) / 4);
+    // this.log('log', `[runtime-controller] appendAudioChunk called, size=${audioSize} bytes, isFinal=${chunk.isFinal || false}, isActive=${this.deps.isActive()}`);
     await this.hooks.appendAudioChunk(chunk);
   }
 
@@ -303,12 +305,7 @@ export const createBufferedTranscriptAudioHooks: RuntimeControllerHooksFactory =
           audio: payloadBase64,
         } as RealtimeClientEvent);
         sentChunkCount += 1;
-        if (sentChunkCount <= 10) {
-          // context.log(
-          //   'log',
-          //   `[transcript][debug] Transcript chunk sent (#${sentChunkCount}, ${payload.length} bytes)`
-          // );
-        }
+        // context.log('log', `[transcript] Audio chunk sent to OpenAI (#${sentChunkCount}, ${payload.length} bytes)`);
       } catch (error: unknown) {
         context.log('warn', `${logPrefix}: failed to flush ${payload.length} bytes, preserving buffer for retry`);
         throw error;
@@ -330,11 +327,15 @@ export const createBufferedTranscriptAudioHooks: RuntimeControllerHooksFactory =
   const handleTranscriptChunk = (chunk: RealtimeAudioChunk): void => {
     const session = context.getSession();
     const isActive = context.isActive();
+    // const audioSize = chunk.audioBase64 ? Math.round((chunk.audioBase64.length * 3) / 4) : 0;
+    
+    // context.log('log', `[transcript-hooks] handleTranscriptChunk called, seq=${chunk.seq || 'unknown'}, size=${audioSize} bytes, hasSession=${!!session}, isActive=${isActive}, audioReady=${audioReady}`);
 
     if (!session || !isActive) {
       const incoming = Buffer.from(chunk.audioBase64, 'base64');
       if (incoming.length > 0) {
         transcriptPcmBuffer = Buffer.concat([transcriptPcmBuffer, incoming]);
+        // context.log('log', `[transcript] Audio chunk buffered (session not connected/active): ${incoming.length} bytes, total buffered: ${transcriptPcmBuffer.length} bytes`);
       }
       return;
     }
@@ -369,17 +370,24 @@ export const createBufferedTranscriptAudioHooks: RuntimeControllerHooksFactory =
         // Audio not ready yet - buffer the chunk
         // This is expected during session initialization
         // The buffer will be flushed when markReady() is called
+        // context.log('log', `[transcript] Audio chunk buffered (session not ready): ${incoming.length} bytes, total buffered: ${transcriptPcmBuffer.length} bytes`);
         return;
       }
       // Audio is ready - flush buffer if we have enough data
       // Use a smaller threshold to ensure more frequent flushing
       const aggressiveFlushThreshold = Math.max(1, Math.floor(flushThresholdBytes * 0.5)); // 50% of target
+      const bufferedBeforeFlush = transcriptPcmBuffer.length;
+      // context.log('log', `[transcript] Audio ready, attempting flush: buffered=${bufferedBeforeFlush} bytes, threshold=${aggressiveFlushThreshold} bytes`);
       flushTranscriptBuffer({
         session,
         flushAll: false,
         minFlushBytes: aggressiveFlushThreshold,
         logPrefix: 'Buffered flush',
       });
+      const bufferedAfterFlush = transcriptPcmBuffer.length;
+      // if (bufferedAfterFlush < bufferedBeforeFlush) {
+      //   context.log('log', `[transcript] Flushed ${bufferedBeforeFlush - bufferedAfterFlush} bytes, remaining buffered: ${bufferedAfterFlush} bytes`);
+      // }
       return;
     }
 
@@ -398,8 +406,14 @@ export const createBufferedTranscriptAudioHooks: RuntimeControllerHooksFactory =
 
   return {
     appendAudioChunk: async (chunk) => {
+      // const audioSize = chunk.audioBase64 ? Math.round((chunk.audioBase64.length * 3) / 4) : 0;
+      // context.log('log', `[transcript-hooks] appendAudioChunk queued, seq=${chunk.seq || 'unknown'}, size=${audioSize} bytes, isFinal=${chunk.isFinal || false}`);
+      
       transcriptQueue = transcriptQueue
-        .catch(() => undefined)
+        .catch((err: unknown) => {
+          context.log('error', `[transcript-hooks] Error in transcript queue: ${String(err)}`);
+          return undefined;
+        })
         .then(() => {
           handleTranscriptChunk(chunk);
         });
@@ -432,7 +446,8 @@ export const createBufferedTranscriptAudioHooks: RuntimeControllerHooksFactory =
       }
 
       audioReady = true;
-      context.log('log', `[transcript] Session marked ready for audio, buffered: ${transcriptPcmBuffer.length} bytes`);
+      const bufferedBeforeReady = transcriptPcmBuffer.length;
+      // context.log('log', `[transcript] Session marked ready for audio, buffered: ${bufferedBeforeReady} bytes`);
 
       const session = context.getSession();
       if (!session || !context.isActive()) {
@@ -442,13 +457,14 @@ export const createBufferedTranscriptAudioHooks: RuntimeControllerHooksFactory =
 
       // Flush any buffered audio immediately when ready
       if (transcriptPcmBuffer.length > 0) {
+        const flushedBytes = transcriptPcmBuffer.length;
         flushTranscriptBuffer({
           session,
           flushAll: true,
           minFlushBytes: 1, // Flush all buffered data immediately
           logPrefix: 'Ready flush',
         });
-        context.log('log', `[transcript] Flushed ${transcriptPcmBuffer.length} buffered bytes on ready`);
+        // context.log('log', `[transcript] Flushed ${flushedBytes} buffered bytes on ready`);
       }
     },
   };
