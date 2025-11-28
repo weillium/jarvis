@@ -5,6 +5,11 @@
   "engines": {
     "node": ">=22.21.0 <26"
   },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint"
+  },
   "packageManager": "pnpm@10.20.0",
   "dependencies": {
     "@tamagui/animations-react-native": "^1.138.5",
@@ -15,8 +20,9 @@
     "tamagui": "^1.138.5"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.1",
-    "eslint": "^8.57.1",
-    "typescript-eslint": "^8.48.0"
+    "turbo": "^2.0.0",
+    "typescript": "^5.5.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0"
   }
 }

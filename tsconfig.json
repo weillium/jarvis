@@ -1,8 +1,16 @@
 {
-    "files": [],
-    "references": [
-      { "path": "./worker/tsconfig.json" },
-      { "path": "./web/tsconfig.json" },
-      { "path": "./packages/ui-core/tsconfig.json" }
-    ]
+  "files": [],
+  "references": [],
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "@ui-core/*": ["packages/ui-core/src/*"]
+    }
   }
+}

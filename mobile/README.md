@@ -1,67 +1,46 @@
-# Welcome to your Expo app 👋
+# Tamagui Expo Template
+###### This is a community template
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+> [!NOTE]
+> This has now been archived. Meaning I won't be pushing updates to it anymore. We now have a much wider range of templates, and [tamagui.dev](tamagui.dev) explains neatly how to start on Expo only.
 
-## Get started
+<p align="center">
+  <img src="./assets/icon.png" alt="Tamagui Icon"/>
+</p>
 
-1. Install dependencies
+<div align="center">
+  <a target="_blank" href="https://expo.dev/%40ivopr/tamagui-app?serviceType=eas&distribution=expo-go&scheme=&channel=main&sdkVersion=49.0.0">
+      <img src="https://img.shields.io/badge/Open%20in%20Expo%20Go-4630EB.svg?style=flat-square&logo=EXPO&labelColor=f3f3f3&logoColor=000" alt="Open in Expo Go"/>
+    </a>
+</div>
 
-   ```bash
-   pnpm install
-   ```
-
-2. Set up environment variables
-
-   Create a `.env.local` file in the `mobile` directory:
-
-   ```bash
-   cp .env.local.example .env.local
-   ```
-
-   Then edit `.env.local` and add your Supabase credentials:
-
-   ```
-   EXPO_PUBLIC_SUPABASE_URL=http://127.0.0.1:54421
-   EXPO_PUBLIC_SUPABASE_ANON_KEY=your_anon_key_here
-   ```
-
-   **Note:** The `.env.local` file is already in `.gitignore` and will not be committed to version control.
-
-3. Start the app
-
-   ```bash
-   pnpm start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+## Quick Start
+Just run the following, changing `yourappname` to the name of your project.
 ```
+npx create-expo-app yourappname -t tamagui-expo-template --no-install
+cd yourappname
+yarn install
+```
+If you have [Expo Go](https://expo.dev/client) app installed, just start your new app with `yarn start`, if not, create your own [Development Client](https://docs.expo.dev/development/build/)
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## What you get
+This is a starter template for [Expo](https://expo.dev) using [Tamagui](https://tamagui.dev).
+In this template you get out of the box:
+- Semantic Release already configured with everything you might want
+- Expo Router up and running
+- Tamagui, a nice and modern way of building your UIs
+- ESLint and Prettier configurations
 
-## Learn more
+## What you don't get
+- Expo Web support (for this, go to the [Official Tamagui Starter](https://github.com/tamagui/tamagui))
+- i18n
+- Global State management
 
-To learn more about developing your project with Expo, look at the following resources:
+## If you want to...
+1. You can build your own dev client with `eas build -p android --profile development`
+1. Develop in WSL, use the `yarn wsl` command, else `yarn start` is your default choice.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Troubleshooting
+### I'm on WSL but my app doesn't connect
+WSL2 runs inside its own container, so it doesn't share the same IPv4 and port status as your host machine, you might need [this](https://gist.github.com/ivopr/64f974e632b7edcbe1f5e58b91e31598)
 
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.

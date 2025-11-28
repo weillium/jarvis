@@ -1,12 +1,6 @@
 packages:
-  - worker
-  - web
-  - supabase
-  - mobile
-  - packages/*
-
-nodeLinker: hoisted
-
-onlyBuiltDependencies:
-  - sharp
-  - unrs-resolver
+  - "web"
+  - "worker"
+  - "mobile"
+  - "packages/*"
+  - "supabase/functions/*"   # optional, but helps workspace linking

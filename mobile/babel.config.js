@@ -1,21 +1,26 @@
+process.env.TAMAGUI_TARGET = "native"; // Don't forget to specify your TAMAGUI_TARGET here
+
 module.exports = function (api) {
   api.cache(true);
   return {
-    presets: ['babel-preset-expo'],
+    presets: ["babel-preset-expo"],
     plugins: [
-      // NOTE: this is optional, you may want to remove it if you aren't using Tamagui
-      // TEMPORARILY DISABLED FOR TESTING
-      // [
-      //   '@tamagui/babel-plugin',
-      //   {
-      //     components: ['@jarvis/ui-core', 'tamagui'],
-      //     config: './tamagui.config.ts',
-      //     logTimings: true,
-      //     disableExtraction: process.env.NODE_ENV === 'development',
-      //   },
-      // ],
-      // NOTE: this is required, you must add this plugin
-      'react-native-reanimated/plugin',
-    ],
+      [
+        "transform-inline-environment-variables",
+        // NOTE: include is optional, you can leave this part out
+        {
+          include: ["TAMAGUI_TARGET"]
+        }
+      ],
+      [
+        "@tamagui/babel-plugin",
+        {
+          components: ["tamagui"],
+          config: "./tamagui.config.ts",
+          logTimings: true
+        }
+      ],
+      "react-native-reanimated/plugin"
+    ]
   };
 };
