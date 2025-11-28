@@ -244,13 +244,32 @@ export async function GET(req: NextRequest) {
             filter: `event_id=eq.${eventId}`,
           },
           (payload: any) => {
-            const factRow = payload.new || payload.old;
-            const isActive = factRow?.is_active !== false;
+            // Always send DELETE events (so UI can remove them)
+            if (payload.eventType === "DELETE") {
+              const factRow = payload.old;
+              controller.enqueue(
+                encoder.encode(
+                  formatSSE({
+                    type: "fact_update",
+                    event: "DELETE",
+                    payload: factRow,
+                    timestamp: new Date().toISOString(),
+                  }),
+                ),
+              );
+              return;
+            }
+            
+            // For INSERT and UPDATE events, use payload.new
+            const factRow = payload.new;
+            if (!factRow) {
+              return; // Skip if no new row data
+            }
             
             // For UPDATE events, check if fact was deactivated
             if (payload.eventType === "UPDATE") {
               const wasActive = payload.old?.is_active !== false;
-              const nowInactive = factRow?.is_active === false;
+              const nowInactive = factRow.is_active === false;
               
               if (wasActive && nowInactive) {
                 // Send DELETE event for deactivated facts
@@ -268,13 +287,16 @@ export async function GET(req: NextRequest) {
               }
             }
             
-            // Only send updates for active facts
+            // For INSERT and UPDATE, only send if fact is active
+            // Default to true if is_active is null/undefined (backwards compatibility)
+            // Since is_active has a default of true in the DB, undefined/null should be treated as active
+            const isActive = factRow.is_active !== false;
             if (isActive) {
               controller.enqueue(
                 encoder.encode(
                   formatSSE({
                     type: "fact_update",
-                    event: payload.eventType, // INSERT, UPDATE, DELETE
+                    event: payload.eventType, // INSERT or UPDATE
                     payload: factRow,
                     timestamp: new Date().toISOString(),
                   }),

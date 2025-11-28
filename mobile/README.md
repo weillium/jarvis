@@ -7,13 +7,30 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
 1. Install dependencies
 
    ```bash
-   npm install
+   pnpm install
    ```
 
-2. Start the app
+2. Set up environment variables
+
+   Create a `.env.local` file in the `mobile` directory:
 
    ```bash
-   npx expo start
+   cp .env.local.example .env.local
+   ```
+
+   Then edit `.env.local` and add your Supabase credentials:
+
+   ```
+   EXPO_PUBLIC_SUPABASE_URL=http://127.0.0.1:54421
+   EXPO_PUBLIC_SUPABASE_ANON_KEY=your_anon_key_here
+   ```
+
+   **Note:** The `.env.local` file is already in `.gitignore` and will not be committed to version control.
+
+3. Start the app
+
+   ```bash
+   pnpm start
    ```
 
 In the output, you'll find options to open the app in a

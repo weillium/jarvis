@@ -120,18 +120,16 @@ export class ImageFetcher {
       });
 
       if (results.results && results.results.length > 0) {
-        // Look for image URLs in results
+        // Look for image URLs in results - only return direct image URLs
         for (const result of results.results) {
-          // Check if URL is an image
-          if (result.url && /\.(jpg|jpeg|png|gif|webp)$/i.test(result.url)) {
+          // Check if URL is a direct image file
+          if (result.url && /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(result.url)) {
             return result.url;
           }
         }
-        // If no direct image URL found, return first result URL (might be an image page)
-        const firstResult = results.results[0];
-        if (firstResult.url) {
-          return firstResult.url;
-        }
+        // Do NOT return webpage URLs - they may contain unrelated images
+        // If no direct image URL found, return null to try next provider
+        return null;
       }
     } catch {
       // Logged in tryProvider

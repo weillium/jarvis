@@ -6,3 +6,7 @@ packages:
   - packages/*
 
 nodeLinker: hoisted
+
+onlyBuiltDependencies:
+  - sharp
+  - unrs-resolver

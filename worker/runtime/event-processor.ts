@@ -1214,7 +1214,24 @@ export class EventProcessor {
     ];
 
     // Keywords that strongly suggest generate is needed (abstract, conceptual)
-    const generateKeywords = ['flowchart', 'diagram', 'schematic', 'abstract', 'conceptual', 'architecture diagram', 'process flow'];
+    const generateKeywords = [
+      'flowchart',
+      'diagram',
+      'schematic',
+      'abstract',
+      'conceptual',
+      'architecture diagram',
+      'process flow',
+      'infographic',
+      'infographic-style',
+      'map of',
+      'map showing',
+      'arrows',
+      'arrow',
+      'visualization',
+      'chart',
+      'graph',
+    ];
 
     const hasFetchKeywords = fetchKeywords.some((kw) => lower.includes(kw));
     const hasGenerateKeywords = generateKeywords.some((kw) => lower.includes(kw));

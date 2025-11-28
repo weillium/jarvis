@@ -7,15 +7,16 @@
   },
   "packageManager": "pnpm@10.20.0",
   "dependencies": {
-    "@tamagui/animations-react-native": "^1.138.0",
-    "@tamagui/config": "^1.138.0",
-    "@tamagui/core": "^1.138.0",
-    "@tamagui/font-inter": "^1.138.0",
-    "tamagui": "^1.138.0"
+    "@tamagui/animations-react-native": "^1.138.5",
+    "@tamagui/config": "^1.138.5",
+    "@tamagui/core": "^1.138.5",
+    "@tamagui/font-inter": "^1.138.5",
+    "react-native-reanimated": "~3.16.7",
+    "tamagui": "^1.138.5"
   },
   "devDependencies": {
-    "@eslint/js": "^9.14.0",
-    "eslint": "^9.14.0",
-    "typescript-eslint": "^8.11.0"
+    "@eslint/js": "^9.39.1",
+    "eslint": "^8.57.1",
+    "typescript-eslint": "^8.48.0"
   }
 }

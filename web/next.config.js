@@ -1,3 +1,5 @@
+const path = require('path');
+
 const nextConfig = {
   experimental: {
     externalDir: true,
@@ -12,6 +14,13 @@ const nextConfig = {
   transpilePackages: ["@jarvis/ui-core", "tamagui", "@tamagui/web"],
   // Optimize webpack for faster compilation and better code splitting
   webpack: (config, { isServer }) => {
+    // Resolve modules from root node_modules (for hoisted dependencies)
+    const workspaceRoot = path.resolve(__dirname, '..');
+    config.resolve.modules = [
+      ...(config.resolve.modules || []),
+      path.resolve(workspaceRoot, 'node_modules'),
+    ];
+
     if (!isServer) {
       // Optimize chunk splitting for client-side bundles
       config.optimization = {

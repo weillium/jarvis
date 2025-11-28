@@ -1,0 +1,37 @@
+import { View, Text } from 'react-native';
+
+console.log('[index.tsx] MODULE LOADED - File executed');
+
+export default function Index() {
+  console.log('[Index] Component rendering - Function called');
+  
+  try {
+    const result = (
+      <View style={{ flex: 1, backgroundColor: '#00FF00', justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: '#000000', fontSize: 32, fontWeight: 'bold' }}>
+          EXPO ROUTER WORKS!
+        </Text>
+        <Text style={{ color: '#000000', fontSize: 18, marginTop: 20 }}>
+          Green screen = expo-router is rendering
+        </Text>
+        <Text style={{ color: '#000000', fontSize: 14, marginTop: 10 }}>
+          If you see this, everything is working!
+        </Text>
+      </View>
+    );
+    console.log('[Index] Component JSX created successfully');
+    return result;
+  } catch (error) {
+    console.error('[Index] Error rendering:', error);
+    return (
+      <View style={{ flex: 1, backgroundColor: '#FF0000', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+        <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' }}>
+          RENDER ERROR
+        </Text>
+        <Text style={{ color: '#FFFFFF', fontSize: 14, marginTop: 10 }}>
+          {String(error)}
+        </Text>
+      </View>
+    );
+  }
+}

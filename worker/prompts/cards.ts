@@ -1,4 +1,4 @@
-import type { TemplatePlan } from '../sessions/agent-profiles/cards/templates/types';
+import type { TemplatePlan } from "../sessions/agent-profiles/cards/templates/types";
 
 export interface CardGenerationPromptInputs {
   transcriptSegment: string;
@@ -18,28 +18,28 @@ export interface CardGenerationPromptInputs {
 
 const formatTemplatePlan = (plan?: TemplatePlan): string => {
   if (!plan) {
-    return 'No template was selected. Emit a card only if you are certain it fits a Definition or Summary pattern.';
+    return "No template was selected. Emit a card only if you are certain it fits a Definition or Summary pattern.";
   }
 
   const slotLines = plan.slotSpecs
     .map((slot) => {
-      const requirement = slot.required ? 'REQUIRED' : 'optional';
+      const requirement = slot.required ? "REQUIRED" : "optional";
       const strategy = slot.strategy.toUpperCase();
-      const max = slot.maxLength ? `${slot.maxLength} chars` : 'free length';
-      const markdown = slot.allowMarkdown ? 'markdown allowed' : 'plain text';
-      const bodyNote = slot.id === 'definition' || slot.id === 'bullets' 
-        ? ' → write as natural prose in body'
-        : slot.id === 'why_now' || slot.id === 'visual_prompt'
-        ? ' → separate from body (internal/metadata only)'
-        : '';
+      const max = slot.maxLength ? `${slot.maxLength} chars` : "free length";
+      const markdown = slot.allowMarkdown ? "markdown allowed" : "plain text";
+      const bodyNote = slot.id === "definition" || slot.id === "bullets"
+        ? " → write as natural prose in body"
+        : slot.id === "why_now" || slot.id === "visual_prompt"
+        ? " → separate from body (internal/metadata only)"
+        : "";
       return `- ${slot.id} (${requirement}; ${strategy}; ${max}; ${markdown})${bodyNote}: ${slot.description}`;
     })
-    .join('\n');
+    .join("\n");
 
   const templateLabel = plan.metadata.label ?? plan.templateId;
 
   return `Template Selected: ${templateLabel} (${plan.templateId})
-Why it was chosen: ${plan.metadata.eligibilityReason ?? 'not provided'}
+Why it was chosen: ${plan.metadata.eligibilityReason ?? "not provided"}
 Emit these metadata fields exactly in every card output:
 - template_id: ${plan.templateId}
 - template_label: ${templateLabel}
@@ -62,30 +62,29 @@ export function createCardGenerationUserPrompt({
   conceptFocus,
 }: CardGenerationPromptInputs): string {
   const templateSection = formatTemplatePlan(templatePlan);
-  const audienceSection =
-    audienceProfile && audienceProfile.trim().length > 0
-      ? audienceProfile.trim()
-      : 'No audience profile available. Default to pragmatic, event-aligned insight and skip conjecture.';
+  const audienceSection = audienceProfile && audienceProfile.trim().length > 0
+    ? audienceProfile.trim()
+    : "No audience profile available. Default to pragmatic, event-aligned insight and skip conjecture.";
 
   const supportingFactsSection =
     supportingFacts && supportingFacts.trim().length > 0
       ? supportingFacts.trim()
-      : 'None provided.';
+      : "None provided.";
 
   const supportingGlossarySection =
     supportingGlossary && supportingGlossary.trim().length > 0
       ? supportingGlossary.trim()
-      : 'None provided.';
+      : "None provided.";
 
   const transcriptBulletsSection =
     transcriptBullets && transcriptBullets.trim().length > 0
       ? transcriptBullets.trim()
-      : 'No additional transcript bullets.';
+      : "No additional transcript bullets.";
 
   const retrievedContextSection =
     retrievedContext && retrievedContext.trim().length > 0
       ? `${retrievedContext.trim()}\n\nTreat each chunk as optional evidence. Validate relevance before citing it.`
-      : 'No retrieved context chunks for this trigger.';
+      : "No retrieved context chunks for this trigger.";
 
   return `You are an event assistant generating concise, high-signal recap cards.
 
@@ -98,7 +97,11 @@ ${audienceSection}
 TRANSCRIPT SEGMENT
 ${transcriptSegment}
 
-${transcriptSummary && transcriptSummary.trim().length > 0 ? `TRANSCRIPT SUMMARY\n${transcriptSummary}\n` : ''}
+${
+    transcriptSummary && transcriptSummary.trim().length > 0
+      ? `TRANSCRIPT SUMMARY\n${transcriptSummary}\n`
+      : ""
+  }
 
 FACTS SNAPSHOT
 ${factsSnapshot}
@@ -116,32 +119,37 @@ RETRIEVED CONTEXT CHUNKS
 ${retrievedContextSection}
 
 CONCEPT WINDOW
-${conceptWindow && conceptWindow.trim().length > 0 ? conceptWindow : 'No high-salience concepts detected'}
+${
+    conceptWindow && conceptWindow.trim().length > 0
+      ? conceptWindow
+      : "No high-salience concepts detected"
+  }
 
 RECENT CARDS
 ${recentCards}
 
-${conceptFocus ? `CONCEPT FOCUS\n${conceptFocus}\n\n` : ''}INSTRUCTIONS
+INSTRUCTIONS
 - Emit a card ONLY if it delivers genuinely new, audience-relevant insight that clarifies the live discussion.
-- Reject duplicated or stale angles. Build on recent cards only when you add fresh interpretation or consequences.
+- STRICTLY DEDUPLICATE: Do not emit a card if a similar topic was covered in the last 5 cards.
 - Write the body as natural, conversational prose—not labeled bullets or structured sections. Use template slots as content guidelines, not formatting requirements.
-- For definition cards: write a natural explanation that flows smoothly, incorporating the definition seamlessly.
-- For summary cards: present key points as natural sentences or a cohesive paragraph, not as disconnected labeled bullets.
+- For definition cards: explain the concept naturally (EL5), incorporating the definition seamlessly. Do NOT ask the audience to do further research.
+- For summary cards: address the audience directly ("You will see...", "This means..."). Do NOT use "moderator-speak".
 - Keep the body focused on the main readable content. Why-now context and visual prompts are handled separately (not in the body).
 - Validate retrieved chunks before using them; ignore low-similarity or off-topic excerpts.
-- Quote metrics, dates, and named entities precisely. Keep titles ≤ 8 words and body as natural, flowing text (typically 1-3 sentences or a short paragraph).
+- Quote metrics, dates, and named entities precisely. Keep titles ≤ 8 words in Title Case and body as natural, flowing text.
 - Respect card_type semantics:
   * text: body required (natural prose). label, image_url, visual_request must be null.
   * text_visual: body required (natural prose) and visual_request required; label null; image_url must remain null until the worker resolves the request.
   * visual: label required and visual_request required; body must be null; image_url must remain null until the worker resolves the request.
+- PRIORITIZE VISUALS: Visuals anchor the audience. Lean towards "text_visual" or "visual" cards when possible.
 - Populate visual_request whenever a helpful visual exists:
-  * DEFAULT STRATEGY: Use {"strategy":"fetch",...} unless the visual is inherently abstract/conceptual with no real-world representation. Fetch is faster and cheaper; only use generate when fetch cannot provide the needed visual.
-  * Use {"strategy":"fetch","instructions":"descriptive search terms like 'Tokyo skyline at night' or 'Albert Einstein portrait'","source_url":null} for:
+  * DEFAULT STRATEGY: Use {"strategy":"fetch",...} unless the visual is inherently abstract/conceptual with no real-world representation. Fetch is faster and cheaper.
+  * Use {"strategy":"fetch","instructions":"simple noun-based search terms (e.g. 'Tokyo skyline', 'Albert Einstein')","source_url":null} for:
     - Photographic content (people, places, objects, buildings, landscapes, real-world scenes)
-    - Real-world representations of concepts (e.g., "Federal Reserve building", "trading floor", "bank vault", "central bank headquarters")
+    - Real-world representations of concepts (e.g., "Federal Reserve building", "trading floor", "bank vault")
     - Historical events, figures, locations
-    - Products, tools, technology (screenshots, physical objects, devices)
-    - Nature, science (photos of experiments, natural phenomena, scientific equipment)
+    - Products, tools, technology
+    - Nature, science
     - Most financial/economic concepts that have real-world visual representations
   * ONLY use {"strategy":"generate","instructions":"detailed description like 'flowchart showing process steps'","source_url":null} for:
     - Pure abstract diagrams (flowcharts, system architectures, process flows) that cannot be photographed
@@ -174,4 +182,3 @@ OUTPUT FORMAT (STRICT)
 - Respond with exactly one JSON object. No leading text, commentary, or extra fields.
 - The body field should contain natural, conversational prose—not labeled bullets or structured sections.`;
 }
-
