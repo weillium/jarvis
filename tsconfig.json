@@ -1,6 +1,11 @@
 {
   "files": [],
-  "references": [],
+  "references": [
+    { "path": "./web" },
+    { "path": "./worker" },
+    { "path": "./mobile" },
+    { "path": "./packages/ui-core" }
+  ],
   "compilerOptions": {
     "target": "ES2020",
     "module": "ESNext",
@@ -10,6 +15,7 @@
     "strict": true,
     "baseUrl": ".",
     "paths": {
+      "@jarvis/ui-core/*": ["packages/ui-core/src/*"],
       "@ui-core/*": ["packages/ui-core/src/*"]
     }
   }

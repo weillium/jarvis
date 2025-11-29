@@ -1,3 +1,4 @@
+'use client';
 import { YStack, XStack, Card, Heading, Body, Input, Select, Button, Badge } from '@jarvis/ui-core';
 
 export default function AgentsIndex() {

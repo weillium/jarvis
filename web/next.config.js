@@ -1,9 +1,12 @@
-const path = require('path');
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig = {
   experimental: {
     externalDir: true,
-    optimizePackageImports: ['@jarvis/ui-core', 'tamagui', 'dayjs', '@uiw/react-md-editor'],
+    optimizePackageImports: ['tamagui', 'dayjs', '@uiw/react-md-editor'],
   },
   images: {
     remotePatterns: [
@@ -11,7 +14,16 @@ const nextConfig = {
       { protocol: "http", hostname: "**" },
     ],
   },
-  transpilePackages: ["@jarvis/ui-core", "tamagui", "@tamagui/web"],
+  transpilePackages: [
+    "@jarvis/ui-core",
+    "tamagui",
+    "@tamagui/web",
+    "@tamagui/core",
+    "@tamagui/animations-react-native",
+    "@tamagui/font-inter",
+    "react-native",
+    "react-native-web"
+  ],
   // Optimize webpack for faster compilation and better code splitting
   webpack: (config, { isServer }) => {
     // Resolve modules from root node_modules (for hoisted dependencies)
@@ -20,6 +32,11 @@ const nextConfig = {
       ...(config.resolve.modules || []),
       path.resolve(workspaceRoot, 'node_modules'),
     ];
+
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      'react-native$': 'react-native-web',
+    };
 
     if (!isServer) {
       // Optimize chunk splitting for client-side bundles

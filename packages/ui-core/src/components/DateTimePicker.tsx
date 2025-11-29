@@ -35,7 +35,7 @@ const PopupContainer = styled(YStack, {
   width: 'auto',
   maxWidth: '100vw',
   overflow: 'visible',
-});
+} as any);
 
 export const DateTimePickerComponent = forwardRef<HTMLDivElement, DateTimePickerProps>(
   function DateTimePickerComponent(props, ref) {

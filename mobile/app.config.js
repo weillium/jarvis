@@ -6,11 +6,12 @@ module.exports = {
     slug: 'mobile',
     version: '1.0.0',
     orientation: 'portrait',
-    icon: './assets/images/icon.png',
+    icon: './assets/icon.png',
     scheme: 'mobile',
     userInterfaceStyle: 'automatic',
     newArchEnabled: true,
     ios: {
+      icon: './assets/icon.png',
       supportsTablet: true,
       jsEngine: 'hermes', // Enable Hermes for iOS (required for React Native DevTools)
       bundleIdentifier: 'com.jarvis.mobile',
@@ -19,9 +20,7 @@ module.exports = {
       package: 'com.jarvis.mobile',
       adaptiveIcon: {
         backgroundColor: '#E6F4FE',
-        foregroundImage: './assets/images/android-icon-foreground.png',
-        backgroundImage: './assets/images/android-icon-background.png',
-        monochromeImage: './assets/images/android-icon-monochrome.png',
+        foregroundImage: './assets/icon.png'
       },
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
@@ -29,7 +28,7 @@ module.exports = {
     },
     web: {
       output: 'static',
-      favicon: './assets/images/favicon.png',
+      favicon: './assets/icon.png',
     },
     plugins: [
       'expo-router',
@@ -64,4 +63,3 @@ module.exports = {
     },
   },
 };
-

@@ -8,6 +8,15 @@
       "resizeMode": "contain"
     },
     "icon": "./assets/icon.png",
+    "ios": {
+      "icon": "./assets/icon.png"
+    },
+    "android": {
+      "icon": "./assets/icon.png"
+    },
+    "web": {
+      "favicon": "./assets/icon.png"
+    },
     "name": "mobile",
     "slug": "mobile",
     "plugins": [

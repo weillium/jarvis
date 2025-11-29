@@ -25,9 +25,7 @@ export {
 export { ProgressBar } from "./components/Progress";
 export { FileUpload } from "./components/FileUpload";
 
-// TEMPORARILY DISABLED FOR MOBILE: MarkdownEditor requires web-only dependencies (rehype-rewrite)
-// TODO: Create platform-specific exports or move to web-only package
-// export { MarkdownEditor } from './components/MarkdownEditor';
+export { MarkdownEditor } from "./components/MarkdownEditor";
 
 export { SubTabs, Tabs } from "./components/Tabs";
 export { EmptyStateCard } from "./components/EmptyState";

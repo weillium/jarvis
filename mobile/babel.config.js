@@ -15,7 +15,7 @@ module.exports = function (api) {
       [
         "@tamagui/babel-plugin",
         {
-          components: ["tamagui"],
+          components: ["tamagui", "@jarvis/ui-core"],
           config: "./tamagui.config.ts",
           logTimings: true
         }

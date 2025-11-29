@@ -1,6 +1,10 @@
 {
   "compilerOptions": {
-    "module": "ES2020"
+    "module": "ES2020",
+    "baseUrl": ".",
+    "paths": {
+      "@jarvis/ui-core/*": ["../packages/ui-core/src/*"]
+    }
   },
   "extends": "expo/tsconfig.base",
   "include": [

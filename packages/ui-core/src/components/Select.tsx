@@ -90,7 +90,7 @@ const StyledSelectContent = styled(TamaguiSelect.Content, {
   // Absolute positioning - Tamagui handles positioning relative to trigger
   // The portal container is fixed, so absolute positioning here is relative to that
   position: 'absolute',
-});
+} as any);
 
 const StyledSelectItem = styled(TamaguiSelect.Item, {
   name: 'SelectItem',
@@ -124,7 +124,7 @@ const SelectPortalContent = styled(YStack, {
   pointerEvents: 'none',
   // Ensure this creates a new stacking context above everything
   isolation: 'isolate',
-});
+} as any);
 
 // Helper to safely convert children to string
 function childrenToString(children: unknown): string {

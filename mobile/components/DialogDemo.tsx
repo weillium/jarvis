@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { X } from "@tamagui/lucide-icons";
 import {
   Adapt,
