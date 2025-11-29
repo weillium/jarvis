@@ -4,6 +4,7 @@
  */
 const { getDefaultConfig } = require('expo/metro-config')
 const { withTamagui } = require('@tamagui/metro-plugin')
+const path = require('path')
 
 const config = getDefaultConfig(__dirname, {
   // [Web-only]: Enables CSS support in Metro.
@@ -12,8 +13,18 @@ const config = getDefaultConfig(__dirname, {
 
 config.resolver.sourceExts.push('mjs')
 
+config.watchFolders = [
+  ...(config.watchFolders || []),
+  path.resolve(__dirname, '..', 'packages', 'ui-core'),
+]
+
+config.resolver.nodeModulesPaths = [
+  ...(config.resolver?.nodeModulesPaths || []),
+  path.resolve(__dirname, '../node_modules'),
+]
+
 module.exports = withTamagui(config, {
-  components: ['tamagui'],
+  components: ['tamagui', '@jarvis/ui-core'],
   config: './tamagui.config.ts',
   outputCSS: './tamagui-web.css',
   cssInterop: true,

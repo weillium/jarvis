@@ -17,6 +17,7 @@
     "preset": "jest-expo"
   },
   "dependencies": {
+    "@jarvis/ui-core": "workspace:*",
     "@react-navigation/native": "^7.1.6",
     "@tamagui/config": "^1.138.6",
     "@tamagui/lucide-icons": "^1.138.6",

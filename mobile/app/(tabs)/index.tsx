@@ -1,5 +1,6 @@
 import { ExternalLink } from '@tamagui/lucide-icons'
 import { Anchor, H2, Paragraph, XStack, YStack } from 'tamagui'
+import { Card, Button, Heading, Body, Alert } from '@jarvis/ui-core'
 import { ToastControl } from 'components/CurrentToast'
 
 export default function TabOneScreen() {
@@ -8,6 +9,15 @@ export default function TabOneScreen() {
       <H2>Tamagui + Expo</H2>
 
       <ToastControl />
+
+      <Card width="100%" maxWidth={520} p="$6" gap="$4">
+        <Heading level={3}>Shared UI-Core on Mobile</Heading>
+        <Body size="md" tone="muted">
+          This card, text, alert, and button are rendered from the shared @jarvis/ui-core package.
+        </Body>
+        <Alert variant="info">The shared Tamagui config is now wired into Expo.</Alert>
+        <Button variant="primary">Get Started</Button>
+      </Card>
 
       <XStack
         items="center"

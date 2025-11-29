@@ -37,16 +37,17 @@
     "@tamagui/config": "^1.138.5",
     "@tamagui/core": "^1.138.5",
     "@tamagui/font-inter": "^1.138.5",
+    "metro-runtime": "^0.83.3",
     "react-native-reanimated": "~3.16.7",
     "tamagui": "^1.138.5"
   },
   "devDependencies": {
-    "typescript-eslint": "^8.46.3",
-    "turbo": "^2.0.0",
-    "typescript": "^5.5.0",
+    "@types/react": "18.2.79",
+    "@types/react-dom": "18.2.25",
     "eslint": "^9.0.0",
     "prettier": "^3.0.0",
-    "@types/react": "18.2.79",
-    "@types/react-dom": "18.2.25"
+    "turbo": "^2.0.0",
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.46.3"
   }
 }
