@@ -1,15 +1,12 @@
-import config from "@jarvis/ui-core/src/tamagui.config";
+import { defaultConfig } from '@tamagui/config/v4'
+import { createTamagui } from 'tamagui'
 
-export type AppConfig = typeof config;
+export const config = createTamagui(defaultConfig)
 
-declare module "tamagui" {
-  // overrides TamaguiCustomConfig so your custom types
-  // work everywhere you import `tamagui`
-  interface TamaguiCustomConfig extends AppConfig {}
+export default config
+
+export type Conf = typeof config
+
+declare module 'tamagui' {
+  interface TamaguiCustomConfig extends Conf {}
 }
-
-declare module "@tamagui/core" {
-  interface TamaguiCustomConfig extends AppConfig {}
-}
-
-export default config;

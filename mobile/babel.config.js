@@ -1,26 +1,20 @@
-process.env.TAMAGUI_TARGET = "native"; // Don't forget to specify your TAMAGUI_TARGET here
-
-module.exports = function (api) {
-  api.cache(true);
+module.exports = (api) => {
+  api.cache(true)
   return {
-    presets: ["babel-preset-expo"],
+    presets: [['babel-preset-expo', { jsxRuntime: 'automatic' }]],
     plugins: [
       [
-        "transform-inline-environment-variables",
-        // NOTE: include is optional, you can leave this part out
+        '@tamagui/babel-plugin',
         {
-          include: ["TAMAGUI_TARGET"]
-        }
+          components: ['tamagui'],
+          config: './tamagui.config.ts',
+          logTimings: true,
+          disableExtraction: process.env.NODE_ENV === 'development',
+        },
       ],
-      [
-        "@tamagui/babel-plugin",
-        {
-          components: ["tamagui", "@jarvis/ui-core"],
-          config: "./tamagui.config.ts",
-          logTimings: true
-        }
-      ],
-      "react-native-reanimated/plugin"
-    ]
-  };
-};
+
+      // NOTE: this is only necessary if you are using reanimated for animations
+      'react-native-reanimated/plugin',
+    ],
+  }
+}

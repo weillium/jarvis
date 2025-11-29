@@ -1,26 +1,52 @@
 {
   "expo": {
-    "scheme": "tamagui-app",
+    "name": "expo-router-example",
+    "slug": "expo-router-example",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "backgroundColor": "#ddffe2",
-      "image": "./assets/splash.png",
-      "resizeMode": "contain"
+      "image": "./assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
     },
-    "icon": "./assets/icon.png",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
-      "icon": "./assets/icon.png"
+      "supportsTablet": true
     },
     "android": {
-      "icon": "./assets/icon.png"
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      }
     },
     "web": {
-      "favicon": "./assets/icon.png"
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
     },
-    "name": "mobile",
-    "slug": "mobile",
     "plugins": [
-      "expo-font"
-    ]
+      "expo-router",
+      "expo-font",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "newArchEnabled": true
+          },
+          "android": {
+            "newArchEnabled": true
+          }
+        }
+      ],
+      "expo-web-browser"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
   }
 }

@@ -3,4 +3,4 @@ packages:
   - "worker"
   - "mobile"
   - "packages/*"
-  - "supabase/functions/*"   # optional, but helps workspace linking
+  - "supabase/functions/*"
