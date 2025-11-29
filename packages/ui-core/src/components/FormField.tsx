@@ -23,7 +23,7 @@ export function FormField({
   ...stackProps
 }: FormFieldProps) {
   return (
-    <YStack gap="$3" width="100%" {...(stackProps as any)}>
+    <YStack gap="$2.5" width="100%" {...(stackProps as any)}>
       {label ? (
         <Label htmlFor={htmlFor}>
           {label}

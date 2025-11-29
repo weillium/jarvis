@@ -6,6 +6,7 @@ import { isWeb } from '@tamagui/constants';
 
 export interface ClampTextProps extends TextProps {
   lines?: number;
+  children?: React.ReactNode;
 }
 
 export const ClampText = forwardRef<any, ClampTextProps>(function ClampText(
