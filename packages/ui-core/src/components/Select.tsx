@@ -333,7 +333,7 @@ export const Select = forwardRef<any, SelectProps>(function Select(props, _ref) 
         <TamaguiSelect.Value placeholder="Select..." />
         <TamaguiSelect.Icon />
       </StyledSelectTrigger>
-      <TamaguiSelect.Adapt when="sm" platform="touch">
+      <TamaguiSelect.Adapt when={'sm' as any} platform="touch">
         <TamaguiSelect.Sheet modal dismissOnSnapToBottom>
           <TamaguiSelect.Sheet.Frame>
             <TamaguiSelect.Sheet.ScrollView>

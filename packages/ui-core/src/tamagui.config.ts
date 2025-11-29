@@ -4,6 +4,7 @@ import { config as defaultConfig } from '@tamagui/config/v3';
 import { createInterFont } from '@tamagui/font-inter';
 import { createMedia } from '@tamagui/react-native-media-driver';
 import { createTamagui } from 'tamagui';
+import type { TamaguiInternalConfig } from 'tamagui';
 
 // Base font from Tamagui - we'll extend it with our custom sizes
 const baseInterFont = createInterFont();
@@ -69,7 +70,7 @@ const animations = createAnimations({
 
 // Extend the base config with custom theme tokens
 // Matching current design system colors
-const tamaguiConfig = createTamagui({
+const tamaguiConfig: TamaguiInternalConfig = createTamagui({
   ...defaultConfig,
   animations,
   defaultTheme: 'dark',

@@ -5,12 +5,6 @@
   "engines": {
     "node": ">=22.21.0 <26"
   },
-  "pnpm": {
-    "overrides": {
-      "react": "18.2.0",
-      "react-dom": "18.2.0"
-    }
-  },
   "workspaces": [
     "web",
     "worker",
@@ -42,8 +36,8 @@
     "tamagui": "^1.138.5"
   },
   "devDependencies": {
-    "@types/react": "18.2.79",
-    "@types/react-dom": "18.2.25",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
     "eslint": "^9.0.0",
     "prettier": "^3.0.0",
     "turbo": "^2.0.0",
